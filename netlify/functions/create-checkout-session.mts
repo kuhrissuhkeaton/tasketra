@@ -4,12 +4,13 @@ import { getUserIdFromRequest } from "../lib/auth.ts";
 import { json } from "../lib/http.ts";
 import { stripe } from "../lib/stripe.ts";
 import { getSiteUrl, getEnv } from "../lib/env.ts";
+import { withSentry } from "../lib/sentry.ts";
 
 // Starts a Stripe Checkout session for the flat-rate Tasketra Pro plan.
 // 14-day trial on both intervals; Stripe handles the actual card entry,
 // so no payment data ever touches our servers.
 
-export default async (req: Request) => {
+export default withSentry(async (req: Request) => {
   if (req.method !== "POST") return json({ error: "Method not allowed" }, { status: 405 });
   const userId = getUserIdFromRequest(req);
   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
@@ -52,6 +53,6 @@ export default async (req: Request) => {
   });
 
   return json({ url: session.url });
-};
+});
 
 export const config: Config = { path: "/api/create-checkout-session" };

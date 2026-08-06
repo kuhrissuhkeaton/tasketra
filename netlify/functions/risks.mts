@@ -4,6 +4,7 @@ import { getUserIdFromRequest } from "../lib/auth.ts";
 import { hasProjectAccess } from "../lib/ownership.ts";
 import { json } from "../lib/http.ts";
 import { logActivity, diffSummary } from "../lib/activity.ts";
+import { withSentry } from "../lib/sentry.ts";
 
 const VALID_LEVELS = ["low", "medium", "high"];
 const VALID_STATUSES = ["open", "monitoring", "resolved"];
@@ -17,7 +18,7 @@ const RISK_FIELDS = [
   { key: "status", label: "status" },
 ];
 
-export default async (req: Request) => {
+export default withSentry(async (req: Request) => {
   const userId = getUserIdFromRequest(req);
   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
   const database = db();
@@ -123,6 +124,6 @@ export default async (req: Request) => {
   }
 
   return json({ error: "Method not allowed" }, { status: 405 });
-};
+});
 
 export const config: Config = { path: "/api/risks" };

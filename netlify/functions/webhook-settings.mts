@@ -3,13 +3,14 @@ import { db } from "../lib/db.ts";
 import { getUserIdFromRequest } from "../lib/auth.ts";
 import { json } from "../lib/http.ts";
 import { isObviouslyUnsafeWebhookUrl } from "../lib/ssrf-guard.ts";
+import { withSentry } from "../lib/sentry.ts";
 
 // Account-wide outbound webhook URL -- one per user, shared across every
 // project they own. Individual projects opt in/out via projects.webhook_enabled
 // (see project.mts PATCH), but the URL itself lives here so it's configured
 // once rather than re-entered per project.
 
-export default async (req: Request) => {
+export default withSentry(async (req: Request) => {
   const userId = getUserIdFromRequest(req);
   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
   const database = db();
@@ -43,6 +44,6 @@ export default async (req: Request) => {
   }
 
   return json({ error: "Method not allowed" }, { status: 405 });
-};
+});
 
 export const config: Config = { path: "/api/webhook-settings" };

@@ -5,6 +5,7 @@ import { db } from "../lib/db.ts";
 import { getUserIdFromRequest } from "../lib/auth.ts";
 import { getEnv } from "../lib/env.ts";
 import { json } from "../lib/http.ts";
+import { withSentry } from "../lib/sentry.ts";
 
 // On-demand restore verification: fetches the most recent backup run from B2
 // and checks that its contents are actually valid and restorable, not just
@@ -30,7 +31,7 @@ async function streamToBytes(body: unknown): Promise<Uint8Array> {
   return body.transformToByteArray();
 }
 
-export default async (req: Request) => {
+export default withSentry(async (req: Request) => {
   const userId = getUserIdFromRequest(req);
   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
   if (!(await isAdmin(userId))) return json({ error: "Not found" }, { status: 404 });
@@ -105,6 +106,6 @@ export default async (req: Request) => {
     console.error(`[verify-backup] FAILED: ${message}`);
     return json({ ok: false, error: message, checks }, { status: 500 });
   }
-};
+});
 
 export const config: Config = { path: "/api/verify-backup" };

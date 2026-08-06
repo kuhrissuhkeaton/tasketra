@@ -5,6 +5,7 @@ import { documentsStore } from "../lib/blobs.ts";
 import { s3, backupBucketName } from "../lib/s3.ts";
 import { sendEmail } from "../lib/notify.ts";
 import { getEnv } from "../lib/env.ts";
+import { withSentry } from "../lib/sentry.ts";
 
 // Weekly off-site backup: every table in the database plus every uploaded
 // document, exported to a Backblaze B2 bucket outside Netlify entirely --
@@ -78,7 +79,7 @@ async function pruneOldRuns(client: ReturnType<typeof s3>, bucket: string) {
   return toDelete.length;
 }
 
-export default async () => {
+export default withSentry(async () => {
   const startedAt = new Date();
   const runId = startedAt.toISOString().replace(/[:.]/g, "-");
   const prefix = `backups/${runId}/`;
@@ -148,6 +149,6 @@ export default async () => {
       headers: { "content-type": "application/json" },
     });
   }
-};
+});
 
 export const config: Config = { schedule: "0 6 * * 1" };

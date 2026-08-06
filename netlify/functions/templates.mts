@@ -3,6 +3,7 @@ import {
   Document, Packer, Paragraph, TextRun, HeadingLevel,
   Table, TableRow, TableCell, WidthType, BorderStyle, ShadingType,
 } from "docx";
+import { withSentry } from "../lib/sentry.ts";
 import { db } from "../lib/db.ts";
 import { getUserIdFromRequest } from "../lib/auth.ts";
 import { hasProjectAccess } from "../lib/ownership.ts";
@@ -208,7 +209,7 @@ async function buildRaci(database: any, project: any, projectId: string) {
   return new Document({ styles, sections: [{ properties: { page: PAGE }, children }] });
 }
 
-export default async (req: Request) => {
+export default withSentry(async (req: Request) => {
   const userId = getUserIdFromRequest(req);
   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
   if (req.method !== "GET") return json({ error: "Method not allowed" }, { status: 405 });
@@ -238,6 +239,6 @@ export default async (req: Request) => {
       "content-disposition": `attachment; filename="${safeFilename(project.name)}-${suffix}.docx"`,
     },
   });
-};
+});
 
 export const config: Config = { path: "/api/templates" };

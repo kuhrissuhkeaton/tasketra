@@ -3,13 +3,14 @@ import { db } from "../lib/db.ts";
 import { getUserIdFromRequest } from "../lib/auth.ts";
 import { hasProjectAccess } from "../lib/ownership.ts";
 import { json } from "../lib/http.ts";
+import { withSentry } from "../lib/sentry.ts";
 
 // The daily "what needs me right now" view: blocked tasks, tasks nobody has
 // touched in a while, decisions still waiting on a stakeholder, and the
 // highest-exposure open issues and risks. Nothing here is a new record --
 // it's all a read-only lens on data that already exists elsewhere.
 
-export default async (req: Request) => {
+export default withSentry(async (req: Request) => {
   const userId = getUserIdFromRequest(req);
   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
   const database = db();
@@ -62,6 +63,6 @@ export default async (req: Request) => {
   const taskCount = taskCountRows[0]?.count ?? 0;
 
   return json({ blockedTasks, staleTasks, awaitingDecisions, urgentIssues, urgentRisks, taskCount });
-};
+});
 
 export const config: Config = { path: "/api/today" };

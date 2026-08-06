@@ -4,13 +4,14 @@ import { json } from "../lib/http.ts";
 import { stripe } from "../lib/stripe.ts";
 import { getEnv } from "../lib/env.ts";
 import type Stripe from "stripe";
+import { withSentry } from "../lib/sentry.ts";
 
 // Single entry point for all subscription state changes. Never trusts the
 // client for billing state -- Stripe is the source of truth, this just
 // mirrors it into `subscriptions` so the rest of the app can read plan
 // status with a plain SQL query instead of calling Stripe on every request.
 
-export default async (req: Request) => {
+export default withSentry(async (req: Request) => {
   if (req.method !== "POST") return json({ error: "Method not allowed" }, { status: 405 });
 
   const signature = req.headers.get("stripe-signature");
@@ -92,6 +93,6 @@ export default async (req: Request) => {
   }
 
   return json({ received: true });
-};
+});
 
 export const config: Config = { path: "/api/stripe-webhook" };

@@ -7,8 +7,9 @@ import { logActivity } from "../lib/activity.ts";
 import { sendEmail } from "../lib/notify.ts";
 import { getSiteUrl } from "../lib/env.ts";
 import { MEMBER_LIMIT_PER_PROJECT } from "../lib/billing.ts";
+import { withSentry } from "../lib/sentry.ts";
 
-export default async (req: Request) => {
+export default withSentry(async (req: Request) => {
   const userId = getUserIdFromRequest(req);
   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
   const database = db();
@@ -137,6 +138,6 @@ export default async (req: Request) => {
   }
 
   return json({ error: "Method not allowed" }, { status: 405 });
-};
+});
 
 export const config: Config = { path: "/api/members" };

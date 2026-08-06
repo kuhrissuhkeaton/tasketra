@@ -3,6 +3,7 @@ import { db } from "../lib/db.ts";
 import { getUserIdFromRequest } from "../lib/auth.ts";
 import { getEnv } from "../lib/env.ts";
 import { json } from "../lib/http.ts";
+import { withSentry } from "../lib/sentry.ts";
 
 /**
  * A single admin gate for reviewing the waitlist. If ADMIN_EMAIL isn't set,
@@ -17,7 +18,7 @@ async function isAdmin(userId: string): Promise<boolean> {
   return user?.email?.toLowerCase() === adminEmail.toLowerCase();
 }
 
-export default async (req: Request) => {
+export default withSentry(async (req: Request) => {
   const database = db();
   const url = new URL(req.url);
 
@@ -66,6 +67,6 @@ export default async (req: Request) => {
   }
 
   return json({ error: "Method not allowed" }, { status: 405 });
-};
+});
 
 export const config: Config = { path: "/api/waitlist" };

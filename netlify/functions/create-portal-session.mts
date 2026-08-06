@@ -4,13 +4,14 @@ import { getUserIdFromRequest } from "../lib/auth.ts";
 import { json } from "../lib/http.ts";
 import { stripe } from "../lib/stripe.ts";
 import { getSiteUrl } from "../lib/env.ts";
+import { withSentry } from "../lib/sentry.ts";
 
 // Hands off to Stripe's own hosted Customer Portal for plan management and
 // cancellation -- no custom UI to build, and cancellation genuinely
 // self-serve (no support ticket, no email chase) since it's Stripe's own
 // flow end to end.
 
-export default async (req: Request) => {
+export default withSentry(async (req: Request) => {
   if (req.method !== "POST") return json({ error: "Method not allowed" }, { status: 405 });
   const userId = getUserIdFromRequest(req);
   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
@@ -26,6 +27,6 @@ export default async (req: Request) => {
   });
 
   return json({ url: session.url });
-};
+});
 
 export const config: Config = { path: "/api/create-portal-session" };

@@ -2,8 +2,9 @@ import type { Config } from "@netlify/functions";
 import { db } from "../lib/db.ts";
 import { hashPassword, hashResetToken, createSessionCookie } from "../lib/auth.ts";
 import { json } from "../lib/http.ts";
+import { withSentry } from "../lib/sentry.ts";
 
-export default async (req: Request) => {
+export default withSentry(async (req: Request) => {
   if (req.method !== "POST") return json({ error: "Method not allowed" }, { status: 405 });
 
   const body = await req.json().catch(() => null) as any;
@@ -40,6 +41,6 @@ export default async (req: Request) => {
 
   const cookie = createSessionCookie(user.id);
   return json({ user: { id: user.id, email: user.email } }, { headers: { "set-cookie": cookie } });
-};
+});
 
 export const config: Config = { path: "/api/auth/reset-password" };

@@ -3,12 +3,13 @@ import { db } from "../lib/db.ts";
 import { getUserIdFromRequest } from "../lib/auth.ts";
 import { hasProjectAccess } from "../lib/ownership.ts";
 import { json } from "../lib/http.ts";
+import { withSentry } from "../lib/sentry.ts";
 
 // One-click weekly status report: everything that moved on a project in the
 // last 7 days, plus a current-state snapshot. Pure aggregation, no new
 // records -- built to be skimmed by a stakeholder in under a minute.
 
-export default async (req: Request) => {
+export default withSentry(async (req: Request) => {
   const userId = getUserIdFromRequest(req);
   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
   const database = db();
@@ -94,6 +95,6 @@ export default async (req: Request) => {
     statusUpdates,
     snapshot: snapshot[0],
   });
-};
+});
 
 export const config: Config = { path: "/api/weekly-report" };

@@ -3,12 +3,13 @@ import { db } from "../lib/db.ts";
 import { getUserIdFromRequest } from "../lib/auth.ts";
 import { hasProjectAccess } from "../lib/ownership.ts";
 import { json } from "../lib/http.ts";
+import { withSentry } from "../lib/sentry.ts";
 
 // A single, unified trash can across every soft-deletable entity type, so
 // there's one place to go looking for anything you deleted -- restoring an
 // item just calls back to that entity's own PATCH { restore: true }.
 
-export default async (req: Request) => {
+export default withSentry(async (req: Request) => {
   const userId = getUserIdFromRequest(req);
   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
   if (req.method !== "GET") return json({ error: "Method not allowed" }, { status: 405 });
@@ -45,6 +46,6 @@ export default async (req: Request) => {
   `;
 
   return json({ items });
-};
+});
 
 export const config: Config = { path: "/api/trash" };

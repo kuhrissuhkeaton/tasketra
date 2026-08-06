@@ -2,11 +2,12 @@ import type { Config } from "@netlify/functions";
 import { db } from "../lib/db.ts";
 import { json } from "../lib/http.ts";
 import { sendEmail } from "../lib/notify.ts";
+import { withSentry } from "../lib/sentry.ts";
 
 // Public, unauthenticated endpoint. Only ever exposes the single decision
 // request matching an unguessable token -- never a list, never other project data.
 
-export default async (req: Request) => {
+export default withSentry(async (req: Request) => {
   const database = db();
   const url = new URL(req.url);
 
@@ -88,6 +89,6 @@ export default async (req: Request) => {
   }
 
   return json({ error: "Method not allowed" }, { status: 405 });
-};
+});
 
 export const config: Config = { path: "/api/decision-public" };

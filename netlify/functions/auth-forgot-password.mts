@@ -5,13 +5,14 @@ import { json } from "../lib/http.ts";
 import { sendEmail } from "../lib/notify.ts";
 import { getSiteUrl } from "../lib/env.ts";
 import { checkRateLimit, getClientIp } from "../lib/rate-limit.ts";
+import { withSentry } from "../lib/sentry.ts";
 
 const GENERIC_RESPONSE = {
   ok: true,
   message: "If an account exists for that email, we've sent a password reset link.",
 };
 
-export default async (req: Request) => {
+export default withSentry(async (req: Request) => {
   if (req.method !== "POST") return json({ error: "Method not allowed" }, { status: 405 });
 
   const body = await req.json().catch(() => null) as any;
@@ -49,6 +50,6 @@ export default async (req: Request) => {
   );
 
   return json(GENERIC_RESPONSE);
-};
+});
 
 export const config: Config = { path: "/api/auth/forgot-password" };

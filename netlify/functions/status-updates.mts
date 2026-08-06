@@ -3,8 +3,9 @@ import { db } from "../lib/db.ts";
 import { getUserIdFromRequest } from "../lib/auth.ts";
 import { hasProjectAccess } from "../lib/ownership.ts";
 import { json } from "../lib/http.ts";
+import { withSentry } from "../lib/sentry.ts";
 
-export default async (req: Request) => {
+export default withSentry(async (req: Request) => {
   const userId = getUserIdFromRequest(req);
   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, { status: 405 });
@@ -21,6 +22,6 @@ export default async (req: Request) => {
     RETURNING id, body, created_at
   `;
   return json({ statusUpdate: update }, { status: 201 });
-};
+});
 
 export const config: Config = { path: "/api/status-updates" };

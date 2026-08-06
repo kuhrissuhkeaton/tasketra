@@ -4,6 +4,7 @@ import { getUserIdFromRequest } from "../lib/auth.ts";
 import { hasProjectAccess } from "../lib/ownership.ts";
 import { json } from "../lib/http.ts";
 import { round2, computeEvmMetrics } from "../lib/evm.ts";
+import { withSentry } from "../lib/sentry.ts";
 
 // Lightweight Earned Value Management: a project's budget baseline (BAC) plus
 // logged actual costs, compared against schedule/scope progress already
@@ -26,7 +27,7 @@ import { round2, computeEvmMetrics } from "../lib/evm.ts";
 // tested in lib/__tests__/evm.test.ts -- kept here as pure arithmetic so it
 // can be tested without a database.
 
-export default async (req: Request) => {
+export default withSentry(async (req: Request) => {
   const userId = getUserIdFromRequest(req);
   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
   const database = db();
@@ -103,6 +104,6 @@ export default async (req: Request) => {
   }
 
   return json({ error: "Method not allowed" }, { status: 405 });
-};
+});
 
 export const config: Config = { path: "/api/budget" };
