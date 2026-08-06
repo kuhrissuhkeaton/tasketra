@@ -1,0 +1,33 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly sanity check, no code changes involved — catches drift or environment issues
+    - cron: "0 14 * * 1"  # Mondays 14:00 UTC (~9am ET)
+  workflow_dispatch: {}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check (app)
+        run: npx tsc -b
+
+      - name: Type check (functions)
+        run: npx tsc -p tsconfig.functions.json
+
+      - name: Run test suite
+        run: npm test
