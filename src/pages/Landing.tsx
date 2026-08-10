@@ -164,15 +164,25 @@ export default function Landing() {
 
       <main>
         <section className="landing-hero">
-          <h1>Project management built for project managers.</h1>
-          <p className="landing-subhead">
-            Most work-management tools make you build PM structure from scratch -- a board here, a risk log there,
-            a spreadsheet for the budget. Tasketra starts with it already built in: WBS, EVM, RAID, decisions, and
-            a stakeholder-ready roadmap, from day one.
-          </p>
+          <div className="landing-hero-grid">
+            <div className="landing-hero-copy">
+              <h1>Project management built for project managers.</h1>
+              <p className="landing-subhead">
+                Most work-management tools make you build PM structure from scratch -- a board here, a risk log
+                there, a spreadsheet for the budget. Tasketra starts with it already built in: WBS, EVM, RAID,
+                decisions, and a stakeholder-ready roadmap, from day one.
+              </p>
 
-          {waitlistForm}
-          {error && <div className="form-error">{error}</div>}
+              {waitlistForm}
+              {error && <div className="form-error">{error}</div>}
+            </div>
+            <div className="landing-hero-visual">
+              <img
+                src={shotRoadmap}
+                alt="Tasketra roadmap view showing swimlanes with phase bars and milestone markers"
+              />
+            </div>
+          </div>
         </section>
 
         <section className="landing-audience">

@@ -624,12 +624,21 @@ textarea { resize: vertical; }
     var(--cream);
 }
 .landing-hero {
-  max-width: 720px; margin: 0 auto; padding: 72px 24px 48px; text-align: center;
+  max-width: 1180px; margin: 0 auto; padding: 56px 24px 64px;
 }
-.landing-hero h1 { font-size: 38px; line-height: 1.15; margin-bottom: 16px; }
-.landing-subhead { color: var(--slate); font-size: 17px; line-height: 1.6; max-width: 600px; margin: 0 auto 32px; }
+.landing-hero-grid {
+  display: flex; align-items: center; gap: 56px;
+}
+.landing-hero-copy { flex: 0 1 460px; }
+.landing-hero h1 { font-size: 34px; line-height: 1.12; letter-spacing: -0.01em; margin-bottom: 14px; }
+.landing-subhead { color: var(--slate); font-size: 16px; line-height: 1.6; margin: 0 0 28px; }
+.landing-hero-visual {
+  flex: 1 1 620px; background: white; border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 10px; box-shadow: var(--shadow-lift);
+}
+.landing-hero-visual img { display: block; width: 100%; height: auto; border-radius: calc(var(--radius) - 6px); }
 .landing-cta {
-  display: flex; gap: 10px; justify-content: center; max-width: 440px; margin: 0 auto; flex-wrap: wrap;
+  display: flex; gap: 10px; max-width: 440px; flex-wrap: wrap;
 }
 .landing-cta input {
   flex: 1; min-width: 220px; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm);
@@ -639,8 +648,10 @@ textarea { resize: vertical; }
 .landing-cta .btn { white-space: nowrap; }
 .landing-confirm {
   color: var(--navy); font-weight: 600; background: white; border: 1px solid var(--border);
-  border-radius: var(--radius); padding: 14px 20px; max-width: 440px; margin: 0 auto; box-shadow: var(--shadow-sm);
+  border-radius: var(--radius); padding: 14px 20px; max-width: 440px; box-shadow: var(--shadow-sm);
 }
+.landing-cta-band .landing-confirm, .landing-cta-band .landing-cta { margin: 0 auto; }
+.landing-cta-band .landing-cta { justify-content: center; }
 .landing main h2 {
   text-align: center; font-size: 26px; margin-bottom: 8px;
 }
@@ -701,6 +712,10 @@ textarea { resize: vertical; }
 @media (max-width: 760px) {
   .spotlight, .spotlight-reverse { flex-direction: column; gap: 20px; }
   .spotlight-text { flex-basis: auto; }
+  .landing-hero-grid { flex-direction: column; gap: 32px; }
+  .landing-hero-copy { flex-basis: auto; text-align: center; }
+  .landing-hero-copy .landing-cta { justify-content: center; margin: 0 auto; }
+  .landing-hero-visual { flex-basis: auto; width: 100%; }
 }
 
 .landing-plans {
