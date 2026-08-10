@@ -9,11 +9,11 @@ import { jsonBody } from "./fixtures.ts";
 // (disposable) Postgres -- these exercise the exact code path a live
 // request would, including the SQL itself, not a mock of it.
 
-function registerRequest(email: string, password: string, ip = "203.0.113.1") {
+function registerRequest(email: string, password: string, ip = "203.0.113.1", ref?: string) {
   return new Request("https://tasketra.com/api/auth/register", {
     method: "POST",
     headers: { "content-type": "application/json", "x-nf-client-connection-ip": ip },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email, password, ...(ref ? { ref } : {}) }),
   });
 }
 
@@ -118,6 +118,36 @@ describe("auth-register", () => {
       const hundredFirstBody = await jsonBody<{ user: { id: string } }>(hundredFirst);
       const [hundredFirstRow] = await database.sql`SELECT founding_member FROM users WHERE id = ${hundredFirstBody.user.id}`;
       expect(hundredFirstRow.founding_member).toBe(false);
+    });
+  });
+
+  describe("referral attribution", () => {
+    it("attributes a signup to the referrer when a valid ref code is given", async () => {
+      const referrerRes = await registerHandler(registerRequest("referrer@example.com", "correcthorse123", "10.1.0.1"));
+      const referrer = await jsonBody<{ user: { id: string } }>(referrerRes);
+      const code = referrer.user.id.replace(/-/g, "").slice(0, 8);
+
+      const refereeRes = await registerHandler(registerRequest("referee@example.com", "correcthorse123", "10.1.0.2", code));
+      const referee = await jsonBody<{ user: { id: string } }>(refereeRes);
+      expect(refereeRes.status).toBe(201);
+
+      const database = db();
+      const [row] = await database.sql`SELECT referred_by FROM users WHERE id = ${referee.user.id}`;
+      expect(row.referred_by).toBe(referrer.user.id);
+    });
+
+    it("registers successfully with no referral attached when the ref code doesn't match anyone", async () => {
+      const res = await registerHandler(registerRequest("no-referrer@example.com", "correcthorse123", "10.1.0.3", "deadbeef"));
+      expect(res.status).toBe(201);
+      const body = await jsonBody<{ user: { id: string } }>(res);
+      const database = db();
+      const [row] = await database.sql`SELECT referred_by FROM users WHERE id = ${body.user.id}`;
+      expect(row.referred_by).toBeNull();
+    });
+
+    it("registers successfully and ignores a malformed ref code rather than erroring", async () => {
+      const res = await registerHandler(registerRequest("weird-ref@example.com", "correcthorse123", "10.1.0.4", "not-hex-at-all!!"));
+      expect(res.status).toBe(201);
     });
   });
 });

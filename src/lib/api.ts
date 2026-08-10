@@ -43,7 +43,23 @@ async function uploadRequest<T>(path: string, formData: FormData): Promise<T> {
   return data as T;
 }
 
-export type User = { id: string; email: string; isAdmin?: boolean; plan?: "founding" | "trialing" | "active" | "free" };
+export type User = {
+  id: string;
+  email: string;
+  isAdmin?: boolean;
+  plan?: "founding" | "trialing" | "active" | "free";
+  display_name?: string | null;
+  job_title?: string | null;
+  timezone?: string | null;
+  has_avatar?: boolean;
+};
+
+export type ReferralInfo = {
+  link: string;
+  totalReferred: number;
+  totalRewarded: number;
+  referred: { email: string; joinedAt: string; rewarded: boolean }[];
+};
 
 export type Project = {
   id: string;
@@ -304,8 +320,8 @@ export type BudgetData = {
 };
 
 export const api = {
-  register: (email: string, password: string) =>
-    request<{ user: User }>("/auth/register", { method: "POST", body: JSON.stringify({ email, password }) }),
+  register: (email: string, password: string, ref?: string) =>
+    request<{ user: User }>("/auth/register", { method: "POST", body: JSON.stringify({ email, password, ...(ref ? { ref } : {}) }) }),
   login: (email: string, password: string) =>
     request<{ user: User }>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
   logout: () => request<{ ok: true }>("/auth/logout", { method: "POST" }),
@@ -605,4 +621,25 @@ export const api = {
     request<{ feedback: Feedback }>("/feedback", { method: "PATCH", body: JSON.stringify({ id, ...updates }) }),
   notifyFeedbackSubmitter: (id: string) =>
     request<{ feedback: Feedback }>("/feedback", { method: "PATCH", body: JSON.stringify({ id, notify: true }) }),
+
+  updateProfile: (updates: { displayName?: string; jobTitle?: string; timezone?: string }) =>
+    request<{ user: { display_name: string | null; job_title: string | null; timezone: string | null } }>("/account", {
+      method: "PATCH",
+      body: JSON.stringify(updates),
+    }),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    request<{ ok: true }>("/account", {
+      method: "PATCH",
+      body: JSON.stringify({ action: "change-password", currentPassword, newPassword }),
+    }),
+
+  uploadAvatar: (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return uploadRequest<{ ok: true }>("/avatar", form);
+  },
+  deleteAvatar: () => request<{ ok: true }>("/avatar", { method: "DELETE" }),
+  avatarUrl: (userId: string) => `${BASE}/avatar?userId=${userId}`,
+
+  getReferrals: () => request<ReferralInfo>("/referrals"),
 };

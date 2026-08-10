@@ -21,7 +21,10 @@ export default withSentry(async (req: Request) => {
   if (!userId) return json({ user: null }, { status: 200 });
 
   const database = db();
-  const [user] = await database.sql`SELECT id, email FROM users WHERE id = ${userId}`;
+  const [user] = await database.sql`
+    SELECT id, email, display_name, job_title, timezone, avatar_key IS NOT NULL AS has_avatar
+    FROM users WHERE id = ${userId}
+  `;
   if (!user) return json({ user: null });
   const plan = await getUserPlan(database, userId);
   return json({ user: { ...user, isAdmin: isAdminEmail(user.email), plan } });

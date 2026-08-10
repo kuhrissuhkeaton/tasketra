@@ -103,6 +103,52 @@ export default withSentry(async (req: Request) => {
     await database.sql`UPDATE subscriptions SET cancellation_notified_at = now() WHERE user_id = ${userId}`;
   }
 
+  // Referral reward: "both sides get a free month," applied as a Stripe
+  // customer balance credit (negative balance = credit toward the next
+  // invoice) rather than an actual transfer of money. Fires once, the
+  // moment a referred user's subscription first becomes active (trial ->
+  // paid) -- not on every subsequent webhook ping while it stays active.
+  // If the referrer never went through checkout (no Stripe customer on
+  // file -- e.g. a founding member who's never seen the billing flow),
+  // there's nothing to credit them against; the referral is still marked
+  // granted so this doesn't retry forever, but only the referee's side
+  // actually gets money off in that case.
+  async function grantReferralRewardIfNewlyActive(sub: Stripe.Subscription) {
+    if (sub.status !== "active") return;
+    const userId = sub.metadata?.userId;
+    if (!userId) return;
+
+    const [existing] = await database.sql`SELECT status FROM subscriptions WHERE user_id = ${userId}`;
+    if (existing?.status === "active") return; // already active before this event -- not a new conversion
+
+    const [user] = await database.sql`SELECT referred_by, referral_reward_granted_at FROM users WHERE id = ${userId}`;
+    if (!user?.referred_by || user.referral_reward_granted_at) return;
+
+    const priceId = getEnv("STRIPE_PRICE_MONTHLY");
+    if (!priceId) return;
+    const price = await client.prices.retrieve(priceId);
+    const amountCents = price.unit_amount;
+    if (!amountCents) return;
+
+    const refereeCustomerId = typeof sub.customer === "string" ? sub.customer : sub.customer.id;
+    await client.customers.createBalanceTransaction(refereeCustomerId, {
+      amount: -amountCents,
+      currency: price.currency,
+      description: "Referral reward -- one month free for joining through a referral link",
+    });
+
+    const [referrerSub] = await database.sql`SELECT stripe_customer_id FROM subscriptions WHERE user_id = ${user.referred_by}`;
+    if (referrerSub?.stripe_customer_id) {
+      await client.customers.createBalanceTransaction(referrerSub.stripe_customer_id, {
+        amount: -amountCents,
+        currency: price.currency,
+        description: "Referral reward -- one month free for a referral that converted to paid",
+      });
+    }
+
+    await database.sql`UPDATE users SET referral_reward_granted_at = now() WHERE id = ${userId}`;
+  }
+
   switch (event.type) {
     case "checkout.session.completed": {
       const session = event.data.object as Stripe.Checkout.Session;
@@ -117,6 +163,7 @@ export default withSentry(async (req: Request) => {
     case "customer.subscription.created": {
       const sub = event.data.object as Stripe.Subscription;
       await notifyOnNewCancellation(sub);
+      await grantReferralRewardIfNewlyActive(sub);
       await upsertFromSubscription(sub);
       break;
     }

@@ -1,11 +1,13 @@
 import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
 import { Wordmark } from "../components/Wordmark";
 
 export default function Login() {
-  const [mode, setMode] = useState<"login" | "register">("login");
+  const [params] = useSearchParams();
+  const refCode = params.get("ref") || undefined;
+  const [mode, setMode] = useState<"login" | "register">(params.get("mode") === "register" ? "register" : "login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -21,7 +23,7 @@ export default function Login() {
       if (mode === "login") {
         await api.login(email, password);
       } else {
-        await api.register(email, password);
+        await api.register(email, password, refCode);
       }
       await refresh();
       navigate("/app");
@@ -37,6 +39,12 @@ export default function Login() {
       <div className="auth-card">
         <Wordmark beta />
         <p className="auth-tagline">Project management built for project managers.</p>
+
+        {mode === "register" && refCode && (
+          <p className="form-success" style={{ marginBottom: 4 }}>
+            Referred by a friend -- you'll both get a free month once you upgrade to Pro.
+          </p>
+        )}
 
         <div className="auth-tabs">
           <button className={mode === "login" ? "tab active" : "tab"} onClick={() => setMode("login")} type="button">

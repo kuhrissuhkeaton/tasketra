@@ -11,12 +11,24 @@ export default withSentry(async (req: Request) => {
   const body = await req.json().catch(() => null) as any;
   const email = (body?.email || "").trim().toLowerCase();
   const password = body?.password || "";
+  const refCode = typeof body?.ref === "string" ? body.ref.trim().toLowerCase() : "";
 
   if (!email || !password || password.length < 8) {
     return json({ error: "Email and a password of at least 8 characters are required." }, { status: 400 });
   }
 
   const database = db();
+
+  // Resolve a referral code (first 8 hex chars of the referrer's own id --
+  // see referrals.mts) to the referring user. A bad, expired, or malformed
+  // code just means no referral is attached; it never blocks registration.
+  let referredBy: string | null = null;
+  if (/^[0-9a-f]{8}$/.test(refCode)) {
+    const [referrer] = await database.sql`
+      SELECT id FROM users WHERE replace(id::text, '-', '') LIKE ${refCode + "%"} LIMIT 1
+    `;
+    if (referrer && referrer.id) referredBy = referrer.id;
+  }
 
   // Caps mass account creation from a single source -- registration has no
   // other gate (no invite/waitlist requirement), so this is the only thing
@@ -36,8 +48,8 @@ export default withSentry(async (req: Request) => {
   // heavy concurrent signups is an acceptable outcome, a separate query pair
   // would just widen that window for no benefit.
   const [user] = await database.sql`
-    INSERT INTO users (email, password_hash, founding_member)
-    VALUES (${email}, ${passwordHash}, (SELECT count(*) FROM users) < 100)
+    INSERT INTO users (email, password_hash, founding_member, referred_by)
+    VALUES (${email}, ${passwordHash}, (SELECT count(*) FROM users) < 100, ${referredBy})
     RETURNING id, email, founding_member
   `;
 

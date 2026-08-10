@@ -63,6 +63,13 @@ export function AppSidebar({ children }: { children?: ReactNode }) {
             What's new
           </Link>
           <Link
+            to="/app/account"
+            className={pathname === "/app/account" ? "side-tab active" : "side-tab"}
+          >
+            <NavDot active={pathname === "/app/account"} />
+            Account
+          </Link>
+          <Link
             to="/app/billing"
             className={pathname === "/app/billing" ? "side-tab active" : "side-tab"}
           >
