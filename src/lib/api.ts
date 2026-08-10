@@ -72,6 +72,8 @@ export type Project = {
   overdue_tasks?: number;
   webhook_enabled?: boolean;
   ccb_enabled?: boolean;
+  roadmap_share_enabled?: boolean;
+  roadmap_share_token?: string | null;
   archived?: boolean;
   deleted_at?: string | null;
 };
@@ -194,7 +196,7 @@ export type FeedItem = {
 };
 
 export type TrashItem = {
-  entity_type: "task" | "issue" | "risk" | "stakeholder" | "decision" | "assumption" | "dependency" | "change_request" | "lesson" | "meeting" | "document";
+  entity_type: "task" | "issue" | "risk" | "stakeholder" | "decision" | "assumption" | "dependency" | "change_request" | "lesson" | "meeting" | "document" | "roadmap_item";
   id: string;
   title: string;
   deleted_at: string;
@@ -215,6 +217,21 @@ export type ProjectDocument = {
 export type StorageUsage = {
   usedBytes: number;
   capBytes: number;
+};
+
+export type RoadmapItemType = "phase" | "milestone" | "release" | "event" | "note";
+export type RoadmapItem = {
+  id: string;
+  type: RoadmapItemType;
+  title: string;
+  description: string | null;
+  swimlane: string;
+  start_date: string | null;
+  end_date: string | null;
+  status: "not_started" | "in_progress" | "blocked" | "done";
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 export type ChangeRequest = {
@@ -460,6 +477,7 @@ export const api = {
       task: "/tasks", issue: "/issues", risk: "/risks", stakeholder: "/stakeholders", decision: "/decisions",
       assumption: "/assumptions", dependency: "/dependencies",
       change_request: "/change-requests", lesson: "/lessons", meeting: "/meetings", document: "/documents",
+      roadmap_item: "/roadmap",
     };
     return request<{ ok: true }>(path[entityType], { method: "PATCH", body: JSON.stringify({ id, restore: true }) });
   },
@@ -607,6 +625,25 @@ export const api = {
 
   setProjectWebhookEnabled: (projectId: string, enabled: boolean) =>
     request<{ project: Project }>("/project", { method: "PATCH", body: JSON.stringify({ id: projectId, webhook_enabled: enabled }) }),
+
+  listRoadmapItems: (projectId: string) =>
+    request<{ items: RoadmapItem[] }>(`/roadmap?projectId=${projectId}`),
+  createRoadmapItem: (
+    projectId: string,
+    item: { type: RoadmapItemType; title: string; description?: string; swimlane?: string; startDate?: string; endDate?: string; status?: RoadmapItem["status"] }
+  ) => request<{ item: RoadmapItem }>("/roadmap", { method: "POST", body: JSON.stringify({ projectId, ...item }) }),
+  updateRoadmapItem: (
+    id: string,
+    patch: { type?: RoadmapItemType; title?: string; description?: string; swimlane?: string; startDate?: string | null; endDate?: string | null; status?: RoadmapItem["status"] }
+  ) => request<{ item: RoadmapItem }>("/roadmap", { method: "PATCH", body: JSON.stringify({ id, ...patch }) }),
+  deleteRoadmapItem: (id: string) => request<{ ok: true }>(`/roadmap?id=${id}`, { method: "DELETE" }),
+
+  setProjectRoadmapShareEnabled: (projectId: string, enabled: boolean) =>
+    request<{ project: Project }>("/project", { method: "PATCH", body: JSON.stringify({ id: projectId, roadmap_share_enabled: enabled }) }),
+  regenerateRoadmapShareToken: (projectId: string) =>
+    request<{ project: Project }>("/project", { method: "PATCH", body: JSON.stringify({ id: projectId, regenerateRoadmapToken: true }) }),
+  getPublicRoadmap: (token: string) =>
+    request<{ project: { name: string }; items: RoadmapItem[] }>(`/roadmap-public?token=${token}`),
 
   getWebhookSettings: () => request<{ webhook_url: string | null }>("/webhook-settings"),
   setWebhookSettings: (webhookUrl: string) =>

@@ -42,6 +42,8 @@ export default withSentry(async (req: Request) => {
     SELECT 'meeting' AS entity_type, id, title, deleted_at FROM meetings WHERE project_id = ${projectId} AND deleted_at IS NOT NULL
     UNION ALL
     SELECT 'document' AS entity_type, id, filename AS title, deleted_at FROM documents WHERE project_id = ${projectId} AND deleted_at IS NOT NULL
+    UNION ALL
+    SELECT 'roadmap_item' AS entity_type, id, title, deleted_at FROM roadmap_items WHERE project_id = ${projectId} AND deleted_at IS NOT NULL
     ORDER BY deleted_at DESC
   `;
 

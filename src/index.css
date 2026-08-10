@@ -516,6 +516,22 @@ textarea { resize: vertical; }
 .gantt-legend { display: flex; gap: 18px; margin-top: 12px; font-size: 13px; color: var(--slate); flex-wrap: wrap; }
 .gantt-legend span { display: inline-flex; align-items: center; gap: 6px; }
 .gantt-swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; }
+
+/* Roadmap timeline -- separate row classes from the Gantt ones above since
+   swimlane row height is dynamic (packed lanes), not the Gantt's fixed 36px;
+   otherwise reuses the same wrap/header/legend/status-color chrome. */
+.roadmap-label-row {
+  display: flex; align-items: center; padding: 0 10px; font-size: 13px; font-weight: 600;
+  border-bottom: 1px solid var(--border); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.roadmap-row { position: relative; border-bottom: 1px solid var(--border); }
+.roadmap-bar {
+  position: absolute; height: 22px; border-radius: 4px; min-width: 10px;
+  display: flex; align-items: center; overflow: hidden; cursor: default;
+}
+.roadmap-bar-label { font-size: 11px; color: white; padding: 0 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.roadmap-marker { position: absolute; width: 12px; height: 12px; transform: rotate(45deg); border-radius: 2px; cursor: default; }
+.roadmap-undated-chip { font-size: 12px; }
 @media (max-width: 800px) {
   .kanban-board { grid-template-columns: 1fr; }
 }
@@ -572,6 +588,11 @@ textarea { resize: vertical; }
 }
 .decision-context { color: var(--slate); margin: 12px 0; }
 .option-list { margin: 8px 0 16px; }
+
+.public-roadmap {
+  max-width: 1100px; margin: 40px auto; padding: 32px; background: white;
+  border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-lift);
+}
 
 /* --- Landing page --- */
 .landing main {

@@ -1,6 +1,7 @@
 import { useEffect, useState, Fragment } from "react";
 import { useParams, useSearchParams, useNavigate, Link } from "react-router-dom";
-import { api, ApiError, type Project, type Task, type Stakeholder, type Decision, type Issue, type Risk, type Assumption, type Dependency, type ChangeRequest, type Lesson, type TodayData, type WeeklyReport, type BudgetData, type FeedItem, type TrashItem, type ProjectMember, type Meeting, type MeetingActionItem, type ProjectDocument, type StorageUsage } from "../lib/api";
+import { api, ApiError, type Project, type Task, type Stakeholder, type Decision, type Issue, type Risk, type Assumption, type Dependency, type ChangeRequest, type Lesson, type TodayData, type WeeklyReport, type BudgetData, type FeedItem, type TrashItem, type ProjectMember, type Meeting, type MeetingActionItem, type ProjectDocument, type StorageUsage, type RoadmapItem, type RoadmapItemType } from "../lib/api";
+import { RoadmapTimeline, ROADMAP_TYPE_LABEL, ROADMAP_STATUS_LABEL, fmtRoadmapDate } from "../components/RoadmapTimeline";
 import { tasksToICS, downloadICS } from "../lib/ics";
 import { useAuth } from "../lib/auth-context";
 import { AppSidebar, NavDot } from "../components/AppSidebar";
@@ -8,7 +9,7 @@ import { useConfirm } from "../components/ConfirmDialog";
 import { avatarColor, initials } from "../lib/avatar";
 
 
-type Tab = "home" | "tasks" | "raid" | "budget" | "meetings" | "documents" | "stakeholders" | "decisions" | "team" | "report" | "templates" | "export" | "connections" | "trash";
+type Tab = "home" | "roadmap" | "tasks" | "raid" | "budget" | "meetings" | "documents" | "stakeholders" | "decisions" | "team" | "report" | "templates" | "export" | "connections" | "trash";
 
 function daysAgo(dateStr: string): number {
   return Math.max(0, Math.floor((Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24)));
@@ -122,6 +123,7 @@ const NAV_GROUPS: { label: string; tabs: { id: Tab; label: string }[] }[] = [
     { id: "home", label: "Home" },
   ] },
   { label: "Plan & track", tabs: [
+    { id: "roadmap", label: "Roadmap" },
     { id: "tasks", label: "Tasks" },
     { id: "raid", label: "Issues & risks" },
     { id: "budget", label: "Budget" },
@@ -194,6 +196,7 @@ export default function ProjectHome() {
         </div>
 
         {tab === "home" && <HomeTab projectId={id} />}
+        {tab === "roadmap" && <RoadmapTab projectId={id} isOwner={project?.is_owner ?? false} />}
         {tab === "tasks" && <TasksTab projectId={id} projectName={project?.name || "Project"} />}
         {tab === "raid" && <RaidTab projectId={id} />}
         {tab === "budget" && <BudgetTab projectId={id} />}
@@ -432,6 +435,7 @@ const TRASH_ENTITY_LABEL: Record<TrashItem["entity_type"], string> = {
   lesson: "Lesson",
   meeting: "Meeting",
   document: "Document",
+  roadmap_item: "Roadmap item",
 };
 
 function TrashTab({ projectId }: { projectId: string }) {
@@ -460,7 +464,7 @@ function TrashTab({ projectId }: { projectId: string }) {
   return (
     <div>
       <p className="muted" style={{ marginBottom: 16 }}>
-        Deleted tasks, issues, risks, assumptions, dependencies, change requests, lessons, stakeholders, decisions, meetings, and documents land here. Restore them any time -- nothing is gone for good.
+        Deleted tasks, issues, risks, assumptions, dependencies, change requests, lessons, stakeholders, decisions, meetings, documents, and roadmap items land here. Restore them any time -- nothing is gone for good.
       </p>
 
       {loading ? (
@@ -1717,6 +1721,257 @@ const MEETING_TEMPLATES: Record<Meeting["meeting_type"], string> = {
   ccb_review: "Change requests under review:\n\nImpact assessment (schedule / budget / scope):\n\nBoard discussion notes:\n\nDecisions:",
   other: "",
 };
+
+function RoadmapTab({ projectId, isOwner }: { projectId: string; isOwner: boolean }) {
+  const confirmDialog = useConfirm();
+  const [items, setItems] = useState<RoadmapItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const [type, setType] = useState<RoadmapItemType>("milestone");
+  const [title, setTitle] = useState("");
+  const [swimlane, setSwimlane] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [description, setDescription] = useState("");
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editType, setEditType] = useState<RoadmapItemType>("milestone");
+  const [editTitle, setEditTitle] = useState("");
+  const [editSwimlane, setEditSwimlane] = useState("");
+  const [editStart, setEditStart] = useState("");
+  const [editEnd, setEditEnd] = useState("");
+  const [editStatus, setEditStatus] = useState<RoadmapItem["status"]>("not_started");
+  const [editDescription, setEditDescription] = useState("");
+
+  const [project, setProject] = useState<Project | null>(null);
+  const [shareBusy, setShareBusy] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  async function load() {
+    setLoading(true);
+    const { items } = await api.listRoadmapItems(projectId);
+    setItems(items);
+    setLoading(false);
+  }
+
+  useEffect(() => { load(); }, [projectId]);
+  useEffect(() => {
+    if (isOwner) api.getProject(projectId).then(({ project }) => setProject(project));
+  }, [projectId, isOwner]);
+
+  const swimlaneNames = Array.from(new Set(items.map((i) => i.swimlane))).sort();
+
+  async function addItem(e: React.FormEvent) {
+    e.preventDefault();
+    if (!title.trim()) return;
+    setError("");
+    try {
+      await api.createRoadmapItem(projectId, {
+        type,
+        title: title.trim(),
+        swimlane: swimlane.trim() || undefined,
+        startDate: startDate || undefined,
+        endDate: endDate || undefined,
+        description: description.trim() || undefined,
+      });
+      setTitle(""); setSwimlane(""); setStartDate(""); setEndDate(""); setDescription(""); setType("milestone");
+      load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't add that item.");
+    }
+  }
+
+  function startEdit(item: RoadmapItem) {
+    if (editingId === item.id) { setEditingId(null); return; }
+    setEditingId(item.id);
+    setEditType(item.type);
+    setEditTitle(item.title);
+    setEditSwimlane(item.swimlane);
+    setEditStart(item.start_date || "");
+    setEditEnd(item.end_date || "");
+    setEditStatus(item.status);
+    setEditDescription(item.description || "");
+  }
+
+  async function saveEdit(id: string) {
+    await api.updateRoadmapItem(id, {
+      type: editType,
+      title: editTitle.trim(),
+      swimlane: editSwimlane.trim() || "General",
+      startDate: editStart || null,
+      endDate: editEnd || null,
+      status: editStatus,
+      description: editDescription,
+    });
+    setEditingId(null);
+    load();
+  }
+
+  async function removeItem(item: RoadmapItem) {
+    if (!(await confirmDialog(`Delete "${item.title}"? You can restore it from Trash.`))) return;
+    await api.deleteRoadmapItem(item.id);
+    load();
+  }
+
+  async function toggleShare() {
+    if (!project) return;
+    const next = !project.roadmap_share_enabled;
+    setShareBusy(true);
+    try {
+      const { project: updated } = await api.setProjectRoadmapShareEnabled(projectId, next);
+      setProject(updated);
+    } finally {
+      setShareBusy(false);
+    }
+  }
+
+  async function regenerateLink() {
+    if (!(await confirmDialog("Generate a new link? The old link will stop working right away."))) return;
+    setShareBusy(true);
+    try {
+      const { project: updated } = await api.regenerateRoadmapShareToken(projectId);
+      setProject(updated);
+    } finally {
+      setShareBusy(false);
+    }
+  }
+
+  function copyLink() {
+    if (!project?.roadmap_share_token) return;
+    const url = `${window.location.origin}/r/${project.roadmap_share_token}`;
+    navigator.clipboard.writeText(url).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
+  if (loading) return <div className="skel-loading-block"><div className="skel skel-text" style={{ width: "45%" }} /><div className="skel skel-text" style={{ width: "80%" }} /><div className="skel skel-text" style={{ width: "60%", marginBottom: 0 }} /></div>;
+
+  return (
+    <div>
+      <p className="muted" style={{ marginBottom: 16, maxWidth: 640 }}>
+        The strategic view of this project -- phases, milestones, releases, events, and notes, grouped
+        into swimlanes and laid out on a timeline. For day-to-day execution, use the Tasks tab.
+      </p>
+
+      <RoadmapTimeline items={items} />
+
+      {isOwner && (
+        <div className="template-card" style={{ maxWidth: 640, marginTop: 20 }}>
+          <h4>Share roadmap</h4>
+          <p className="muted">
+            Turn this on to get a read-only link for exec sponsors or stakeholders -- no Tasketra account needed.
+          </p>
+          <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
+            <input type="checkbox" checked={!!project?.roadmap_share_enabled} disabled={shareBusy} onChange={toggleShare} />
+            Sharing is {project?.roadmap_share_enabled ? "on" : "off"}
+          </label>
+          {project?.roadmap_share_enabled && project?.roadmap_share_token && (
+            <div className="inline-form" style={{ marginTop: 10, marginBottom: 0 }}>
+              <input
+                type="text"
+                readOnly
+                value={`${window.location.origin}/r/${project.roadmap_share_token}`}
+                onFocus={(e) => e.target.select()}
+                style={{ flex: 1, minWidth: 260 }}
+              />
+              <button className="btn btn-primary" type="button" onClick={copyLink}>{copied ? "Copied!" : "Copy link"}</button>
+              <button className="btn-link" type="button" disabled={shareBusy} onClick={regenerateLink}>Generate new link</button>
+            </div>
+          )}
+        </div>
+      )}
+
+      <form className="stacked-form" onSubmit={addItem} style={{ marginTop: 20 }}>
+        <label>New roadmap item</label>
+        <input placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
+        <div className="inline-form" style={{ marginTop: 8 }}>
+          <select value={type} onChange={(e) => setType(e.target.value as RoadmapItemType)}>
+            {Object.entries(ROADMAP_TYPE_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </select>
+          <input
+            list="roadmap-swimlane-options"
+            placeholder="Swimlane (e.g. Platform)"
+            value={swimlane}
+            onChange={(e) => setSwimlane(e.target.value)}
+          />
+          <datalist id="roadmap-swimlane-options">
+            {swimlaneNames.map((s) => <option key={s} value={s} />)}
+          </datalist>
+          <input type="date" title="Start date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+          <input type="date" title="End date (optional)" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+        </div>
+        <label>Notes (optional)</label>
+        <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
+        <div style={{ marginTop: 8 }}>
+          <button className="btn btn-primary">Add to roadmap</button>
+        </div>
+      </form>
+      {error && <p className="form-error">{error}</p>}
+
+      <table className="table" style={{ marginTop: 20 }}>
+        <thead>
+          <tr><th>Item</th><th>Type</th><th>Swimlane</th><th>Dates</th><th>Status</th><th></th></tr>
+        </thead>
+        <tbody>
+          {items.map((item) => (
+            <Fragment key={item.id}>
+              <tr>
+                <td>{item.title}</td>
+                <td><span className="pill pill-navy">{ROADMAP_TYPE_LABEL[item.type]}</span></td>
+                <td className="muted">{item.swimlane}</td>
+                <td className="muted">
+                  {item.start_date
+                    ? `${fmtRoadmapDate(item.start_date)}${item.end_date ? ` -- ${fmtRoadmapDate(item.end_date)}` : ""}`
+                    : "Undated"}
+                </td>
+                <td><span className={`pill ${TASK_STATUS_PILL[item.status]}`}>{ROADMAP_STATUS_LABEL[item.status]}</span></td>
+                <td className="row-actions">
+                  <button className="btn-link" type="button" onClick={() => startEdit(item)}>
+                    {editingId === item.id ? "Close" : "Edit"}
+                  </button>
+                  <button className="btn-link btn-link-danger" type="button" onClick={() => removeItem(item)}>Delete</button>
+                </td>
+              </tr>
+              {editingId === item.id && (
+                <tr>
+                  <td colSpan={6}>
+                    <div className="settings-card" style={{ margin: "6px 0 14px" }}>
+                      <label>Title</label>
+                      <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
+                      <div className="inline-form" style={{ marginTop: 8 }}>
+                        <select value={editType} onChange={(e) => setEditType(e.target.value as RoadmapItemType)}>
+                          {Object.entries(ROADMAP_TYPE_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                        </select>
+                        <input value={editSwimlane} onChange={(e) => setEditSwimlane(e.target.value)} placeholder="Swimlane" />
+                        <select value={editStatus} onChange={(e) => setEditStatus(e.target.value as RoadmapItem["status"])}>
+                          {Object.entries(ROADMAP_STATUS_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                        </select>
+                      </div>
+                      <div className="inline-form" style={{ marginTop: 8 }}>
+                        <input type="date" title="Start date" value={editStart} onChange={(e) => setEditStart(e.target.value)} />
+                        <input type="date" title="End date" value={editEnd} onChange={(e) => setEditEnd(e.target.value)} />
+                      </div>
+                      <label style={{ marginTop: 8 }}>Notes</label>
+                      <textarea value={editDescription} onChange={(e) => setEditDescription(e.target.value)} rows={3} />
+                      <div style={{ marginTop: 8 }}>
+                        <button className="btn btn-primary" type="button" onClick={() => saveEdit(item.id)}>Save</button>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </Fragment>
+          ))}
+          {items.length === 0 && (
+            <tr><td colSpan={6} className="muted">No roadmap items yet. Add phases, milestones, releases, events, or notes above to sketch out the plan.</td></tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
 function MeetingsTab({ projectId }: { projectId: string }) {
   const confirmDialog = useConfirm();

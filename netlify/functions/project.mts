@@ -1,4 +1,5 @@
 import type { Config } from "@netlify/functions";
+import crypto from "node:crypto";
 import { db } from "../lib/db.ts";
 import { getUserIdFromRequest } from "../lib/auth.ts";
 import { isProjectOwner } from "../lib/ownership.ts";
@@ -19,7 +20,8 @@ export default withSentry(async (req: Request) => {
 
     const [project] = await database.sql`
       SELECT p.id, p.name, p.description, p.created_at, p.owner_id, p.webhook_enabled,
-        p.ccb_enabled, p.archived, p.deleted_at, (p.owner_id = ${userId}) AS is_owner
+        p.ccb_enabled, p.archived, p.deleted_at, p.roadmap_share_enabled, p.roadmap_share_token,
+        (p.owner_id = ${userId}) AS is_owner
       FROM projects p
       WHERE p.id = ${id}
         AND (p.owner_id = ${userId}
@@ -45,16 +47,38 @@ export default withSentry(async (req: Request) => {
       return json({ project });
     }
 
+    // Regenerating rotates the token (invalidating any previously shared
+    // link) without touching roadmap_share_enabled -- the owner can rotate
+    // a link and re-share it, or rotate one that's currently off, in one step.
+    if (body.regenerateRoadmapToken) {
+      const token = crypto.randomBytes(24).toString("base64url");
+      const [project] = await database.sql`
+        UPDATE projects SET roadmap_share_token = ${token} WHERE id = ${id}
+        RETURNING id, roadmap_share_token, roadmap_share_enabled
+      `;
+      return json({ project });
+    }
+
     const hasName = typeof body?.name === "string";
     const hasDescription = typeof body?.description === "string";
     const hasWebhook = typeof body?.webhook_enabled === "boolean";
     const hasCcb = typeof body?.ccb_enabled === "boolean";
+    const hasRoadmapShare = typeof body?.roadmap_share_enabled === "boolean";
 
     if (hasName && !body.name.trim()) {
       return json({ error: "Project name can't be empty." }, { status: 400 });
     }
-    if (!hasName && !hasDescription && !hasWebhook && !hasCcb) {
+    if (!hasName && !hasDescription && !hasWebhook && !hasCcb && !hasRoadmapShare) {
       return json({ error: "Nothing to update." }, { status: 400 });
+    }
+
+    // Turning sharing on for the first time needs a token to share -- generate
+    // one right here if this project has never had one, rather than making
+    // the frontend call regenerateRoadmapToken first.
+    let newShareToken: string | null = null;
+    if (hasRoadmapShare && body.roadmap_share_enabled) {
+      const [existing] = await database.sql`SELECT roadmap_share_token FROM projects WHERE id = ${id}`;
+      if (!existing?.roadmap_share_token) newShareToken = crypto.randomBytes(24).toString("base64url");
     }
 
     const [project] = await database.sql`
@@ -62,9 +86,12 @@ export default withSentry(async (req: Request) => {
         name = COALESCE(${hasName ? body.name.trim() : null}, name),
         description = CASE WHEN ${hasDescription} THEN ${hasDescription ? body.description : null} ELSE description END,
         webhook_enabled = COALESCE(${hasWebhook ? body.webhook_enabled : null}, webhook_enabled),
-        ccb_enabled = COALESCE(${hasCcb ? body.ccb_enabled : null}, ccb_enabled)
+        ccb_enabled = COALESCE(${hasCcb ? body.ccb_enabled : null}, ccb_enabled),
+        roadmap_share_enabled = COALESCE(${hasRoadmapShare ? body.roadmap_share_enabled : null}, roadmap_share_enabled),
+        roadmap_share_token = COALESCE(${newShareToken}, roadmap_share_token)
       WHERE id = ${id}
-      RETURNING id, name, description, created_at, owner_id, webhook_enabled, ccb_enabled, archived, deleted_at
+      RETURNING id, name, description, created_at, owner_id, webhook_enabled, ccb_enabled, archived, deleted_at,
+        roadmap_share_enabled, roadmap_share_token
     `;
 
     if (hasName || hasDescription) {

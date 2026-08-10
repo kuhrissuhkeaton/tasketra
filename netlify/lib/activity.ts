@@ -10,7 +10,7 @@
 
 import { isWebhookUrlSafeToDispatch } from "./ssrf-guard.ts";
 
-export type EntityType = "task" | "issue" | "risk" | "stakeholder" | "decision" | "member" | "assumption" | "dependency" | "change_request" | "lesson" | "meeting" | "project" | "document";
+export type EntityType = "task" | "issue" | "risk" | "stakeholder" | "decision" | "member" | "assumption" | "dependency" | "change_request" | "lesson" | "meeting" | "project" | "document" | "roadmap_item";
 export type ActivityAction = "created" | "updated" | "deleted" | "restored";
 
 export async function logActivity(

@@ -8,6 +8,7 @@ import ResetPassword from "./pages/ResetPassword";
 import Dashboard from "./pages/Dashboard";
 import ProjectHome from "./pages/ProjectHome";
 import DecisionPublic from "./pages/DecisionPublic";
+import RoadmapPublic from "./pages/RoadmapPublic";
 import Resources from "./pages/Resources";
 import WhatsNew from "./pages/WhatsNew";
 import Billing from "./pages/Billing";
@@ -60,6 +61,7 @@ export default function App() {
           <Route path="/admin/feedback" element={<AdminProtected><AdminFeedback /></AdminProtected>} />
           <Route path="/app/projects/:id" element={<Protected><ProjectHome /></Protected>} />
           <Route path="/d/:token" element={<DecisionPublic />} />
+          <Route path="/r/:token" element={<RoadmapPublic />} />
           <Route path="/legal" element={<LegalHub />} />
           <Route path="/legal/terms" element={<Terms />} />
           <Route path="/legal/privacy" element={<Privacy />} />
