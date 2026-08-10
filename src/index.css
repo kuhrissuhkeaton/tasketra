@@ -619,9 +619,9 @@ textarea { resize: vertical; }
 /* --- Landing page --- */
 .landing main {
   background:
-    radial-gradient(circle at 15% 0%, rgba(201, 222, 69, 0.14), transparent 45%),
+    radial-gradient(circle at 15% 0%, rgba(201, 222, 69, 0.18), transparent 45%),
     radial-gradient(circle at 90% 30%, rgba(27, 31, 20, 0.05), transparent 45%),
-    var(--cream);
+    white;
 }
 .landing-hero {
   max-width: 1180px; margin: 0 auto; padding: 56px 24px 64px;
@@ -633,7 +633,7 @@ textarea { resize: vertical; }
 .landing-hero h1 { font-size: 34px; line-height: 1.12; letter-spacing: -0.01em; margin-bottom: 14px; }
 .landing-subhead { color: var(--slate); font-size: 16px; line-height: 1.6; margin: 0 0 28px; }
 .landing-hero-visual {
-  flex: 1 1 620px; background: white; border: 1px solid var(--border); border-radius: var(--radius);
+  flex: 1 1 620px; background: var(--cream); border: 1px solid var(--border); border-radius: var(--radius);
   padding: 10px; box-shadow: var(--shadow-lift);
 }
 .landing-hero-visual img { display: block; width: 100%; height: auto; border-radius: calc(var(--radius) - 6px); }
@@ -647,7 +647,7 @@ textarea { resize: vertical; }
 .landing-cta input:focus { outline: 2px solid var(--gold); outline-offset: 1px; }
 .landing-cta .btn { white-space: nowrap; }
 .landing-confirm {
-  color: var(--navy); font-weight: 600; background: white; border: 1px solid var(--border);
+  color: var(--navy); font-weight: 600; background: var(--cream); border: 1px solid var(--border);
   border-radius: var(--radius); padding: 14px 20px; max-width: 440px; box-shadow: var(--shadow-sm);
 }
 .landing-cta-band .landing-confirm, .landing-cta-band .landing-cta { margin: 0 auto; }
@@ -666,7 +666,7 @@ textarea { resize: vertical; }
   display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px;
 }
 .audience-card {
-  background: white; border: 1px solid var(--border); border-radius: var(--radius); padding: 20px;
+  background: var(--cream); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px;
 }
 .audience-card h3 { font-size: 16px; margin-bottom: 6px; }
 
@@ -682,7 +682,7 @@ textarea { resize: vertical; }
 .spotlight-text h3 { font-size: 21px; margin-bottom: 10px; }
 .spotlight-text p { font-size: 15px; line-height: 1.6; }
 .spotlight-image {
-  flex: 1 1 560px; background: white; border: 1px solid var(--border); border-radius: var(--radius);
+  flex: 1 1 560px; background: var(--cream); border: 1px solid var(--border); border-radius: var(--radius);
   padding: 10px; overflow: hidden;
 }
 .spotlight-image img {
@@ -698,7 +698,7 @@ textarea { resize: vertical; }
 }
 .feature-card-compact {
   display: flex; gap: 14px; align-items: flex-start;
-  background: white; border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--cream); border: 1px solid var(--border); border-radius: var(--radius);
   padding: 18px; transition: border-color var(--ease);
 }
 .feature-card-compact:hover { border-color: var(--gold); }
@@ -725,7 +725,7 @@ textarea { resize: vertical; }
   display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; max-width: 860px; margin: 0 auto;
 }
 .plan-card {
-  position: relative; background: white; border: 1px solid var(--border); border-radius: var(--radius);
+  position: relative; background: var(--cream); border: 1px solid var(--border); border-radius: var(--radius);
   padding: 24px; text-align: center;
 }
 .plan-card-highlight { border-color: var(--gold); border-width: 2px; background: var(--tint); }
