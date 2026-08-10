@@ -30,6 +30,16 @@ function fmtRatio(n: number | null | undefined): string {
   return n.toFixed(2);
 }
 
+// DATE columns come back from the API as full ISO timestamps
+// ("2026-08-01T00:00:00.000Z"), not bare date strings -- slicing to the
+// first 10 chars before re-appending a time keeps this safe for both that
+// shape and a plain "2026-08-01" string (appending straight onto an
+// already-complete ISO string produces "...ZT00:00:00", which silently
+// parses to Invalid Date instead of throwing).
+function toLocalDate(d: string): Date {
+  return new Date(`${d.slice(0, 10)}T00:00:00`);
+}
+
 function fmtBytes(n: number): string {
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
@@ -779,8 +789,8 @@ function TimelineView({ tasks }: { tasks: Task[] }) {
   const rows = buildTaskRows(tasks).filter((r) => r.task.due_date);
 
   const times = dated.flatMap((t) => [
-    new Date(t.start_date || t.due_date!).getTime(),
-    new Date(t.due_date!).getTime(),
+    toLocalDate(t.start_date || t.due_date!).getTime(),
+    toLocalDate(t.due_date!).getTime(),
   ]);
   const minDate = new Date(Math.min(...times));
   const maxDate = new Date(Math.max(...times));
@@ -792,7 +802,7 @@ function TimelineView({ tasks }: { tasks: Task[] }) {
   const trackWidth = totalDays * pxPerDay;
 
   function dayOffset(dateStr: string) {
-    return Math.round((new Date(`${dateStr}T00:00:00`).getTime() - minDate.getTime()) / 86400000);
+    return Math.round((toLocalDate(dateStr).getTime() - minDate.getTime()) / 86400000);
   }
 
   const todayStr = new Date().toISOString().slice(0, 10);
@@ -2115,7 +2125,7 @@ function MeetingsTab({ projectId }: { projectId: string }) {
               <tr>
                 <td>{m.title}</td>
                 <td><span className="pill pill-navy">{MEETING_TYPE_LABEL[m.meeting_type]}</span></td>
-                <td className="muted">{m.meeting_date ? new Date(`${m.meeting_date}T00:00:00`).toLocaleDateString() : "--"}</td>
+                <td className="muted">{m.meeting_date ? toLocalDate(m.meeting_date).toLocaleDateString() : "--"}</td>
                 <td className="muted">
                   {m.action_items?.length
                     ? `${m.action_items.filter((it) => it.done).length}/${m.action_items.length} done`
@@ -3183,7 +3193,7 @@ function WeeklyReportView({ projectId, projectName }: { projectId: string; proje
     api.listMeetings(projectId).then(({ meetings }) => {
       const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
       setRecentMeetings(
-        meetings.filter((m) => m.meeting_date && new Date(`${m.meeting_date}T00:00:00`).getTime() >= sevenDaysAgo)
+        meetings.filter((m) => m.meeting_date && toLocalDate(m.meeting_date).getTime() >= sevenDaysAgo)
       );
     });
   }, [projectId]);
@@ -3220,7 +3230,7 @@ function WeeklyReportView({ projectId, projectName }: { projectId: string; proje
           <ul className="today-list">
             {recentMeetings.map((m) => (
               <li key={m.id}>
-                {m.title} <span className="muted">-- {MEETING_TYPE_LABEL[m.meeting_type]}{m.meeting_date ? ` -- ${new Date(`${m.meeting_date}T00:00:00`).toLocaleDateString()}` : ""}</span>
+                {m.title} <span className="muted">-- {MEETING_TYPE_LABEL[m.meeting_type]}{m.meeting_date ? ` -- ${toLocalDate(m.meeting_date).toLocaleDateString()}` : ""}</span>
               </li>
             ))}
             {recentMeetings.length === 0 && <li className="muted">No meetings logged this week.</li>}

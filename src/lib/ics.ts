@@ -1,12 +1,15 @@
 import type { Task } from "./api";
 
 function formatDate(dateStr: string): string {
-  // Task due_date is a plain date (YYYY-MM-DD); treat as an all-day event.
-  return dateStr.replace(/-/g, "");
+  // due_date comes back from the API as either a plain date (YYYY-MM-DD) or
+  // a full ISO timestamp (YYYY-MM-DDT00:00:00.000Z) depending on the driver
+  // -- slicing to the date portion first keeps this an all-day event either
+  // way, instead of leaving stray T/colons/Z characters in the ICS value.
+  return dateStr.slice(0, 10).replace(/-/g, "");
 }
 
 function addDays(dateStr: string, days: number): string {
-  const d = new Date(`${dateStr}T00:00:00Z`);
+  const d = new Date(`${dateStr.slice(0, 10)}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
 }

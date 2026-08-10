@@ -53,4 +53,15 @@ describe("tasksToICS", () => {
     expect(ics).toContain("DTSTART;VALUE=DATE:20260810");
     expect(ics).toContain("DTEND;VALUE=DATE:20260816");
   });
+
+  // Regression: the real API returns DATE columns as full ISO timestamps
+  // ("2026-08-15T00:00:00.000Z"), not the bare "YYYY-MM-DD" these mocks
+  // otherwise use -- a full timestamp broke both formatDate (stray
+  // T/colons/Z left in the ICS value) and addDays (Invalid Date from
+  // appending a second "T00:00:00Z" onto an already-complete timestamp).
+  it("handles a due date that arrives as a full ISO timestamp, not just a bare date", () => {
+    const ics = tasksToICS([makeTask({ due_date: "2026-08-15T00:00:00.000Z" })], "Project X");
+    expect(ics).toContain("DTSTART;VALUE=DATE:20260815");
+    expect(ics).toContain("DTEND;VALUE=DATE:20260816");
+  });
 });

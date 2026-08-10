@@ -20,9 +20,18 @@ export const ROADMAP_STATUS_LABEL: Record<RoadmapItem["status"], string> = {
   done: "Done",
 };
 
+// DATE columns come back from the API as full ISO timestamps
+// ("2026-08-01T00:00:00.000Z"), not bare date strings -- slicing to the
+// first 10 chars before re-appending a time makes this safe for both that
+// shape and a plain "2026-08-01" string, instead of producing "...ZT00:00:00"
+// (a malformed string that silently parses to Invalid Date).
+function toLocalDate(d: string): Date {
+  return new Date(`${d.slice(0, 10)}T00:00:00`);
+}
+
 export function fmtRoadmapDate(d: string | null): string {
   if (!d) return "--";
-  return new Date(`${d}T00:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  return toLocalDate(d).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
 // Greedy interval packing: assigns each dated item in a swimlane to the
@@ -70,8 +79,8 @@ export function RoadmapTimeline({ items }: { items: RoadmapItem[] }) {
   }
 
   const times = dated.flatMap((i) => [
-    new Date(`${i.start_date}T00:00:00`).getTime(),
-    new Date(`${i.end_date || i.start_date}T00:00:00`).getTime(),
+    toLocalDate(i.start_date!).getTime(),
+    toLocalDate(i.end_date || i.start_date!).getTime(),
   ]);
   const minDate = new Date(Math.min(...times));
   const maxDate = new Date(Math.max(...times));
@@ -83,7 +92,7 @@ export function RoadmapTimeline({ items }: { items: RoadmapItem[] }) {
   const trackWidth = totalDays * pxPerDay;
 
   function dayOffset(dateStr: string) {
-    return Math.round((new Date(`${dateStr}T00:00:00`).getTime() - minDate.getTime()) / 86400000);
+    return Math.round((toLocalDate(dateStr).getTime() - minDate.getTime()) / 86400000);
   }
 
   const todayOffset = dayOffset(new Date().toISOString().slice(0, 10));
