@@ -210,6 +210,13 @@ export type ProjectDocument = {
   previewable: boolean;
 };
 
+// Storage usage is scoped to the project owner's account, not the viewer --
+// every member of a project sees the same shared number.
+export type StorageUsage = {
+  usedBytes: number;
+  capBytes: number;
+};
+
 export type ChangeRequest = {
   id: string;
   title: string;
@@ -457,7 +464,8 @@ export const api = {
     return request<{ ok: true }>(path[entityType], { method: "PATCH", body: JSON.stringify({ id, restore: true }) });
   },
 
-  listDocuments: (projectId: string) => request<{ documents: ProjectDocument[] }>(`/documents?projectId=${projectId}`),
+  listDocuments: (projectId: string) =>
+    request<{ documents: ProjectDocument[]; storage: StorageUsage }>(`/documents?projectId=${projectId}`),
   uploadDocument: (projectId: string, file: File) => {
     const form = new FormData();
     form.append("projectId", projectId);

@@ -41,6 +41,28 @@ export async function createTestProject(ownerId: string, name = "Test Project"):
   return project;
 }
 
+/** Inserts a documents row directly (no real blob write) -- used to seed
+ *  storage totals for cap tests without uploading real files. blob_key must
+ *  be unique per row; defaults to a random one if not given. */
+export async function createTestDocument(
+  projectId: string,
+  uploadedBy: string,
+  sizeBytes: number,
+  opts: { filename?: string; deleted?: boolean } = {}
+): Promise<{ id: string }> {
+  const database = db();
+  const blobKey = crypto.randomUUID();
+  const [doc] = await database.sql<{ id: string }>`
+    INSERT INTO documents (project_id, uploaded_by, filename, mime_type, size_bytes, blob_key, deleted_at)
+    VALUES (
+      ${projectId}, ${uploadedBy}, ${opts.filename ?? "test.pdf"}, 'application/pdf', ${sizeBytes}, ${blobKey},
+      ${opts.deleted ? new Date().toISOString() : null}
+    )
+    RETURNING id
+  `;
+  return doc;
+}
+
 /** Response.json() types as unknown under this project's tsconfig (no DOM
  *  lib) -- this narrows it for test assertions without an inline cast at
  *  every call site. */

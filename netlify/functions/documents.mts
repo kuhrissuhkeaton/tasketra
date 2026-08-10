@@ -6,6 +6,7 @@ import { json } from "../lib/http.ts";
 import { logActivity } from "../lib/activity.ts";
 import { documentsStore } from "../lib/blobs.ts";
 import { withSentry } from "../lib/sentry.ts";
+import { canUploadBytes, getUserPlan, isPaidPlan, storageCapBytes, storageUsedBytes } from "../lib/billing.ts";
 
 // Project documentation uploads (specs, contracts, reference PDFs/images).
 // Scoped to a fixed allow-list of common office/document/image types, capped
@@ -41,6 +42,11 @@ function extOf(filename: string): string {
 function sanitizeFilename(filename: string): string {
   const base = filename.split(/[/\\]/).pop() || "file";
   return base.replace(/[^\w.\- ]/g, "_").slice(0, 200) || "file";
+}
+
+function fmtGB(bytes: number): string {
+  const gb = bytes / (1024 * 1024 * 1024);
+  return `${gb % 1 === 0 ? gb : gb.toFixed(1)}GB`;
 }
 
 export default withSentry(async (req: Request) => {
@@ -92,7 +98,17 @@ export default withSentry(async (req: Request) => {
       ...r,
       previewable: ALLOWED_TYPES[extOf(r.filename)]?.previewable ?? false,
     }));
-    return json({ documents });
+
+    // Storage usage is scoped to the project owner's account (the paying
+    // party), not the viewer -- every member of the project sees the same
+    // shared number, since they're all drawing against the owner's cap.
+    const [project] = await database.sql`SELECT owner_id FROM projects WHERE id = ${projectId}`;
+    const plan = await getUserPlan(database, project.owner_id);
+    const storage = {
+      usedBytes: await storageUsedBytes(database, project.owner_id),
+      capBytes: storageCapBytes(plan),
+    };
+    return json({ documents, storage });
   }
 
   if (req.method === "POST") {
@@ -120,6 +136,20 @@ export default withSentry(async (req: Request) => {
     }
     if (file.size > MAX_SIZE_BYTES) {
       return json({ error: "Files are limited to 5MB." }, { status: 400 });
+    }
+
+    const [project] = await database.sql`SELECT owner_id FROM projects WHERE id = ${projectId}`;
+    const { ok, capBytes, plan } = await canUploadBytes(database, project.owner_id, file.size);
+    if (!ok) {
+      return json(
+        {
+          error: `Storage limit reached (${fmtGB(capBytes)} used across your projects). ${
+            isPaidPlan(plan) ? "Delete some files to free up room." : "Upgrade to Pro for more room, or delete some files."
+          }`,
+          upgradeRequired: !isPaidPlan(plan),
+        },
+        { status: 402 }
+      );
     }
 
     const bytes = await file.arrayBuffer();

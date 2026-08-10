@@ -78,8 +78,9 @@ export default function Billing() {
           {(plan === "trialing" || plan === "active") && (
             <>
               <p className="muted">
-                Unlimited projects, up to 25 team members per project. Manage your payment method,
-                view invoices, switch billing interval, or cancel any time -- no need to contact us.
+                Unlimited projects, up to 25 team members per project, and 25GB of document storage.
+                Manage your payment method, view invoices, switch billing interval, or cancel any time --
+                no need to contact us.
               </p>
               <button className="btn btn-primary" type="button" disabled={loadingPortal} onClick={manageBilling}>
                 {loadingPortal ? "Opening..." : "Manage billing"}
@@ -90,8 +91,9 @@ export default function Billing() {
           {plan === "free" && (
             <>
               <p className="muted">
-                Up to 3 active projects, and up to 25 team members per project. Upgrade to Pro for
-                unlimited projects -- 14 days free, cancel any time from this page.
+                Up to 3 active projects, up to 25 team members per project, and 2GB of document storage.
+                Upgrade to Pro for unlimited projects and 25GB of storage -- 14 days free, cancel any time
+                from this page.
               </p>
               <div className="inline-form">
                 <button

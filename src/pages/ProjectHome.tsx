@@ -1,6 +1,6 @@
 import { useEffect, useState, Fragment } from "react";
-import { useParams, useSearchParams, useNavigate } from "react-router-dom";
-import { api, type Project, type Task, type Stakeholder, type Decision, type Issue, type Risk, type Assumption, type Dependency, type ChangeRequest, type Lesson, type TodayData, type WeeklyReport, type BudgetData, type FeedItem, type TrashItem, type ProjectMember, type Meeting, type MeetingActionItem, type ProjectDocument } from "../lib/api";
+import { useParams, useSearchParams, useNavigate, Link } from "react-router-dom";
+import { api, ApiError, type Project, type Task, type Stakeholder, type Decision, type Issue, type Risk, type Assumption, type Dependency, type ChangeRequest, type Lesson, type TodayData, type WeeklyReport, type BudgetData, type FeedItem, type TrashItem, type ProjectMember, type Meeting, type MeetingActionItem, type ProjectDocument, type StorageUsage } from "../lib/api";
 import { tasksToICS, downloadICS } from "../lib/ics";
 import { useAuth } from "../lib/auth-context";
 import { AppSidebar, NavDot } from "../components/AppSidebar";
@@ -32,7 +32,8 @@ function fmtRatio(n: number | null | undefined): string {
 function fmtBytes(n: number): string {
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+  if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(n / (1024 * 1024 * 1024)).toFixed(1)} GB`;
 }
 
 // Flattens a parent/child task list into an ordered, indented row list (a
@@ -1937,17 +1938,48 @@ function MeetingsTab({ projectId }: { projectId: string }) {
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 const ACCEPTED_DOC_EXT = ".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.webp";
 
+// Storage is scoped to the project owner's account (shared across everyone
+// on the project, not per-viewer) -- see billing.ts storageUsedBytes(). The
+// bar turns gold past 80% used and red once the cap is hit, matching the
+// pattern used for other soft/hard limit warnings in the app.
+function StorageMeter({ storage }: { storage: StorageUsage }) {
+  const pct = storage.capBytes > 0 ? Math.min(100, (storage.usedBytes / storage.capBytes) * 100) : 0;
+  const atCap = storage.usedBytes >= storage.capBytes;
+  const nearCap = pct >= 80;
+  const fillColor = atCap ? "var(--red)" : nearCap ? "var(--gold)" : "var(--navy)";
+
+  return (
+    <div style={{ maxWidth: 360, marginBottom: 16 }}>
+      <div className="muted" style={{ fontSize: 12, marginBottom: 4, display: "flex", justifyContent: "space-between" }}>
+        <span>Storage</span>
+        <span>{fmtBytes(storage.usedBytes)} of {fmtBytes(storage.capBytes)}</span>
+      </div>
+      <div style={{ height: 6, borderRadius: 3, background: "var(--border)", overflow: "hidden" }}>
+        <div style={{ height: "100%", width: `${pct}%`, background: fillColor, borderRadius: 3, transition: "width 0.3s" }} />
+      </div>
+      {atCap && (
+        <p className="muted" style={{ fontSize: 12, marginTop: 4, marginBottom: 0 }}>
+          Storage limit reached. <Link to="/app/billing">Upgrade to Pro</Link> for more room, or delete some files.
+        </p>
+      )}
+    </div>
+  );
+}
+
 function DocumentsTab({ projectId }: { projectId: string }) {
   const confirmDialog = useConfirm();
   const [documents, setDocuments] = useState<ProjectDocument[]>([]);
+  const [storage, setStorage] = useState<StorageUsage | null>(null);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
+  const [upgradeRequired, setUpgradeRequired] = useState(false);
 
   async function load() {
     setLoading(true);
-    const { documents } = await api.listDocuments(projectId);
+    const { documents, storage } = await api.listDocuments(projectId);
     setDocuments(documents);
+    setStorage(storage);
     setLoading(false);
   }
 
@@ -1960,6 +1992,7 @@ function DocumentsTab({ projectId }: { projectId: string }) {
     e.target.value = "";
     if (!file) return;
     setError("");
+    setUpgradeRequired(false);
     if (file.size > MAX_UPLOAD_BYTES) {
       setError("Files are limited to 5MB.");
       return;
@@ -1968,8 +2001,9 @@ function DocumentsTab({ projectId }: { projectId: string }) {
     try {
       await api.uploadDocument(projectId, file);
       load();
-    } catch (err: any) {
-      setError(err.message || "Couldn't upload that file.");
+    } catch (err) {
+      if (err instanceof ApiError && err.upgradeRequired) setUpgradeRequired(true);
+      setError(err instanceof Error ? err.message : "Couldn't upload that file.");
     } finally {
       setUploading(false);
     }
@@ -1990,6 +2024,8 @@ function DocumentsTab({ projectId }: { projectId: string }) {
         PDF, Word, Excel, and image files up to 5MB. To update a document, delete the old copy and upload the new one.
       </p>
 
+      {storage && <StorageMeter storage={storage} />}
+
       <div className="inline-form">
         <label className="btn btn-primary" style={{ cursor: uploading ? "default" : "pointer" }}>
           {uploading ? "Uploading..." : "Upload document"}
@@ -2002,7 +2038,17 @@ function DocumentsTab({ projectId }: { projectId: string }) {
           />
         </label>
       </div>
-      {error && <p className="form-error">{error}</p>}
+      {error && (
+        <p className="form-error">
+          {error}
+          {upgradeRequired && (
+            <>
+              {" "}
+              <Link to="/app/billing">Upgrade to Pro</Link>
+            </>
+          )}
+        </p>
+      )}
 
       <table className="table" style={{ marginTop: 20 }}>
         <thead>

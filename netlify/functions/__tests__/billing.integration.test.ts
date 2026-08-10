@@ -1,7 +1,16 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 import { setupTestDb, teardownTestDb, resetTestDb } from "../../lib/__tests__/testDb.ts";
-import { createTestUser, createTestProject, asUser } from "./fixtures.ts";
-import { canCreateProject, getUserPlan, FREE_PROJECT_LIMIT } from "../../lib/billing.ts";
+import { createTestUser, createTestProject, createTestDocument, asUser } from "./fixtures.ts";
+import {
+  canCreateProject,
+  getUserPlan,
+  FREE_PROJECT_LIMIT,
+  canUploadBytes,
+  storageUsedBytes,
+  storageCapBytes,
+  FREE_STORAGE_CAP_BYTES,
+  PAID_STORAGE_CAP_BYTES,
+} from "../../lib/billing.ts";
 import projectsHandler from "../projects.mts";
 import { db } from "../../lib/db.ts";
 import { jsonBody } from "./fixtures.ts";
@@ -144,6 +153,96 @@ describe("billing plan limits", () => {
         );
         expect(res.status).toBe(201);
       }
+    });
+  });
+
+  describe("document storage caps", () => {
+    it("reports zero used bytes with no documents", async () => {
+      const user = await createTestUser("storage-empty@example.com");
+      const database = db();
+      expect(await storageUsedBytes(database, user.id)).toBe(0);
+    });
+
+    it("sums document sizes across all of an owner's projects", async () => {
+      const user = await createTestUser("storage-sum@example.com");
+      const database = db();
+      const projectA = await createTestProject(user.id, "A");
+      const projectB = await createTestProject(user.id, "B");
+      await createTestDocument(projectA.id, user.id, 1000);
+      await createTestDocument(projectA.id, user.id, 2000);
+      await createTestDocument(projectB.id, user.id, 500);
+      expect(await storageUsedBytes(database, user.id)).toBe(3500);
+    });
+
+    it("excludes soft-deleted documents from the total", async () => {
+      const user = await createTestUser("storage-deleted@example.com");
+      const database = db();
+      const project = await createTestProject(user.id);
+      await createTestDocument(project.id, user.id, 1000);
+      await createTestDocument(project.id, user.id, 5000, { deleted: true });
+      expect(await storageUsedBytes(database, user.id)).toBe(1000);
+    });
+
+    it("excludes another owner's documents entirely", async () => {
+      const userA = await createTestUser("storage-a@example.com");
+      const userB = await createTestUser("storage-b@example.com");
+      const database = db();
+      const projectA = await createTestProject(userA.id);
+      await createTestDocument(projectA.id, userA.id, 9999);
+      expect(await storageUsedBytes(database, userB.id)).toBe(0);
+    });
+
+    it(`gives free-tier users a ${FREE_STORAGE_CAP_BYTES / 1024 / 1024 / 1024}GB cap and paid/founding users a ${PAID_STORAGE_CAP_BYTES / 1024 / 1024 / 1024}GB cap`, async () => {
+      const database = db();
+      expect(storageCapBytes("free")).toBe(FREE_STORAGE_CAP_BYTES);
+      expect(storageCapBytes("founding")).toBe(PAID_STORAGE_CAP_BYTES);
+      expect(storageCapBytes("trialing")).toBe(PAID_STORAGE_CAP_BYTES);
+      expect(storageCapBytes("active")).toBe(PAID_STORAGE_CAP_BYTES);
+      void database; // storageCapBytes takes no db arg -- kept here for describe-block symmetry
+    });
+
+    it("blocks an upload that would push a free user over their cap, allows one that fits", async () => {
+      const user = await createTestUser("storage-cap-free@example.com");
+      const database = db();
+      const project = await createTestProject(user.id);
+      await createTestDocument(project.id, user.id, FREE_STORAGE_CAP_BYTES - 1000);
+
+      const tooBig = await canUploadBytes(database, user.id, 2000);
+      expect(tooBig.ok).toBe(false);
+      expect(tooBig.capBytes).toBe(FREE_STORAGE_CAP_BYTES);
+
+      const fits = await canUploadBytes(database, user.id, 500);
+      expect(fits.ok).toBe(true);
+    });
+
+    it("allows a founding member well past the free cap, up to their own 25GB cap", async () => {
+      const user = await createTestUser("storage-cap-founding@example.com", { foundingMember: true });
+      const database = db();
+      const project = await createTestProject(user.id);
+      await createTestDocument(project.id, user.id, FREE_STORAGE_CAP_BYTES + 500 * 1024 * 1024); // 500MB past the free cap
+
+      const result = await canUploadBytes(database, user.id, 1000);
+      expect(result.ok).toBe(true);
+      expect(result.capBytes).toBe(PAID_STORAGE_CAP_BYTES);
+      expect(result.plan).toBe("founding");
+    });
+
+    it("a project member's upload draws against the project owner's cap, not their own", async () => {
+      const owner = await createTestUser("storage-owner@example.com");
+      const member = await createTestUser("storage-member@example.com");
+      const database = db();
+      const project = await createTestProject(owner.id);
+      await createTestDocument(project.id, member.id, FREE_STORAGE_CAP_BYTES - 1000);
+
+      // Checked against the owner's account, since that's the paying party.
+      const asOwner = await canUploadBytes(database, owner.id, 2000);
+      expect(asOwner.ok).toBe(false);
+
+      // The member's own (empty) storage is unaffected -- they have no
+      // projects of their own, so this is a hypothetical/unused check but
+      // confirms the totals aren't cross-contaminated between accounts.
+      const asMember = await canUploadBytes(database, member.id, 2000);
+      expect(asMember.ok).toBe(true);
     });
   });
 });
