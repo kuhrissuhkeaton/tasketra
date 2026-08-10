@@ -659,18 +659,49 @@ textarea { resize: vertical; }
 }
 .audience-card h3 { font-size: 16px; margin-bottom: 6px; }
 
-.landing-features {
+.landing-spotlights {
   max-width: 1040px; margin: 0 auto; padding: 56px 24px 8px; border-top: 1px solid var(--border);
 }
-.feature-grid {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px;
+.spotlight {
+  display: flex; align-items: center; gap: 48px; padding: 40px 0;
 }
-.feature-card {
+.spotlight:not(:last-child) { border-bottom: 1px solid var(--border); }
+.spotlight-reverse { flex-direction: row-reverse; }
+.spotlight-text { flex: 0 1 340px; }
+.spotlight-text h3 { font-size: 21px; margin-bottom: 10px; }
+.spotlight-text p { font-size: 15px; line-height: 1.6; }
+.spotlight-image {
+  flex: 1 1 560px; background: white; border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 10px; overflow: hidden;
+}
+.spotlight-image img {
+  display: block; width: 100%; height: auto; border-radius: calc(var(--radius) - 6px);
+}
+
+.landing-features {
+  max-width: 1040px; margin: 0 auto; padding: 48px 24px 8px; border-top: 1px solid var(--border);
+}
+.landing-features .landing-section-sub { margin-bottom: 28px; }
+.feature-grid-compact {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px;
+}
+.feature-card-compact {
+  display: flex; gap: 14px; align-items: flex-start;
   background: white; border: 1px solid var(--border); border-radius: var(--radius);
-  padding: 22px; transition: border-color var(--ease);
+  padding: 18px; transition: border-color var(--ease);
 }
-.feature-card:hover { border-color: var(--gold); }
-.feature-card h3 { font-size: 16px; margin-bottom: 6px; }
+.feature-card-compact:hover { border-color: var(--gold); }
+.feature-card-compact h3 { font-size: 15px; margin-bottom: 4px; }
+.feature-card-compact p { font-size: 13.5px; line-height: 1.5; }
+.feature-icon {
+  flex: none; display: flex; align-items: center; justify-content: center;
+  width: 44px; height: 44px; border-radius: var(--radius-sm); background: var(--tint); color: var(--navy);
+}
+
+@media (max-width: 760px) {
+  .spotlight, .spotlight-reverse { flex-direction: column; gap: 20px; }
+  .spotlight-text { flex-basis: auto; }
+}
 
 .landing-plans {
   max-width: 1040px; margin: 0 auto; padding: 56px 24px 8px; border-top: 1px solid var(--border);

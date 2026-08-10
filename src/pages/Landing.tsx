@@ -2,6 +2,18 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../lib/api";
 import { Wordmark } from "../components/Wordmark";
+import {
+  IconDecisions,
+  IconMeetings,
+  IconDocuments,
+  IconTeam,
+  IconLessons,
+  IconAuditTrail,
+} from "../components/FeatureIcons";
+import shotGantt from "../assets/landing-gantt.png";
+import shotRaid from "../assets/landing-raid.png";
+import shotBudget from "../assets/landing-budget.png";
+import shotRoadmap from "../assets/landing-roadmap.png";
 
 const AUDIENCES = [
   {
@@ -22,46 +34,63 @@ const AUDIENCES = [
   },
 ];
 
-const FEATURE_GROUPS = [
+const SPOTLIGHTS = [
   {
     title: "WBS, board & Gantt",
     body: "Break work into a real work breakdown structure with parent/child tasks. Switch between list, kanban board, and timeline/Gantt views of the same data -- not three different tools.",
+    image: shotGantt,
+    alt: "Tasketra Gantt timeline view showing tasks across several weeks, color-coded by status",
   },
   {
     title: "Full RAID log",
-    body: "Risks, issues, assumptions, and dependencies in one tab, with severity/probability/impact scoring, assumption validation status, and dependency direction with needed-by dates.",
+    body: "Risks, issues, assumptions, and dependencies in one tab, with severity/probability/impact scoring, mitigation plans, and owners attached to every entry.",
+    image: shotRaid,
+    alt: "Tasketra risk log showing exposure ratings, owners, and a mitigation plan",
   },
   {
     title: "Budget & EVM",
     body: "Planned value, earned value, cost and schedule variance -- calculated automatically from your task data as it moves, not a spreadsheet you update by hand every Friday.",
-  },
-  {
-    title: "Stakeholder decisions",
-    body: "Send a decision request with a shareable link. Get a real, timestamped answer back -- no account required on their end, no chasing a reply buried in email.",
+    image: shotBudget,
+    alt: "Tasketra budget dashboard showing PV, EV, AC, CPI, SPI and other EVM metrics",
   },
   {
     title: "Project roadmap",
-    body: "A standalone, exec-facing timeline of phases, milestones, releases, and notes -- separate from the granular task Gantt. Share a public, read-only link with sponsors who don't need a login.",
+    body: "A standalone, exec-facing timeline of phases, milestones, and releases -- separate from the granular task Gantt. Share a public, read-only link with sponsors who don't need a login.",
+    image: shotRoadmap,
+    alt: "Tasketra roadmap view showing swimlanes with phase bars and milestone markers",
+  },
+];
+
+const COMPACT_FEATURES = [
+  {
+    title: "Stakeholder decisions",
+    body: "Shareable decision links with a real, timestamped answer back -- no login required on their end.",
+    Icon: IconDecisions,
   },
   {
     title: "Meetings & change control",
-    body: "Log PM meetings by type with starter agendas, and turn action items straight into real tasks. Turn on Change Control Board mode when a change needs every reviewer's sign-off before it's approved.",
+    body: "Starter agendas, action items that become real tasks, and optional sign-off before a change is approved.",
+    Icon: IconMeetings,
   },
   {
     title: "Documents & templates",
-    body: "Generate a project charter, risk register, or RACI matrix as a Word doc, pre-filled from what's already in the project. Store supporting files right on the project, up to your plan's limit.",
+    body: "Generate a charter, risk register, or RACI matrix as a Word doc, pre-filled from the project.",
+    Icon: IconDocuments,
   },
   {
     title: "Team & workload",
-    body: "A workload view shows open, blocked, and overdue tasks per owner, so you know who's underwater before they tell you.",
+    body: "See open, blocked, and overdue tasks per owner -- know who's underwater before they tell you.",
+    Icon: IconTeam,
   },
   {
     title: "Lessons learned & reporting",
-    body: "A went-well / went-poorly / action-item retro log, plus one-click weekly status reports -- so the retro actually gets written down instead of living in someone's memory.",
+    body: "A went-well / went-poorly retro log, plus one-click weekly status reports.",
+    Icon: IconLessons,
   },
   {
     title: "A real audit trail",
-    body: "Every edit, delete, and restore is logged automatically, with a soft-delete Trash you can recover from. Nothing disappears from a project without a trace.",
+    body: "Every edit, delete, and restore is logged, with a soft-delete Trash you can recover from.",
+    Icon: IconAuditTrail,
   },
 ];
 
@@ -161,16 +190,36 @@ export default function Landing() {
           </div>
         </section>
 
-        <section className="landing-features">
+        <section className="landing-spotlights">
           <h2>Everything you need to run a project</h2>
           <p className="landing-section-sub">
             Not a to-do list with extra steps -- the actual toolkit a PM reaches for, in one place.
           </p>
-          <div className="feature-grid">
-            {FEATURE_GROUPS.map((f) => (
-              <div key={f.title} className="feature-card">
-                <h3>{f.title}</h3>
-                <p className="muted">{f.body}</p>
+          {SPOTLIGHTS.map((s, i) => (
+            <div key={s.title} className={`spotlight${i % 2 === 1 ? " spotlight-reverse" : ""}`}>
+              <div className="spotlight-text">
+                <h3>{s.title}</h3>
+                <p className="muted">{s.body}</p>
+              </div>
+              <div className="spotlight-image">
+                <img src={s.image} alt={s.alt} loading="lazy" />
+              </div>
+            </div>
+          ))}
+        </section>
+
+        <section className="landing-features">
+          <p className="landing-section-sub">And the rest of the toolkit that comes with every plan.</p>
+          <div className="feature-grid-compact">
+            {COMPACT_FEATURES.map((f) => (
+              <div key={f.title} className="feature-card-compact">
+                <span className="feature-icon">
+                  <f.Icon />
+                </span>
+                <div>
+                  <h3>{f.title}</h3>
+                  <p className="muted">{f.body}</p>
+                </div>
               </div>
             ))}
           </div>
