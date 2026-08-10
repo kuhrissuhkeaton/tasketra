@@ -14,7 +14,7 @@ import { db } from "../../lib/db.ts";
 
 const WEBHOOK_SECRET = "whsec_test_secret_for_integration_tests";
 
-function subscriptionUpdatedPayload(userId: string, status: string) {
+function subscriptionUpdatedPayload(userId: string, status: string, cancelAtPeriodEnd = false) {
   return {
     id: "evt_test_1",
     object: "event",
@@ -25,7 +25,7 @@ function subscriptionUpdatedPayload(userId: string, status: string) {
         object: "subscription",
         customer: "cus_test_1",
         status,
-        cancel_at_period_end: false,
+        cancel_at_period_end: cancelAtPeriodEnd,
         metadata: { userId },
         items: { data: [{ price: { recurring: { interval: "month" } }, current_period_end: Math.floor(Date.now() / 1000) + 2592000 }] },
       },
@@ -149,5 +149,58 @@ describe("stripe-webhook signature verification", () => {
     const database = db();
     const [row] = await database.sql`SELECT status FROM subscriptions WHERE user_id = ${user.id}`;
     expect(row.status).toBe("canceled");
+  });
+
+  it("marks cancellation_notified_at when cancel_at_period_end first flips to true", async () => {
+    const user = await createTestUser("exit-notify-user@example.com");
+    await webhookHandler(signedRequest(subscriptionUpdatedPayload(user.id, "active", false)));
+
+    const database = db();
+    let [row] = await database.sql`SELECT cancellation_notified_at FROM subscriptions WHERE user_id = ${user.id}`;
+    expect(row.cancellation_notified_at).toBeNull();
+
+    const res = await webhookHandler(
+      signedRequest({
+        id: "evt_test_cancel",
+        object: "event",
+        type: "customer.subscription.updated",
+        data: { object: subscriptionUpdatedPayload(user.id, "active", true).data.object },
+      })
+    );
+    expect(res.status).toBe(200);
+
+    [row] = await database.sql`SELECT cancellation_notified_at FROM subscriptions WHERE user_id = ${user.id}`;
+    expect(row.cancellation_notified_at).not.toBeNull();
+  });
+
+  it("does not re-notify on a second webhook event while still canceling", async () => {
+    const user = await createTestUser("exit-notify-dedupe@example.com");
+    await webhookHandler(signedRequest(subscriptionUpdatedPayload(user.id, "active", false)));
+    await webhookHandler(
+      signedRequest({
+        id: "evt_test_cancel_a",
+        object: "event",
+        type: "customer.subscription.updated",
+        data: { object: subscriptionUpdatedPayload(user.id, "active", true).data.object },
+      })
+    );
+
+    const database = db();
+    const [first] = await database.sql`SELECT cancellation_notified_at FROM subscriptions WHERE user_id = ${user.id}`;
+    const firstNotifiedAt = first.cancellation_notified_at;
+    expect(firstNotifiedAt).not.toBeNull();
+
+    // A second unrelated update event, still canceling -- should not re-trigger.
+    await webhookHandler(
+      signedRequest({
+        id: "evt_test_cancel_b",
+        object: "event",
+        type: "customer.subscription.updated",
+        data: { object: subscriptionUpdatedPayload(user.id, "active", true).data.object },
+      })
+    );
+
+    const [second] = await database.sql`SELECT cancellation_notified_at FROM subscriptions WHERE user_id = ${user.id}`;
+    expect(second.cancellation_notified_at.getTime()).toBe(firstNotifiedAt.getTime());
   });
 });

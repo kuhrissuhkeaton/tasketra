@@ -3,6 +3,7 @@ import { db } from "../lib/db.ts";
 import { json } from "../lib/http.ts";
 import { stripe } from "../lib/stripe.ts";
 import { getEnv } from "../lib/env.ts";
+import { sendEmail } from "../lib/notify.ts";
 import type Stripe from "stripe";
 import { withSentry } from "../lib/sentry.ts";
 
@@ -68,6 +69,40 @@ export default withSentry(async (req: Request) => {
     }
   }
 
+  // A cancellation happens entirely inside Stripe's hosted portal -- there's
+  // no in-app "cancel" action to hook into. This is the only place that
+  // knows it happened, so it's also the only place that can make sure it
+  // isn't a silent event: notify the person (asking why, low-pressure,
+  // reply-based) and notify the admin (so a cancellation isn't only visible
+  // by noticing MRR dropped later).
+  async function notifyOnNewCancellation(sub: Stripe.Subscription) {
+    if (!sub.cancel_at_period_end) return;
+    const userId = sub.metadata?.userId;
+    if (!userId) return;
+
+    const [existing] = await database.sql`SELECT cancel_at_period_end, cancellation_notified_at FROM subscriptions WHERE user_id = ${userId}`;
+    const wasAlreadyCanceling = existing?.cancel_at_period_end === true;
+    const alreadyNotified = !!existing?.cancellation_notified_at;
+    if (wasAlreadyCanceling || alreadyNotified) return;
+
+    const [user] = await database.sql`SELECT email FROM users WHERE id = ${userId}`;
+    if (!user?.email) return;
+
+    const adminEmail = getEnv("ADMIN_EMAIL");
+    await sendEmail(
+      user.email,
+      "Sorry to see you go",
+      `Hi,\n\nLooks like you canceled your Tasketra subscription -- it'll stay active through the end of` +
+        ` your current billing period, no rush.\n\nMind telling me why? Not asking to talk you out of it,` +
+        ` genuinely just want to know what didn't work. Hit reply, one line is plenty.\n\n-- Karissa`,
+      adminEmail || undefined
+    );
+    if (adminEmail) {
+      await sendEmail(adminEmail, "A subscription just canceled", `${user.email} just canceled their Tasketra subscription.`);
+    }
+    await database.sql`UPDATE subscriptions SET cancellation_notified_at = now() WHERE user_id = ${userId}`;
+  }
+
   switch (event.type) {
     case "checkout.session.completed": {
       const session = event.data.object as Stripe.Checkout.Session;
@@ -80,7 +115,9 @@ export default withSentry(async (req: Request) => {
     }
     case "customer.subscription.updated":
     case "customer.subscription.created": {
-      await upsertFromSubscription(event.data.object as Stripe.Subscription);
+      const sub = event.data.object as Stripe.Subscription;
+      await notifyOnNewCancellation(sub);
+      await upsertFromSubscription(sub);
       break;
     }
     case "customer.subscription.deleted": {

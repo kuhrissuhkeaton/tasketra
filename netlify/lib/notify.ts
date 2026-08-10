@@ -4,7 +4,7 @@
 
 import { getEnv } from "./env.ts";
 
-export async function sendEmail(to: string, subject: string, text: string) {
+export async function sendEmail(to: string, subject: string, text: string, replyTo?: string) {
   const apiKey = getEnv("RESEND_API_KEY");
   const from = getEnv("NOTIFY_FROM_EMAIL") || "tasketra <info@tasketra.com>";
   if (!apiKey || !to) return { sent: false, reason: "not_configured" };
@@ -16,7 +16,7 @@ export async function sendEmail(to: string, subject: string, text: string) {
         Authorization: `Bearer ${apiKey}`,
         "content-type": "application/json",
       },
-      body: JSON.stringify({ from, to, subject, text }),
+      body: JSON.stringify({ from, to, subject, text, ...(replyTo ? { reply_to: replyTo } : {}) }),
     });
     if (!res.ok) return { sent: false, reason: `resend_error_${res.status}` };
     return { sent: true };
