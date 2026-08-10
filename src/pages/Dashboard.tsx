@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api, ApiError, type Project } from "../lib/api";
 import { AppSidebar } from "../components/AppSidebar";
+import { useConfirm } from "../components/ConfirmDialog";
 
 export default function Dashboard() {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -12,6 +13,9 @@ export default function Dashboard() {
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const [showDeleted, setShowDeleted] = useState(false);
   const [upgradeNotice, setUpgradeNotice] = useState<string | null>(null);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const confirmDialog = useConfirm();
   const navigate = useNavigate();
 
   async function load() {
@@ -34,6 +38,20 @@ export default function Dashboard() {
     await api.restoreProject(id);
     await load();
     setRestoringId(null);
+  }
+
+  async function deleteProject(p: Project) {
+    setOpenMenuId(null);
+    if (!(await confirmDialog(`Delete "${p.name}"? Everything in it -- tasks, decisions, meetings, everything -- goes with it. You can restore it from Recently deleted below.`))) {
+      return;
+    }
+    setDeletingId(p.id);
+    try {
+      await api.deleteProject(p.id);
+      await load();
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   async function createProject(e: React.FormEvent) {
@@ -103,18 +121,47 @@ export default function Dashboard() {
         ) : (
           <div className="project-grid">
             {projects.map((p) => (
-              <Link to={`/app/projects/${p.id}`} key={p.id} className="project-card">
-                <h3>{p.name}</h3>
-                {p.description && <p className="muted">{p.description}</p>}
-                <div className="project-card-stats">
-                  {(p.open_decisions ?? 0) > 0 && (
-                    <span className="pill pill-gold">{p.open_decisions} awaiting decision</span>
-                  )}
-                  {(p.overdue_tasks ?? 0) > 0 && (
-                    <span className="pill pill-red">{p.overdue_tasks} overdue</span>
-                  )}
-                </div>
-              </Link>
+              <div className="project-card-wrap" key={p.id} style={{ opacity: deletingId === p.id ? 0.5 : 1 }}>
+                <Link to={`/app/projects/${p.id}`} className="project-card">
+                  <h3>{p.name}</h3>
+                  {p.description && <p className="muted">{p.description}</p>}
+                  <div className="project-card-stats">
+                    {(p.open_decisions ?? 0) > 0 && (
+                      <span className="pill pill-gold">{p.open_decisions} awaiting decision</span>
+                    )}
+                    {(p.overdue_tasks ?? 0) > 0 && (
+                      <span className="pill pill-red">{p.overdue_tasks} overdue</span>
+                    )}
+                  </div>
+                </Link>
+
+                {p.is_owner !== false && (
+                  <>
+                    <button
+                      className="project-card-menu-btn"
+                      type="button"
+                      aria-label="Project actions"
+                      disabled={deletingId === p.id}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setOpenMenuId(openMenuId === p.id ? null : p.id);
+                      }}
+                    >
+                      ⋮
+                    </button>
+                    {openMenuId === p.id && (
+                      <>
+                        <div className="project-card-menu-backdrop" onClick={() => setOpenMenuId(null)} />
+                        <div className="project-card-menu">
+                          <button className="project-card-menu-item" type="button" onClick={() => deleteProject(p)}>
+                            Delete project
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </>
+                )}
+              </div>
             ))}
           </div>
         )}

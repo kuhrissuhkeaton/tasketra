@@ -266,9 +266,31 @@ textarea { resize: vertical; }
   padding: 22px; text-decoration: none; color: inherit;
   transition: border-color var(--ease), transform var(--ease);
 }
-.project-card h3 { font-size: 20px; margin-bottom: 6px; }
+.project-card h3 { font-size: 20px; margin-bottom: 6px; padding-right: 22px; }
 .project-card:hover { border-color: var(--gold); transform: translateY(-2px); }
 .project-card-stats { margin-top: 12px; display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* Kebab menu sits as a sibling of the card's <Link>, not nested inside it
+   (a <button> inside an <a> is invalid HTML and fights the card's own click
+   target) -- absolutely positioned over the card via the wrapper below. */
+.project-card-wrap { position: relative; }
+.project-card-menu-btn {
+  position: absolute; top: 14px; right: 10px; width: 28px; height: 28px; border-radius: 6px;
+  border: none; background: transparent; color: var(--slate); font-size: 18px; line-height: 1;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+}
+.project-card-menu-btn:hover { background: var(--surface-muted); color: var(--navy); }
+.project-card-menu {
+  position: absolute; top: 46px; right: 10px; z-index: 5; min-width: 160px;
+  background: white; border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: var(--shadow-md); padding: 6px; display: flex; flex-direction: column;
+}
+.project-card-menu-item {
+  display: block; width: 100%; text-align: left; padding: 8px 10px; border: none; background: none;
+  border-radius: 6px; font-size: 13px; color: var(--red); cursor: pointer;
+}
+.project-card-menu-item:hover { background: var(--red-border); }
+.project-card-menu-backdrop { position: fixed; inset: 0; z-index: 4; background: transparent; }
 
 /* --- Pills --- */
 .pill { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; letter-spacing: 0.01em; }
