@@ -1,7 +1,8 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../lib/auth-context";
 import { Wordmark } from "./Wordmark";
+import { FeedbackModal } from "./FeedbackModal";
 
 /** Small square/round dot used in place of icons throughout nav --
  * the rebrand's visual language deliberately avoids icons. Square (3px
@@ -32,6 +33,7 @@ export function NavDot({ active, shape = "3px" }: { active: boolean; shape?: str
 export function AppSidebar({ children }: { children?: ReactNode }) {
   const { user, logout } = useAuth();
   const { pathname } = useLocation();
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
 
   return (
     <aside className="sidebar">
@@ -76,20 +78,30 @@ export function AppSidebar({ children }: { children?: ReactNode }) {
               Waitlist
             </Link>
           )}
+          {user?.isAdmin && (
+            <Link
+              to="/admin/feedback"
+              className={pathname === "/admin/feedback" ? "side-tab active" : "side-tab"}
+            >
+              <NavDot active={pathname === "/admin/feedback"} />
+              Feedback inbox
+            </Link>
+          )}
         </div>
 
         {children}
       </nav>
 
       <div className="sidebar-footer">
-        <a
-          href="mailto:mileskarissa@gmail.com?subject=Tasketra%20feedback"
+        <button
+          type="button"
           className="side-tab sidebar-feedback"
           style={{ marginBottom: 4 }}
+          onClick={() => setFeedbackOpen(true)}
         >
           <span aria-hidden="true" className="sidebar-feedback-dot" />
           Feedback
-        </a>
+        </button>
         <Link to="/legal" className="side-tab" style={{ marginBottom: 4 }}>
           Legal
         </Link>
@@ -98,6 +110,8 @@ export function AppSidebar({ children }: { children?: ReactNode }) {
           Sign out
         </button>
       </div>
+
+      {feedbackOpen && <FeedbackModal onClose={() => setFeedbackOpen(false)} />}
     </aside>
   );
 }

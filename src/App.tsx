@@ -12,6 +12,7 @@ import Resources from "./pages/Resources";
 import WhatsNew from "./pages/WhatsNew";
 import Billing from "./pages/Billing";
 import AdminWaitlist from "./pages/AdminWaitlist";
+import AdminFeedback from "./pages/AdminFeedback";
 import LegalHub from "./pages/legal/LegalHub";
 import Terms from "./pages/legal/Terms";
 import Privacy from "./pages/legal/Privacy";
@@ -54,6 +55,7 @@ export default function App() {
           <Route path="/app/whats-new" element={<Protected><WhatsNew /></Protected>} />
           <Route path="/app/billing" element={<Protected><Billing /></Protected>} />
           <Route path="/admin/waitlist" element={<AdminProtected><AdminWaitlist /></AdminProtected>} />
+          <Route path="/admin/feedback" element={<AdminProtected><AdminFeedback /></AdminProtected>} />
           <Route path="/app/projects/:id" element={<Protected><ProjectHome /></Protected>} />
           <Route path="/d/:token" element={<DecisionPublic />} />
           <Route path="/legal" element={<LegalHub />} />

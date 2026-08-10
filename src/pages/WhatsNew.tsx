@@ -9,6 +9,12 @@ type ChangeEntry = { version: string; date: string; title: string; body: string 
 // they can do.
 const CHANGES: ChangeEntry[] = [
   {
+    version: "v48",
+    date: "August 2026",
+    title: "Feedback, properly this time",
+    body: "The Feedback link now opens a quick in-app form instead of just firing off an email -- and if what you asked for ships, you'll hear back directly.",
+  },
+  {
     version: "v29",
     date: "August 2026",
     title: "You're looking at it",

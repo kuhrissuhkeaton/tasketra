@@ -158,6 +158,17 @@ export type WaitlistSignup = {
   created_at: string;
 };
 
+export type Feedback = {
+  id: string;
+  message: string;
+  page_path: string | null;
+  status: "new" | "planned" | "shipped" | "dismissed";
+  admin_note: string | null;
+  notified_at: string | null;
+  created_at: string;
+  submitter_email?: string;
+};
+
 export type FeedItem = {
   type: "status_update" | "task" | "decision_request" | "decision_record" | "issue" | "risk" | "activity";
   title: string | null;
@@ -586,4 +597,12 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ token, chosenOption, responderName }),
     }),
+
+  submitFeedback: (message: string, pagePath: string) =>
+    request<{ feedback: Feedback }>("/feedback", { method: "POST", body: JSON.stringify({ message, pagePath }) }),
+  listFeedback: () => request<{ items: Feedback[] }>("/feedback"),
+  updateFeedback: (id: string, updates: { status?: Feedback["status"]; adminNote?: string }) =>
+    request<{ feedback: Feedback }>("/feedback", { method: "PATCH", body: JSON.stringify({ id, ...updates }) }),
+  notifyFeedbackSubmitter: (id: string) =>
+    request<{ feedback: Feedback }>("/feedback", { method: "PATCH", body: JSON.stringify({ id, notify: true }) }),
 };
