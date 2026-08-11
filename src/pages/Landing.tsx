@@ -166,7 +166,7 @@ export default function Landing() {
         <section className="landing-hero">
           <div className="landing-hero-grid">
             <div className="landing-hero-copy">
-              <h1>Project management built for project managers.</h1>
+              <h1>Project management built for <span className="hl">project managers</span>.</h1>
               <p className="landing-subhead">
                 Most work-management tools make you build PM structure from scratch -- a board here, a risk log
                 there, a spreadsheet for the budget. Tasketra starts with it already built in: WBS, EVM, RAID,

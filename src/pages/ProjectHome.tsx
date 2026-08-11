@@ -4,7 +4,7 @@ import { api, ApiError, type Project, type Task, type Stakeholder, type Decision
 import { RoadmapTimeline, ROADMAP_TYPE_LABEL, ROADMAP_STATUS_LABEL, fmtRoadmapDate } from "../components/RoadmapTimeline";
 import { tasksToICS, downloadICS } from "../lib/ics";
 import { useAuth } from "../lib/auth-context";
-import { AppSidebar, NavDot } from "../components/AppSidebar";
+import { AppSidebar, NavDot, NavGroup } from "../components/AppSidebar";
 import { useConfirm } from "../components/ConfirmDialog";
 import { avatarColor, initials } from "../lib/avatar";
 
@@ -128,24 +128,31 @@ const EXPOSURE_PILL: Record<"low" | "medium" | "high", string> = {
   high: "pill-red",
 };
 
-const NAV_GROUPS: { label: string; tabs: { id: Tab; label: string }[] }[] = [
-  { label: "Workspace", tabs: [
-    { id: "home", label: "Home" },
-  ] },
-  { label: "Plan & track", tabs: [
-    { id: "roadmap", label: "Roadmap" },
-    { id: "tasks", label: "Tasks" },
-    { id: "raid", label: "Issues & risks" },
-    { id: "budget", label: "Budget" },
-    { id: "meetings", label: "Meetings" },
-    { id: "documents", label: "Documents" },
-  ] },
+// The six sections a PM actually lives in day to day -- rendered as a pill
+// bar at the top of the project content area (same visual pattern as the
+// List/Board/Timeline and Issues/Risks/Assumptions/Dependencies sub-tabs
+// already used inside individual pages), instead of buried in the sidebar
+// alongside everything else.
+const PRIMARY_TABS: { id: Tab; label: string }[] = [
+  { id: "home", label: "Home" },
+  { id: "roadmap", label: "Roadmap" },
+  { id: "tasks", label: "Tasks" },
+  { id: "raid", label: "Issues & risks" },
+  { id: "budget", label: "Budget" },
+  { id: "meetings", label: "Meetings" },
+];
+
+// Everything else stays in the sidebar, grouped into collapsible sections so
+// the list doesn't read as one long undifferentiated wall of links. Each
+// label names an actual category -- no "More"/"Misc" catch-alls.
+const SECONDARY_NAV_GROUPS: { label: string; tabs: { id: Tab; label: string }[] }[] = [
   { label: "People & decisions", tabs: [
     { id: "stakeholders", label: "Stakeholders" },
     { id: "decisions", label: "Decisions" },
     { id: "team", label: "Team" },
   ] },
-  { label: "Output", tabs: [
+  { label: "Documents & output", tabs: [
+    { id: "documents", label: "Documents" },
     { id: "report", label: "Weekly report" },
     { id: "templates", label: "Templates" },
     { id: "export", label: "Export" },
@@ -171,9 +178,12 @@ export default function ProjectHome() {
         <div className="side-nav-group">
           <div className="side-nav-label">{project?.name || "Project"}</div>
         </div>
-        {NAV_GROUPS.map((group) => (
-          <div className="side-nav-group" key={group.label}>
-            <div className="side-nav-label">{group.label}</div>
+        {SECONDARY_NAV_GROUPS.map((group) => (
+          <NavGroup
+            key={group.label}
+            label={group.label}
+            defaultCollapsed={!group.tabs.some((t) => t.id === tab)}
+          >
             {group.tabs.map((t) => (
               <button
                 key={t.id}
@@ -185,10 +195,9 @@ export default function ProjectHome() {
                 {t.label}
               </button>
             ))}
-          </div>
+          </NavGroup>
         ))}
-        <div className="side-nav-group">
-          <div className="side-nav-label">Reference</div>
+        <NavGroup label="Reference" defaultCollapsed={tab !== "trash"}>
           <button
             className={tab === "trash" ? "side-tab active" : "side-tab"}
             onClick={() => setParams({ tab: "trash" })}
@@ -197,12 +206,25 @@ export default function ProjectHome() {
             <NavDot active={tab === "trash"} />
             Trash
           </button>
-        </div>
+        </NavGroup>
       </AppSidebar>
 
       <main className="project-main">
         <div className="page-head">
           <h1>{project?.name || "Project"}</h1>
+        </div>
+
+        <div className="inline-form primary-tabs">
+          {PRIMARY_TABS.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              className={tab === t.id ? "btn btn-primary" : "btn btn-ghost"}
+              onClick={() => setParams({ tab: t.id })}
+            >
+              {t.label}
+            </button>
+          ))}
         </div>
 
         {tab === "home" && <HomeTab projectId={id} />}

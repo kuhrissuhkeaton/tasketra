@@ -6,7 +6,11 @@ import { FeedbackModal } from "./FeedbackModal";
 
 /** Small square/round dot used in place of icons throughout nav --
  * the rebrand's visual language deliberately avoids icons. Square (3px
- * radius) for top-level pages, round (50%) for project-scoped items. */
+ * radius) for top-level pages, round (50%) for project-scoped items.
+ * Colors are tuned for the navy sidebar: an active dot sits on a solid
+ * gold pill so it needs to go dark to stay visible; an inactive dot sits
+ * directly on navy so it needs a muted light tone instead of the old
+ * light-tan-on-white value. */
 export function NavDot({ active, shape = "3px" }: { active: boolean; shape?: string }) {
   return (
     <span
@@ -16,10 +20,42 @@ export function NavDot({ active, shape = "3px" }: { active: boolean; shape?: str
         width: 9,
         height: 9,
         borderRadius: shape,
-        background: active ? "var(--gold)" : "#DAD2B8",
+        background: active ? "var(--navy)" : "#6B7358",
         flexShrink: 0,
       }}
     />
+  );
+}
+
+/** Collapsible nav section used by both the sidebar's own global group and
+ * ProjectHome's secondary (non-pill-bar) groups -- clicking the label
+ * toggles a chevron and shows/hides the items below it. On mobile the
+ * items always render regardless of collapsed state (see the CSS media
+ * query), since the label/chevron affordance is hidden there. */
+export function NavGroup({
+  label,
+  children,
+  defaultCollapsed = false,
+}: {
+  label: string;
+  children: ReactNode;
+  defaultCollapsed?: boolean;
+}) {
+  const [collapsed, setCollapsed] = useState(defaultCollapsed);
+  return (
+    <div className={collapsed ? "side-nav-group collapsed" : "side-nav-group"}>
+      <div
+        className="side-nav-label collapsible"
+        onClick={() => setCollapsed((c) => !c)}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setCollapsed((c) => !c); } }}
+      >
+        {label}
+        <span className="side-nav-chevron" aria-hidden="true">▾</span>
+      </div>
+      <div className="side-nav-items">{children}</div>
+    </div>
   );
 }
 
@@ -42,8 +78,7 @@ export function AppSidebar({ children }: { children?: ReactNode }) {
       </Link>
 
       <nav className="side-nav">
-        <div className="side-nav-group">
-          <div className="side-nav-label">Workspace</div>
+        <NavGroup label="Workspace" defaultCollapsed={!!children}>
           <Link to="/app" className={pathname === "/app" ? "side-tab active" : "side-tab"}>
             <NavDot active={pathname === "/app"} />
             Dashboard
@@ -94,7 +129,7 @@ export function AppSidebar({ children }: { children?: ReactNode }) {
               Feedback inbox
             </Link>
           )}
-        </div>
+        </NavGroup>
 
         {children}
       </nav>
