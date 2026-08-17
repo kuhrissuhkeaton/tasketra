@@ -4,7 +4,7 @@ export default function Terms() {
   return (
     <LegalLayout title="Terms of Service" updated="August 4, 2026">
       <p>
-        These Terms of Service ("Terms") are a legal agreement between you and ProjectPMP ("ProjectPMP," "we," "us," or
+        These Terms of Service ("Terms") are a legal agreement between you and The Working PM ("The Working PM," "we," "us," or
         "our") governing your access to and use of Tasketra, our project management application available at
         tasketra.com and any related services (collectively, the "Service"). By creating an account or otherwise
         using the Service, you agree to these Terms. If you don't agree, don't use the Service.
@@ -30,7 +30,7 @@ export default function Terms() {
       <h2>3. Your project data</h2>
       <p>
         Everything you create in Tasketra -- tasks, budgets, RAID items, stakeholder records, decisions, meeting
-        notes, and so on ("Your Content") -- belongs to you. You grant ProjectPMP a limited license to host, store,
+        notes, and so on ("Your Content") -- belongs to you. You grant The Working PM a limited license to host, store,
         process, and display Your Content solely to operate and improve the Service. We don't claim ownership of
         Your Content and we don't sell it.
       </p>
@@ -87,7 +87,7 @@ export default function Terms() {
 
       <h2>10. Limitation of liability</h2>
       <p>
-        To the maximum extent permitted by law, ProjectPMP won't be liable for any indirect, incidental, special,
+        To the maximum extent permitted by law, The Working PM won't be liable for any indirect, incidental, special,
         consequential, or punitive damages, or for any loss of data, profits, or business, arising from your use of
         the Service. Our total liability for any claim arising from these Terms or the Service is limited to the
         amount you paid us in the twelve months before the claim arose (which, during the free beta period, is $0).

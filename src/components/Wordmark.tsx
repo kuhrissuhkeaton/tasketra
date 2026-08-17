@@ -1,8 +1,8 @@
 /**
- * ProjectPMP's icon glyph -- a simplified version of the ascending
- * mountain-and-flags motif from projectpmp.com's hero illustration. Used
- * only where a compact square mark is needed (favicon, OG image) since the
- * real site's own nav has no icon at all, just two-tone text.
+ * The Working PM's icon glyph -- a simplified ascending mountain-and-flags
+ * motif carried over from the ProjectPMP-era brand. Used only where a
+ * compact square mark is needed (favicon, OG image) since the nav itself
+ * has no icon at all, just two-tone text.
  */
 export function Logomark({ size = 28 }: { size?: number }) {
   return (
@@ -24,11 +24,9 @@ export function Logomark({ size = 28 }: { size?: number }) {
 type WordmarkProps = { size?: "sm" | "md"; className?: string; beta?: boolean };
 
 /**
- * The Tasketra wordmark -- a small lime pill badge reading "ProjectPMP"
- * (mirrors the badge-chip component used all over projectpmp.com, e.g. the
- * "PROJECT PMP" and "ABOUT KARISSA" tags) sitting above the bold serif
- * "tasketra" name. No icon glyph here, matching the real site's own nav,
- * which is text-only.
+ * The Tasketra wordmark -- a small lime pill badge reading "The Working PM"
+ * sitting above the bold serif "tasketra" name. No icon glyph here, keeping
+ * the nav text-only.
  *
  * The optional `beta` prop adds a small outlined "Beta" tag next to the
  * name -- used on in-app screens (sidebar, auth) so people already using
@@ -39,7 +37,7 @@ export function Wordmark({ size = "md", className = "", beta = false }: Wordmark
   return (
     <span className={`brand-lockup brand-lockup-${size}${className ? ` ${className}` : ""}`}>
       <span className="brand-lockup-text">
-        <span className="brand-lockup-caption">ProjectPMP</span>
+        <span className="brand-lockup-caption">The Working PM</span>
         <span className="brand-lockup-name-row">
           <span className="brand-lockup-name">tasketra</span>
           {beta && <span className="brand-lockup-beta">Beta</span>}

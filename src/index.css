@@ -1,11 +1,11 @@
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700;900&family=Public+Sans:wght@400;500;600;700&display=swap');
 
 /*
- * ProjectPMP brand system -- matches the actual live projectpmp.com site:
+ * The Working PM brand system (carried over from the ProjectPMP era):
  * dark ink, one bright lime accent, warm cream paper background, Fraunces
  * serif for display type + Inter for body/UI. --gold is kept as the
  * variable name for the primary interactive accent to avoid touching every
- * consumer, but its value is the ProjectPMP lime, not an invented orange or
+ * consumer, but its value is the brand lime, not an invented orange or
  * the teal used in an earlier (wrong) pass.
  */
 :root {

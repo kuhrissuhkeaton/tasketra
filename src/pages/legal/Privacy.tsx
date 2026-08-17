@@ -4,7 +4,7 @@ export default function Privacy() {
   return (
     <LegalLayout title="Privacy Policy" updated="August 5, 2026">
       <p>
-        This Privacy Policy explains what information Tasketra (operated by ProjectPMP, "we," "us," "our")
+        This Privacy Policy explains what information Tasketra (operated by The Working PM, "we," "us," "our")
         collects, how we use it, and the choices you have. It applies to tasketra.com and the Tasketra application
         (the "Service").
       </p>
@@ -72,7 +72,7 @@ export default function Privacy() {
       <p>
         We don't share your data with advertisers, data brokers, or anyone else, and we won't disclose it to third
         parties except: with your direction (e.g., a public Decision link you choose to share), to comply with the
-        law or a valid legal process, or to protect the rights, safety, or property of ProjectPMP, our users, or the
+        law or a valid legal process, or to protect the rights, safety, or property of The Working PM, our users, or the
         public.
       </p>
 

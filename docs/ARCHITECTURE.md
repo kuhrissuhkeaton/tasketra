@@ -6,7 +6,7 @@
 - **Backend:** Netlify Functions (TypeScript, modern `.mts` handler format).
 - **Database:** Netlify DB (managed Postgres, auto-provisioned via `@netlify/database`) — relational, since decisions/tasks/stakeholders are fundamentally relational data with clear foreign keys.
 - **Auth:** custom, minimal — email + bcrypt-hashed password, signed session token in an httpOnly cookie. No third-party auth provider needed at single-user scale; keeps the whole stack inside Netlify with nothing external to configure.
-- **Hosting:** Netlify (new, standalone project — separate from the existing projectpmp.com site).
+- **Hosting:** Netlify (new, standalone project — separate from the existing projectpmp.com site, which predates the rebrand to The Working PM).
 
 ## Why this stack
 
