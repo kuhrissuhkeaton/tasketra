@@ -40,6 +40,13 @@ function Root() {
   const { user, loading } = useAuth();
   if (loading) return <div className="shell"><p className="muted" style={{ padding: 24 }}>Loading...</p></div>;
   if (user) return <Navigate to="/app" replace />;
+  // app.tasketra.com is the tool itself -- marketing/waitlist content now
+  // lives on tasketra.com root, a separate site. Same build, same routes,
+  // just skip straight to login for logged-out visitors on the app
+  // subdomain instead of showing them the marketing landing page again.
+  if (typeof window !== "undefined" && window.location.hostname.startsWith("app.")) {
+    return <Navigate to="/login" replace />;
+  }
   return <Landing />;
 }
 

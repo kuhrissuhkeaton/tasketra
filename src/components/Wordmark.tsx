@@ -1,8 +1,8 @@
 /**
- * The Working PM's icon glyph -- a simplified ascending mountain-and-flags
- * motif carried over from the ProjectPMP-era brand. Used only where a
- * compact square mark is needed (favicon, OG image) since the nav itself
- * has no icon at all, just two-tone text.
+ * Tasketra's icon glyph -- a simplified ascending mountain-and-flags motif
+ * carried over from the ProjectPMP-era brand. Used only where a compact
+ * square mark is needed (favicon, OG image) since the nav itself has no
+ * icon at all, just text.
  */
 export function Logomark({ size = 28 }: { size?: number }) {
   return (
@@ -24,8 +24,12 @@ export function Logomark({ size = 28 }: { size?: number }) {
 type WordmarkProps = { size?: "sm" | "md"; className?: string; beta?: boolean };
 
 /**
- * The Tasketra wordmark -- a small lime pill badge reading "The Working PM"
- * sitting above the bold serif "tasketra" name. No icon glyph here, keeping
+ * The Tasketra wordmark -- the bold serif "tasketra" name, no caption pill
+ * above it. Earlier versions carried a parent-brand caption (first
+ * "ProjectPMP", later "The Working PM") above the name, but now that
+ * Tasketra is the umbrella brand itself, there's no separate parent name
+ * to display -- a caption reading "Tasketra" above a name reading
+ * "tasketra" would just be redundant. No icon glyph here either, keeping
  * the nav text-only.
  *
  * The optional `beta` prop adds a small outlined "Beta" tag next to the
@@ -37,7 +41,6 @@ export function Wordmark({ size = "md", className = "", beta = false }: Wordmark
   return (
     <span className={`brand-lockup brand-lockup-${size}${className ? ` ${className}` : ""}`}>
       <span className="brand-lockup-text">
-        <span className="brand-lockup-caption">The Working PM</span>
         <span className="brand-lockup-name-row">
           <span className="brand-lockup-name">tasketra</span>
           {beta && <span className="brand-lockup-beta">Beta</span>}

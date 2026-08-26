@@ -41,7 +41,7 @@ export default function LegalHub() {
           Legal
         </h1>
         <p className="muted" style={{ marginBottom: 24 }}>
-          Clear terms for Tasketra, The Working PM's project management tool. Last updated August 4, 2026.
+          Clear terms for Tasketra, our project management tool. Last updated August 4, 2026.
         </p>
 
         <div className="legal-hub-grid">
