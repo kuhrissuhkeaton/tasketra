@@ -111,12 +111,17 @@ export default function Terms() {
         error-free.
       </p>
 
+      {/* LAWYER REVIEW: previously this cap was described only in a "$0 during the free beta"
+          framing, written before paid plans existed. Now that Pro subscribers pay real money,
+          please confirm a liability cap tied purely to trailing-12-months fees paid (which is
+          still $0 for Free-plan users) is the cap you want, or whether we should set a minimum
+          floor (e.g., a flat dollar amount) regardless of plan. */}
       <h2>10. Limitation of liability</h2>
       <p>
         To the maximum extent permitted by law, Tasketra won't be liable for any indirect, incidental, special,
         consequential, or punitive damages, or for any loss of data, profits, or business, arising from your use of
         the Service. Our total liability for any claim arising from these Terms or the Service is limited to the
-        amount you paid us in the twelve months before the claim arose (which, during the free beta period, is $0).
+        amount you paid us in the twelve months before the claim arose (which is $0 if you're on the Free plan).
       </p>
 
       <h2>11. Governing law</h2>
