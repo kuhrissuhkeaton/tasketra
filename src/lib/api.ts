@@ -176,6 +176,14 @@ export type WaitlistSignup = {
   created_at: string;
 };
 
+export type FoundingMember = {
+  id: string;
+  email: string;
+  display_name: string | null;
+  job_title: string | null;
+  created_at: string;
+};
+
 export type Feedback = {
   id: string;
   message: string;
@@ -361,6 +369,7 @@ export const api = {
   markWaitlistInvited: (id: string) =>
     request<{ signup: WaitlistSignup }>("/waitlist", { method: "PATCH", body: JSON.stringify({ id }) }),
   deleteWaitlistSignup: (id: string) => request<{ ok: true }>(`/waitlist?id=${id}`, { method: "DELETE" }),
+  listFoundingMembers: () => request<{ members: FoundingMember[] }>("/founding-members"),
 
   listProjects: () => request<{ projects: Project[] }>("/projects"),
   listDeletedProjects: () => request<{ projects: Project[] }>("/projects?deleted=true"),

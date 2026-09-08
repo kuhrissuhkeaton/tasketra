@@ -129,6 +129,15 @@ export function AppSidebar({ children }: { children?: ReactNode }) {
               Feedback inbox
             </Link>
           )}
+          {user?.isAdmin && (
+            <Link
+              to="/admin/founding-members"
+              className={pathname === "/admin/founding-members" ? "side-tab active" : "side-tab"}
+            >
+              <NavDot active={pathname === "/admin/founding-members"} />
+              Founding members
+            </Link>
+          )}
         </NavGroup>
 
         {children}

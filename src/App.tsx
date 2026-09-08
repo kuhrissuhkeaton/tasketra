@@ -14,6 +14,7 @@ import Billing from "./pages/Billing";
 import Account from "./pages/Account";
 import AdminWaitlist from "./pages/AdminWaitlist";
 import AdminFeedback from "./pages/AdminFeedback";
+import AdminFoundingMembers from "./pages/AdminFoundingMembers";
 import LegalHub from "./pages/legal/LegalHub";
 import Terms from "./pages/legal/Terms";
 import Privacy from "./pages/legal/Privacy";
@@ -62,6 +63,7 @@ export default function App() {
           <Route path="/app/account" element={<Protected><Account /></Protected>} />
           <Route path="/admin/waitlist" element={<AdminProtected><AdminWaitlist /></AdminProtected>} />
           <Route path="/admin/feedback" element={<AdminProtected><AdminFeedback /></AdminProtected>} />
+          <Route path="/admin/founding-members" element={<AdminProtected><AdminFoundingMembers /></AdminProtected>} />
           <Route path="/app/projects/:id" element={<Protected><ProjectHome /></Protected>} />
           <Route path="/d/:token" element={<DecisionPublic />} />
           <Route path="/r/:token" element={<RoadmapPublic />} />
