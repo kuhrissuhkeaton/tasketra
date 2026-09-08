@@ -8,7 +8,24 @@ const MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days
 
 function getSecret() {
   const fromNetlify = typeof Netlify !== "undefined" ? Netlify.env.get("SESSION_SECRET") : undefined;
-  return fromNetlify || process.env.SESSION_SECRET || "dev-insecure-secret-change-me";
+  const secret = fromNetlify || process.env.SESSION_SECRET;
+  if (secret) return secret;
+
+  // The `Netlify` global only exists inside an actual Netlify Functions
+  // runtime (deployed, or `netlify dev` locally) -- never in plain `node`/
+  // `vitest`. If we're really running on Netlify and SESSION_SECRET isn't
+  // set, fail loudly rather than silently signing every session with a
+  // hardcoded string that's sitting in this file: anyone who read this
+  // source could forge a valid login for any user. Falling back to the
+  // insecure default is only ever OK outside a real Netlify runtime (unit
+  // tests importing this module directly), where no real session is ever
+  // exposed to the internet.
+  if (typeof Netlify !== "undefined") {
+    throw new Error(
+      "SESSION_SECRET is not set. Set it in Netlify (Site settings -> Environment variables) before this function can safely issue sessions."
+    );
+  }
+  return "dev-insecure-secret-change-me";
 }
 
 export async function hashPassword(pw: string) {
