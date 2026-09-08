@@ -2,6 +2,7 @@ import type { Config } from "@netlify/functions";
 import { db } from "../lib/db.ts";
 import { hashPassword, hashResetToken, createSessionCookie } from "../lib/auth.ts";
 import { json } from "../lib/http.ts";
+import { checkRateLimit, getClientIp } from "../lib/rate-limit.ts";
 import { withSentry } from "../lib/sentry.ts";
 
 export default withSentry(async (req: Request) => {
@@ -16,6 +17,14 @@ export default withSentry(async (req: Request) => {
   }
 
   const database = db();
+
+  // Reset tokens are 256-bit random values, so brute-forcing one directly
+  // isn't computationally realistic -- this is defense-in-depth to match
+  // the rest of the auth surface (login/register/forgot-password are all
+  // rate-limited) rather than a response to a practical attack.
+  const ipOk = await checkRateLimit(database, `reset-password:ip:${getClientIp(req)}`, 20, 15);
+  if (!ipOk) return json({ error: "Too many attempts. Try again in a few minutes." }, { status: 429 });
+
   const tokenHash = hashResetToken(token);
 
   const [record] = await database.sql`

@@ -64,6 +64,17 @@ export function clearSessionCookie() {
   return `${COOKIE_NAME}=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`;
 }
 
+/** Constant-time string comparison -- avoids leaking how many leading bytes
+ *  of a forged signature happened to match via response-time differences.
+ *  Falls back to `false` on any length mismatch (timingSafeEqual throws
+ *  rather than returning false for unequal-length buffers). */
+function safeEqual(a: string, b: string): boolean {
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
+
 export function getUserIdFromRequest(req: Request): string | null {
   const cookieHeader = req.headers.get("cookie") || "";
   const match = cookieHeader
@@ -76,7 +87,7 @@ export function getUserIdFromRequest(req: Request): string | null {
   if (parts.length !== 3) return null;
   const [userId, expires, sig] = parts;
   const payload = `${userId}.${expires}`;
-  if (sign(payload) !== sig) return null;
+  if (!safeEqual(sign(payload), sig)) return null;
   if (Date.now() > Number(expires)) return null;
   return userId;
 }

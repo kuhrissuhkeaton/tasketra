@@ -1,7 +1,6 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./lib/auth-context";
 import { ConfirmProvider } from "./components/ConfirmDialog";
-import Landing from "./pages/Landing";
 import Login from "./pages/Login";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
@@ -40,14 +39,11 @@ function Root() {
   const { user, loading } = useAuth();
   if (loading) return <div className="shell"><p className="muted" style={{ padding: 24 }}>Loading...</p></div>;
   if (user) return <Navigate to="/app" replace />;
-  // app.tasketra.com is the tool itself -- marketing/waitlist content now
-  // lives on tasketra.com root, a separate site. Same build, same routes,
-  // just skip straight to login for logged-out visitors on the app
-  // subdomain instead of showing them the marketing landing page again.
-  if (typeof window !== "undefined" && window.location.hostname.startsWith("app.")) {
-    return <Navigate to="/login" replace />;
-  }
-  return <Landing />;
+  // Marketing/waitlist content lives on tasketra.com root, a separate site --
+  // this app has no logged-out landing page of its own anymore, on any
+  // hostname (including raw Netlify preview/deploy subdomains), so always
+  // send a logged-out visitor straight to login.
+  return <Navigate to="/login" replace />;
 }
 
 export default function App() {

@@ -60,7 +60,7 @@ const CHANGES: ChangeEntry[] = [
     version: "v18",
     date: "July 2026",
     title: "New look",
-    body: "A persistent sidebar, cleaner navigation, and the full ProjectPMP visual identity.",
+    body: "A persistent sidebar, cleaner navigation, and Tasketra's current visual identity.",
   },
 ];
 
