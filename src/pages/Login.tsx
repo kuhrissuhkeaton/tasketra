@@ -7,6 +7,7 @@ import { Wordmark } from "../components/Wordmark";
 export default function Login() {
   const [params] = useSearchParams();
   const refCode = params.get("ref") || undefined;
+  const planParam = params.get("plan") === "pro" || params.get("plan") === "founding" ? params.get("plan") : null;
   const [mode, setMode] = useState<"login" | "register">(params.get("mode") === "register" ? "register" : "login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -26,7 +27,7 @@ export default function Login() {
         await api.register(email, password, refCode);
       }
       await refresh();
-      navigate("/app");
+      navigate(mode === "register" && planParam ? "/app/billing" : "/app");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
@@ -43,6 +44,18 @@ export default function Login() {
         {mode === "register" && refCode && (
           <p className="form-success" style={{ marginBottom: 4 }}>
             Referred by a friend -- you'll both get a free month once you upgrade to Pro.
+          </p>
+        )}
+
+        {mode === "register" && planParam === "founding" && (
+          <p className="form-success" style={{ marginBottom: 4 }}>
+            Going for a founding member spot -- free Pro, forever, if one's still open. We'll confirm right after you sign up.
+          </p>
+        )}
+
+        {mode === "register" && planParam === "pro" && (
+          <p className="form-success" style={{ marginBottom: 4 }}>
+            Create your account first -- you'll land on Billing to start your 14-day Pro trial next. No card required yet.
           </p>
         )}
 
