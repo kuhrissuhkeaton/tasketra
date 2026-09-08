@@ -62,10 +62,36 @@ export default function Terms() {
         it.
       </p>
 
-      <h2>7. Fees</h2>
+      {/* LAWYER REVIEW: this section describes a real, live auto-renewing subscription with a
+          card-required free trial. Please confirm the disclosure here satisfies applicable
+          auto-renewal / negative-option laws (e.g., California's Automatic Renewal Law, ROSCA,
+          and any other state-specific requirements) for where Tasketra has customers, and that
+          the refund/cancellation language is one we're comfortable standing behind. */}
+      <h2>7. Fees and billing</h2>
       <p>
-        Tasketra is currently free to use during the beta period. We may introduce paid plans in the future; if we
-        do, we'll give existing users advance notice before any charges apply to their account.
+        Tasketra offers a Free plan (up to 3 projects, 2GB of storage) at no cost, forever. The Pro plan unlocks
+        unlimited projects and 25GB of storage for $29/month or $290/year, and starts with a 14-day free trial.
+      </p>
+      <p>
+        <strong>A payment method is required to start a Pro trial.</strong> If you don't cancel before the trial
+        ends, we'll automatically charge the payment method on file for the plan and interval you selected, and
+        your subscription will continue to renew automatically at that price at the end of each billing period
+        until you cancel. We'll never charge you during the trial itself.
+      </p>
+      <p>
+        The first 100 accounts to register get every Pro feature free, permanently, as a founding member -- no
+        trial, no card required, and no future charge.
+      </p>
+      <p>
+        You can cancel anytime from the Billing page in the app, which opens a secure, Stripe-hosted billing
+        portal -- no need to contact us. Cancellation takes effect at the end of your current billing period, and
+        you keep Pro access until then; we don't provide refunds for the unused portion of a period except where
+        required by law. All payments are processed by Stripe; Tasketra never receives or stores your full card
+        number.
+      </p>
+      <p>
+        We may change our prices or plans in the future. If we do, we'll give existing subscribers advance notice
+        before any change takes effect on their account.
       </p>
 
       <h2>8. Termination</h2>

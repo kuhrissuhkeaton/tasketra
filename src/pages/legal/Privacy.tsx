@@ -36,6 +36,12 @@ export default function Privacy() {
         <a href="/legal/cookies">Cookie Policy</a> for detail. We do not use any advertising or cross-site tracking
         scripts on tasketra.com.
       </p>
+      <p>
+        <strong>Billing information:</strong> if you upgrade to a paid plan, your payment card details are
+        collected and processed directly by our payment processor, Stripe -- they never pass through or get
+        stored on our own servers. We store your subscription status, billing interval, and Stripe's identifiers
+        for your customer and subscription record, so the app can show your plan and let you manage billing.
+      </p>
 
       <h2>2. How we use your information</h2>
       <ul>
@@ -45,6 +51,7 @@ export default function Privacy() {
         </li>
         <li>To communicate with you: password-reset emails, and replies if you contact us for feedback or support.</li>
         <li>To keep the Service secure and working: diagnosing bugs, preventing abuse, and maintaining uptime.</li>
+        <li>To process payments and manage subscriptions, for anyone on a paid plan.</li>
       </ul>
       <p>We do not sell your personal information, and we do not use your project content to train any AI/ML models.</p>
 
@@ -66,6 +73,17 @@ export default function Privacy() {
           <strong>Plausible Analytics</strong> -- provides aggregate website traffic analytics. Because Plausible is
           cookieless and doesn't use persistent identifiers, it doesn't receive or store personal information about
           you as an individual.
+        </li>
+        <li>
+          <strong>Stripe</strong> -- processes payments and manages subscriptions for the Pro plan. Stripe collects
+          your payment details directly through its own secure checkout -- we never see or store your full card
+          number. We share your email and an account identifier with Stripe so it can create and manage your
+          subscription.
+        </li>
+        <li>
+          <strong>Sentry</strong> -- error monitoring, so we can detect and fix bugs quickly. When something breaks,
+          Sentry may receive technical details about the error, such as a stack trace or which page or request was
+          involved. We don't send Sentry your project content.
         </li>
       </ul>
       <p>
