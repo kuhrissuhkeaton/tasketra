@@ -144,6 +144,15 @@ export function AppSidebar({ children }: { children?: ReactNode }) {
           <span aria-hidden="true" className="sidebar-feedback-dot" />
           Feedback
         </button>
+        <a
+          href="https://discord.gg/R66gSFz9d"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="side-tab"
+          style={{ marginBottom: 4 }}
+        >
+          Community
+        </a>
         <Link to="/legal" className="side-tab" style={{ marginBottom: 4 }}>
           Legal
         </Link>

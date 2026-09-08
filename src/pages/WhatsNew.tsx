@@ -9,6 +9,12 @@ type ChangeEntry = { version: string; date: string; title: string; body: string 
 // they can do.
 const CHANGES: ChangeEntry[] = [
   {
+    version: "v49",
+    date: "September 2026",
+    title: "A place to talk to other PMs",
+    body: "Tasketra's Discord community is live -- swap interview questions, vent about your week, or tell us what to fix in the app. Find the link under Community in the sidebar.",
+  },
+  {
     version: "v48",
     date: "August 2026",
     title: "Feedback, properly this time",
