@@ -9,6 +9,12 @@ type ChangeEntry = { version: string; date: string; title: string; body: string 
 // they can do.
 const CHANGES: ChangeEntry[] = [
   {
+    version: "v50",
+    date: "September 2026",
+    title: "A tour for your first project",
+    body: "Create your first project and a quick walkthrough shows you around: Roadmap, Tasks, RAID, Meetings, Decisions, Budget, Team, and Templates. Missed it or want to see it again? Find \"Replay the tour\" on the Resource hub.",
+  },
+  {
     version: "v49",
     date: "September 2026",
     title: "A place to talk to other PMs",
