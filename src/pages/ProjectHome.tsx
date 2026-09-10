@@ -1,5 +1,5 @@
 import { useEffect, useState, Fragment } from "react";
-import { useParams, useSearchParams, useNavigate, Link } from "react-router-dom";
+import { useParams, useSearchParams, useNavigate, useLocation, Link } from "react-router-dom";
 import { api, ApiError, type Project, type Task, type Stakeholder, type Decision, type Issue, type Risk, type Assumption, type Dependency, type ChangeRequest, type Lesson, type TodayData, type WeeklyReport, type BudgetData, type FeedItem, type TrashItem, type ProjectMember, type Meeting, type MeetingActionItem, type ProjectDocument, type StorageUsage, type RoadmapItem, type RoadmapItemType } from "../lib/api";
 import { RoadmapTimeline, ROADMAP_TYPE_LABEL, ROADMAP_STATUS_LABEL, fmtRoadmapDate } from "../components/RoadmapTimeline";
 import { tasksToICS, downloadICS } from "../lib/ics";
@@ -7,9 +7,10 @@ import { useAuth } from "../lib/auth-context";
 import { AppSidebar, NavDot, NavGroup } from "../components/AppSidebar";
 import { useConfirm } from "../components/ConfirmDialog";
 import { avatarColor, initials } from "../lib/avatar";
+import { TourOverlay, useProductTour } from "../components/ProductTour";
 
 
-type Tab = "home" | "roadmap" | "tasks" | "raid" | "budget" | "meetings" | "documents" | "stakeholders" | "decisions" | "team" | "report" | "templates" | "export" | "connections" | "trash";
+export type Tab = "home" | "roadmap" | "tasks" | "raid" | "budget" | "meetings" | "documents" | "stakeholders" | "decisions" | "team" | "report" | "templates" | "export" | "connections" | "trash";
 
 function daysAgo(dateStr: string): number {
   return Math.max(0, Math.floor((Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24)));
@@ -165,10 +166,31 @@ export default function ProjectHome() {
   const [params, setParams] = useSearchParams();
   const tab = (params.get("tab") as Tab) || "home";
   const [project, setProject] = useState<Project | null>(null);
+  const { user } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const tour = useProductTour((tourTab) => setParams({ tab: tourTab }));
 
   useEffect(() => {
     if (id) api.getProject(id).then(({ project }) => setProject(project));
   }, [id]);
+
+  // Started by Dashboard's first-project flow, or Resources' "Replay the
+  // tour" link, both of which pass startTour via router state rather than
+  // a query param (so it can't be triggered by pasting/bookmarking a URL).
+  // Consumed once, then cleared from history state so back/forward
+  // navigation doesn't replay it.
+  useEffect(() => {
+    const navState = location.state as { startTour?: boolean; forceReplay?: boolean } | null;
+    if (!navState?.startTour || !id) return;
+    if (navState.forceReplay || !user?.tour_completed_at) {
+      tour.start();
+    }
+    navigate(location.pathname + location.search, { replace: true, state: null });
+    // Deliberately narrow: `tour` and `navigate` are new references most
+    // renders, and including them here would replay the tour or loop on
+    // the state-clearing navigate() call below.
+  }, [location.state, id, user]);
 
   if (!id) return null;
 
@@ -183,6 +205,7 @@ export default function ProjectHome() {
             key={group.label}
             label={group.label}
             defaultCollapsed={!group.tabs.some((t) => t.id === tab)}
+            forceExpanded={tour.active && group.tabs.some((t) => t.id === tour.step.tab)}
           >
             {group.tabs.map((t) => (
               <button
@@ -190,6 +213,7 @@ export default function ProjectHome() {
                 className={tab === t.id ? "side-tab active" : "side-tab"}
                 onClick={() => setParams({ tab: t.id })}
                 type="button"
+                data-tour={`tab-${t.id}`}
               >
                 <NavDot active={tab === t.id} />
                 {t.label}
@@ -221,6 +245,7 @@ export default function ProjectHome() {
               type="button"
               className={tab === t.id ? "btn btn-primary" : "btn btn-ghost"}
               onClick={() => setParams({ tab: t.id })}
+              data-tour={`tab-${t.id}`}
             >
               {t.label}
             </button>
@@ -243,6 +268,16 @@ export default function ProjectHome() {
         {tab === "connections" && <ConnectionsTab projectId={id} />}
         {tab === "trash" && <TrashTab projectId={id} />}
       </main>
+
+      {tour.active && (
+        <TourOverlay
+          step={tour.step}
+          stepIndex={tour.stepIndex}
+          totalSteps={tour.totalSteps}
+          onNext={tour.next}
+          onSkip={tour.skip}
+        />
+      )}
     </div>
   );
 }

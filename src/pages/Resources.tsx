@@ -1,5 +1,7 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { AppSidebar } from "../components/AppSidebar";
+import { api } from "../lib/api";
 
 type Methodology = { name: string; points: string[]; bestWhen: string };
 
@@ -190,7 +192,25 @@ const STATUS_REPORT_TIPS: string[] = [
 
 export default function Resources() {
   const [query, setQuery] = useState("");
+  const [replaying, setReplaying] = useState(false);
+  const [replayNotice, setReplayNotice] = useState<string | null>(null);
+  const navigate = useNavigate();
   const q = query.trim().toLowerCase();
+
+  async function replayTour() {
+    setReplaying(true);
+    setReplayNotice(null);
+    try {
+      const { projects } = await api.listProjects();
+      if (projects.length === 0) {
+        setReplayNotice("Create a project first, the tour walks through a real one.");
+        return;
+      }
+      navigate(`/app/projects/${projects[0].id}`, { state: { startTour: true, forceReplay: true } });
+    } finally {
+      setReplaying(false);
+    }
+  }
   const matches = (...parts: string[]) => !q || parts.some((p) => p.toLowerCase().includes(q));
 
   const methodologies = METHODOLOGIES.filter((m) => matches(m.name, m.bestWhen, ...m.points));
@@ -218,6 +238,13 @@ export default function Resources() {
           is reference only -- your project's own Budget, Issues &amp; risks, Stakeholders, and
           Weekly report tabs are where the live data lives.
         </p>
+
+        <div className="inline-form" style={{ marginBottom: 20, alignItems: "center" }}>
+          <button type="button" className="btn btn-ghost" onClick={replayTour} disabled={replaying}>
+            {replaying ? "Loading..." : "Replay the tour"}
+          </button>
+          {replayNotice && <span className="muted" style={{ fontSize: 13 }}>{replayNotice}</span>}
+        </div>
 
         <input
           placeholder="Search everything on this page..."

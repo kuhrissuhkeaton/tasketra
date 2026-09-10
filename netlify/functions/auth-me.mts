@@ -22,7 +22,7 @@ export default withSentry(async (req: Request) => {
 
   const database = db();
   const [user] = await database.sql`
-    SELECT id, email, display_name, job_title, timezone, avatar_key IS NOT NULL AS has_avatar
+    SELECT id, email, display_name, job_title, timezone, avatar_key IS NOT NULL AS has_avatar, tour_completed_at
     FROM users WHERE id = ${userId}
   `;
   if (!user) return json({ user: null });

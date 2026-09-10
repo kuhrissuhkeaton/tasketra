@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { api, ApiError, type Project } from "../lib/api";
 import { AppSidebar } from "../components/AppSidebar";
 import { useConfirm } from "../components/ConfirmDialog";
+import { useAuth } from "../lib/auth-context";
 
 export default function Dashboard() {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -17,6 +18,7 @@ export default function Dashboard() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const confirmDialog = useConfirm();
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   async function load() {
     setLoading(true);
@@ -57,12 +59,16 @@ export default function Dashboard() {
   async function createProject(e: React.FormEvent) {
     e.preventDefault();
     if (!newName.trim()) return;
+    // Captured before the request, not after -- this create() call is what
+    // would make it non-zero.
+    const isFirstProjectEver = projects.length === 0;
     setCreating(true);
     setUpgradeNotice(null);
     try {
       const { project } = await api.createProject(newName.trim());
       setNewName("");
-      navigate(`/app/projects/${project.id}`);
+      const shouldStartTour = isFirstProjectEver && !user?.tour_completed_at;
+      navigate(`/app/projects/${project.id}`, shouldStartTour ? { state: { startTour: true } } : undefined);
     } catch (err) {
       if (err instanceof ApiError && err.upgradeRequired) {
         setUpgradeNotice(err.message);

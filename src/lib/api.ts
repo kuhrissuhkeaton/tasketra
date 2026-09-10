@@ -52,6 +52,7 @@ export type User = {
   job_title?: string | null;
   timezone?: string | null;
   has_avatar?: boolean;
+  tour_completed_at?: string | null;
 };
 
 export type ReferralInfo = {
@@ -685,6 +686,11 @@ export const api = {
     request<{ ok: true }>("/account", {
       method: "PATCH",
       body: JSON.stringify({ action: "change-password", currentPassword, newPassword }),
+    }),
+  completeTour: () =>
+    request<{ ok: true }>("/account", {
+      method: "PATCH",
+      body: JSON.stringify({ action: "complete-tour" }),
     }),
 
   uploadAvatar: (file: File) => {

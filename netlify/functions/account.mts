@@ -30,6 +30,15 @@ export default withSentry(async (req: Request) => {
       return json({ ok: true });
     }
 
+    // Marks the first-run product tour as done, whether the user finished
+    // it or hit Skip -- either way it shouldn't auto-trigger again. The
+    // Resources page's "Replay the tour" link starts it again explicitly,
+    // client-side, without touching this column.
+    if (body?.action === "complete-tour") {
+      await database.sql`UPDATE users SET tour_completed_at = now() WHERE id = ${userId}`;
+      return json({ ok: true });
+    }
+
     // Field left out of the body entirely -> null -> COALESCE keeps the old
     // value. Field sent as an empty string (clearing it) -> COALESCE still
     // applies it, since "" isn't NULL. Only an actual missing key leaves the

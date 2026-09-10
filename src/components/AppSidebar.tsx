@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../lib/auth-context";
 import { Wordmark } from "./Wordmark";
@@ -36,12 +36,22 @@ export function NavGroup({
   label,
   children,
   defaultCollapsed = false,
+  forceExpanded = false,
 }: {
   label: string;
   children: ReactNode;
   defaultCollapsed?: boolean;
+  /** Overrides the collapsed state open, e.g. so the product tour can reveal
+   * a sidebar group whose contents it's about to spotlight. Doesn't fight
+   * the user's own toggle -- it only ever forces open, never closed. */
+  forceExpanded?: boolean;
 }) {
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
+
+  useEffect(() => {
+    if (forceExpanded) setCollapsed(false);
+  }, [forceExpanded]);
+
   return (
     <div className={collapsed ? "side-nav-group collapsed" : "side-nav-group"}>
       <div
