@@ -357,7 +357,7 @@ textarea { resize: vertical; }
   padding: 20px 16px 16px; position: sticky; top: 0; height: 100vh; overflow-y: auto;
   display: flex; flex-direction: column;
 }
-.sidebar-wordmark { display: block; margin-bottom: 4px; }
+.sidebar-wordmark { display: block; margin-bottom: 24px; }
 .sidebar .brand-lockup-name { color: var(--cream); }
 .sidebar .brand-lockup-beta { color: var(--cream); border-color: rgba(242, 235, 217, 0.35); }
 .sidebar-project { font-size: 13px; margin-bottom: 20px; word-break: break-word; color: var(--cream); }
