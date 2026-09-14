@@ -9,6 +9,12 @@ type ChangeEntry = { version: string; date: string; title: string; body: string 
 // they can do.
 const CHANGES: ChangeEntry[] = [
   {
+    version: "v51",
+    date: "September 2026",
+    title: "Set a status when you add something",
+    body: "Tasks, roadmap items, issues, risks, assumptions, and dependencies now let you pick a status right when you create them -- handy for backfilling a project that's already underway. Roadmap items are also now editable inline, just like the rest.",
+  },
+  {
     version: "v50",
     date: "September 2026",
     title: "A tour for your first project",

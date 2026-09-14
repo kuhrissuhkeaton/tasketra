@@ -47,10 +47,15 @@ export default withSentry(async (req: Request) => {
     if (!(await hasProjectAccess(userId, projectId))) return json({ error: "Not found" }, { status: 404 });
 
     const severity = VALID_SEVERITIES.includes(body?.severity) ? body.severity : "medium";
+    if (body?.status && !VALID_STATUSES.includes(body.status)) {
+      return json({ error: "Invalid status." }, { status: 400 });
+    }
+    const status = VALID_STATUSES.includes(body?.status) ? body.status : "open";
+    const resolvedAt = status === "resolved" ? new Date() : null;
 
     const [issue] = await database.sql`
-      INSERT INTO issues (project_id, title, description, severity, owner_name)
-      VALUES (${projectId}, ${title}, ${body?.description || null}, ${severity}, ${body?.ownerName || null})
+      INSERT INTO issues (project_id, title, description, severity, owner_name, status, resolved_at)
+      VALUES (${projectId}, ${title}, ${body?.description || null}, ${severity}, ${body?.ownerName || null}, ${status}, ${resolvedAt})
       RETURNING id, title, description, severity, status, owner_name, resolution, created_at, updated_at, resolved_at
     `;
     await logActivity(database, { projectId, entityType: "issue", entityId: issue.id, entityTitle: issue.title, action: "created" });

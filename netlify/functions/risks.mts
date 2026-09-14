@@ -52,10 +52,15 @@ export default withSentry(async (req: Request) => {
 
     const probability = VALID_LEVELS.includes(body?.probability) ? body.probability : "medium";
     const impact = VALID_LEVELS.includes(body?.impact) ? body.impact : "medium";
+    if (body?.status && !VALID_STATUSES.includes(body.status)) {
+      return json({ error: "Invalid status." }, { status: 400 });
+    }
+    const status = VALID_STATUSES.includes(body?.status) ? body.status : "open";
+    const resolvedAt = status === "resolved" ? new Date() : null;
 
     const [risk] = await database.sql`
-      INSERT INTO risks (project_id, title, description, probability, impact, mitigation, owner_name)
-      VALUES (${projectId}, ${title}, ${body?.description || null}, ${probability}, ${impact}, ${body?.mitigation || null}, ${body?.ownerName || null})
+      INSERT INTO risks (project_id, title, description, probability, impact, mitigation, owner_name, status, resolved_at)
+      VALUES (${projectId}, ${title}, ${body?.description || null}, ${probability}, ${impact}, ${body?.mitigation || null}, ${body?.ownerName || null}, ${status}, ${resolvedAt})
       RETURNING id, title, description, probability, impact, mitigation, owner_name, status, created_at, updated_at, resolved_at
     `;
     await logActivity(database, { projectId, entityType: "risk", entityId: risk.id, entityTitle: risk.title, action: "created" });

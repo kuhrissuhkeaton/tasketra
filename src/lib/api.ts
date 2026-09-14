@@ -400,10 +400,10 @@ export const api = {
     request<{ ok: true }>("/stakeholders", { method: "PATCH", body: JSON.stringify({ id, restore: true }) }),
 
   listTasks: (projectId: string) => request<{ tasks: Task[] }>(`/tasks?projectId=${projectId}`),
-  createTask: (projectId: string, title: string, ownerName?: string, dueDate?: string, parentTaskId?: string, startDate?: string) =>
+  createTask: (projectId: string, title: string, ownerName?: string, dueDate?: string, parentTaskId?: string, startDate?: string, status?: Task["status"]) =>
     request<{ task: Task }>("/tasks", {
       method: "POST",
-      body: JSON.stringify({ projectId, title, ownerName, dueDate, parentTaskId, startDate }),
+      body: JSON.stringify({ projectId, title, ownerName, dueDate, parentTaskId, startDate, status }),
     }),
   updateTask: (id: string, patch: Partial<Pick<Task, "status" | "title" | "owner_name" | "due_date" | "parent_task_id" | "start_date">>) =>
     request<{ task: Task }>("/tasks", {
@@ -438,10 +438,10 @@ export const api = {
     request<{ ok: true }>("/decisions", { method: "PATCH", body: JSON.stringify({ id, restore: true }) }),
 
   listIssues: (projectId: string) => request<{ issues: Issue[] }>(`/issues?projectId=${projectId}`),
-  createIssue: (projectId: string, title: string, description?: string, severity?: Issue["severity"], ownerName?: string) =>
+  createIssue: (projectId: string, title: string, description?: string, severity?: Issue["severity"], ownerName?: string, status?: Issue["status"]) =>
     request<{ issue: Issue }>("/issues", {
       method: "POST",
-      body: JSON.stringify({ projectId, title, description, severity, ownerName }),
+      body: JSON.stringify({ projectId, title, description, severity, ownerName, status }),
     }),
   updateIssue: (id: string, patch: Partial<Pick<Issue, "status" | "severity" | "resolution" | "owner_name" | "title" | "description">>) =>
     request<{ issue: Issue }>("/issues", {
@@ -463,11 +463,12 @@ export const api = {
     probability?: Risk["probability"],
     impact?: Risk["impact"],
     mitigation?: string,
-    ownerName?: string
+    ownerName?: string,
+    status?: Risk["status"]
   ) =>
     request<{ risk: Risk }>("/risks", {
       method: "POST",
-      body: JSON.stringify({ projectId, title, description, probability, impact, mitigation, ownerName }),
+      body: JSON.stringify({ projectId, title, description, probability, impact, mitigation, ownerName, status }),
     }),
   updateRisk: (id: string, patch: Partial<Pick<Risk, "status" | "probability" | "impact" | "mitigation" | "owner_name" | "title" | "description">>) =>
     request<{ risk: Risk }>("/risks", {
@@ -572,9 +573,9 @@ export const api = {
   deleteLesson: (id: string) => request<{ ok: true }>(`/lessons?id=${id}`, { method: "DELETE" }),
 
   listAssumptions: (projectId: string) => request<{ assumptions: Assumption[] }>(`/assumptions?projectId=${projectId}`),
-  createAssumption: (projectId: string, statement: string, notes?: string, ownerName?: string) =>
+  createAssumption: (projectId: string, statement: string, notes?: string, ownerName?: string, status?: Assumption["status"]) =>
     request<{ assumption: Assumption }>("/assumptions", {
-      method: "POST", body: JSON.stringify({ projectId, statement, notes, ownerName }),
+      method: "POST", body: JSON.stringify({ projectId, statement, notes, ownerName, status }),
     }),
   updateAssumption: (id: string, patch: Partial<Pick<Assumption, "status" | "statement" | "notes" | "owner_name">>) =>
     request<{ assumption: Assumption }>("/assumptions", {
@@ -585,10 +586,10 @@ export const api = {
   listDependencies: (projectId: string) => request<{ dependencies: Dependency[] }>(`/dependencies?projectId=${projectId}`),
   createDependency: (
     projectId: string, title: string, description?: string,
-    direction?: Dependency["direction"], ownerName?: string, neededBy?: string
+    direction?: Dependency["direction"], ownerName?: string, neededBy?: string, status?: Dependency["status"]
   ) =>
     request<{ dependency: Dependency }>("/dependencies", {
-      method: "POST", body: JSON.stringify({ projectId, title, description, direction, ownerName, neededBy }),
+      method: "POST", body: JSON.stringify({ projectId, title, description, direction, ownerName, neededBy, status }),
     }),
   updateDependency: (id: string, patch: Partial<Pick<Dependency, "status" | "title" | "description" | "direction" | "owner_name" | "needed_by">>) =>
     request<{ dependency: Dependency }>("/dependencies", {

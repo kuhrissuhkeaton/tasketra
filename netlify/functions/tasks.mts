@@ -43,6 +43,9 @@ export default withSentry(async (req: Request) => {
     const title = (body?.title || "").trim();
     if (!projectId || !title) return json({ error: "projectId and title are required." }, { status: 400 });
     if (!(await hasProjectAccess(userId, projectId))) return json({ error: "Not found" }, { status: 404 });
+    if (body?.status && !VALID_STATUSES.includes(body.status)) {
+      return json({ error: "Invalid status." }, { status: 400 });
+    }
 
     const parentTaskId = body?.parentTaskId || null;
     if (parentTaskId) {
@@ -52,9 +55,11 @@ export default withSentry(async (req: Request) => {
       }
     }
 
+    const status = VALID_STATUSES.includes(body?.status) ? body.status : "not_started";
+
     const [task] = await database.sql`
-      INSERT INTO tasks (project_id, title, owner_name, start_date, due_date, stakeholder_id, parent_task_id)
-      VALUES (${projectId}, ${title}, ${body?.ownerName || null}, ${body?.startDate || null}, ${body?.dueDate || null}, ${body?.stakeholderId || null}, ${parentTaskId})
+      INSERT INTO tasks (project_id, title, owner_name, start_date, due_date, stakeholder_id, parent_task_id, status)
+      VALUES (${projectId}, ${title}, ${body?.ownerName || null}, ${body?.startDate || null}, ${body?.dueDate || null}, ${body?.stakeholderId || null}, ${parentTaskId}, ${status})
       RETURNING id, title, status, owner_name, start_date, due_date, stakeholder_id, parent_task_id, created_at, updated_at
     `;
     await logActivity(database, { projectId, entityType: "task", entityId: task.id, entityTitle: task.title, action: "created" });

@@ -42,9 +42,15 @@ export default withSentry(async (req: Request) => {
     if (!projectId || !statement) return json({ error: "projectId and statement are required." }, { status: 400 });
     if (!(await hasProjectAccess(userId, projectId))) return json({ error: "Not found" }, { status: 404 });
 
+    if (body?.status && !VALID_STATUSES.includes(body.status)) {
+      return json({ error: "Invalid status." }, { status: 400 });
+    }
+    const status = VALID_STATUSES.includes(body?.status) ? body.status : "unconfirmed";
+    const validatedAt = status === "confirmed" || status === "invalidated" ? new Date() : null;
+
     const [assumption] = await database.sql`
-      INSERT INTO assumptions (project_id, statement, notes, owner_name)
-      VALUES (${projectId}, ${statement}, ${body?.notes || null}, ${body?.ownerName || null})
+      INSERT INTO assumptions (project_id, statement, notes, owner_name, status, validated_at)
+      VALUES (${projectId}, ${statement}, ${body?.notes || null}, ${body?.ownerName || null}, ${status}, ${validatedAt})
       RETURNING id, statement, notes, status, owner_name, created_at, updated_at, validated_at
     `;
     await logActivity(database, { projectId, entityType: "assumption", entityId: assumption.id, entityTitle: assumption.statement, action: "created" });

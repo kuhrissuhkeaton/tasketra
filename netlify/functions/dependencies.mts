@@ -46,10 +46,15 @@ export default withSentry(async (req: Request) => {
     if (!(await hasProjectAccess(userId, projectId))) return json({ error: "Not found" }, { status: 404 });
 
     const direction = VALID_DIRECTIONS.includes(body?.direction) ? body.direction : "internal";
+    if (body?.status && !VALID_STATUSES.includes(body.status)) {
+      return json({ error: "Invalid status." }, { status: 400 });
+    }
+    const status = VALID_STATUSES.includes(body?.status) ? body.status : "blocked";
+    const resolvedAt = status === "resolved" ? new Date() : null;
 
     const [dependency] = await database.sql`
-      INSERT INTO dependencies (project_id, title, description, direction, owner_name, needed_by)
-      VALUES (${projectId}, ${title}, ${body?.description || null}, ${direction}, ${body?.ownerName || null}, ${body?.neededBy || null})
+      INSERT INTO dependencies (project_id, title, description, direction, owner_name, needed_by, status, resolved_at)
+      VALUES (${projectId}, ${title}, ${body?.description || null}, ${direction}, ${body?.ownerName || null}, ${body?.neededBy || null}, ${status}, ${resolvedAt})
       RETURNING id, title, description, direction, status, owner_name, needed_by, created_at, updated_at, resolved_at
     `;
     await logActivity(database, { projectId, entityType: "dependency", entityId: dependency.id, entityTitle: dependency.title, action: "created" });

@@ -575,6 +575,7 @@ function TasksTab({ projectId, projectName }: { projectId: string; projectName: 
   const [owner, setOwner] = useState("");
   const [start, setStart] = useState("");
   const [due, setDue] = useState("");
+  const [newStatus, setNewStatus] = useState<Task["status"]>("not_started");
   const [view, setView] = useState<"list" | "board" | "timeline">("list");
   const [dragOverStatus, setDragOverStatus] = useState<Task["status"] | null>(null);
   const [addingSubtaskFor, setAddingSubtaskFor] = useState<string | null>(null);
@@ -606,11 +607,12 @@ function TasksTab({ projectId, projectName }: { projectId: string; projectName: 
     if (!title.trim()) return;
     setError("");
     try {
-      await api.createTask(projectId, title.trim(), owner || undefined, due || undefined, undefined, start || undefined);
+      await api.createTask(projectId, title.trim(), owner || undefined, due || undefined, undefined, start || undefined, newStatus);
       setTitle("");
       setOwner("");
       setStart("");
       setDue("");
+      setNewStatus("not_started");
       load();
     } catch (err: any) {
       setError(err.message || "Couldn't add that task.");
@@ -676,6 +678,11 @@ function TasksTab({ projectId, projectName }: { projectId: string; projectName: 
         <input placeholder="Owner (optional)" value={owner} onChange={(e) => setOwner(e.target.value)} />
         <input type="date" title="Start date (optional)" value={start} onChange={(e) => setStart(e.target.value)} />
         <input type="date" title="Due date" value={due} onChange={(e) => setDue(e.target.value)} />
+        <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as Task["status"])} title="Status">
+          {Object.entries(STATUS_LABEL).map(([value, label]) => (
+            <option key={value} value={value}>{label}</option>
+          ))}
+        </select>
         <button className="btn btn-primary">Add task</button>
       </form>
       {error && <p className="form-error">{error}</p>}
@@ -962,6 +969,7 @@ function IssuesTab({ projectId }: { projectId: string }) {
   const [description, setDescription] = useState("");
   const [severity, setSeverity] = useState<Issue["severity"]>("medium");
   const [owner, setOwner] = useState("");
+  const [newStatus, setNewStatus] = useState<Issue["status"]>("open");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editDescription, setEditDescription] = useState("");
@@ -987,11 +995,12 @@ function IssuesTab({ projectId }: { projectId: string }) {
     if (!title.trim()) return;
     setError("");
     try {
-      await api.createIssue(projectId, title.trim(), description || undefined, severity, owner || undefined);
+      await api.createIssue(projectId, title.trim(), description || undefined, severity, owner || undefined, newStatus);
       setTitle("");
       setDescription("");
       setSeverity("medium");
       setOwner("");
+      setNewStatus("open");
       load();
     } catch (err: any) {
       setError(err.message || "Couldn't log that issue.");
@@ -1045,6 +1054,11 @@ function IssuesTab({ projectId }: { projectId: string }) {
             ))}
           </select>
           <input placeholder="Owner (optional)" value={owner} onChange={(e) => setOwner(e.target.value)} />
+          <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as Issue["status"])} title="Status">
+            {Object.entries(ISSUE_STATUS_LABEL).map(([value, label]) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
+          </select>
           <button className="btn btn-primary">Log issue</button>
         </div>
       </form>
@@ -1128,6 +1142,7 @@ function RisksTab({ projectId }: { projectId: string }) {
   const [impact, setImpact] = useState<Risk["impact"]>("medium");
   const [mitigation, setMitigation] = useState("");
   const [owner, setOwner] = useState("");
+  const [newStatus, setNewStatus] = useState<Risk["status"]>("open");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editDescription, setEditDescription] = useState("");
@@ -1154,13 +1169,14 @@ function RisksTab({ projectId }: { projectId: string }) {
     if (!title.trim()) return;
     setError("");
     try {
-      await api.createRisk(projectId, title.trim(), description || undefined, probability, impact, mitigation || undefined, owner || undefined);
+      await api.createRisk(projectId, title.trim(), description || undefined, probability, impact, mitigation || undefined, owner || undefined, newStatus);
       setTitle("");
       setDescription("");
       setProbability("medium");
       setImpact("medium");
       setMitigation("");
       setOwner("");
+      setNewStatus("open");
       load();
     } catch (err: any) {
       setError(err.message || "Couldn't log that risk.");
@@ -1221,6 +1237,11 @@ function RisksTab({ projectId }: { projectId: string }) {
             ))}
           </select>
           <input placeholder="Owner (optional)" value={owner} onChange={(e) => setOwner(e.target.value)} />
+          <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as Risk["status"])} title="Status">
+            {Object.entries(RISK_STATUS_LABEL).map(([value, label]) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
+          </select>
           <button className="btn btn-primary">Log risk</button>
         </div>
       </form>
@@ -1309,6 +1330,7 @@ function AssumptionsTab({ projectId }: { projectId: string }) {
   const [statement, setStatement] = useState("");
   const [notes, setNotes] = useState("");
   const [owner, setOwner] = useState("");
+  const [newStatus, setNewStatus] = useState<Assumption["status"]>("unconfirmed");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editStatement, setEditStatement] = useState("");
   const [editNotes, setEditNotes] = useState("");
@@ -1332,10 +1354,11 @@ function AssumptionsTab({ projectId }: { projectId: string }) {
     if (!statement.trim()) return;
     setError("");
     try {
-      await api.createAssumption(projectId, statement.trim(), notes || undefined, owner || undefined);
+      await api.createAssumption(projectId, statement.trim(), notes || undefined, owner || undefined, newStatus);
       setStatement("");
       setNotes("");
       setOwner("");
+      setNewStatus("unconfirmed");
       load();
     } catch (err: any) {
       setError(err.message || "Couldn't log that assumption.");
@@ -1384,6 +1407,11 @@ function AssumptionsTab({ projectId }: { projectId: string }) {
         <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
         <div className="inline-form" style={{ marginTop: 8, marginBottom: 0 }}>
           <input placeholder="Owner (optional)" value={owner} onChange={(e) => setOwner(e.target.value)} />
+          <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as Assumption["status"])} title="Status">
+            {Object.entries(ASSUMPTION_STATUS_LABEL).map(([value, label]) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
+          </select>
           <button className="btn btn-primary">Log assumption</button>
         </div>
       </form>
@@ -1461,6 +1489,7 @@ function DependenciesTab({ projectId }: { projectId: string }) {
   const [direction, setDirection] = useState<Dependency["direction"]>("internal");
   const [owner, setOwner] = useState("");
   const [neededBy, setNeededBy] = useState("");
+  const [newStatus, setNewStatus] = useState<Dependency["status"]>("blocked");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editDescription, setEditDescription] = useState("");
@@ -1486,12 +1515,13 @@ function DependenciesTab({ projectId }: { projectId: string }) {
     if (!title.trim()) return;
     setError("");
     try {
-      await api.createDependency(projectId, title.trim(), description || undefined, direction, owner || undefined, neededBy || undefined);
+      await api.createDependency(projectId, title.trim(), description || undefined, direction, owner || undefined, neededBy || undefined, newStatus);
       setTitle("");
       setDescription("");
       setDirection("internal");
       setOwner("");
       setNeededBy("");
+      setNewStatus("blocked");
       load();
     } catch (err: any) {
       setError(err.message || "Couldn't log that dependency.");
@@ -1549,6 +1579,11 @@ function DependenciesTab({ projectId }: { projectId: string }) {
           </select>
           <input placeholder="Owner (optional)" value={owner} onChange={(e) => setOwner(e.target.value)} />
           <input type="date" value={neededBy} onChange={(e) => setNeededBy(e.target.value)} />
+          <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as Dependency["status"])} title="Status">
+            {Object.entries(DEPENDENCY_STATUS_LABEL).map(([value, label]) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
+          </select>
           <button className="btn btn-primary">Log dependency</button>
         </div>
       </form>
@@ -1801,6 +1836,7 @@ function RoadmapTab({ projectId, isOwner }: { projectId: string; isOwner: boolea
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [description, setDescription] = useState("");
+  const [status, setStatus] = useState<RoadmapItem["status"]>("not_started");
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editType, setEditType] = useState<RoadmapItemType>("milestone");
@@ -1841,8 +1877,9 @@ function RoadmapTab({ projectId, isOwner }: { projectId: string; isOwner: boolea
         startDate: startDate || undefined,
         endDate: endDate || undefined,
         description: description.trim() || undefined,
+        status,
       });
-      setTitle(""); setSwimlane(""); setStartDate(""); setEndDate(""); setDescription(""); setType("milestone");
+      setTitle(""); setSwimlane(""); setStartDate(""); setEndDate(""); setDescription(""); setType("milestone"); setStatus("not_started");
       load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't add that item.");
@@ -1872,6 +1909,11 @@ function RoadmapTab({ projectId, isOwner }: { projectId: string; isOwner: boolea
       description: editDescription,
     });
     setEditingId(null);
+    load();
+  }
+
+  async function setItemStatus(id: string, status: RoadmapItem["status"]) {
+    await api.updateRoadmapItem(id, { status });
     load();
   }
 
@@ -1968,6 +2010,9 @@ function RoadmapTab({ projectId, isOwner }: { projectId: string; isOwner: boolea
           </datalist>
           <input type="date" title="Start date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
           <input type="date" title="End date (optional)" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+          <select value={status} onChange={(e) => setStatus(e.target.value as RoadmapItem["status"])} title="Status">
+            {Object.entries(ROADMAP_STATUS_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </select>
         </div>
         <label>Notes (optional)</label>
         <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
@@ -1993,7 +2038,17 @@ function RoadmapTab({ projectId, isOwner }: { projectId: string; isOwner: boolea
                     ? `${fmtRoadmapDate(item.start_date)}${item.end_date ? ` -- ${fmtRoadmapDate(item.end_date)}` : ""}`
                     : "Undated"}
                 </td>
-                <td><span className={`pill ${TASK_STATUS_PILL[item.status]}`}>{ROADMAP_STATUS_LABEL[item.status]}</span></td>
+                <td>
+                  <select
+                    className={`status-select status-select-${item.status}`}
+                    value={item.status}
+                    onChange={(e) => setItemStatus(item.id, e.target.value as RoadmapItem["status"])}
+                  >
+                    {Object.entries(ROADMAP_STATUS_LABEL).map(([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
+                  </select>
+                </td>
                 <td className="row-actions">
                   <button className="btn-link" type="button" onClick={() => startEdit(item)}>
                     {editingId === item.id ? "Close" : "Edit"}
