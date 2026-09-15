@@ -33,7 +33,7 @@ export default withSentry(async (req: Request) => {
       ORDER BY updated_at ASC
     `,
     database.sql`
-      SELECT dr.id, dr.title, dr.created_at, dr.deadline,
+      SELECT dr.id, dr.title, dr.created_at, dr.deadline, dr.public_token,
         COALESCE(json_agg(s.name) FILTER (WHERE s.name IS NOT NULL), '[]'::json) AS recipients
       FROM decision_requests dr
       LEFT JOIN decision_request_recipients drr ON drr.decision_request_id = dr.id
@@ -43,13 +43,13 @@ export default withSentry(async (req: Request) => {
       ORDER BY dr.created_at ASC
     `,
     database.sql`
-      SELECT id, title, severity, owner_name
+      SELECT id, title, severity, owner_name, status
       FROM issues
       WHERE project_id = ${projectId} AND status != 'resolved' AND severity IN ('high','critical') AND deleted_at IS NULL
       ORDER BY CASE severity WHEN 'critical' THEN 0 ELSE 1 END
     `,
     database.sql`
-      SELECT id, title, probability, impact, owner_name
+      SELECT id, title, probability, impact, owner_name, status
       FROM risks
       WHERE project_id = ${projectId} AND status = 'open' AND (probability = 'high' OR impact = 'high') AND deleted_at IS NULL
       ORDER BY created_at ASC

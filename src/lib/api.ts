@@ -296,10 +296,10 @@ export type Dependency = {
 
 export type TodayData = {
   blockedTasks: { id: string; title: string; owner_name: string | null; due_date: string | null; updated_at: string }[];
-  staleTasks: { id: string; title: string; status: string; owner_name: string | null; updated_at: string }[];
-  awaitingDecisions: { id: string; title: string; created_at: string; deadline: string | null; recipients: string[] }[];
-  urgentIssues: { id: string; title: string; severity: string; owner_name: string | null }[];
-  urgentRisks: { id: string; title: string; probability: string; impact: string; owner_name: string | null }[];
+  staleTasks: { id: string; title: string; status: Task["status"]; owner_name: string | null; updated_at: string }[];
+  awaitingDecisions: { id: string; title: string; created_at: string; deadline: string | null; recipients: string[]; public_token: string }[];
+  urgentIssues: { id: string; title: string; severity: string; owner_name: string | null; status: Issue["status"] }[];
+  urgentRisks: { id: string; title: string; probability: string; impact: string; owner_name: string | null; status: Risk["status"] }[];
   taskCount: number;
 };
 

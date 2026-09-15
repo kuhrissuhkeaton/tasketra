@@ -333,6 +333,9 @@ textarea { resize: vertical; }
   box-shadow: var(--shadow-sm); transition: box-shadow var(--ease), transform var(--ease);
 }
 .today-list li:hover { box-shadow: var(--shadow-md); transform: translateX(2px); }
+.today-list-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.today-list-row .row-actions { flex-shrink: 0; }
+.today-list-row .status-select { font-size: 13px; padding: 3px 8px; }
 
 /* --- Budget / EVM --- */
 .evm-baseline { margin-bottom: 20px; }

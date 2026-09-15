@@ -9,6 +9,12 @@ type ChangeEntry = { version: string; date: string; title: string; body: string 
 // they can do.
 const CHANGES: ChangeEntry[] = [
   {
+    version: "v53",
+    date: "September 2026",
+    title: "Act on Home without leaving it",
+    body: "Blocked and stale tasks, open issues, and open risks on your Home tab now have a status dropdown and a Reassign button right on the row -- no more clicking through to Tasks or RAID just to nudge something along. Decisions waiting on a stakeholder get a one-click Copy link too.",
+  },
+  {
     version: "v52",
     date: "September 2026",
     title: "Board view for Issues and Risks",

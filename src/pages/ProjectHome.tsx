@@ -363,10 +363,75 @@ function FeedTab({ projectId }: { projectId: string }) {
 function TodayTab({ projectId }: { projectId: string }) {
   const [data, setData] = useState<TodayData | null>(null);
   const [, setParams] = useSearchParams();
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [reassignId, setReassignId] = useState<string | null>(null);
+  const [reassignValue, setReassignValue] = useState("");
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  function load() {
+    api.getToday(projectId).then(setData);
+  }
 
   useEffect(() => {
-    api.getToday(projectId).then(setData);
+    load();
   }, [projectId]);
+
+  async function setTaskStatus(id: string, status: Task["status"]) {
+    setBusyId(id);
+    try {
+      await api.updateTask(id, { status });
+      load();
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function setIssueStatus(id: string, status: Issue["status"]) {
+    setBusyId(id);
+    try {
+      await api.updateIssue(id, { status });
+      load();
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function setRiskStatus(id: string, status: Risk["status"]) {
+    setBusyId(id);
+    try {
+      await api.updateRisk(id, { status });
+      load();
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  function startReassign(id: string, currentOwner: string | null) {
+    setReassignId(id);
+    setReassignValue(currentOwner || "");
+  }
+
+  async function saveReassign(kind: "task" | "issue" | "risk", id: string) {
+    setBusyId(id);
+    try {
+      const owner_name = reassignValue.trim() || null;
+      if (kind === "task") await api.updateTask(id, { owner_name });
+      else if (kind === "issue") await api.updateIssue(id, { owner_name });
+      else await api.updateRisk(id, { owner_name });
+      setReassignId(null);
+      load();
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  function copyDecisionLink(id: string, token: string) {
+    const url = `${window.location.origin}/d/${token}`;
+    navigator.clipboard.writeText(url).then(() => {
+      setCopiedId(id);
+      setTimeout(() => setCopiedId((cur) => (cur === id ? null : cur)), 2000);
+    });
+  }
 
   if (!data) return <div className="skel-loading-block"><div className="skel skel-text" style={{ width: "45%" }} /><div className="skel skel-text" style={{ width: "80%" }} /><div className="skel skel-text" style={{ width: "60%", marginBottom: 0 }} /></div>;
 
@@ -404,9 +469,38 @@ function TodayTab({ projectId }: { projectId: string }) {
           <h4>Blocked tasks</h4>
           <ul className="today-list">
             {data.blockedTasks.map((t) => (
-              <li key={t.id}>
-                <strong>{t.title}</strong> -- {t.owner_name || "unassigned"}
-                <span className="muted"> -- blocked {daysAgo(t.updated_at)}d</span>
+              <li key={t.id} className="today-list-row">
+                <div>
+                  <strong>{t.title}</strong> -- {t.owner_name || "unassigned"}
+                  <span className="muted"> -- blocked {daysAgo(t.updated_at)}d</span>
+                </div>
+                {reassignId === t.id ? (
+                  <div className="row-actions">
+                    <input
+                      value={reassignValue}
+                      onChange={(e) => setReassignValue(e.target.value)}
+                      placeholder="Owner"
+                      style={{ width: 130 }}
+                      autoFocus
+                    />
+                    <button className="btn-link" type="button" disabled={busyId === t.id} onClick={() => saveReassign("task", t.id)}>Save</button>
+                    <button className="btn-link" type="button" onClick={() => setReassignId(null)}>Cancel</button>
+                  </div>
+                ) : (
+                  <div className="row-actions">
+                    <select
+                      className="status-select status-select-blocked"
+                      value="blocked"
+                      disabled={busyId === t.id}
+                      onChange={(e) => setTaskStatus(t.id, e.target.value as Task["status"])}
+                    >
+                      {Object.entries(STATUS_LABEL).map(([value, label]) => (
+                        <option key={value} value={value}>{label}</option>
+                      ))}
+                    </select>
+                    <button className="btn-link" type="button" onClick={() => startReassign(t.id, t.owner_name)}>Reassign</button>
+                  </div>
+                )}
               </li>
             ))}
           </ul>
@@ -418,9 +512,38 @@ function TodayTab({ projectId }: { projectId: string }) {
           <h4>No movement in 3+ days</h4>
           <ul className="today-list">
             {data.staleTasks.map((t) => (
-              <li key={t.id}>
-                <strong>{t.title}</strong> -- {t.owner_name || "unassigned"}
-                <span className="muted"> -- untouched {daysAgo(t.updated_at)}d</span>
+              <li key={t.id} className="today-list-row">
+                <div>
+                  <strong>{t.title}</strong> -- {t.owner_name || "unassigned"}
+                  <span className="muted"> -- untouched {daysAgo(t.updated_at)}d</span>
+                </div>
+                {reassignId === t.id ? (
+                  <div className="row-actions">
+                    <input
+                      value={reassignValue}
+                      onChange={(e) => setReassignValue(e.target.value)}
+                      placeholder="Owner"
+                      style={{ width: 130 }}
+                      autoFocus
+                    />
+                    <button className="btn-link" type="button" disabled={busyId === t.id} onClick={() => saveReassign("task", t.id)}>Save</button>
+                    <button className="btn-link" type="button" onClick={() => setReassignId(null)}>Cancel</button>
+                  </div>
+                ) : (
+                  <div className="row-actions">
+                    <select
+                      className={`status-select status-select-${t.status}`}
+                      value={t.status}
+                      disabled={busyId === t.id}
+                      onChange={(e) => setTaskStatus(t.id, e.target.value as Task["status"])}
+                    >
+                      {Object.entries(STATUS_LABEL).map(([value, label]) => (
+                        <option key={value} value={value}>{label}</option>
+                      ))}
+                    </select>
+                    <button className="btn-link" type="button" onClick={() => startReassign(t.id, t.owner_name)}>Reassign</button>
+                  </div>
+                )}
               </li>
             ))}
           </ul>
@@ -432,10 +555,17 @@ function TodayTab({ projectId }: { projectId: string }) {
           <h4>Decisions waiting on a stakeholder</h4>
           <ul className="today-list">
             {data.awaitingDecisions.map((d) => (
-              <li key={d.id}>
-                <strong>{d.title}</strong>
-                <span className="muted"> -- waiting {daysAgo(d.created_at)}d</span>
-                {d.recipients.length > 0 && <span className="muted"> -- sent to {d.recipients.join(", ")}</span>}
+              <li key={d.id} className="today-list-row">
+                <div>
+                  <strong>{d.title}</strong>
+                  <span className="muted"> -- waiting {daysAgo(d.created_at)}d</span>
+                  {d.recipients.length > 0 && <span className="muted"> -- sent to {d.recipients.join(", ")}</span>}
+                </div>
+                <div className="row-actions">
+                  <button className="btn-link" type="button" onClick={() => copyDecisionLink(d.id, d.public_token)}>
+                    {copiedId === d.id ? "Copied!" : "Copy link"}
+                  </button>
+                </div>
               </li>
             ))}
           </ul>
@@ -447,9 +577,38 @@ function TodayTab({ projectId }: { projectId: string }) {
           <h4>High-severity issues still open</h4>
           <ul className="today-list">
             {data.urgentIssues.map((i) => (
-              <li key={i.id}>
-                <strong>{i.title}</strong> -- {i.owner_name || "unassigned"}
-                <span className="muted"> -- {i.severity}</span>
+              <li key={i.id} className="today-list-row">
+                <div>
+                  <strong>{i.title}</strong> -- {i.owner_name || "unassigned"}
+                  <span className="muted"> -- {i.severity}</span>
+                </div>
+                {reassignId === i.id ? (
+                  <div className="row-actions">
+                    <input
+                      value={reassignValue}
+                      onChange={(e) => setReassignValue(e.target.value)}
+                      placeholder="Owner"
+                      style={{ width: 130 }}
+                      autoFocus
+                    />
+                    <button className="btn-link" type="button" disabled={busyId === i.id} onClick={() => saveReassign("issue", i.id)}>Save</button>
+                    <button className="btn-link" type="button" onClick={() => setReassignId(null)}>Cancel</button>
+                  </div>
+                ) : (
+                  <div className="row-actions">
+                    <select
+                      className={`status-select status-select-${i.status}`}
+                      value={i.status}
+                      disabled={busyId === i.id}
+                      onChange={(e) => setIssueStatus(i.id, e.target.value as Issue["status"])}
+                    >
+                      {Object.entries(ISSUE_STATUS_LABEL).map(([value, label]) => (
+                        <option key={value} value={value}>{label}</option>
+                      ))}
+                    </select>
+                    <button className="btn-link" type="button" onClick={() => startReassign(i.id, i.owner_name)}>Reassign</button>
+                  </div>
+                )}
               </li>
             ))}
           </ul>
@@ -461,9 +620,38 @@ function TodayTab({ projectId }: { projectId: string }) {
           <h4>High-exposure risks</h4>
           <ul className="today-list">
             {data.urgentRisks.map((r) => (
-              <li key={r.id}>
-                <strong>{r.title}</strong> -- {r.owner_name || "unassigned"}
-                <span className="muted"> -- {r.probability} probability / {r.impact} impact</span>
+              <li key={r.id} className="today-list-row">
+                <div>
+                  <strong>{r.title}</strong> -- {r.owner_name || "unassigned"}
+                  <span className="muted"> -- {r.probability} probability / {r.impact} impact</span>
+                </div>
+                {reassignId === r.id ? (
+                  <div className="row-actions">
+                    <input
+                      value={reassignValue}
+                      onChange={(e) => setReassignValue(e.target.value)}
+                      placeholder="Owner"
+                      style={{ width: 130 }}
+                      autoFocus
+                    />
+                    <button className="btn-link" type="button" disabled={busyId === r.id} onClick={() => saveReassign("risk", r.id)}>Save</button>
+                    <button className="btn-link" type="button" onClick={() => setReassignId(null)}>Cancel</button>
+                  </div>
+                ) : (
+                  <div className="row-actions">
+                    <select
+                      className={`status-select status-select-${r.status}`}
+                      value={r.status}
+                      disabled={busyId === r.id}
+                      onChange={(e) => setRiskStatus(r.id, e.target.value as Risk["status"])}
+                    >
+                      {Object.entries(RISK_STATUS_LABEL).map(([value, label]) => (
+                        <option key={value} value={value}>{label}</option>
+                      ))}
+                    </select>
+                    <button className="btn-link" type="button" onClick={() => startReassign(r.id, r.owner_name)}>Reassign</button>
+                  </div>
+                )}
               </li>
             ))}
           </ul>
