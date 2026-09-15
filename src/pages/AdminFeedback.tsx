@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, type Feedback } from "../lib/api";
 import { AppSidebar } from "../components/AppSidebar";
+import { fmtDate } from "../lib/format";
 
 const STATUS_PILL: Record<Feedback["status"], string> = {
   new: "pill-gold",
@@ -88,7 +89,7 @@ export default function AdminFeedback() {
                   <span className={`pill ${STATUS_PILL[f.status]}`}>{f.status}</span>
                 </div>
                 <p className="muted" style={{ fontSize: 13, margin: "8px 0 0" }}>
-                  {f.submitter_email} {f.page_path ? `-- ${f.page_path}` : ""} -- {new Date(f.created_at).toLocaleDateString()}
+                  {f.submitter_email} {f.page_path ? `-- ${f.page_path}` : ""} -- {fmtDate(f.created_at)}
                 </p>
 
                 <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 12, flexWrap: "wrap" }}>
@@ -106,7 +107,7 @@ export default function AdminFeedback() {
                     style={{ flex: 1, minWidth: 180, marginBottom: 0 }}
                   />
                   {f.notified_at ? (
-                    <span className="muted" style={{ fontSize: 13 }}>Notified {new Date(f.notified_at).toLocaleDateString()}</span>
+                    <span className="muted" style={{ fontSize: 13 }}>Notified {fmtDate(f.notified_at)}</span>
                   ) : (
                     <button
                       type="button"

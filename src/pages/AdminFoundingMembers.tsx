@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, type FoundingMember } from "../lib/api";
 import { AppSidebar } from "../components/AppSidebar";
+import { fmtDate } from "../lib/format";
 
 export default function AdminFoundingMembers() {
   const [members, setMembers] = useState<FoundingMember[]>([]);
@@ -53,7 +54,7 @@ export default function AdminFoundingMembers() {
                   <td>{m.display_name || <span className="muted">—</span>}</td>
                   <td>{m.email}</td>
                   <td>{m.job_title || <span className="muted">—</span>}</td>
-                  <td className="muted">{new Date(m.created_at).toLocaleDateString()}</td>
+                  <td className="muted">{fmtDate(m.created_at)}</td>
                 </tr>
               ))}
             </tbody>

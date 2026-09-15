@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { Wordmark } from "../components/Wordmark";
+import { fmtDateTime } from "../lib/format";
 
 export default function DecisionPublic() {
   const { token } = useParams<{ token: string }>();
@@ -66,7 +67,7 @@ export default function DecisionPublic() {
           <p>
             <strong>{record.chosen_option}</strong> -- recorded for <strong>{record.responder_name}</strong>
           </p>
-          <p className="muted">{new Date(record.responded_at).toLocaleString()}</p>
+          <p className="muted">{fmtDateTime(record.responded_at)}</p>
           <p className="muted">This decision has been recorded. You can close this page.</p>
         </div>
       ) : (

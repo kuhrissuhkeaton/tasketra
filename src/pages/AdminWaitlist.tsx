@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, type WaitlistSignup } from "../lib/api";
 import { AppSidebar } from "../components/AppSidebar";
 import { useConfirm } from "../components/ConfirmDialog";
+import { fmtDate } from "../lib/format";
 
 export default function AdminWaitlist() {
   const confirmDialog = useConfirm();
@@ -66,7 +67,7 @@ export default function AdminWaitlist() {
                 <tr key={s.id}>
                   <td>{s.email}</td>
                   <td><span className={`pill ${s.status === "invited" ? "pill-green" : "pill-gold"}`}>{s.status}</span></td>
-                  <td className="muted">{new Date(s.created_at).toLocaleDateString()}</td>
+                  <td className="muted">{fmtDate(s.created_at)}</td>
                   <td className="row-actions">
                     {s.status === "pending" && (
                       <button className="btn-link" type="button" onClick={() => markInvited(s.id)}>Mark invited</button>

@@ -3,6 +3,7 @@ import { useParams, useSearchParams, useNavigate, useLocation, Link } from "reac
 import { api, ApiError, type Project, type Task, type Stakeholder, type Decision, type Issue, type Risk, type Assumption, type Dependency, type ChangeRequest, type Lesson, type TodayData, type WeeklyReport, type BudgetData, type FeedItem, type TrashItem, type ProjectMember, type Meeting, type MeetingActionItem, type ProjectDocument, type StorageUsage, type RoadmapItem, type RoadmapItemType } from "../lib/api";
 import { RoadmapTimeline, ROADMAP_TYPE_LABEL, ROADMAP_STATUS_LABEL, fmtRoadmapDate } from "../components/RoadmapTimeline";
 import { tasksToICS, downloadICS } from "../lib/ics";
+import { fmtDate, fmtDateTime, fmtLocalDate } from "../lib/format";
 import { useAuth } from "../lib/auth-context";
 import { AppSidebar, NavGroup } from "../components/AppSidebar";
 import { NavIcon, type NavIconName } from "../components/NavIcon";
@@ -349,7 +350,7 @@ function FeedTab({ projectId }: { projectId: string }) {
             <li key={i} className={`feed-item feed-${item.type}`}>
               <div className="feed-item-head">
                 <span className="feed-type">{feedLabel(item)}</span>
-                <span className="feed-ts">{new Date(item.ts).toLocaleString()}</span>
+                <span className="feed-ts">{fmtDateTime(item.ts)}</span>
               </div>
               {item.title && <div className="feed-title">{item.title}</div>}
               <div className="feed-body">{item.body}</div>
@@ -737,7 +738,7 @@ function TrashTab({ projectId }: { projectId: string }) {
               <tr key={`${item.entity_type}-${item.id}`}>
                 <td>{item.title || "(untitled)"}</td>
                 <td><span className="pill pill-navy">{TRASH_ENTITY_LABEL[item.entity_type]}</span></td>
-                <td className="muted">{new Date(item.deleted_at).toLocaleString()}</td>
+                <td className="muted">{fmtDateTime(item.deleted_at)}</td>
                 <td className="row-actions">
                   <button
                     className="btn-link"
@@ -2015,7 +2016,7 @@ function DependenciesTab({ projectId }: { projectId: string }) {
                   </span>
                   <div>{d.title}</div>
                   <div className="muted">
-                    {d.owner_name || "unassigned"}{d.needed_by ? ` -- ${new Date(d.needed_by).toLocaleDateString()}` : ""}
+                    {d.owner_name || "unassigned"}{d.needed_by ? ` -- ${fmtLocalDate(d.needed_by)}` : ""}
                   </div>
                 </div>
               ))}
@@ -2061,7 +2062,7 @@ function DependenciesTab({ projectId }: { projectId: string }) {
                 </td>
                 <td><span className="pill pill-navy">{DEPENDENCY_DIRECTION_LABEL[d.direction]}</span></td>
                 <td>{d.owner_name || "--"}</td>
-                <td>{d.needed_by ? new Date(d.needed_by).toLocaleDateString() : "--"}</td>
+                <td>{fmtLocalDate(d.needed_by)}</td>
                 <td>
                   <select
                     className={`status-select status-select-${d.status}`}
@@ -2674,7 +2675,7 @@ function MeetingsTab({ projectId }: { projectId: string }) {
               <tr>
                 <td>{m.title}</td>
                 <td><span className="pill pill-navy">{MEETING_TYPE_LABEL[m.meeting_type]}</span></td>
-                <td className="muted">{m.meeting_date ? toLocalDate(m.meeting_date).toLocaleDateString() : "--"}</td>
+                <td className="muted">{fmtLocalDate(m.meeting_date)}</td>
                 <td className="muted">
                   {m.action_items?.length
                     ? `${m.action_items.filter((it) => it.done).length}/${m.action_items.length} done`
@@ -2881,7 +2882,7 @@ function DocumentsTab({ projectId }: { projectId: string }) {
                 <td><span className="pill pill-navy">{ext}</span></td>
                 <td className="muted">{fmtBytes(doc.size_bytes)}</td>
                 <td className="muted">{doc.uploaded_by_email || "--"}</td>
-                <td className="muted">{new Date(doc.created_at).toLocaleDateString()}</td>
+                <td className="muted">{fmtDate(doc.created_at)}</td>
                 <td className="row-actions">
                   <a className="btn-link" href={api.documentDownloadUrl(doc.id)} target="_blank" rel="noreferrer">
                     {doc.previewable ? "Preview" : "Download"}
@@ -3160,7 +3161,7 @@ function StakeholderDecisionsTab({ projectId }: { projectId: string }) {
               <div className="decision-record">
                 <strong>{d.chosen_option}</strong> -- approved by <strong>{d.responder_name}</strong>
                 <br />
-                <span className="muted">{d.responded_at && new Date(d.responded_at).toLocaleString()}</span>
+                <span className="muted">{d.responded_at && fmtDateTime(d.responded_at)}</span>
               </div>
             )}
             <div className="row-actions" style={{ marginTop: 10 }}>
@@ -3759,7 +3760,7 @@ function WeeklyReportView({ projectId, projectName }: { projectId: string; proje
       <div className="export-header">
         <div>
           <h2>{projectName} -- Weekly Status Report</h2>
-          <p className="muted">Last 7 days, generated {new Date(report.generatedAt).toLocaleString()}</p>
+          <p className="muted">Last 7 days, generated {fmtDateTime(report.generatedAt)}</p>
         </div>
         <button className="btn btn-ghost no-print" onClick={() => window.print()} type="button">Print / Save as PDF</button>
       </div>
@@ -3779,7 +3780,7 @@ function WeeklyReportView({ projectId, projectName }: { projectId: string; proje
           <ul className="today-list">
             {recentMeetings.map((m) => (
               <li key={m.id}>
-                {m.title} <span className="muted">-- {MEETING_TYPE_LABEL[m.meeting_type]}{m.meeting_date ? ` -- ${toLocalDate(m.meeting_date).toLocaleDateString()}` : ""}</span>
+                {m.title} <span className="muted">-- {MEETING_TYPE_LABEL[m.meeting_type]}{m.meeting_date ? ` -- ${fmtLocalDate(m.meeting_date)}` : ""}</span>
               </li>
             ))}
             {recentMeetings.length === 0 && <li className="muted">No meetings logged this week.</li>}
@@ -4183,7 +4184,7 @@ function ExportTab({ projectId, projectName }: { projectId: string; projectName:
           <h4>{d.title}</h4>
           {d.context && <p>{d.context}</p>}
           <p><strong>{d.chosen_option}</strong> -- approved by <strong>{d.responder_name}</strong></p>
-          <p className="muted">{d.responded_at && new Date(d.responded_at).toLocaleString()}</p>
+          <p className="muted">{d.responded_at && fmtDateTime(d.responded_at)}</p>
         </div>
       ))}
       {decisions.length === 0 && <p className="muted">No resolved decisions yet.</p>}

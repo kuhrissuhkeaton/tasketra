@@ -9,6 +9,12 @@ type ChangeEntry = { version: string; date: string; title: string; body: string 
 // they can do.
 const CHANGES: ChangeEntry[] = [
   {
+    version: "v56",
+    date: "September 2026",
+    title: "Shorter dates and times",
+    body: "Timestamps across the app -- Feed, Trash, decision records, weekly reports, and the admin pages -- used to show the full \"9/15/2026, 4:39:12 PM\" format. They now read as \"Sep 15, 4:39 PM\" (or just \"Sep 15, 2026\" where only the date matters), dropping seconds and the year when it's the current one.",
+  },
+  {
     version: "v55",
     date: "September 2026",
     title: "Icons in the sidebar",

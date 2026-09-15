@@ -4,6 +4,7 @@ import { api, ApiError, type Project } from "../lib/api";
 import { AppSidebar } from "../components/AppSidebar";
 import { useConfirm } from "../components/ConfirmDialog";
 import { useAuth } from "../lib/auth-context";
+import { fmtDateTime } from "../lib/format";
 
 export default function Dashboard() {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -203,7 +204,7 @@ export default function Dashboard() {
                   {deletedProjects.map((p) => (
                     <tr key={p.id}>
                       <td>{p.name}</td>
-                      <td className="muted">{p.deleted_at ? new Date(p.deleted_at).toLocaleString() : "--"}</td>
+                      <td className="muted">{fmtDateTime(p.deleted_at)}</td>
                       <td className="row-actions">
                         <button
                           className="btn-link"
