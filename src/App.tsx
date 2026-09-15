@@ -1,25 +1,36 @@
+import { lazy, Suspense } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./lib/auth-context";
 import { ConfirmProvider } from "./components/ConfirmDialog";
-import Login from "./pages/Login";
-import ForgotPassword from "./pages/ForgotPassword";
-import ResetPassword from "./pages/ResetPassword";
-import Dashboard from "./pages/Dashboard";
-import ProjectHome from "./pages/ProjectHome";
-import DecisionPublic from "./pages/DecisionPublic";
-import RoadmapPublic from "./pages/RoadmapPublic";
-import Resources from "./pages/Resources";
-import WhatsNew from "./pages/WhatsNew";
-import Billing from "./pages/Billing";
-import Account from "./pages/Account";
-import AdminWaitlist from "./pages/AdminWaitlist";
-import AdminFeedback from "./pages/AdminFeedback";
-import AdminFoundingMembers from "./pages/AdminFoundingMembers";
-import LegalHub from "./pages/legal/LegalHub";
-import Terms from "./pages/legal/Terms";
-import Privacy from "./pages/legal/Privacy";
-import AcceptableUse from "./pages/legal/AcceptableUse";
-import Cookies from "./pages/legal/Cookies";
+
+// Every route is loaded on demand rather than bundled into the initial
+// chunk -- ProjectHome in particular carries every tab's logic (Tasks,
+// RAID, Budget, Meetings, ...) and was most of what pushed the single
+// bundled chunk past Vite's 500kB warning. Splitting per route means a
+// login or dashboard visit no longer pays for code it doesn't use yet.
+const Login = lazy(() => import("./pages/Login"));
+const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
+const ResetPassword = lazy(() => import("./pages/ResetPassword"));
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const ProjectHome = lazy(() => import("./pages/ProjectHome"));
+const DecisionPublic = lazy(() => import("./pages/DecisionPublic"));
+const RoadmapPublic = lazy(() => import("./pages/RoadmapPublic"));
+const Resources = lazy(() => import("./pages/Resources"));
+const WhatsNew = lazy(() => import("./pages/WhatsNew"));
+const Billing = lazy(() => import("./pages/Billing"));
+const Account = lazy(() => import("./pages/Account"));
+const AdminWaitlist = lazy(() => import("./pages/AdminWaitlist"));
+const AdminFeedback = lazy(() => import("./pages/AdminFeedback"));
+const AdminFoundingMembers = lazy(() => import("./pages/AdminFoundingMembers"));
+const LegalHub = lazy(() => import("./pages/legal/LegalHub"));
+const Terms = lazy(() => import("./pages/legal/Terms"));
+const Privacy = lazy(() => import("./pages/legal/Privacy"));
+const AcceptableUse = lazy(() => import("./pages/legal/AcceptableUse"));
+const Cookies = lazy(() => import("./pages/legal/Cookies"));
+
+function RouteLoading() {
+  return <div className="shell"><p className="muted" style={{ padding: 24 }}>Loading...</p></div>;
+}
 
 function Protected({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -51,28 +62,30 @@ export default function App() {
   return (
     <AuthProvider>
       <ConfirmProvider>
-        <Routes>
-          <Route path="/" element={<Root />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/forgot-password" element={<ForgotPassword />} />
-          <Route path="/reset-password" element={<ResetPassword />} />
-          <Route path="/app" element={<Protected><Dashboard /></Protected>} />
-          <Route path="/app/resources" element={<Protected><Resources /></Protected>} />
-          <Route path="/app/whats-new" element={<Protected><WhatsNew /></Protected>} />
-          <Route path="/app/billing" element={<Protected><Billing /></Protected>} />
-          <Route path="/app/account" element={<Protected><Account /></Protected>} />
-          <Route path="/admin/waitlist" element={<AdminProtected><AdminWaitlist /></AdminProtected>} />
-          <Route path="/admin/feedback" element={<AdminProtected><AdminFeedback /></AdminProtected>} />
-          <Route path="/admin/founding-members" element={<AdminProtected><AdminFoundingMembers /></AdminProtected>} />
-          <Route path="/app/projects/:id" element={<Protected><ProjectHome /></Protected>} />
-          <Route path="/d/:token" element={<DecisionPublic />} />
-          <Route path="/r/:token" element={<RoadmapPublic />} />
-          <Route path="/legal" element={<LegalHub />} />
-          <Route path="/legal/terms" element={<Terms />} />
-          <Route path="/legal/privacy" element={<Privacy />} />
-          <Route path="/legal/acceptable-use" element={<AcceptableUse />} />
-          <Route path="/legal/cookies" element={<Cookies />} />
-        </Routes>
+        <Suspense fallback={<RouteLoading />}>
+          <Routes>
+            <Route path="/" element={<Root />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/app" element={<Protected><Dashboard /></Protected>} />
+            <Route path="/app/resources" element={<Protected><Resources /></Protected>} />
+            <Route path="/app/whats-new" element={<Protected><WhatsNew /></Protected>} />
+            <Route path="/app/billing" element={<Protected><Billing /></Protected>} />
+            <Route path="/app/account" element={<Protected><Account /></Protected>} />
+            <Route path="/admin/waitlist" element={<AdminProtected><AdminWaitlist /></AdminProtected>} />
+            <Route path="/admin/feedback" element={<AdminProtected><AdminFeedback /></AdminProtected>} />
+            <Route path="/admin/founding-members" element={<AdminProtected><AdminFoundingMembers /></AdminProtected>} />
+            <Route path="/app/projects/:id" element={<Protected><ProjectHome /></Protected>} />
+            <Route path="/d/:token" element={<DecisionPublic />} />
+            <Route path="/r/:token" element={<RoadmapPublic />} />
+            <Route path="/legal" element={<LegalHub />} />
+            <Route path="/legal/terms" element={<Terms />} />
+            <Route path="/legal/privacy" element={<Privacy />} />
+            <Route path="/legal/acceptable-use" element={<AcceptableUse />} />
+            <Route path="/legal/cookies" element={<Cookies />} />
+          </Routes>
+        </Suspense>
       </ConfirmProvider>
     </AuthProvider>
   );

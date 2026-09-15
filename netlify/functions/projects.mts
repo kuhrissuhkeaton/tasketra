@@ -3,6 +3,7 @@ import { db } from "../lib/db.ts";
 import { getUserIdFromRequest } from "../lib/auth.ts";
 import { json } from "../lib/http.ts";
 import { canCreateProject, FREE_PROJECT_LIMIT } from "../lib/billing.ts";
+import { seedExampleData } from "../lib/exampleData.ts";
 import { withSentry } from "../lib/sentry.ts";
 
 export default withSentry(async (req: Request) => {
@@ -52,6 +53,17 @@ export default withSentry(async (req: Request) => {
       VALUES (${userId}, ${name}, ${body?.description || null})
       RETURNING id, name, description, created_at
     `;
+
+    if (body?.seedExample === true) {
+      // Best-effort: a brand-new project is still fully usable even if
+      // seeding partially fails, so don't fail project creation over it.
+      try {
+        await seedExampleData(database, project.id, userId);
+      } catch {
+        // swallow -- the project itself was already created successfully
+      }
+    }
+
     return json({ project }, { status: 201 });
   }
 

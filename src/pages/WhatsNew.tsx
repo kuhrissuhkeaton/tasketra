@@ -9,6 +9,12 @@ type ChangeEntry = { version: string; date: string; title: string; body: string 
 // they can do.
 const CHANGES: ChangeEntry[] = [
   {
+    version: "v54",
+    date: "September 2026",
+    title: "Board view everywhere in RAID, and a running start",
+    body: "Assumptions and Dependencies now have the same Board view Issues and Risks got last release -- drag a card between columns to update its status. Starting a new project? Check \"Start with example data\" and we'll pre-fill it with sample tasks, a roadmap, and one of each RAID item, so you've got something to click around instead of five empty tabs. Pages should also feel snappier -- they now load only the code they actually need.",
+  },
+  {
     version: "v53",
     date: "September 2026",
     title: "Act on Home without leaving it",

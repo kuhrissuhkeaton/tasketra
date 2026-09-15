@@ -1646,6 +1646,8 @@ function AssumptionsTab({ projectId }: { projectId: string }) {
   const [notes, setNotes] = useState("");
   const [owner, setOwner] = useState("");
   const [newStatus, setNewStatus] = useState<Assumption["status"]>("unconfirmed");
+  const [view, setView] = useState<"list" | "board">("list");
+  const [dragOverStatus, setDragOverStatus] = useState<Assumption["status"] | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editStatement, setEditStatement] = useState("");
   const [editNotes, setEditNotes] = useState("");
@@ -1683,6 +1685,13 @@ function AssumptionsTab({ projectId }: { projectId: string }) {
   async function setStatus(id: string, status: Assumption["status"]) {
     await api.updateAssumption(id, { status });
     load();
+  }
+
+  function onDropOnColumn(e: React.DragEvent, status: Assumption["status"]) {
+    e.preventDefault();
+    setDragOverStatus(null);
+    const assumptionId = e.dataTransfer.getData("text/plain");
+    if (assumptionId) setStatus(assumptionId, status);
   }
 
   function startEdit(a: Assumption) {
@@ -1732,6 +1741,55 @@ function AssumptionsTab({ projectId }: { projectId: string }) {
       </form>
       {error && <p className="form-error">{error}</p>}
 
+      <div className="inline-form" style={{ marginBottom: 16 }}>
+        <button
+          className={view === "list" ? "btn btn-primary" : "btn btn-ghost"}
+          type="button"
+          onClick={() => setView("list")}
+        >
+          List
+        </button>
+        <button
+          className={view === "board" ? "btn btn-primary" : "btn btn-ghost"}
+          type="button"
+          onClick={() => setView("board")}
+        >
+          Board
+        </button>
+      </div>
+
+      {view === "board" ? (
+        <div className="kanban-board">
+          {(Object.keys(ASSUMPTION_STATUS_LABEL) as Assumption["status"][]).map((status) => (
+            <div
+              key={status}
+              className={dragOverStatus === status ? "kanban-column kanban-column-over" : "kanban-column"}
+              onDragOver={(e) => { e.preventDefault(); setDragOverStatus(status); }}
+              onDragLeave={() => setDragOverStatus(null)}
+              onDrop={(e) => onDropOnColumn(e, status)}
+            >
+              <div className="kanban-column-head">
+                {ASSUMPTION_STATUS_LABEL[status]}
+                <span className="kanban-column-count">{assumptions.filter((a) => a.status === status).length}</span>
+              </div>
+              {assumptions.filter((a) => a.status === status).map((a) => (
+                <div
+                  key={a.id}
+                  className="kanban-card"
+                  draggable
+                  onDragStart={(e) => e.dataTransfer.setData("text/plain", a.id)}
+                >
+                  <div>{a.statement}</div>
+                  <div className="muted">{a.owner_name || "unassigned"}</div>
+                </div>
+              ))}
+              {assumptions.filter((a) => a.status === status).length === 0 && (
+                <div className="muted kanban-empty">Drop assumptions here</div>
+              )}
+            </div>
+          ))}
+        </div>
+      ) : (
       <table className="table">
         <thead>
           <tr><th>Assumption</th><th>Owner</th><th>Status</th><th></th></tr>
@@ -1781,10 +1839,10 @@ function AssumptionsTab({ projectId }: { projectId: string }) {
           )}
         </tbody>
       </table>
+      )}
     </div>
   );
 }
-
 const DEPENDENCY_STATUS_LABEL: Record<Dependency["status"], string> = {
   blocked: "Waiting",
   in_progress: "In progress",
@@ -1805,6 +1863,8 @@ function DependenciesTab({ projectId }: { projectId: string }) {
   const [owner, setOwner] = useState("");
   const [neededBy, setNeededBy] = useState("");
   const [newStatus, setNewStatus] = useState<Dependency["status"]>("blocked");
+  const [view, setView] = useState<"list" | "board">("list");
+  const [dragOverStatus, setDragOverStatus] = useState<Dependency["status"] | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editDescription, setEditDescription] = useState("");
@@ -1846,6 +1906,13 @@ function DependenciesTab({ projectId }: { projectId: string }) {
   async function setStatus(id: string, status: Dependency["status"]) {
     await api.updateDependency(id, { status });
     load();
+  }
+
+  function onDropOnColumn(e: React.DragEvent, status: Dependency["status"]) {
+    e.preventDefault();
+    setDragOverStatus(null);
+    const dependencyId = e.dataTransfer.getData("text/plain");
+    if (dependencyId) setStatus(dependencyId, status);
   }
 
   function startEdit(d: Dependency) {
@@ -1904,6 +1971,60 @@ function DependenciesTab({ projectId }: { projectId: string }) {
       </form>
       {error && <p className="form-error">{error}</p>}
 
+      <div className="inline-form" style={{ marginBottom: 16 }}>
+        <button
+          className={view === "list" ? "btn btn-primary" : "btn btn-ghost"}
+          type="button"
+          onClick={() => setView("list")}
+        >
+          List
+        </button>
+        <button
+          className={view === "board" ? "btn btn-primary" : "btn btn-ghost"}
+          type="button"
+          onClick={() => setView("board")}
+        >
+          Board
+        </button>
+      </div>
+
+      {view === "board" ? (
+        <div className="kanban-board">
+          {(Object.keys(DEPENDENCY_STATUS_LABEL) as Dependency["status"][]).map((status) => (
+            <div
+              key={status}
+              className={dragOverStatus === status ? "kanban-column kanban-column-over" : "kanban-column"}
+              onDragOver={(e) => { e.preventDefault(); setDragOverStatus(status); }}
+              onDragLeave={() => setDragOverStatus(null)}
+              onDrop={(e) => onDropOnColumn(e, status)}
+            >
+              <div className="kanban-column-head">
+                {DEPENDENCY_STATUS_LABEL[status]}
+                <span className="kanban-column-count">{dependencies.filter((d) => d.status === status).length}</span>
+              </div>
+              {dependencies.filter((d) => d.status === status).map((d) => (
+                <div
+                  key={d.id}
+                  className="kanban-card"
+                  draggable
+                  onDragStart={(e) => e.dataTransfer.setData("text/plain", d.id)}
+                >
+                  <span className="pill pill-navy" style={{ marginBottom: 6, display: "inline-block" }}>
+                    {DEPENDENCY_DIRECTION_LABEL[d.direction]}
+                  </span>
+                  <div>{d.title}</div>
+                  <div className="muted">
+                    {d.owner_name || "unassigned"}{d.needed_by ? ` -- ${new Date(d.needed_by).toLocaleDateString()}` : ""}
+                  </div>
+                </div>
+              ))}
+              {dependencies.filter((d) => d.status === status).length === 0 && (
+                <div className="muted kanban-empty">Drop dependencies here</div>
+              )}
+            </div>
+          ))}
+        </div>
+      ) : (
       <table className="table">
         <thead>
           <tr><th>Dependency</th><th>Direction</th><th>Owner</th><th>Needed by</th><th>Status</th><th></th></tr>
@@ -1963,10 +2084,10 @@ function DependenciesTab({ projectId }: { projectId: string }) {
           )}
         </tbody>
       </table>
+      )}
     </div>
   );
 }
-
 function BudgetTab({ projectId }: { projectId: string }) {
   const [data, setData] = useState<BudgetData | null>(null);
   const [bacInput, setBacInput] = useState("");

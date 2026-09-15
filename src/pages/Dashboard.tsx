@@ -10,6 +10,7 @@ export default function Dashboard() {
   const [deletedProjects, setDeletedProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [newName, setNewName] = useState("");
+  const [seedExample, setSeedExample] = useState(false);
   const [creating, setCreating] = useState(false);
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const [showDeleted, setShowDeleted] = useState(false);
@@ -65,8 +66,9 @@ export default function Dashboard() {
     setCreating(true);
     setUpgradeNotice(null);
     try {
-      const { project } = await api.createProject(newName.trim());
+      const { project } = await api.createProject(newName.trim(), undefined, seedExample);
       setNewName("");
+      setSeedExample(false);
       const shouldStartTour = isFirstProjectEver && !user?.tour_completed_at;
       navigate(`/app/projects/${project.id}`, shouldStartTour ? { state: { startTour: true } } : undefined);
     } catch (err) {
@@ -102,8 +104,23 @@ export default function Dashboard() {
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
           />
+          <label className="checkbox-row" style={{ alignSelf: "center" }}>
+            <input
+              type="checkbox"
+              checked={seedExample}
+              onChange={(e) => setSeedExample(e.target.checked)}
+            />
+            Start with example data
+          </label>
           <button className="btn btn-primary" disabled={creating}>Create project</button>
         </form>
+        {seedExample && (
+          <p className="muted" style={{ marginTop: -12, marginBottom: 20 }}>
+            We'll pre-fill this project with sample tasks, a roadmap, and one issue, risk,
+            assumption, and dependency, so you have something to explore right away. Delete
+            anything you don't want.
+          </p>
+        )}
 
         {upgradeNotice && (
           <p className="form-error">

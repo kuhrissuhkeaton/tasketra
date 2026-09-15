@@ -374,8 +374,8 @@ export const api = {
 
   listProjects: () => request<{ projects: Project[] }>("/projects"),
   listDeletedProjects: () => request<{ projects: Project[] }>("/projects?deleted=true"),
-  createProject: (name: string, description?: string) =>
-    request<{ project: Project }>("/projects", { method: "POST", body: JSON.stringify({ name, description }) }),
+  createProject: (name: string, description?: string, seedExample?: boolean) =>
+    request<{ project: Project }>("/projects", { method: "POST", body: JSON.stringify({ name, description, seedExample }) }),
   getProject: (id: string) => request<{ project: Project }>(`/project?id=${id}`),
   updateProject: (id: string, patch: { name?: string; description?: string; ccb_enabled?: boolean }) =>
     request<{ project: Project }>("/project", { method: "PATCH", body: JSON.stringify({ id, ...patch }) }),
