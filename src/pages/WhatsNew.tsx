@@ -9,6 +9,12 @@ type ChangeEntry = { version: string; date: string; title: string; body: string 
 // they can do.
 const CHANGES: ChangeEntry[] = [
   {
+    version: "v52",
+    date: "September 2026",
+    title: "Board view for Issues and Risks",
+    body: "Issues and Risks now have a Board view alongside List, same as Tasks -- drag a card between Open, In progress/Monitoring, and Resolved columns to update its status. Each card shows severity or exposure at a glance.",
+  },
+  {
     version: "v51",
     date: "September 2026",
     title: "Set a status when you add something",

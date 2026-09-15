@@ -502,7 +502,10 @@ textarea { resize: vertical; }
 .template-card .btn { align-self: flex-start; margin-top: 4px; }
 
 /* --- Kanban board --- */
-.kanban-board { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; align-items: start; }
+/* auto-fit rather than a fixed column count so this works for any status
+   set -- Tasks has 4 columns, Issues/Risks have 3 -- without a stray empty
+   track or a separate board variant per entity. */
+.kanban-board { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; align-items: start; }
 .kanban-column {
   background: transparent; border: none; border-radius: var(--radius); padding: 0; min-height: 120px;
   transition: background var(--ease), border-color var(--ease);

@@ -970,6 +970,8 @@ function IssuesTab({ projectId }: { projectId: string }) {
   const [severity, setSeverity] = useState<Issue["severity"]>("medium");
   const [owner, setOwner] = useState("");
   const [newStatus, setNewStatus] = useState<Issue["status"]>("open");
+  const [view, setView] = useState<"list" | "board">("list");
+  const [dragOverStatus, setDragOverStatus] = useState<Issue["status"] | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editDescription, setEditDescription] = useState("");
@@ -1010,6 +1012,13 @@ function IssuesTab({ projectId }: { projectId: string }) {
   async function setStatus(issueId: string, status: Issue["status"]) {
     await api.updateIssue(issueId, { status });
     load();
+  }
+
+  function onDropOnColumn(e: React.DragEvent, status: Issue["status"]) {
+    e.preventDefault();
+    setDragOverStatus(null);
+    const issueId = e.dataTransfer.getData("text/plain");
+    if (issueId) setStatus(issueId, status);
   }
 
   function startEdit(i: Issue) {
@@ -1064,6 +1073,58 @@ function IssuesTab({ projectId }: { projectId: string }) {
       </form>
       {error && <p className="form-error">{error}</p>}
 
+      <div className="inline-form" style={{ marginBottom: 16 }}>
+        <button
+          className={view === "list" ? "btn btn-primary" : "btn btn-ghost"}
+          type="button"
+          onClick={() => setView("list")}
+        >
+          List
+        </button>
+        <button
+          className={view === "board" ? "btn btn-primary" : "btn btn-ghost"}
+          type="button"
+          onClick={() => setView("board")}
+        >
+          Board
+        </button>
+      </div>
+
+      {view === "board" ? (
+        <div className="kanban-board">
+          {(Object.keys(ISSUE_STATUS_LABEL) as Issue["status"][]).map((status) => (
+            <div
+              key={status}
+              className={dragOverStatus === status ? "kanban-column kanban-column-over" : "kanban-column"}
+              onDragOver={(e) => { e.preventDefault(); setDragOverStatus(status); }}
+              onDragLeave={() => setDragOverStatus(null)}
+              onDrop={(e) => onDropOnColumn(e, status)}
+            >
+              <div className="kanban-column-head">
+                {ISSUE_STATUS_LABEL[status]}
+                <span className="kanban-column-count">{issues.filter((i) => i.status === status).length}</span>
+              </div>
+              {issues.filter((i) => i.status === status).map((i) => (
+                <div
+                  key={i.id}
+                  className="kanban-card"
+                  draggable
+                  onDragStart={(e) => e.dataTransfer.setData("text/plain", i.id)}
+                >
+                  <span className={`pill ${SEVERITY_PILL[i.severity]}`} style={{ marginBottom: 6, display: "inline-block" }}>
+                    {SEVERITY_LABEL[i.severity]}
+                  </span>
+                  <div>{i.title}</div>
+                  <div className="muted">{i.owner_name || "unassigned"}</div>
+                </div>
+              ))}
+              {issues.filter((i) => i.status === status).length === 0 && (
+                <div className="muted kanban-empty">Drop issues here</div>
+              )}
+            </div>
+          ))}
+        </div>
+      ) : (
       <table className="table">
         <thead>
           <tr><th>Issue</th><th>Severity</th><th>Owner</th><th>Status</th><th></th></tr>
@@ -1129,6 +1190,7 @@ function IssuesTab({ projectId }: { projectId: string }) {
           )}
         </tbody>
       </table>
+      )}
     </div>
   );
 }
@@ -1143,6 +1205,8 @@ function RisksTab({ projectId }: { projectId: string }) {
   const [mitigation, setMitigation] = useState("");
   const [owner, setOwner] = useState("");
   const [newStatus, setNewStatus] = useState<Risk["status"]>("open");
+  const [view, setView] = useState<"list" | "board">("list");
+  const [dragOverStatus, setDragOverStatus] = useState<Risk["status"] | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editDescription, setEditDescription] = useState("");
@@ -1186,6 +1250,13 @@ function RisksTab({ projectId }: { projectId: string }) {
   async function setStatus(riskId: string, status: Risk["status"]) {
     await api.updateRisk(riskId, { status });
     load();
+  }
+
+  function onDropOnColumn(e: React.DragEvent, status: Risk["status"]) {
+    e.preventDefault();
+    setDragOverStatus(null);
+    const riskId = e.dataTransfer.getData("text/plain");
+    if (riskId) setStatus(riskId, status);
   }
 
   function startEdit(r: Risk) {
@@ -1247,6 +1318,61 @@ function RisksTab({ projectId }: { projectId: string }) {
       </form>
       {error && <p className="form-error">{error}</p>}
 
+      <div className="inline-form" style={{ marginBottom: 16 }}>
+        <button
+          className={view === "list" ? "btn btn-primary" : "btn btn-ghost"}
+          type="button"
+          onClick={() => setView("list")}
+        >
+          List
+        </button>
+        <button
+          className={view === "board" ? "btn btn-primary" : "btn btn-ghost"}
+          type="button"
+          onClick={() => setView("board")}
+        >
+          Board
+        </button>
+      </div>
+
+      {view === "board" ? (
+        <div className="kanban-board">
+          {(Object.keys(RISK_STATUS_LABEL) as Risk["status"][]).map((status) => (
+            <div
+              key={status}
+              className={dragOverStatus === status ? "kanban-column kanban-column-over" : "kanban-column"}
+              onDragOver={(e) => { e.preventDefault(); setDragOverStatus(status); }}
+              onDragLeave={() => setDragOverStatus(null)}
+              onDrop={(e) => onDropOnColumn(e, status)}
+            >
+              <div className="kanban-column-head">
+                {RISK_STATUS_LABEL[status]}
+                <span className="kanban-column-count">{risks.filter((r) => r.status === status).length}</span>
+              </div>
+              {risks.filter((r) => r.status === status).map((r) => {
+                const exposure = riskExposure(r.probability, r.impact);
+                return (
+                  <div
+                    key={r.id}
+                    className="kanban-card"
+                    draggable
+                    onDragStart={(e) => e.dataTransfer.setData("text/plain", r.id)}
+                  >
+                    <span className={`pill ${EXPOSURE_PILL[exposure]}`} style={{ marginBottom: 6, display: "inline-block" }}>
+                      {LEVEL_LABEL[exposure]} exposure
+                    </span>
+                    <div>{r.title}</div>
+                    <div className="muted">{r.owner_name || "unassigned"}</div>
+                  </div>
+                );
+              })}
+              {risks.filter((r) => r.status === status).length === 0 && (
+                <div className="muted kanban-empty">Drop risks here</div>
+              )}
+            </div>
+          ))}
+        </div>
+      ) : (
       <table className="table">
         <thead>
           <tr><th>Risk</th><th>Exposure</th><th>Owner</th><th>Status</th><th></th></tr>
@@ -1314,6 +1440,7 @@ function RisksTab({ projectId }: { projectId: string }) {
           )}
         </tbody>
       </table>
+      )}
     </div>
   );
 }
