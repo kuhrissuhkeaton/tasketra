@@ -4,7 +4,8 @@ import { api, ApiError, type Project, type Task, type Stakeholder, type Decision
 import { RoadmapTimeline, ROADMAP_TYPE_LABEL, ROADMAP_STATUS_LABEL, fmtRoadmapDate } from "../components/RoadmapTimeline";
 import { tasksToICS, downloadICS } from "../lib/ics";
 import { useAuth } from "../lib/auth-context";
-import { AppSidebar, NavDot, NavGroup } from "../components/AppSidebar";
+import { AppSidebar, NavGroup } from "../components/AppSidebar";
+import { NavIcon, type NavIconName } from "../components/NavIcon";
 import { useConfirm } from "../components/ConfirmDialog";
 import { avatarColor, initials } from "../lib/avatar";
 import { TourOverlay, useProductTour } from "../components/ProductTour";
@@ -215,7 +216,7 @@ export default function ProjectHome() {
                 type="button"
                 data-tour={`tab-${t.id}`}
               >
-                <NavDot active={tab === t.id} />
+                <NavIcon name={t.id as NavIconName} active={tab === t.id} />
                 {t.label}
               </button>
             ))}
@@ -227,7 +228,7 @@ export default function ProjectHome() {
             onClick={() => setParams({ tab: "trash" })}
             type="button"
           >
-            <NavDot active={tab === "trash"} />
+            <NavIcon name="trash" active={tab === "trash"} />
             Trash
           </button>
         </NavGroup>

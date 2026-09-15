@@ -3,29 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../lib/auth-context";
 import { Wordmark } from "./Wordmark";
 import { FeedbackModal } from "./FeedbackModal";
-
-/** Small square/round dot used in place of icons throughout nav --
- * the rebrand's visual language deliberately avoids icons. Square (3px
- * radius) for top-level pages, round (50%) for project-scoped items.
- * Colors are tuned for the navy sidebar: an active dot sits on a solid
- * gold pill so it needs to go dark to stay visible; an inactive dot sits
- * directly on navy so it needs a muted light tone instead of the old
- * light-tan-on-white value. */
-export function NavDot({ active, shape = "3px" }: { active: boolean; shape?: string }) {
-  return (
-    <span
-      aria-hidden="true"
-      style={{
-        display: "inline-block",
-        width: 9,
-        height: 9,
-        borderRadius: shape,
-        background: active ? "var(--navy)" : "#6B7358",
-        flexShrink: 0,
-      }}
-    />
-  );
-}
+import { NavIcon } from "./NavIcon";
 
 /** Collapsible nav section used by both the sidebar's own global group and
  * ProjectHome's secondary (non-pill-bar) groups -- clicking the label
@@ -90,35 +68,35 @@ export function AppSidebar({ children }: { children?: ReactNode }) {
       <nav className="side-nav">
         <NavGroup label="Workspace" defaultCollapsed={!!children}>
           <Link to="/app" className={pathname === "/app" ? "side-tab active" : "side-tab"}>
-            <NavDot active={pathname === "/app"} />
+            <NavIcon name="dashboard" active={pathname === "/app"} />
             Dashboard
           </Link>
           <Link
             to="/app/resources"
             className={pathname === "/app/resources" ? "side-tab active" : "side-tab"}
           >
-            <NavDot active={pathname === "/app/resources"} />
+            <NavIcon name="resources" active={pathname === "/app/resources"} />
             Resource hub
           </Link>
           <Link
             to="/app/whats-new"
             className={pathname === "/app/whats-new" ? "side-tab active" : "side-tab"}
           >
-            <NavDot active={pathname === "/app/whats-new"} />
+            <NavIcon name="whatsnew" active={pathname === "/app/whats-new"} />
             What's new
           </Link>
           <Link
             to="/app/account"
             className={pathname === "/app/account" ? "side-tab active" : "side-tab"}
           >
-            <NavDot active={pathname === "/app/account"} />
+            <NavIcon name="account" active={pathname === "/app/account"} />
             Account
           </Link>
           <Link
             to="/app/billing"
             className={pathname === "/app/billing" ? "side-tab active" : "side-tab"}
           >
-            <NavDot active={pathname === "/app/billing"} />
+            <NavIcon name="billing" active={pathname === "/app/billing"} />
             Billing
           </Link>
           {user?.isAdmin && (
@@ -126,7 +104,7 @@ export function AppSidebar({ children }: { children?: ReactNode }) {
               to="/admin/waitlist"
               className={pathname === "/admin/waitlist" ? "side-tab active" : "side-tab"}
             >
-              <NavDot active={pathname === "/admin/waitlist"} />
+              <NavIcon name="waitlist" active={pathname === "/admin/waitlist"} />
               Waitlist
             </Link>
           )}
@@ -135,7 +113,7 @@ export function AppSidebar({ children }: { children?: ReactNode }) {
               to="/admin/feedback"
               className={pathname === "/admin/feedback" ? "side-tab active" : "side-tab"}
             >
-              <NavDot active={pathname === "/admin/feedback"} />
+              <NavIcon name="feedback" active={pathname === "/admin/feedback"} />
               Feedback inbox
             </Link>
           )}
@@ -144,7 +122,7 @@ export function AppSidebar({ children }: { children?: ReactNode }) {
               to="/admin/founding-members"
               className={pathname === "/admin/founding-members" ? "side-tab active" : "side-tab"}
             >
-              <NavDot active={pathname === "/admin/founding-members"} />
+              <NavIcon name="founding" active={pathname === "/admin/founding-members"} />
               Founding members
             </Link>
           )}

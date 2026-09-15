@@ -388,6 +388,18 @@ textarea { resize: vertical; }
 .side-tab:hover { background: rgba(255, 255, 255, 0.07); color: var(--cream); }
 .side-tab.active { background: var(--gold); color: var(--navy); font-weight: 700; }
 
+/* Bold icon treatment (Option C from the "Icons or Not" comparison) --
+   lime-tinted swatch at rest, solid navy swatch on the active gold pill so
+   the icon keeps working as a shape even once its background flips. */
+.nav-icon-wrap {
+  width: 22px; height: 22px; border-radius: 7px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(207, 234, 70, 0.14);
+}
+.side-tab.active .nav-icon-wrap { background: var(--navy); }
+.nav-icon-glyph { width: 14px; height: 14px; }
+.nav-icon-glyph * { stroke: var(--gold); stroke-width: 2.1; fill: none; }
+
 .sidebar-footer {
   border-top: 1px solid rgba(255, 255, 255, 0.14); margin-top: 12px; padding-top: 12px;
 }

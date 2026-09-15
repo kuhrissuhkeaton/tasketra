@@ -9,6 +9,12 @@ type ChangeEntry = { version: string; date: string; title: string; body: string 
 // they can do.
 const CHANGES: ChangeEntry[] = [
   {
+    version: "v55",
+    date: "September 2026",
+    title: "Icons in the sidebar",
+    body: "Every sidebar tab -- Dashboard, Stakeholders, Decisions, Documents, all of it -- now has an icon alongside its label, so you can spot a tab by shape as well as by reading it.",
+  },
+  {
     version: "v54",
     date: "September 2026",
     title: "Board view everywhere in RAID, and a running start",
