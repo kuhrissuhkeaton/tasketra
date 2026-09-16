@@ -950,7 +950,7 @@ function TasksTab({ projectId, projectName }: { projectId: string; projectName: 
                       </button>
                     </td>
                     <td>{t.owner_name || "--"}</td>
-                    <td>{t.due_date || "--"}</td>
+                    <td>{t.due_date ? fmtLocalDate(t.due_date) : "--"}</td>
                     <td>
                       <select
                         className={`status-select status-select-${t.status}`}
@@ -1018,7 +1018,7 @@ function TasksTab({ projectId, projectName }: { projectId: string; projectName: 
                   >
                     {parent && <div className="kanban-parent muted">&#8627; {parent.title}</div>}
                     <div>{t.title}</div>
-                    <div className="muted">{t.owner_name || "unassigned"}{t.due_date ? ` -- ${t.due_date}` : ""}</div>
+                    <div className="muted">{t.owner_name || "unassigned"}{t.due_date ? ` -- ${fmtLocalDate(t.due_date)}` : ""}</div>
                   </div>
                 );
               })}
@@ -1105,7 +1105,7 @@ function TimelineView({ tasks }: { tasks: Task[] }) {
                   <div
                     className={`gantt-bar gantt-bar-${t.status}`}
                     style={{ left, width }}
-                    title={`${t.title}: ${t.start_date || t.due_date} → ${t.due_date}`}
+                    title={`${t.title}: ${fmtLocalDate(t.start_date || t.due_date)} → ${fmtLocalDate(t.due_date)}`}
                   />
                 </div>
               );
@@ -3803,7 +3803,7 @@ function WeeklyReportView({ projectId, projectName }: { projectId: string; proje
       <div className="today-section">
         <h4>New tasks added ({tasksAdded.length})</h4>
         <ul className="today-list">
-          {tasksAdded.map((t) => <li key={t.id}>{t.title} <span className="muted">-- {STATUS_LABEL[t.status as Task["status"]]}{t.due_date ? ` -- due ${t.due_date}` : ""}</span></li>)}
+          {tasksAdded.map((t) => <li key={t.id}>{t.title} <span className="muted">-- {STATUS_LABEL[t.status as Task["status"]]}{t.due_date ? ` -- due ${fmtLocalDate(t.due_date)}` : ""}</span></li>)}
           {tasksAdded.length === 0 && <li className="muted">No new tasks this week.</li>}
         </ul>
       </div>
