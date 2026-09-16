@@ -317,11 +317,34 @@ textarea { resize: vertical; }
 
 /* --- Table --- */
 .table { width: 100%; border-collapse: collapse; background: var(--cream); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow-sm); }
-.table th, .table td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--border); font-size: 14px; }
+.table th, .table td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--border); font-size: 14px; overflow-wrap: break-word; }
 .table th { background: var(--surface-muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--slate); }
 .table tbody tr { transition: background var(--ease); }
 .table tbody tr:hover { background: var(--surface-muted); }
 .table tr:last-child td { border-bottom: none; }
+
+/* Resizable tables (src/components/ResizableTable.tsx) -- every table in
+   the app renders through this wrapper so columns can be dragged wider
+   instead of clipping long titles/emails/notes. The wrap scrolls
+   horizontally once dragged columns push the table past its container,
+   same as a spreadsheet, rather than squeezing everything back down. */
+.resizable-table-wrap { overflow-x: auto; }
+.table th.col-resizable { position: relative; }
+.table th.col-resizable::after {
+  content: "";
+  position: absolute;
+  top: 0; right: 0; bottom: 0;
+  width: 8px;
+  cursor: col-resize;
+  border-right: 2px solid transparent;
+}
+.table th.col-resizable:hover::after,
+.table th.col-resizable.col-resizing::after {
+  border-right-color: var(--slate-2);
+}
+.table th.col-resizable.col-resizing { background: var(--tint-strong); }
+body.col-resize-active,
+body.col-resize-active * { cursor: col-resize !important; user-select: none !important; }
 
 /* --- Today view --- */
 .today-section { margin-bottom: 24px; }

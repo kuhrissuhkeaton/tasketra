@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, type FoundingMember } from "../lib/api";
 import { AppSidebar } from "../components/AppSidebar";
+import { ResizableTable } from "../components/ResizableTable";
 import { fmtDate } from "../lib/format";
 
 export default function AdminFoundingMembers() {
@@ -44,7 +45,7 @@ export default function AdminFoundingMembers() {
         ) : members.length === 0 ? (
           <p className="muted">No founding members yet.</p>
         ) : (
-          <table className="table">
+          <ResizableTable id="admin-founding-members">
             <thead>
               <tr><th>Name</th><th>Email</th><th>Job title</th><th>Joined</th></tr>
             </thead>
@@ -58,7 +59,7 @@ export default function AdminFoundingMembers() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </ResizableTable>
         )}
       </main>
     </div>

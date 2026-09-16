@@ -8,6 +8,7 @@ import { useAuth } from "../lib/auth-context";
 import { AppSidebar, NavGroup } from "../components/AppSidebar";
 import { NavIcon, type NavIconName } from "../components/NavIcon";
 import { useConfirm } from "../components/ConfirmDialog";
+import { ResizableTable } from "../components/ResizableTable";
 import { avatarColor, initials } from "../lib/avatar";
 import { TourOverlay, useProductTour } from "../components/ProductTour";
 
@@ -729,7 +730,7 @@ function TrashTab({ projectId }: { projectId: string }) {
       ) : items.length === 0 ? (
         <p className="muted">Trash is empty.</p>
       ) : (
-        <table className="table">
+        <ResizableTable id="trash">
           <thead>
             <tr><th>Item</th><th>Type</th><th>Deleted</th><th></th></tr>
           </thead>
@@ -752,7 +753,7 @@ function TrashTab({ projectId }: { projectId: string }) {
               </tr>
             ))}
           </tbody>
-        </table>
+        </ResizableTable>
       )}
     </div>
   );
@@ -909,7 +910,7 @@ function TasksTab({ projectId, projectName }: { projectId: string; projectName: 
       </div>
 
       {view === "list" ? (
-        <table className="table">
+        <ResizableTable id="tasks">
           <thead>
             <tr><th>Task</th><th>Owner</th><th>Due</th><th>Status</th><th></th></tr>
           </thead>
@@ -991,7 +992,7 @@ function TasksTab({ projectId, projectName }: { projectId: string; projectName: 
               <tr><td colSpan={5} className="muted">No tasks yet. Add one above to get started.</td></tr>
             )}
           </tbody>
-        </table>
+        </ResizableTable>
       ) : view === "board" ? (
         <div className="kanban-board">
           {(Object.keys(STATUS_LABEL) as Task["status"][]).map((status) => (
@@ -1315,7 +1316,7 @@ function IssuesTab({ projectId }: { projectId: string }) {
           ))}
         </div>
       ) : (
-      <table className="table">
+      <ResizableTable id="raid-issues">
         <thead>
           <tr><th>Issue</th><th>Severity</th><th>Owner</th><th>Status</th><th></th></tr>
         </thead>
@@ -1379,7 +1380,7 @@ function IssuesTab({ projectId }: { projectId: string }) {
             <tr><td colSpan={5} className="muted">No issues logged. Nice.</td></tr>
           )}
         </tbody>
-      </table>
+      </ResizableTable>
       )}
     </div>
   );
@@ -1563,7 +1564,7 @@ function RisksTab({ projectId }: { projectId: string }) {
           ))}
         </div>
       ) : (
-      <table className="table">
+      <ResizableTable id="raid-risks">
         <thead>
           <tr><th>Risk</th><th>Exposure</th><th>Owner</th><th>Status</th><th></th></tr>
         </thead>
@@ -1629,7 +1630,7 @@ function RisksTab({ projectId }: { projectId: string }) {
             <tr><td colSpan={5} className="muted">No risks logged yet. Add one above if something's worth tracking.</td></tr>
           )}
         </tbody>
-      </table>
+      </ResizableTable>
       )}
     </div>
   );
@@ -1792,7 +1793,7 @@ function AssumptionsTab({ projectId }: { projectId: string }) {
           ))}
         </div>
       ) : (
-      <table className="table">
+      <ResizableTable id="raid-assumptions">
         <thead>
           <tr><th>Assumption</th><th>Owner</th><th>Status</th><th></th></tr>
         </thead>
@@ -1840,7 +1841,7 @@ function AssumptionsTab({ projectId }: { projectId: string }) {
             <tr><td colSpan={4} className="muted">No assumptions logged yet. Add one above to track what you're taking for granted.</td></tr>
           )}
         </tbody>
-      </table>
+      </ResizableTable>
       )}
     </div>
   );
@@ -2027,7 +2028,7 @@ function DependenciesTab({ projectId }: { projectId: string }) {
           ))}
         </div>
       ) : (
-      <table className="table">
+      <ResizableTable id="raid-dependencies">
         <thead>
           <tr><th>Dependency</th><th>Direction</th><th>Owner</th><th>Needed by</th><th>Status</th><th></th></tr>
         </thead>
@@ -2085,7 +2086,7 @@ function DependenciesTab({ projectId }: { projectId: string }) {
             <tr><td colSpan={6} className="muted">No dependencies logged yet. Add one above if this project is waiting on something.</td></tr>
           )}
         </tbody>
-      </table>
+      </ResizableTable>
       )}
     </div>
   );
@@ -2223,7 +2224,7 @@ function BudgetTab({ projectId }: { projectId: string }) {
         <button className="btn btn-primary">Add cost</button>
       </form>
 
-      <table className="table">
+      <ResizableTable id="budget">
         <thead>
           <tr><th>Description</th><th>Amount</th><th>Date</th></tr>
         </thead>
@@ -2239,7 +2240,7 @@ function BudgetTab({ projectId }: { projectId: string }) {
             <tr><td colSpan={3} className="muted">No costs logged yet. Add one above to start tracking spend.</td></tr>
           )}
         </tbody>
-      </table>
+      </ResizableTable>
     </div>
   );
 }
@@ -2460,7 +2461,7 @@ function RoadmapTab({ projectId, isOwner }: { projectId: string; isOwner: boolea
       </form>
       {error && <p className="form-error">{error}</p>}
 
-      <table className="table" style={{ marginTop: 20 }}>
+      <ResizableTable id="roadmap-list" style={{ marginTop: 20 }}>
         <thead>
           <tr><th>Item</th><th>Type</th><th>Swimlane</th><th>Dates</th><th>Status</th><th></th></tr>
         </thead>
@@ -2528,7 +2529,7 @@ function RoadmapTab({ projectId, isOwner }: { projectId: string; isOwner: boolea
             <tr><td colSpan={6} className="muted">No roadmap items yet. Add phases, milestones, releases, events, or notes above to sketch out the plan.</td></tr>
           )}
         </tbody>
-      </table>
+      </ResizableTable>
     </div>
   );
 }
@@ -2665,7 +2666,7 @@ function MeetingsTab({ projectId }: { projectId: string }) {
       </form>
       {error && <p className="form-error">{error}</p>}
 
-      <table className="table" style={{ marginTop: 20 }}>
+      <ResizableTable id="meetings" style={{ marginTop: 20 }}>
         <thead>
           <tr><th>Meeting</th><th>Type</th><th>Date</th><th>Action items</th><th></th></tr>
         </thead>
@@ -2745,7 +2746,7 @@ function MeetingsTab({ projectId }: { projectId: string }) {
             <tr><td colSpan={5} className="muted">No meetings logged yet. Add one above to start a record.</td></tr>
           )}
         </tbody>
-      </table>
+      </ResizableTable>
     </div>
   );
 }
@@ -2865,7 +2866,7 @@ function DocumentsTab({ projectId }: { projectId: string }) {
         </p>
       )}
 
-      <table className="table" style={{ marginTop: 20 }}>
+      <ResizableTable id="documents" style={{ marginTop: 20 }}>
         <thead>
           <tr><th>File</th><th>Type</th><th>Size</th><th>Uploaded by</th><th>Uploaded</th><th></th></tr>
         </thead>
@@ -2898,7 +2899,7 @@ function DocumentsTab({ projectId }: { projectId: string }) {
             <tr><td colSpan={6} className="muted">No documents uploaded yet. Add one above to start building a reference library.</td></tr>
           )}
         </tbody>
-      </table>
+      </ResizableTable>
     </div>
   );
 }
@@ -2975,7 +2976,7 @@ function StakeholdersTab({ projectId }: { projectId: string }) {
       </form>
       {error && <p className="form-error">{error}</p>}
 
-      <table className="table">
+      <ResizableTable id="stakeholders">
         <thead>
           <tr><th>Name</th><th>Role</th><th>Email</th><th>Decisions</th><th></th></tr>
         </thead>
@@ -3009,7 +3010,7 @@ function StakeholdersTab({ projectId }: { projectId: string }) {
             <tr><td colSpan={5} className="muted">No stakeholders yet. Add one above to start your register.</td></tr>
           )}
         </tbody>
-      </table>
+      </ResizableTable>
     </div>
   );
 }
@@ -3334,7 +3335,7 @@ function ChangeRequestsTab({ projectId }: { projectId: string }) {
       {error && <p className="form-error">{error}</p>}
       {statusError && <p className="form-error">{statusError}</p>}
 
-      <table className="table">
+      <ResizableTable id="change-requests">
         <thead>
           <tr><th>Change request</th><th>Schedule</th><th>Budget</th><th>Requested by</th><th>Status</th><th></th></tr>
         </thead>
@@ -3412,7 +3413,7 @@ function ChangeRequestsTab({ projectId }: { projectId: string }) {
             <tr><td colSpan={6} className="muted">No change requests logged yet. Add one above if scope shifts.</td></tr>
           )}
         </tbody>
-      </table>
+      </ResizableTable>
     </div>
   );
 }
@@ -3670,7 +3671,7 @@ function TeamTab({ projectId, isOwner }: { projectId: string; isOwner: boolean }
         <p className="muted" style={{ marginBottom: 12, fontSize: 13 }}>
           Grouped by the Owner field on each open task -- as clean as what's typed in, not tied to accounts.
         </p>
-        <table className="table">
+        <ResizableTable id="team-workload">
           <thead>
             <tr><th>Owner</th><th>Open tasks</th><th>Blocked</th><th>Overdue</th></tr>
           </thead>
@@ -3687,7 +3688,7 @@ function TeamTab({ projectId, isOwner }: { projectId: string; isOwner: boolean }
               <tr><td colSpan={4} className="muted">No open tasks to show workload for.</td></tr>
             )}
           </tbody>
-        </table>
+        </ResizableTable>
       </div>
 
       {isOwner && (
@@ -3948,7 +3949,7 @@ function LessonsLearnedTab({ projectId }: { projectId: string }) {
       </form>
       {error && <p className="form-error">{error}</p>}
 
-      <table className="table">
+      <ResizableTable id="lessons-learned">
         <thead>
           <tr><th>Lesson</th><th>Category</th><th>Owner</th><th></th><th></th></tr>
         </thead>
@@ -3994,7 +3995,7 @@ function LessonsLearnedTab({ projectId }: { projectId: string }) {
             <tr><td colSpan={5} className="muted">No lessons logged yet. Log one any time, not just at project close.</td></tr>
           )}
         </tbody>
-      </table>
+      </ResizableTable>
     </div>
   );
 }

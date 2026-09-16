@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AppSidebar } from "../components/AppSidebar";
+import { ResizableTable } from "../components/ResizableTable";
 import { api } from "../lib/api";
 
 type Methodology = { name: string; points: string[]; bestWhen: string };
@@ -275,7 +276,7 @@ export default function Resources() {
         {formulas.length > 0 && (
           <>
             <h2 style={{ marginTop: 36 }}>EVM &amp; scheduling formulas</h2>
-            <table className="table">
+            <ResizableTable id="resources-formulas">
               <thead>
                 <tr><th>Code</th><th>Name</th><th>Formula</th><th>What it tells you</th></tr>
               </thead>
@@ -289,7 +290,7 @@ export default function Resources() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </ResizableTable>
           </>
         )}
 

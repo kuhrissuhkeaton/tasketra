@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { api, ApiError, type Project } from "../lib/api";
 import { AppSidebar } from "../components/AppSidebar";
 import { useConfirm } from "../components/ConfirmDialog";
+import { ResizableTable } from "../components/ResizableTable";
 import { useAuth } from "../lib/auth-context";
 import { fmtDateTime } from "../lib/format";
 
@@ -196,7 +197,7 @@ export default function Dashboard() {
               {showDeleted ? "Hide" : "Show"} recently deleted ({deletedProjects.length})
             </button>
             {showDeleted && (
-              <table className="table" style={{ marginTop: 12, maxWidth: 640 }}>
+              <ResizableTable id="dashboard-deleted" style={{ marginTop: 12, maxWidth: 640 }}>
                 <thead>
                   <tr><th>Project</th><th>Deleted</th><th></th></tr>
                 </thead>
@@ -218,7 +219,7 @@ export default function Dashboard() {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </ResizableTable>
             )}
           </div>
         )}

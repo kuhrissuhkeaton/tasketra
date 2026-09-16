@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, type WaitlistSignup } from "../lib/api";
 import { AppSidebar } from "../components/AppSidebar";
 import { useConfirm } from "../components/ConfirmDialog";
+import { ResizableTable } from "../components/ResizableTable";
 import { fmtDate } from "../lib/format";
 
 export default function AdminWaitlist() {
@@ -58,7 +59,7 @@ export default function AdminWaitlist() {
         ) : signups.length === 0 ? (
           <p className="muted">No one's signed up yet.</p>
         ) : (
-          <table className="table">
+          <ResizableTable id="admin-waitlist">
             <thead>
               <tr><th>Email</th><th>Status</th><th>Joined</th><th></th></tr>
             </thead>
@@ -77,7 +78,7 @@ export default function AdminWaitlist() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </ResizableTable>
         )}
       </main>
     </div>
