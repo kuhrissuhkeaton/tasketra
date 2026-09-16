@@ -9,6 +9,12 @@ type ChangeEntry = { version: string; date: string; title: string; body: string 
 // they can do.
 const CHANGES: ChangeEntry[] = [
   {
+    version: "v57",
+    date: "September 2026",
+    title: "Resize any column, anywhere",
+    body: "Every table in the app -- Tasks, RAID, Budget, Roadmap, Meetings, Documents, and the rest -- now lets you drag a column's edge to make it wider, so a long title, email, or note isn't cut off with nowhere to go. Double-click the edge to auto-fit the column to its content. Your column widths are remembered the next time you visit.",
+  },
+  {
     version: "v56",
     date: "September 2026",
     title: "Shorter dates and times",
