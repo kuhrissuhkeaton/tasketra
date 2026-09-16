@@ -602,19 +602,54 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
 
 /* Roadmap timeline -- separate row classes from the Gantt ones above since
    swimlane row height is dynamic (packed lanes), not the Gantt's fixed 36px;
-   otherwise reuses the same wrap/header/legend/status-color chrome. */
+   otherwise reuses the same wrap/header/legend/status-color chrome.
+   .roadmap-labels overrides .gantt-labels' fixed 200px (shared with the
+   Tasks Gantt view) with a width that fits the swimlane names actually in
+   use, instead of every roadmap either wasting or losing space to a
+   one-size column. */
+.roadmap-labels { width: auto; min-width: 140px; max-width: 260px; }
 .roadmap-label-row {
   display: flex; align-items: center; padding: 0 10px; font-size: 13px; font-weight: 600;
   border-bottom: 1px solid var(--border); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .roadmap-row { position: relative; border-bottom: 1px solid var(--border); }
 .roadmap-bar {
-  position: absolute; height: 22px; border-radius: 4px; min-width: 10px;
+  position: absolute; height: 22px; border-radius: 4px; min-width: 10px; border-left: 4px solid transparent;
   display: flex; align-items: center; overflow: hidden; cursor: default;
 }
 .roadmap-bar-label { font-size: 11px; color: white; padding: 0 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.roadmap-marker { position: absolute; width: 12px; height: 12px; transform: rotate(45deg); border-radius: 2px; cursor: default; }
+/* Marker (undated-time item, e.g. a milestone) is now a wrap containing the
+   diamond plus a visible label -- previously the title only appeared in a
+   hover tooltip, which made milestones the least legible thing on the
+   chart despite usually being the thing people care about most. */
+.roadmap-marker-wrap { position: absolute; display: flex; align-items: center; gap: 6px; }
+.roadmap-marker { width: 12px; height: 12px; border: 2px solid transparent; transform: rotate(45deg); border-radius: 2px; cursor: default; flex-shrink: 0; }
+.roadmap-marker-label {
+  font-size: 11px; color: var(--navy); white-space: nowrap; cursor: default;
+  background: var(--cream); border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px;
+}
 .roadmap-undated-chip { font-size: 12px; }
+.gantt-undated-col { width: 200px; flex-shrink: 0; border-left: 1px solid var(--border); }
+.gantt-undated-col-head {
+  display: flex; align-items: center; padding: 0 10px; font-size: 10px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.05em; color: var(--slate);
+}
+.roadmap-undated-row {
+  display: flex; flex-wrap: wrap; align-content: flex-start; gap: 4px; padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.gantt-legend-types { margin-top: 6px; }
+/* The rightmost month tick can land close enough to the track's scrollable
+   edge that its label gets clipped mid-word -- harmless (the chart scrolls
+   to reveal it) but a stray fragment used to trail off into blank page
+   space unnoticed. Now that a colored Undated column can sit right at that
+   edge, an abrupt clip reads as a glitch, so fade the last stretch out
+   instead of cutting it off sharply -- a standard "there's more, scroll"
+   affordance that also has that self-effacing effect. */
+.roadmap-track-wrap {
+  mask-image: linear-gradient(to right, black calc(100% - 20px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, black calc(100% - 20px), transparent 100%);
+}
 @media (max-width: 800px) {
   .kanban-board { grid-template-columns: 1fr; }
 }

@@ -2286,6 +2286,7 @@ function RoadmapTab({ projectId, isOwner }: { projectId: string; isOwner: boolea
   const [editStatus, setEditStatus] = useState<RoadmapItem["status"]>("not_started");
   const [editDescription, setEditDescription] = useState("");
 
+  const [showForm, setShowForm] = useState(false);
   const [project, setProject] = useState<Project | null>(null);
   const [shareBusy, setShareBusy] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -2319,6 +2320,7 @@ function RoadmapTab({ projectId, isOwner }: { projectId: string; isOwner: boolea
         status,
       });
       setTitle(""); setSwimlane(""); setStartDate(""); setEndDate(""); setDescription(""); setType("milestone"); setStatus("not_started");
+      setShowForm(false);
       load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't add that item.");
@@ -2398,70 +2400,53 @@ function RoadmapTab({ projectId, isOwner }: { projectId: string; isOwner: boolea
 
   return (
     <div>
-      <p className="muted" style={{ marginBottom: 16, maxWidth: 640 }}>
+      <p className="muted" style={{ marginBottom: 20, maxWidth: 640 }}>
         The strategic view of this project -- phases, milestones, releases, events, and notes, grouped
         into swimlanes and laid out on a timeline. For day-to-day execution, use the Tasks tab.
       </p>
 
-      <RoadmapTimeline items={items} />
+      <button className="btn btn-primary" onClick={() => setShowForm((v) => !v)} type="button">
+        {showForm ? "Cancel" : "New roadmap item"}
+      </button>
 
-      {isOwner && (
-        <div className="template-card" style={{ maxWidth: 640, marginTop: 20 }}>
-          <h4>Share roadmap</h4>
-          <p className="muted">
-            Turn this on to get a read-only link for exec sponsors or stakeholders -- no Tasketra account needed.
-          </p>
-          <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
-            <input type="checkbox" checked={!!project?.roadmap_share_enabled} disabled={shareBusy} onChange={toggleShare} />
-            Sharing is {project?.roadmap_share_enabled ? "on" : "off"}
-          </label>
-          {project?.roadmap_share_enabled && project?.roadmap_share_token && (
-            <div className="inline-form" style={{ marginTop: 10, marginBottom: 0 }}>
-              <input
-                type="text"
-                readOnly
-                value={`${window.location.origin}/r/${project.roadmap_share_token}`}
-                onFocus={(e) => e.target.select()}
-                style={{ flex: 1, minWidth: 260 }}
-              />
-              <button className="btn btn-primary" type="button" onClick={copyLink}>{copied ? "Copied!" : "Copy link"}</button>
-              <button className="btn-link" type="button" disabled={shareBusy} onClick={regenerateLink}>Generate new link</button>
-            </div>
-          )}
-        </div>
+      {showForm && (
+        <form className="stacked-form" onSubmit={addItem} style={{ marginTop: 16 }}>
+          <label>Title</label>
+          <input placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
+          <div className="inline-form" style={{ marginTop: 8 }}>
+            <select value={type} onChange={(e) => setType(e.target.value as RoadmapItemType)}>
+              {Object.entries(ROADMAP_TYPE_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+            <input
+              list="roadmap-swimlane-options"
+              placeholder="Swimlane (e.g. Platform)"
+              value={swimlane}
+              onChange={(e) => setSwimlane(e.target.value)}
+            />
+            <datalist id="roadmap-swimlane-options">
+              {swimlaneNames.map((s) => <option key={s} value={s} />)}
+            </datalist>
+            <input type="date" title="Start date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+            <input type="date" title="End date (optional)" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+            <select value={status} onChange={(e) => setStatus(e.target.value as RoadmapItem["status"])} title="Status">
+              {Object.entries(ROADMAP_STATUS_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+          </div>
+          <label>Notes (optional)</label>
+          <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
+          <div style={{ marginTop: 8 }}>
+            <button className="btn btn-primary">Add to roadmap</button>
+          </div>
+        </form>
       )}
-
-      <form className="stacked-form" onSubmit={addItem} style={{ marginTop: 20 }}>
-        <label>New roadmap item</label>
-        <input placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
-        <div className="inline-form" style={{ marginTop: 8 }}>
-          <select value={type} onChange={(e) => setType(e.target.value as RoadmapItemType)}>
-            {Object.entries(ROADMAP_TYPE_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-          </select>
-          <input
-            list="roadmap-swimlane-options"
-            placeholder="Swimlane (e.g. Platform)"
-            value={swimlane}
-            onChange={(e) => setSwimlane(e.target.value)}
-          />
-          <datalist id="roadmap-swimlane-options">
-            {swimlaneNames.map((s) => <option key={s} value={s} />)}
-          </datalist>
-          <input type="date" title="Start date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-          <input type="date" title="End date (optional)" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
-          <select value={status} onChange={(e) => setStatus(e.target.value as RoadmapItem["status"])} title="Status">
-            {Object.entries(ROADMAP_STATUS_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-          </select>
-        </div>
-        <label>Notes (optional)</label>
-        <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
-        <div style={{ marginTop: 8 }}>
-          <button className="btn btn-primary">Add to roadmap</button>
-        </div>
-      </form>
       {error && <p className="form-error">{error}</p>}
 
-      <ResizableTable id="roadmap-list" style={{ marginTop: 20 }}>
+      <div style={{ marginTop: 28 }}>
+        <RoadmapTimeline items={items} />
+      </div>
+
+      <div style={{ marginTop: 28 }}>
+        <ResizableTable id="roadmap-list">
         <thead>
           <tr><th>Item</th><th>Type</th><th>Swimlane</th><th>Dates</th><th>Status</th><th></th></tr>
         </thead>
@@ -2529,7 +2514,34 @@ function RoadmapTab({ projectId, isOwner }: { projectId: string; isOwner: boolea
             <tr><td colSpan={6} className="muted">No roadmap items yet. Add phases, milestones, releases, events, or notes above to sketch out the plan.</td></tr>
           )}
         </tbody>
-      </ResizableTable>
+        </ResizableTable>
+      </div>
+
+      {isOwner && (
+        <div className="template-card" style={{ maxWidth: 640, marginTop: 28 }}>
+          <h4>Share roadmap</h4>
+          <p className="muted">
+            Turn this on to get a read-only link for exec sponsors or stakeholders -- no Tasketra account needed.
+          </p>
+          <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
+            <input type="checkbox" checked={!!project?.roadmap_share_enabled} disabled={shareBusy} onChange={toggleShare} />
+            Sharing is {project?.roadmap_share_enabled ? "on" : "off"}
+          </label>
+          {project?.roadmap_share_enabled && project?.roadmap_share_token && (
+            <div className="inline-form" style={{ marginTop: 10, marginBottom: 0 }}>
+              <input
+                type="text"
+                readOnly
+                value={`${window.location.origin}/r/${project.roadmap_share_token}`}
+                onFocus={(e) => e.target.select()}
+                style={{ flex: 1, minWidth: 260 }}
+              />
+              <button className="btn btn-primary" type="button" onClick={copyLink}>{copied ? "Copied!" : "Copy link"}</button>
+              <button className="btn-link" type="button" disabled={shareBusy} onClick={regenerateLink}>Generate new link</button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

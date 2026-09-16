@@ -9,6 +9,12 @@ type ChangeEntry = { version: string; date: string; title: string; body: string 
 // they can do.
 const CHANGES: ChangeEntry[] = [
   {
+    version: "v58",
+    date: "September 2026",
+    title: "A clearer roadmap",
+    body: "Milestones now show their name right on the timeline instead of only on hover, and every item's type (phase, milestone, release, event, or note) gets its own accent color so you can tell what you're looking at at a glance. Undated items now sit next to their swimlane on the chart instead of in a separate list below it. \"New roadmap item\" is now a button instead of an always-open form, and the share-link settings moved below the roadmap list to keep the page focused on the plan itself.",
+  },
+  {
     version: "v57",
     date: "September 2026",
     title: "Resize any column, anywhere",
