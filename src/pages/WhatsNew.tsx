@@ -9,6 +9,12 @@ type ChangeEntry = { version: string; date: string; title: string; body: string 
 // they can do.
 const CHANGES: ChangeEntry[] = [
   {
+    version: "v64",
+    date: "September 2026",
+    title: "A real Dashboard, and OKR tracking",
+    body: "Dashboard is no longer just a project list -- it now rolls up KPIs, a tasks-by-status chart, upcoming milestones, and a project-by-project health read across everything you can see, auto-populated from what's already in each project. And there's real OKR tracking: every project gets a new OKRs tab (under Goals) for setting objectives with a status, breaking each one into key results with start, current, and target values, and watching progress compute itself instead of tracking percentages by hand. Objective and key-result progress rolls straight up into the new Dashboard too, both per project and across your whole portfolio.",
+  },
+  {
     version: "v63",
     date: "September 2026",
     title: "A cleaner nav -- Issues & risks moved to the sidebar",

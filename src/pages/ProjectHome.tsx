@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, Fragment } from "react";
 import { useParams, useSearchParams, useNavigate, useLocation, Link } from "react-router-dom";
-import { api, ApiError, type Project, type Task, type Stakeholder, type Decision, type Issue, type Risk, type Assumption, type Dependency, type ChangeRequest, type Lesson, type TodayData, type WeeklyReport, type BudgetData, type FeedItem, type TrashItem, type ProjectMember, type Meeting, type MeetingActionItem, type ProjectDocument, type StorageUsage, type RoadmapItem, type RoadmapItemType, type QualityItem, type ProcurementItem, type CommPlanItem, type ComplianceItem } from "../lib/api";
+import { api, ApiError, type Project, type Task, type Stakeholder, type Decision, type Issue, type Risk, type Assumption, type Dependency, type ChangeRequest, type Lesson, type TodayData, type WeeklyReport, type BudgetData, type FeedItem, type TrashItem, type ProjectMember, type Meeting, type MeetingActionItem, type ProjectDocument, type StorageUsage, type RoadmapItem, type RoadmapItemType, type QualityItem, type ProcurementItem, type CommPlanItem, type ComplianceItem, type Objective, type KeyResult } from "../lib/api";
 import { RoadmapTimeline, ROADMAP_TYPE_LABEL, ROADMAP_STATUS_LABEL, fmtRoadmapDate } from "../components/RoadmapTimeline";
 import { tasksToICS, downloadICS } from "../lib/ics";
 import { fmtDate, fmtDateTime, fmtLocalDate } from "../lib/format";
@@ -14,7 +14,7 @@ import { avatarColor, initials } from "../lib/avatar";
 import { TourOverlay, useProductTour } from "../components/ProductTour";
 
 
-export type Tab = "home" | "roadmap" | "tasks" | "issues" | "risks" | "assumptions" | "dependencies" | "quality" | "compliance" | "budget" | "meetings" | "documents" | "stakeholders" | "decisions" | "team" | "procurement" | "comms" | "closure" | "report" | "templates" | "export" | "connections" | "trash";
+export type Tab = "home" | "roadmap" | "tasks" | "okrs" | "issues" | "risks" | "assumptions" | "dependencies" | "quality" | "compliance" | "budget" | "meetings" | "documents" | "stakeholders" | "decisions" | "team" | "procurement" | "comms" | "closure" | "report" | "templates" | "export" | "connections" | "trash";
 
 function daysAgo(dateStr: string): number {
   return Math.max(0, Math.floor((Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24)));
@@ -156,6 +156,9 @@ const PRIMARY_TABS: { id: Tab; label: string }[] = [
 // row of the same nav. Each category is now its own sidebar entry instead,
 // the same pattern already proven for People & decisions below.
 const SECONDARY_NAV_GROUPS: { label: string; tabs: { id: Tab; label: string }[] }[] = [
+  { label: "Goals", tabs: [
+    { id: "okrs", label: "OKRs" },
+  ] },
   { label: "Issues & risks", tabs: [
     { id: "issues", label: "Issues" },
     { id: "risks", label: "Risks" },
@@ -275,6 +278,7 @@ export default function ProjectHome() {
         {tab === "home" && <HomeTab projectId={id} />}
         {tab === "roadmap" && <RoadmapTab projectId={id} isOwner={project?.is_owner ?? false} />}
         {tab === "tasks" && <TasksTab projectId={id} projectName={project?.name || "Project"} />}
+        {tab === "okrs" && <OkrsTab projectId={id} />}
         {tab === "issues" && <IssuesTab projectId={id} />}
         {tab === "risks" && <RisksTab projectId={id} />}
         {tab === "assumptions" && <AssumptionsTab projectId={id} />}
@@ -723,6 +727,7 @@ const TRASH_ENTITY_LABEL: Record<TrashItem["entity_type"], string> = {
   procurement_item: "Vendor / procurement item",
   comm_plan_item: "Comms plan item",
   compliance_item: "Compliance item",
+  objective: "Objective",
 };
 
 function TrashTab({ projectId }: { projectId: string }) {
@@ -2643,6 +2648,362 @@ function ComplianceTab({ projectId }: { projectId: string }) {
         </tbody>
       </ResizableTable>
       )}
+    </div>
+  );
+}
+
+const OBJECTIVE_STATUS_LABEL: Record<Objective["status"], string> = {
+  on_track: "On track",
+  at_risk: "At risk",
+  off_track: "Off track",
+  achieved: "Achieved",
+};
+
+// Same reserved status tokens as everywhere else in the app (see the
+// .progress-fill-* rules in index.css) -- an objective's progress bar reads
+// the same "on track" green as its own status pill, never an independent
+// color scale.
+const OBJECTIVE_PROGRESS_FILL: Record<Objective["status"], string> = {
+  on_track: "progress-fill-success",
+  at_risk: "progress-fill-warning",
+  off_track: "progress-fill-danger",
+  achieved: "progress-fill-success",
+};
+
+const METRIC_TYPE_LABEL: Record<KeyResult["metric_type"], string> = {
+  percent: "Percent",
+  number: "Number",
+  currency: "Currency",
+  boolean: "Yes / no",
+};
+
+function fmtKeyResultValue(kr: Pick<KeyResult, "metric_type" | "unit">, value: number): string {
+  if (kr.metric_type === "boolean") return value >= 1 ? "Yes" : "No";
+  if (kr.metric_type === "currency") return fmtMoney(value);
+  if (kr.metric_type === "percent") return `${value}%`;
+  return kr.unit ? `${value} ${kr.unit}` : `${value}`;
+}
+
+function OkrsTab({ projectId }: { projectId: string }) {
+  const confirmDialog = useConfirm();
+  const [objectives, setObjectives] = useState<Objective[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [ownerName, setOwnerName] = useState("");
+  const [targetDate, setTargetDate] = useState("");
+  const [status, setStatus] = useState<Objective["status"]>("on_track");
+
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editOwnerName, setEditOwnerName] = useState("");
+  const [editTargetDate, setEditTargetDate] = useState("");
+
+  const [krTitle, setKrTitle] = useState("");
+  const [krMetricType, setKrMetricType] = useState<KeyResult["metric_type"]>("percent");
+  const [krStart, setKrStart] = useState("0");
+  const [krCurrent, setKrCurrent] = useState("0");
+  const [krTarget, setKrTarget] = useState("100");
+  const [krUnit, setKrUnit] = useState("");
+  const [krAchieved, setKrAchieved] = useState(false);
+  const [krError, setKrError] = useState("");
+
+  const [editingKrId, setEditingKrId] = useState<string | null>(null);
+  const [editKrTitle, setEditKrTitle] = useState("");
+  const [editKrCurrent, setEditKrCurrent] = useState("0");
+
+  async function load() {
+    setLoading(true);
+    const { objectives } = await api.listObjectives(projectId);
+    setObjectives(objectives);
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    load();
+  }, [projectId]);
+
+  async function addObjective(e: React.FormEvent) {
+    e.preventDefault();
+    if (!title.trim()) return;
+    setError("");
+    try {
+      await api.createObjective(projectId, title.trim(), {
+        description: description || undefined, ownerName: ownerName || undefined,
+        targetDate: targetDate || undefined, status,
+      });
+      setTitle("");
+      setDescription("");
+      setOwnerName("");
+      setTargetDate("");
+      setStatus("on_track");
+      load();
+    } catch (err: any) {
+      setError(err.message || "Couldn't add that objective.");
+    }
+  }
+
+  async function setObjectiveStatus(id: string, nextStatus: Objective["status"]) {
+    await api.updateObjective(id, { status: nextStatus });
+    load();
+  }
+
+  function startEdit(o: Objective) {
+    setEditingId(o.id);
+    setEditTitle(o.title);
+    setEditDescription(o.description || "");
+    setEditOwnerName(o.owner_name || "");
+    setEditTargetDate(o.target_date ? o.target_date.slice(0, 10) : "");
+  }
+
+  async function saveEdit(id: string) {
+    if (!editTitle.trim()) return;
+    await api.updateObjective(id, {
+      title: editTitle.trim(), description: editDescription || undefined,
+      owner_name: editOwnerName || undefined, target_date: editTargetDate || undefined,
+    } as any);
+    setEditingId(null);
+    load();
+  }
+
+  async function removeObjective(o: Objective) {
+    if (!(await confirmDialog(`Delete objective "${o.title}"? Its key results go with it. You can restore both from Trash.`))) return;
+    await api.deleteObjective(o.id);
+    if (expandedId === o.id) setExpandedId(null);
+    load();
+  }
+
+  function toggleExpand(o: Objective) {
+    if (expandedId === o.id) {
+      setExpandedId(null);
+      return;
+    }
+    setExpandedId(o.id);
+    setKrTitle("");
+    setKrMetricType("percent");
+    setKrStart("0");
+    setKrCurrent("0");
+    setKrTarget("100");
+    setKrUnit("");
+    setKrAchieved(false);
+    setKrError("");
+    setEditingKrId(null);
+  }
+
+  async function addKeyResult(objectiveId: string) {
+    if (!krTitle.trim()) return;
+    setKrError("");
+    try {
+      if (krMetricType === "boolean") {
+        await api.createKeyResult(objectiveId, krTitle.trim(), { metricType: "boolean", currentValue: krAchieved ? 1 : 0 });
+      } else {
+        await api.createKeyResult(objectiveId, krTitle.trim(), {
+          metricType: krMetricType,
+          startValue: Number(krStart) || 0,
+          currentValue: Number(krCurrent) || 0,
+          targetValue: Number(krTarget) || 0,
+          unit: krMetricType === "number" ? (krUnit || undefined) : undefined,
+        });
+      }
+      setKrTitle("");
+      setKrStart("0");
+      setKrCurrent("0");
+      setKrTarget("100");
+      setKrUnit("");
+      setKrAchieved(false);
+      load();
+    } catch (err: any) {
+      setKrError(err.message || "Couldn't add that key result.");
+    }
+  }
+
+  function startEditKr(kr: KeyResult) {
+    setEditingKrId(kr.id);
+    setEditKrTitle(kr.title);
+    setEditKrCurrent(String(kr.current_value));
+  }
+
+  async function saveEditKr(kr: KeyResult) {
+    if (!editKrTitle.trim()) return;
+    await api.updateKeyResult(kr.id, {
+      title: editKrTitle.trim(),
+      current_value: kr.metric_type === "boolean" ? (Number(editKrCurrent) >= 1 ? 1 : 0) : Number(editKrCurrent),
+    } as any);
+    setEditingKrId(null);
+    load();
+  }
+
+  async function removeKeyResult(kr: KeyResult) {
+    if (!(await confirmDialog(`Delete key result "${kr.title}"?`))) return;
+    await api.deleteKeyResult(kr.id);
+    load();
+  }
+
+  if (loading) return <div className="skel-loading-block"><div className="skel skel-text" style={{ width: "45%" }} /><div className="skel skel-text" style={{ width: "80%" }} /><div className="skel skel-text" style={{ width: "60%", marginBottom: 0 }} /></div>;
+
+  return (
+    <div>
+      <p className="muted" style={{ marginBottom: 16, maxWidth: 640 }}>
+        The handful of outcomes this project is actually driving toward, each broken into the
+        measurable key results that say whether it's happening -- separate from the day-to-day
+        work in Tasks, and rolled up onto the portfolio Dashboard across every project.
+      </p>
+
+      <form className="stacked-form" onSubmit={addObjective}>
+        <label>Objective</label>
+        <input placeholder="What outcome are you driving toward?" value={title} onChange={(e) => setTitle(e.target.value)} />
+        <label>Description (optional)</label>
+        <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
+        <div className="inline-form" style={{ marginTop: 8, marginBottom: 0 }}>
+          <input placeholder="Owner (optional)" value={ownerName} onChange={(e) => setOwnerName(e.target.value)} />
+          <input type="date" title="Target date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} />
+          <select value={status} onChange={(e) => setStatus(e.target.value as Objective["status"])} title="Status">
+            {Object.entries(OBJECTIVE_STATUS_LABEL).map(([value, label]) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
+          </select>
+          <button className="btn btn-primary">Add objective</button>
+        </div>
+      </form>
+      {error && <p className="form-error">{error}</p>}
+
+      <div style={{ marginTop: 20 }}>
+        {objectives.map((o) => (
+          <div key={o.id} className="settings-card" style={{ marginBottom: 14 }}>
+            {editingId === o.id ? (
+              <div>
+                <label>Objective</label>
+                <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
+                <label>Description</label>
+                <textarea value={editDescription} onChange={(e) => setEditDescription(e.target.value)} rows={2} />
+                <div className="inline-form" style={{ marginTop: 8, marginBottom: 0 }}>
+                  <input placeholder="Owner (optional)" value={editOwnerName} onChange={(e) => setEditOwnerName(e.target.value)} />
+                  <input type="date" title="Target date" value={editTargetDate} onChange={(e) => setEditTargetDate(e.target.value)} />
+                  <button className="btn btn-primary" type="button" onClick={() => saveEdit(o.id)}>Save</button>
+                  <button className="btn btn-ghost" type="button" onClick={() => setEditingId(null)}>Cancel</button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
+                  <div style={{ flex: 1, minWidth: 220 }}>
+                    <div style={{ fontWeight: 700, fontSize: 15 }}>{o.title}</div>
+                    {o.description && <div className="muted" style={{ marginTop: 2 }}>{o.description}</div>}
+                    <div className="muted" style={{ fontSize: 12.5, marginTop: 6 }}>
+                      {o.owner_name || "Unassigned"}
+                      {o.target_date && <> &middot; Target {fmtLocalDate(o.target_date)}</>}
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <select
+                      className={`status-select status-select-${o.status}`}
+                      value={o.status}
+                      onChange={(e) => setObjectiveStatus(o.id, e.target.value as Objective["status"])}
+                    >
+                      {Object.entries(OBJECTIVE_STATUS_LABEL).map(([value, label]) => (
+                        <option key={value} value={value}>{label}</option>
+                      ))}
+                    </select>
+                    <button className="btn-link" type="button" onClick={() => startEdit(o)}>Edit</button>
+                    <button className="btn-link btn-link-danger" type="button" onClick={() => removeObjective(o)}>Delete</button>
+                  </div>
+                </div>
+
+                {o.progress === null || o.progress === undefined ? (
+                  <p className="muted" style={{ fontSize: 12.5, margin: "10px 0 0" }}>No key results yet -- break this down to track real progress.</p>
+                ) : (
+                  <div style={{ marginTop: 10, maxWidth: 420 }}>
+                    <div className="progress-track">
+                      <div className={`progress-fill ${OBJECTIVE_PROGRESS_FILL[o.status]}`} style={{ width: `${o.progress}%` }} />
+                    </div>
+                    <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                      {o.progress}% average across {o.key_results.length} key result{o.key_results.length === 1 ? "" : "s"}
+                    </div>
+                  </div>
+                )}
+
+                <button className="btn-link" type="button" style={{ marginTop: 10 }} onClick={() => toggleExpand(o)}>
+                  {expandedId === o.id ? "Hide key results" : `${o.key_results.length ? "Manage" : "Add"} key results`}
+                </button>
+
+                {expandedId === o.id && (
+                  <div style={{ marginTop: 10, borderTop: "1px solid var(--border)", paddingTop: 12 }}>
+                    {o.key_results.map((kr) => (
+                      <div key={kr.id} style={{ marginBottom: 12 }}>
+                        {editingKrId === kr.id ? (
+                          <div className="inline-form" style={{ marginBottom: 0 }}>
+                            <input value={editKrTitle} onChange={(e) => setEditKrTitle(e.target.value)} style={{ flex: 1 }} />
+                            {kr.metric_type === "boolean" ? (
+                              <select value={editKrCurrent} onChange={(e) => setEditKrCurrent(e.target.value)}>
+                                <option value="0">Not yet</option>
+                                <option value="1">Achieved</option>
+                              </select>
+                            ) : (
+                              <input type="number" value={editKrCurrent} onChange={(e) => setEditKrCurrent(e.target.value)} style={{ width: 100 }} />
+                            )}
+                            <button className="btn btn-primary" type="button" onClick={() => saveEditKr(kr)}>Save</button>
+                            <button className="btn btn-ghost" type="button" onClick={() => setEditingKrId(null)}>Cancel</button>
+                          </div>
+                        ) : (
+                          <>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+                              <div style={{ flex: 1 }}>{kr.title}</div>
+                              <div className="muted" style={{ fontSize: 12.5, whiteSpace: "nowrap" }}>
+                                {kr.metric_type === "boolean"
+                                  ? fmtKeyResultValue(kr, kr.current_value)
+                                  : `${fmtKeyResultValue(kr, kr.current_value)} of ${fmtKeyResultValue(kr, kr.target_value)}`}
+                              </div>
+                              <button className="btn-link" type="button" onClick={() => startEditKr(kr)}>Edit</button>
+                              <button className="btn-link btn-link-danger" type="button" onClick={() => removeKeyResult(kr)}>Delete</button>
+                            </div>
+                            <div className="progress-track" style={{ marginTop: 6 }}>
+                              <div className={`progress-fill ${OBJECTIVE_PROGRESS_FILL[o.status]}`} style={{ width: `${kr.progress ?? 0}%` }} />
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    ))}
+                    {o.key_results.length === 0 && <p className="muted" style={{ margin: "0 0 12px" }}>No key results yet.</p>}
+
+                    <div className="inline-form" style={{ marginTop: 4, marginBottom: 0, flexWrap: "wrap" }}>
+                      <input placeholder="New key result" value={krTitle} onChange={(e) => setKrTitle(e.target.value)} style={{ flex: 1, minWidth: 160 }} />
+                      <select value={krMetricType} onChange={(e) => setKrMetricType(e.target.value as KeyResult["metric_type"])}>
+                        {Object.entries(METRIC_TYPE_LABEL).map(([value, label]) => (
+                          <option key={value} value={value}>{label}</option>
+                        ))}
+                      </select>
+                      {krMetricType === "boolean" ? (
+                        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13.5 }}>
+                          <input type="checkbox" checked={krAchieved} onChange={(e) => setKrAchieved(e.target.checked)} />
+                          Already achieved
+                        </label>
+                      ) : (
+                        <>
+                          <input type="number" placeholder="Start" value={krStart} onChange={(e) => setKrStart(e.target.value)} style={{ width: 80 }} />
+                          <input type="number" placeholder="Current" value={krCurrent} onChange={(e) => setKrCurrent(e.target.value)} style={{ width: 80 }} />
+                          <input type="number" placeholder="Target" value={krTarget} onChange={(e) => setKrTarget(e.target.value)} style={{ width: 80 }} />
+                          {krMetricType === "number" && (
+                            <input placeholder="Unit" value={krUnit} onChange={(e) => setKrUnit(e.target.value)} style={{ width: 90 }} />
+                          )}
+                        </>
+                      )}
+                      <button className="btn btn-ghost" type="button" onClick={() => addKeyResult(o.id)}>Add</button>
+                    </div>
+                    {krError && <p className="form-error" style={{ marginTop: 6 }}>{krError}</p>}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        ))}
+        {objectives.length === 0 && (
+          <p className="muted">No objectives yet. Add one above to start tracking what this project is actually driving toward.</p>
+        )}
+      </div>
     </div>
   );
 }

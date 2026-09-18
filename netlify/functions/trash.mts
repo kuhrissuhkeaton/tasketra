@@ -52,6 +52,8 @@ export default withSentry(async (req: Request) => {
     SELECT 'comm_plan_item' AS entity_type, id, (audience || ': ' || topic) AS title, deleted_at FROM comm_plan_items WHERE project_id = ${projectId} AND deleted_at IS NOT NULL
     UNION ALL
     SELECT 'compliance_item' AS entity_type, id, title, deleted_at FROM compliance_items WHERE project_id = ${projectId} AND deleted_at IS NOT NULL
+    UNION ALL
+    SELECT 'objective' AS entity_type, id, title, deleted_at FROM objectives WHERE project_id = ${projectId} AND deleted_at IS NOT NULL
     ORDER BY deleted_at DESC
   `;
 

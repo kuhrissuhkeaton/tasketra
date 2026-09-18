@@ -31,6 +31,7 @@ export type NavIconName =
   | "dependencies"
   | "quality"
   | "compliance"
+  | "okrs"
   | "stakeholders"
   | "decisions"
   | "team"
@@ -107,6 +108,11 @@ const SHAPES: Record<NavIconName, Shape[]> = {
   compliance: [
     { tag: "path", attrs: { d: "M10 3.2 15.5 5.1v4.3c0 4-2.3 6.6-5.5 7.7-3.2-1.1-5.5-3.7-5.5-7.7V5.1Z" } },
     { tag: "path", attrs: { d: "M7.2 10.3 9.3 12.4 13 8.2" } },
+  ],
+  okrs: [
+    { tag: "circle", attrs: { cx: 10, cy: 10, r: 6.5 } },
+    { tag: "circle", attrs: { cx: 10, cy: 10, r: 3.8 } },
+    { tag: "circle", attrs: { cx: 10, cy: 10, r: 1 } },
   ],
   stakeholders: [
     { tag: "circle", attrs: { cx: 7, cy: 7.2, r: 2.5 } },

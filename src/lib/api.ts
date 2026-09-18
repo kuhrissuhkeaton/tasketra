@@ -208,7 +208,7 @@ export type FeedItem = {
 };
 
 export type TrashItem = {
-  entity_type: "task" | "issue" | "risk" | "stakeholder" | "decision" | "assumption" | "dependency" | "change_request" | "lesson" | "meeting" | "document" | "roadmap_item" | "quality_item" | "procurement_item" | "comm_plan_item" | "compliance_item";
+  entity_type: "task" | "issue" | "risk" | "stakeholder" | "decision" | "assumption" | "dependency" | "change_request" | "lesson" | "meeting" | "document" | "roadmap_item" | "quality_item" | "procurement_item" | "comm_plan_item" | "compliance_item" | "objective";
   id: string;
   title: string;
   deleted_at: string;
@@ -349,6 +349,38 @@ export type ComplianceItem = {
   resolved_at: string | null;
 };
 
+export type KeyResult = {
+  id: string;
+  objective_id: string;
+  title: string;
+  metric_type: "percent" | "number" | "currency" | "boolean";
+  start_value: number;
+  current_value: number;
+  target_value: number;
+  unit: string | null;
+  // Only present when this key result was fetched nested inside an
+  // objective's own GET response -- see keyResultProgress() in
+  // netlify/lib/okr.ts. A bare create/update response won't have it yet.
+  progress?: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type Objective = {
+  id: string;
+  title: string;
+  description: string | null;
+  owner_name: string | null;
+  target_date: string | null;
+  status: "on_track" | "at_risk" | "off_track" | "achieved";
+  // Average of this objective's key results' progress, 0-100 -- null when
+  // it has no key results yet (see objectiveProgress() in netlify/lib/okr.ts).
+  progress?: number | null;
+  key_results: KeyResult[];
+  created_at: string;
+  updated_at: string;
+};
+
 export type TodayData = {
   blockedTasks: { id: string; title: string; owner_name: string | null; due_date: string | null; updated_at: string }[];
   staleTasks: { id: string; title: string; status: Task["status"]; owner_name: string | null; updated_at: string }[];
@@ -406,6 +438,44 @@ export type BudgetData = {
     vac: number | null;
     tcpi: number | null;
   };
+};
+
+export type PortfolioProjectSummary = {
+  id: string;
+  name: string;
+  totalTasks: number;
+  doneTasks: number;
+  overdueTasks: number;
+  openRisks: number;
+  highRisks: number;
+  openIssues: number;
+  highIssues: number;
+  cpi: number | null;
+  spi: number | null;
+  objectivesCount: number;
+  avgObjectiveProgress: number | null;
+  health: "on_track" | "at_risk" | "off_track";
+};
+
+export type PortfolioData = {
+  kpis: {
+    activeProjects: number;
+    atRiskProjects: number;
+    offTrackProjects: number;
+    overdueTasks: number;
+    openRisks: number;
+    openIssues: number;
+    highIssues: number;
+    totalObjectives: number;
+    objectivesOnTrack: number;
+    objectivesAtRisk: number;
+    objectivesOffTrack: number;
+    objectivesAchieved: number;
+    avgObjectiveProgress: number | null;
+  };
+  taskStatusBreakdown: { status: Task["status"]; count: number }[];
+  projects: PortfolioProjectSummary[];
+  upcomingMilestones: { id: string; title: string; date: string; status: RoadmapItem["status"]; projectId: string; projectName: string }[];
 };
 
 export const api = {
@@ -552,7 +622,7 @@ export const api = {
       assumption: "/assumptions", dependency: "/dependencies",
       change_request: "/change-requests", lesson: "/lessons", meeting: "/meetings", document: "/documents",
       roadmap_item: "/roadmap", quality_item: "/quality", procurement_item: "/procurement",
-      comm_plan_item: "/communications", compliance_item: "/compliance",
+      comm_plan_item: "/communications", compliance_item: "/compliance", objective: "/objectives",
     };
     return request<{ ok: true }>(path[entityType], { method: "PATCH", body: JSON.stringify({ id, restore: true }) });
   },
@@ -718,6 +788,43 @@ export const api = {
     }),
   deleteCompliance: (id: string) => request<{ ok: true }>(`/compliance?id=${id}`, { method: "DELETE" }),
 
+  listObjectives: (projectId: string) => request<{ objectives: Objective[] }>(`/objectives?projectId=${projectId}`),
+  createObjective: (
+    projectId: string, title: string,
+    opts?: { description?: string; ownerName?: string; targetDate?: string; status?: Objective["status"] },
+  ) =>
+    request<{ objective: Objective }>("/objectives", {
+      method: "POST",
+      body: JSON.stringify({ projectId, title, description: opts?.description, ownerName: opts?.ownerName, targetDate: opts?.targetDate, status: opts?.status }),
+    }),
+  updateObjective: (id: string, patch: Partial<Pick<Objective, "title" | "description" | "owner_name" | "target_date" | "status">>) =>
+    request<{ objective: Objective }>("/objectives", {
+      method: "PATCH",
+      body: JSON.stringify({ id, title: patch.title, description: patch.description, ownerName: patch.owner_name, targetDate: patch.target_date, status: patch.status }),
+    }),
+  deleteObjective: (id: string) => request<{ ok: true }>(`/objectives?id=${id}`, { method: "DELETE" }),
+
+  createKeyResult: (
+    objectiveId: string, title: string,
+    opts?: { metricType?: KeyResult["metric_type"]; startValue?: number; currentValue?: number; targetValue?: number; unit?: string },
+  ) =>
+    request<{ keyResult: KeyResult }>("/key-results", {
+      method: "POST",
+      body: JSON.stringify({
+        objectiveId, title, metricType: opts?.metricType, startValue: opts?.startValue,
+        currentValue: opts?.currentValue, targetValue: opts?.targetValue, unit: opts?.unit,
+      }),
+    }),
+  updateKeyResult: (id: string, patch: Partial<Pick<KeyResult, "title" | "metric_type" | "start_value" | "current_value" | "target_value" | "unit">>) =>
+    request<{ keyResult: KeyResult }>("/key-results", {
+      method: "PATCH",
+      body: JSON.stringify({
+        id, title: patch.title, metricType: patch.metric_type, startValue: patch.start_value,
+        currentValue: patch.current_value, targetValue: patch.target_value, unit: patch.unit,
+      }),
+    }),
+  deleteKeyResult: (id: string) => request<{ ok: true }>(`/key-results?id=${id}`, { method: "DELETE" }),
+
   listMembers: (projectId: string) =>
     request<{ owner: { id: string; email: string }; members: ProjectMember[] }>(`/members?projectId=${projectId}`),
   inviteMember: (projectId: string, email: string) =>
@@ -824,4 +931,6 @@ export const api = {
   avatarUrl: (userId: string) => `${BASE}/avatar?userId=${userId}`,
 
   getReferrals: () => request<ReferralInfo>("/referrals"),
+
+  getPortfolio: () => request<PortfolioData>("/portfolio"),
 };
