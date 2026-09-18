@@ -9,6 +9,12 @@ type ChangeEntry = { version: string; date: string; title: string; body: string 
 // they can do.
 const CHANGES: ChangeEntry[] = [
   {
+    version: "v63",
+    date: "September 2026",
+    title: "A cleaner nav -- Issues & risks moved to the sidebar",
+    body: "Issues, Risks, Assumptions, Dependencies, Quality, and Compliance used to open a second row of tabs stacked right under the main nav -- confusing, and it only got busier once Risks grew a Matrix view on top. Those six now live in the sidebar under their own \"Issues & risks\" group, the same place Vendors and the Comms plan already live. And everywhere else in the app with its own List/Board/Matrix-style view switch (Tasks, Home, Decisions, the Weekly report) now uses a visibly quieter style for that switch, so it reads as \"options for this page\" instead of another row of navigation.",
+  },
+  {
     version: "v62",
     date: "September 2026",
     title: "Closure, a risk matrix, a comms plan, and compliance tracking",

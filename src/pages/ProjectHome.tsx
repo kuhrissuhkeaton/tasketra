@@ -14,7 +14,7 @@ import { avatarColor, initials } from "../lib/avatar";
 import { TourOverlay, useProductTour } from "../components/ProductTour";
 
 
-export type Tab = "home" | "roadmap" | "tasks" | "raid" | "budget" | "meetings" | "documents" | "stakeholders" | "decisions" | "team" | "procurement" | "comms" | "closure" | "report" | "templates" | "export" | "connections" | "trash";
+export type Tab = "home" | "roadmap" | "tasks" | "issues" | "risks" | "assumptions" | "dependencies" | "quality" | "compliance" | "budget" | "meetings" | "documents" | "stakeholders" | "decisions" | "team" | "procurement" | "comms" | "closure" | "report" | "templates" | "export" | "connections" | "trash";
 
 function daysAgo(dateStr: string): number {
   return Math.max(0, Math.floor((Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24)));
@@ -133,24 +133,37 @@ const EXPOSURE_PILL: Record<"low" | "medium" | "high", string> = {
   high: "pill-red",
 };
 
-// The six sections a PM actually lives in day to day -- rendered as a pill
-// bar at the top of the project content area (same visual pattern as the
-// List/Board/Timeline and Issues/Risks/Assumptions/Dependencies sub-tabs
-// already used inside individual pages), instead of buried in the sidebar
-// alongside everything else.
+// The five sections a PM actually lives in day to day -- rendered as a pill
+// bar at the top of the project content area, instead of buried in the
+// sidebar alongside everything else. This bar is reserved for top-level
+// navigation only -- a page's own view switches (List/Board/Matrix, etc.)
+// use the visually lighter .view-toggle style so they never compete with
+// this row for attention.
 const PRIMARY_TABS: { id: Tab; label: string }[] = [
   { id: "home", label: "Home" },
   { id: "roadmap", label: "Roadmap" },
   { id: "tasks", label: "Tasks" },
-  { id: "raid", label: "Issues & risks" },
   { id: "budget", label: "Budget" },
   { id: "meetings", label: "Meetings" },
 ];
 
 // Everything else stays in the sidebar, grouped into collapsible sections so
 // the list doesn't read as one long undifferentiated wall of links. Each
-// label names an actual category -- no "More"/"Misc" catch-alls.
+// label names an actual category -- no "More"/"Misc" catch-alls. Issues &
+// risks used to render its own six-way pill row (Issues/Risks/Assumptions/
+// Dependencies/Quality/Compliance) directly in the page, stacked right
+// under the primary tabs above -- confusing, since it looked like a second
+// row of the same nav. Each category is now its own sidebar entry instead,
+// the same pattern already proven for People & decisions below.
 const SECONDARY_NAV_GROUPS: { label: string; tabs: { id: Tab; label: string }[] }[] = [
+  { label: "Issues & risks", tabs: [
+    { id: "issues", label: "Issues" },
+    { id: "risks", label: "Risks" },
+    { id: "assumptions", label: "Assumptions" },
+    { id: "dependencies", label: "Dependencies" },
+    { id: "quality", label: "Quality" },
+    { id: "compliance", label: "Compliance" },
+  ] },
   { label: "People & decisions", tabs: [
     { id: "stakeholders", label: "Stakeholders" },
     { id: "decisions", label: "Decisions" },
@@ -262,7 +275,12 @@ export default function ProjectHome() {
         {tab === "home" && <HomeTab projectId={id} />}
         {tab === "roadmap" && <RoadmapTab projectId={id} isOwner={project?.is_owner ?? false} />}
         {tab === "tasks" && <TasksTab projectId={id} projectName={project?.name || "Project"} />}
-        {tab === "raid" && <RaidTab projectId={id} />}
+        {tab === "issues" && <IssuesTab projectId={id} />}
+        {tab === "risks" && <RisksTab projectId={id} />}
+        {tab === "assumptions" && <AssumptionsTab projectId={id} />}
+        {tab === "dependencies" && <DependenciesTab projectId={id} />}
+        {tab === "quality" && <QualityTab projectId={id} />}
+        {tab === "compliance" && <ComplianceTab projectId={id} />}
         {tab === "budget" && <BudgetTab projectId={id} />}
         {tab === "meetings" && <MeetingsTab projectId={id} />}
         {tab === "documents" && <DocumentsTab projectId={id} />}
@@ -296,7 +314,7 @@ function HomeTab({ projectId }: { projectId: string }) {
   const [view, setView] = useState<"today" | "feed">("today");
   return (
     <div>
-      <div className="inline-form" style={{ marginBottom: 16 }}>
+      <div className="view-toggle">
         <button
           className={view === "today" ? "btn btn-primary" : "btn btn-ghost"}
           type="button"
@@ -889,7 +907,7 @@ function TasksTab({ projectId, projectName }: { projectId: string; projectName: 
       </form>
       {error && <p className="form-error">{error}</p>}
 
-      <div className="inline-form" style={{ marginBottom: 16 }}>
+      <div className="view-toggle">
         <button
           className={view === "list" ? "btn btn-primary" : "btn btn-ghost"}
           type="button"
@@ -911,6 +929,9 @@ function TasksTab({ projectId, projectName }: { projectId: string; projectName: 
         >
           Timeline
         </button>
+      </div>
+
+      <div className="inline-form" style={{ marginBottom: 16 }}>
         <button
           className="btn btn-ghost"
           type="button"
@@ -1134,40 +1155,6 @@ function TimelineView({ tasks }: { tasks: Task[] }) {
   );
 }
 
-function RaidTab({ projectId }: { projectId: string }) {
-  const [view, setView] = useState<"issues" | "risks" | "assumptions" | "dependencies" | "quality" | "compliance">("issues");
-  const VIEWS: { id: typeof view; label: string }[] = [
-    { id: "issues", label: "Issues" },
-    { id: "risks", label: "Risks" },
-    { id: "assumptions", label: "Assumptions" },
-    { id: "dependencies", label: "Dependencies" },
-    { id: "quality", label: "Quality" },
-    { id: "compliance", label: "Compliance" },
-  ];
-  return (
-    <div>
-      <div className="inline-form" style={{ marginBottom: 16 }}>
-        {VIEWS.map((v) => (
-          <button
-            key={v.id}
-            className={view === v.id ? "btn btn-primary" : "btn btn-ghost"}
-            type="button"
-            onClick={() => setView(v.id)}
-          >
-            {v.label}
-          </button>
-        ))}
-      </div>
-      {view === "issues" && <IssuesTab projectId={projectId} />}
-      {view === "risks" && <RisksTab projectId={projectId} />}
-      {view === "assumptions" && <AssumptionsTab projectId={projectId} />}
-      {view === "dependencies" && <DependenciesTab projectId={projectId} />}
-      {view === "quality" && <QualityTab projectId={projectId} />}
-      {view === "compliance" && <ComplianceTab projectId={projectId} />}
-    </div>
-  );
-}
-
 function IssuesTab({ projectId }: { projectId: string }) {
   const confirmDialog = useConfirm();
   const [issues, setIssues] = useState<Issue[]>([]);
@@ -1279,7 +1266,7 @@ function IssuesTab({ projectId }: { projectId: string }) {
       </form>
       {error && <p className="form-error">{error}</p>}
 
-      <div className="inline-form" style={{ marginBottom: 16 }}>
+      <div className="view-toggle">
         <button
           className={view === "list" ? "btn btn-primary" : "btn btn-ghost"}
           type="button"
@@ -1542,7 +1529,7 @@ function RisksTab({ projectId }: { projectId: string }) {
       </form>
       {error && <p className="form-error">{error}</p>}
 
-      <div className="inline-form" style={{ marginBottom: 16 }}>
+      <div className="view-toggle">
         <button
           className={view === "list" ? "btn btn-primary" : "btn btn-ghost"}
           type="button"
@@ -1827,7 +1814,7 @@ function AssumptionsTab({ projectId }: { projectId: string }) {
       </form>
       {error && <p className="form-error">{error}</p>}
 
-      <div className="inline-form" style={{ marginBottom: 16 }}>
+      <div className="view-toggle">
         <button
           className={view === "list" ? "btn btn-primary" : "btn btn-ghost"}
           type="button"
@@ -2057,7 +2044,7 @@ function DependenciesTab({ projectId }: { projectId: string }) {
       </form>
       {error && <p className="form-error">{error}</p>}
 
-      <div className="inline-form" style={{ marginBottom: 16 }}>
+      <div className="view-toggle">
         <button
           className={view === "list" ? "btn btn-primary" : "btn btn-ghost"}
           type="button"
@@ -2299,7 +2286,7 @@ function QualityTab({ projectId }: { projectId: string }) {
       </form>
       {error && <p className="form-error">{error}</p>}
 
-      <div className="inline-form" style={{ marginBottom: 16 }}>
+      <div className="view-toggle">
         <button
           className={view === "list" ? "btn btn-primary" : "btn btn-ghost"}
           type="button"
@@ -2544,7 +2531,7 @@ function ComplianceTab({ projectId }: { projectId: string }) {
       </form>
       {error && <p className="form-error">{error}</p>}
 
-      <div className="inline-form" style={{ marginBottom: 16 }}>
+      <div className="view-toggle">
         <button
           className={view === "list" ? "btn btn-primary" : "btn btn-ghost"}
           type="button"
@@ -2995,7 +2982,7 @@ function ProcurementTab({ projectId }: { projectId: string }) {
       </form>
       {error && <p className="form-error">{error}</p>}
 
-      <div className="inline-form" style={{ marginBottom: 16 }}>
+      <div className="view-toggle">
         <button
           className={view === "list" ? "btn btn-primary" : "btn btn-ghost"}
           type="button"
@@ -4087,7 +4074,7 @@ function DecisionsTab({ projectId }: { projectId: string }) {
   const [view, setView] = useState<"decisions" | "change_requests">("decisions");
   return (
     <div>
-      <div className="inline-form" style={{ marginBottom: 16 }}>
+      <div className="view-toggle">
         <button
           className={view === "decisions" ? "btn btn-primary" : "btn btn-ghost"}
           type="button"
@@ -4932,7 +4919,7 @@ function ReportTab({ projectId, projectName }: { projectId: string; projectName:
   const [view, setView] = useState<"weekly" | "lessons">("weekly");
   return (
     <div>
-      <div className="inline-form no-print" style={{ marginBottom: 16 }}>
+      <div className="view-toggle no-print">
         <button
           className={view === "weekly" ? "btn btn-primary" : "btn btn-ghost"}
           type="button"

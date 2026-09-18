@@ -25,6 +25,12 @@ export type NavIconName =
   | "waitlist"
   | "feedback"
   | "founding"
+  | "issues"
+  | "risks"
+  | "assumptions"
+  | "dependencies"
+  | "quality"
+  | "compliance"
   | "stakeholders"
   | "decisions"
   | "team"
@@ -72,6 +78,35 @@ const SHAPES: Record<NavIconName, Shape[]> = {
   ],
   founding: [
     { tag: "path", attrs: { d: "M10 3.5l1.9 4 4.4.6-3.2 3.1.8 4.3L10 13.4l-3.9 2.1.8-4.3-3.2-3.1 4.4-.6Z" } },
+  ],
+  issues: [
+    { tag: "circle", attrs: { cx: 10, cy: 10, r: 7 } },
+    { tag: "path", attrs: { d: "M10 6.5v4.3" } },
+    { tag: "path", attrs: { d: "M10 13.6v.01" } },
+  ],
+  risks: [
+    { tag: "path", attrs: { d: "M10 3.3 17.3 15.8H2.7Z" } },
+    { tag: "path", attrs: { d: "M10 8.2v3.2" } },
+    { tag: "path", attrs: { d: "M10 13.7v.01" } },
+  ],
+  assumptions: [
+    { tag: "circle", attrs: { cx: 10, cy: 10, r: 7 } },
+    { tag: "path", attrs: { d: "M7.8 7.8a2.2 2.2 0 1 1 3.7 1.6c-.9.8-1.5 1.3-1.5 2.4" } },
+    { tag: "path", attrs: { d: "M10 14.3v.01" } },
+  ],
+  dependencies: [
+    { tag: "circle", attrs: { cx: 4.8, cy: 10, r: 2.6 } },
+    { tag: "circle", attrs: { cx: 15.2, cy: 10, r: 2.6 } },
+    { tag: "path", attrs: { d: "M7.7 10h4.6" } },
+    { tag: "path", attrs: { d: "M10.6 7.6 13 10 10.6 12.4" } },
+  ],
+  quality: [
+    { tag: "path", attrs: { d: "M16.5 10 13.25 15.63 6.75 15.63 3.5 10 6.75 4.37 13.25 4.37Z" } },
+    { tag: "path", attrs: { d: "M7 10.3 9.2 12.5 13.3 8" } },
+  ],
+  compliance: [
+    { tag: "path", attrs: { d: "M10 3.2 15.5 5.1v4.3c0 4-2.3 6.6-5.5 7.7-3.2-1.1-5.5-3.7-5.5-7.7V5.1Z" } },
+    { tag: "path", attrs: { d: "M7.2 10.3 9.3 12.4 13 8.2" } },
   ],
   stakeholders: [
     { tag: "circle", attrs: { cx: 7, cy: 7.2, r: 2.5 } },

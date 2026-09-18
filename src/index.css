@@ -201,6 +201,18 @@ textarea { resize: vertical; }
 .inline-form input[type="text"], .inline-form input:not([type]) { min-width: 110px; }
 .inline-form input[type="date"] { min-width: 138px; }
 .inline-form-wide input, .inline-form-wide select { flex: 1; }
+
+/* Secondary, in-page view switches (List/Board/Matrix, Today/Feed, Weekly
+   report/Lessons learned, etc.) -- visually lighter than primary/sidebar
+   navigation on purpose, so a page's own view options never read as "more
+   top-level sections" stacked under the real nav. Same flex/wrap layout as
+   .inline-form, quieter fill and smaller type. */
+.view-toggle { display: flex; gap: 6px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
+.view-toggle .btn { padding: 5px 13px; font-size: 13px; box-shadow: none !important; }
+.view-toggle .btn-primary { background: var(--tint-strong); color: var(--navy); }
+.view-toggle .btn-primary:hover { background: var(--tint-strong); transform: none; }
+.view-toggle .btn-ghost { background: transparent; color: var(--slate); border: 1px solid var(--border); }
+.view-toggle .btn-ghost:hover { background: var(--tint); border-color: var(--border); color: var(--navy); }
 .stacked-form {
   background: var(--cream); border: 1px solid var(--border); border-radius: var(--radius);
   box-shadow: var(--shadow-sm); padding: 20px; margin: 16px 0; max-width: 480px;

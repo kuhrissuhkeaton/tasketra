@@ -36,10 +36,10 @@ export const TOUR_STEPS: TourStep[] = [
     body: "Parent tasks, subtasks, owners, due dates. Built like a real WBS, not a flat to-do list.",
   },
   {
-    target: "tab-raid",
-    tab: "raid",
+    target: "tab-issues",
+    tab: "issues",
     title: "Where most PM tools stop, Tasketra doesn't",
-    body: "Risks, assumptions, issues, and dependencies, tracked in one place. This is the stuff that derails a project, not the task list.",
+    body: "Risks, assumptions, issues, dependencies, quality, and compliance, tracked in one place under Issues & risks in the sidebar. This is the stuff that derails a project, not the task list.",
   },
   {
     target: "tab-meetings",
