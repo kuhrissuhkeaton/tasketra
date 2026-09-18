@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, Fragment } from "react";
 import { useParams, useSearchParams, useNavigate, useLocation, Link } from "react-router-dom";
-import { api, ApiError, type Project, type Task, type Stakeholder, type Decision, type Issue, type Risk, type Assumption, type Dependency, type ChangeRequest, type Lesson, type TodayData, type WeeklyReport, type BudgetData, type FeedItem, type TrashItem, type ProjectMember, type Meeting, type MeetingActionItem, type ProjectDocument, type StorageUsage, type RoadmapItem, type RoadmapItemType } from "../lib/api";
+import { api, ApiError, type Project, type Task, type Stakeholder, type Decision, type Issue, type Risk, type Assumption, type Dependency, type ChangeRequest, type Lesson, type TodayData, type WeeklyReport, type BudgetData, type FeedItem, type TrashItem, type ProjectMember, type Meeting, type MeetingActionItem, type ProjectDocument, type StorageUsage, type RoadmapItem, type RoadmapItemType, type QualityItem } from "../lib/api";
 import { RoadmapTimeline, ROADMAP_TYPE_LABEL, ROADMAP_STATUS_LABEL, fmtRoadmapDate } from "../components/RoadmapTimeline";
 import { tasksToICS, downloadICS } from "../lib/ics";
 import { fmtDate, fmtDateTime, fmtLocalDate } from "../lib/format";
@@ -694,6 +694,7 @@ const TRASH_ENTITY_LABEL: Record<TrashItem["entity_type"], string> = {
   meeting: "Meeting",
   document: "Document",
   roadmap_item: "Roadmap item",
+  quality_item: "Quality item",
 };
 
 function TrashTab({ projectId }: { projectId: string }) {
@@ -1124,12 +1125,13 @@ function TimelineView({ tasks }: { tasks: Task[] }) {
 }
 
 function RaidTab({ projectId }: { projectId: string }) {
-  const [view, setView] = useState<"issues" | "risks" | "assumptions" | "dependencies">("issues");
+  const [view, setView] = useState<"issues" | "risks" | "assumptions" | "dependencies" | "quality">("issues");
   const VIEWS: { id: typeof view; label: string }[] = [
     { id: "issues", label: "Issues" },
     { id: "risks", label: "Risks" },
     { id: "assumptions", label: "Assumptions" },
     { id: "dependencies", label: "Dependencies" },
+    { id: "quality", label: "Quality" },
   ];
   return (
     <div>
@@ -1149,6 +1151,7 @@ function RaidTab({ projectId }: { projectId: string }) {
       {view === "risks" && <RisksTab projectId={projectId} />}
       {view === "assumptions" && <AssumptionsTab projectId={projectId} />}
       {view === "dependencies" && <DependenciesTab projectId={projectId} />}
+      {view === "quality" && <QualityTab projectId={projectId} />}
     </div>
   );
 }
@@ -1476,6 +1479,24 @@ function RisksTab({ projectId }: { projectId: string }) {
     load();
   }
 
+  // "Recognize when a risk becomes an issue" (PMI) -- one action that
+  // creates the matching Issue with the risk's details carried over, and
+  // marks the Risk resolved, instead of a PM having to do both by hand.
+  async function promoteToIssue(r: Risk) {
+    if (!(await confirmDialog(`Turn risk "${r.title}" into an issue? This creates a new issue with the same details and marks the risk resolved.`))) return;
+    const exposure = riskExposure(r.probability, r.impact);
+    const description = ["Promoted from a risk.", r.description, r.mitigation ? `Planned mitigation: ${r.mitigation}` : null]
+      .filter(Boolean)
+      .join("\n\n");
+    try {
+      await api.createIssue(projectId, r.title, description || undefined, exposure, r.owner_name || undefined);
+      await api.updateRisk(r.id, { status: "resolved" });
+      load();
+    } catch (err: any) {
+      setError(err.message || "Couldn't turn that risk into an issue.");
+    }
+  }
+
   if (loading) return <div className="skel-loading-block"><div className="skel skel-text" style={{ width: "45%" }} /><div className="skel skel-text" style={{ width: "80%" }} /><div className="skel skel-text" style={{ width: "60%", marginBottom: 0 }} /></div>;
 
   return (
@@ -1554,6 +1575,11 @@ function RisksTab({ projectId }: { projectId: string }) {
                     </span>
                     <div>{r.title}</div>
                     <div className="muted">{r.owner_name || "unassigned"}</div>
+                    {r.status !== "resolved" && (
+                      <button className="btn-link" type="button" onClick={() => promoteToIssue(r)} style={{ marginTop: 6 }}>
+                        This became an issue &rarr;
+                      </button>
+                    )}
                   </div>
                 );
               })}
@@ -1621,6 +1647,9 @@ function RisksTab({ projectId }: { projectId: string }) {
                 </td>
                 <td className="row-actions">
                   <button className="btn-link" type="button" onClick={() => startEdit(r)}>Edit</button>
+                  {r.status !== "resolved" && (
+                    <button className="btn-link" type="button" onClick={() => promoteToIssue(r)}>This became an issue</button>
+                  )}
                   <button className="btn-link btn-link-danger" type="button" onClick={() => removeRisk(r.id, r.title)}>Delete</button>
                 </td>
               </tr>
@@ -2091,9 +2120,248 @@ function DependenciesTab({ projectId }: { projectId: string }) {
     </div>
   );
 }
+const QUALITY_CATEGORY_LABEL: Record<QualityItem["category"], string> = {
+  standard: "Standard",
+  review: "Review",
+  defect: "Defect",
+};
+
+const QUALITY_STATUS_LABEL: Record<QualityItem["status"], string> = {
+  open: "Open",
+  in_progress: "In review",
+  passed: "Passed",
+  failed: "Failed",
+};
+
+function QualityTab({ projectId }: { projectId: string }) {
+  const confirmDialog = useConfirm();
+  const [items, setItems] = useState<QualityItem[]>([]);
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [category, setCategory] = useState<QualityItem["category"]>("review");
+  const [owner, setOwner] = useState("");
+  const [newStatus, setNewStatus] = useState<QualityItem["status"]>("open");
+  const [view, setView] = useState<"list" | "board">("list");
+  const [dragOverStatus, setDragOverStatus] = useState<QualityItem["status"] | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editCategory, setEditCategory] = useState<QualityItem["category"]>("review");
+  const [editOwner, setEditOwner] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  async function load() {
+    setLoading(true);
+    const { qualityItems } = await api.listQuality(projectId);
+    setItems(qualityItems);
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    load();
+  }, [projectId]);
+
+  async function addItem(e: React.FormEvent) {
+    e.preventDefault();
+    if (!title.trim()) return;
+    setError("");
+    try {
+      await api.createQuality(projectId, title.trim(), description || undefined, category, owner || undefined, newStatus);
+      setTitle("");
+      setDescription("");
+      setCategory("review");
+      setOwner("");
+      setNewStatus("open");
+      load();
+    } catch (err: any) {
+      setError(err.message || "Couldn't log that quality item.");
+    }
+  }
+
+  async function setStatus(id: string, status: QualityItem["status"]) {
+    await api.updateQuality(id, { status });
+    load();
+  }
+
+  function onDropOnColumn(e: React.DragEvent, status: QualityItem["status"]) {
+    e.preventDefault();
+    setDragOverStatus(null);
+    const itemId = e.dataTransfer.getData("text/plain");
+    if (itemId) setStatus(itemId, status);
+  }
+
+  function startEdit(q: QualityItem) {
+    setEditingId(q.id);
+    setEditTitle(q.title);
+    setEditDescription(q.description || "");
+    setEditCategory(q.category);
+    setEditOwner(q.owner_name || "");
+  }
+
+  async function saveEdit(id: string) {
+    if (!editTitle.trim()) return;
+    await api.updateQuality(id, {
+      title: editTitle.trim(), description: editDescription || undefined, category: editCategory, owner_name: editOwner || undefined,
+    } as any);
+    setEditingId(null);
+    load();
+  }
+
+  async function removeItem(id: string, label: string) {
+    if (!(await confirmDialog(`Delete quality item "${label}"? You can restore it from Trash.`))) return;
+    await api.deleteQuality(id);
+    load();
+  }
+
+  if (loading) return <div className="skel-loading-block"><div className="skel skel-text" style={{ width: "45%" }} /><div className="skel skel-text" style={{ width: "80%" }} /><div className="skel skel-text" style={{ width: "60%", marginBottom: 0 }} /></div>;
+
+  return (
+    <div>
+      <p className="muted" style={{ marginBottom: 16, maxWidth: 640 }}>
+        Standards to meet, reviews to run, and defects you've found -- a quality log alongside
+        the rest of RAID, since "is this good enough" is a different question from "is something
+        broken."
+      </p>
+      <form className="stacked-form" onSubmit={addItem}>
+        <label>Quality item</label>
+        <input placeholder="What needs to meet a bar, or get reviewed?" value={title} onChange={(e) => setTitle(e.target.value)} />
+        <label>Description (optional)</label>
+        <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
+        <div className="inline-form" style={{ marginTop: 8, marginBottom: 0 }}>
+          <select value={category} onChange={(e) => setCategory(e.target.value as QualityItem["category"])}>
+            {Object.entries(QUALITY_CATEGORY_LABEL).map(([value, label]) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
+          </select>
+          <input placeholder="Owner (optional)" value={owner} onChange={(e) => setOwner(e.target.value)} />
+          <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as QualityItem["status"])} title="Status">
+            {Object.entries(QUALITY_STATUS_LABEL).map(([value, label]) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
+          </select>
+          <button className="btn btn-primary">Log quality item</button>
+        </div>
+      </form>
+      {error && <p className="form-error">{error}</p>}
+
+      <div className="inline-form" style={{ marginBottom: 16 }}>
+        <button
+          className={view === "list" ? "btn btn-primary" : "btn btn-ghost"}
+          type="button"
+          onClick={() => setView("list")}
+        >
+          List
+        </button>
+        <button
+          className={view === "board" ? "btn btn-primary" : "btn btn-ghost"}
+          type="button"
+          onClick={() => setView("board")}
+        >
+          Board
+        </button>
+      </div>
+
+      {view === "board" ? (
+        <div className="kanban-board">
+          {(Object.keys(QUALITY_STATUS_LABEL) as QualityItem["status"][]).map((status) => (
+            <div
+              key={status}
+              className={dragOverStatus === status ? "kanban-column kanban-column-over" : "kanban-column"}
+              onDragOver={(e) => { e.preventDefault(); setDragOverStatus(status); }}
+              onDragLeave={() => setDragOverStatus(null)}
+              onDrop={(e) => onDropOnColumn(e, status)}
+            >
+              <div className="kanban-column-head">
+                {QUALITY_STATUS_LABEL[status]}
+                <span className="kanban-column-count">{items.filter((q) => q.status === status).length}</span>
+              </div>
+              {items.filter((q) => q.status === status).map((q) => (
+                <div
+                  key={q.id}
+                  className="kanban-card"
+                  draggable
+                  onDragStart={(e) => e.dataTransfer.setData("text/plain", q.id)}
+                >
+                  <span className="pill pill-navy" style={{ marginBottom: 6, display: "inline-block" }}>
+                    {QUALITY_CATEGORY_LABEL[q.category]}
+                  </span>
+                  <div>{q.title}</div>
+                  <div className="muted">{q.owner_name || "unassigned"}</div>
+                </div>
+              ))}
+              {items.filter((q) => q.status === status).length === 0 && (
+                <div className="muted kanban-empty">Drop quality items here</div>
+              )}
+            </div>
+          ))}
+        </div>
+      ) : (
+      <ResizableTable id="raid-quality">
+        <thead>
+          <tr><th>Quality item</th><th>Category</th><th>Owner</th><th>Status</th><th></th></tr>
+        </thead>
+        <tbody>
+          {items.map((q) => (
+            editingId === q.id ? (
+              <tr key={q.id}>
+                <td>
+                  <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} style={{ marginBottom: 4 }} />
+                  <textarea value={editDescription} onChange={(e) => setEditDescription(e.target.value)} rows={2} placeholder="Description" />
+                </td>
+                <td>
+                  <select value={editCategory} onChange={(e) => setEditCategory(e.target.value as QualityItem["category"])}>
+                    {Object.entries(QUALITY_CATEGORY_LABEL).map(([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
+                  </select>
+                </td>
+                <td><input value={editOwner} onChange={(e) => setEditOwner(e.target.value)} /></td>
+                <td className="muted">{QUALITY_STATUS_LABEL[q.status]}</td>
+                <td className="row-actions">
+                  <button className="btn btn-primary" type="button" onClick={() => saveEdit(q.id)}>Save</button>
+                  <button className="btn btn-ghost" type="button" onClick={() => setEditingId(null)}>Cancel</button>
+                </td>
+              </tr>
+            ) : (
+              <tr key={q.id}>
+                <td>
+                  {q.title}
+                  {q.description && <div className="muted">{q.description}</div>}
+                </td>
+                <td><span className="pill pill-navy">{QUALITY_CATEGORY_LABEL[q.category]}</span></td>
+                <td>{q.owner_name || "--"}</td>
+                <td>
+                  <select
+                    className={`status-select status-select-${q.status}`}
+                    value={q.status}
+                    onChange={(e) => setStatus(q.id, e.target.value as QualityItem["status"])}
+                  >
+                    {Object.entries(QUALITY_STATUS_LABEL).map(([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
+                  </select>
+                </td>
+                <td className="row-actions">
+                  <button className="btn-link" type="button" onClick={() => startEdit(q)}>Edit</button>
+                  <button className="btn-link btn-link-danger" type="button" onClick={() => removeItem(q.id, q.title)}>Delete</button>
+                </td>
+              </tr>
+            )
+          ))}
+          {items.length === 0 && (
+            <tr><td colSpan={5} className="muted">No quality items logged yet. Add a standard to meet, a review to run, or a defect you found.</td></tr>
+          )}
+        </tbody>
+      </ResizableTable>
+      )}
+    </div>
+  );
+}
 function BudgetTab({ projectId }: { projectId: string }) {
   const [data, setData] = useState<BudgetData | null>(null);
   const [bacInput, setBacInput] = useState("");
+  const [reserveInput, setReserveInput] = useState("");
   const [editingBac, setEditingBac] = useState(false);
   const [desc, setDesc] = useState("");
   const [amount, setAmount] = useState("");
@@ -2103,6 +2371,7 @@ function BudgetTab({ projectId }: { projectId: string }) {
     const d = await api.getBudget(projectId);
     setData(d);
     setBacInput(d.budgetAtCompletion !== null ? String(d.budgetAtCompletion) : "");
+    setReserveInput(d.contingencyReserve !== null ? String(d.contingencyReserve) : "");
   }
 
   useEffect(() => {
@@ -2111,9 +2380,11 @@ function BudgetTab({ projectId }: { projectId: string }) {
 
   async function saveBac(e: React.FormEvent) {
     e.preventDefault();
-    const value = bacInput.trim() === "" ? null : Number(bacInput);
-    if (value !== null && (Number.isNaN(value) || value < 0)) return;
-    await api.setBudget(projectId, value);
+    const bacValue = bacInput.trim() === "" ? null : Number(bacInput);
+    if (bacValue !== null && (Number.isNaN(bacValue) || bacValue < 0)) return;
+    const reserveValue = reserveInput.trim() === "" ? null : Number(reserveInput);
+    if (reserveValue !== null && (Number.isNaN(reserveValue) || reserveValue < 0)) return;
+    await api.setBudget(projectId, bacValue, reserveValue);
     setEditingBac(false);
     load();
   }
@@ -2131,7 +2402,7 @@ function BudgetTab({ projectId }: { projectId: string }) {
 
   if (!data) return <p className="muted">Loading budget...</p>;
 
-  const { metrics, taskStats, costEntries, budgetAtCompletion } = data;
+  const { metrics, taskStats, costEntries, budgetAtCompletion, contingencyReserve } = data;
   const favorable = (n: number | null, goodIsPositive = true) =>
     n === null ? "" : (goodIsPositive ? n >= 0 : n >= 1) ? "evm-good" : "evm-bad";
 
@@ -2146,6 +2417,13 @@ function BudgetTab({ projectId }: { projectId: string }) {
               onChange={(e) => setBacInput(e.target.value)}
               type="number" min="0" step="0.01"
             />
+            <input
+              placeholder="Contingency reserve (optional), e.g. 5000"
+              value={reserveInput}
+              onChange={(e) => setReserveInput(e.target.value)}
+              type="number" min="0" step="0.01"
+              title="Money set aside for known risks -- tracked separately from BAC, not counted in the EVM metrics below."
+            />
             <button className="btn btn-primary">Save budget</button>
             {budgetAtCompletion !== null && (
               <button className="btn btn-ghost" type="button" onClick={() => setEditingBac(false)}>Cancel</button>
@@ -2154,6 +2432,9 @@ function BudgetTab({ projectId }: { projectId: string }) {
         ) : (
           <div className="stat-row">
             <div className="stat"><strong>{fmtMoney(budgetAtCompletion)}</strong> approved budget (BAC)</div>
+            {contingencyReserve !== null && (
+              <div className="stat"><strong>{fmtMoney(contingencyReserve)}</strong> contingency reserve</div>
+            )}
             <button className="btn btn-ghost" type="button" onClick={() => setEditingBac(true)}>Edit</button>
           </div>
         )}

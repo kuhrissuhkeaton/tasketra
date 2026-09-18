@@ -9,6 +9,12 @@ type ChangeEntry = { version: string; date: string; title: string; body: string 
 // they can do.
 const CHANGES: ChangeEntry[] = [
   {
+    version: "v60",
+    date: "September 2026",
+    title: "Quality tracking, risk-to-issue, and a contingency reserve",
+    body: "RAID has a fifth tab -- Quality -- for standards to meet, reviews to run, and defects you've found, tracked the same way as Issues and Risks. A Risk row now has a \"This became an issue\" action that creates the matching issue and marks the risk resolved in one step. And Budget's approved-budget field now sits next to an optional contingency reserve, tracked separately from your EVM metrics.",
+  },
+  {
     version: "v59",
     date: "September 2026",
     title: "Click a chart item to edit it",

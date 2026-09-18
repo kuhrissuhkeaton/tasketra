@@ -205,7 +205,7 @@ export type FeedItem = {
 };
 
 export type TrashItem = {
-  entity_type: "task" | "issue" | "risk" | "stakeholder" | "decision" | "assumption" | "dependency" | "change_request" | "lesson" | "meeting" | "document" | "roadmap_item";
+  entity_type: "task" | "issue" | "risk" | "stakeholder" | "decision" | "assumption" | "dependency" | "change_request" | "lesson" | "meeting" | "document" | "roadmap_item" | "quality_item";
   id: string;
   title: string;
   deleted_at: string;
@@ -294,6 +294,18 @@ export type Dependency = {
   resolved_at: string | null;
 };
 
+export type QualityItem = {
+  id: string;
+  title: string;
+  description: string | null;
+  category: "standard" | "review" | "defect";
+  status: "open" | "in_progress" | "passed" | "failed";
+  owner_name: string | null;
+  created_at: string;
+  updated_at: string;
+  resolved_at: string | null;
+};
+
 export type TodayData = {
   blockedTasks: { id: string; title: string; owner_name: string | null; due_date: string | null; updated_at: string }[];
   staleTasks: { id: string; title: string; status: Task["status"]; owner_name: string | null; updated_at: string }[];
@@ -334,6 +346,7 @@ export type CostEntry = {
 
 export type BudgetData = {
   budgetAtCompletion: number | null;
+  contingencyReserve: number | null;
   costEntries: CostEntry[];
   taskStats: { totalTasks: number; doneTasks: number; dueTasks: number };
   metrics: {
@@ -488,7 +501,7 @@ export const api = {
       task: "/tasks", issue: "/issues", risk: "/risks", stakeholder: "/stakeholders", decision: "/decisions",
       assumption: "/assumptions", dependency: "/dependencies",
       change_request: "/change-requests", lesson: "/lessons", meeting: "/meetings", document: "/documents",
-      roadmap_item: "/roadmap",
+      roadmap_item: "/roadmap", quality_item: "/quality",
     };
     return request<{ ok: true }>(path[entityType], { method: "PATCH", body: JSON.stringify({ id, restore: true }) });
   },
@@ -597,6 +610,17 @@ export const api = {
     }),
   deleteDependency: (id: string) => request<{ ok: true }>(`/dependencies?id=${id}`, { method: "DELETE" }),
 
+  listQuality: (projectId: string) => request<{ qualityItems: QualityItem[] }>(`/quality?projectId=${projectId}`),
+  createQuality: (projectId: string, title: string, description?: string, category?: QualityItem["category"], ownerName?: string, status?: QualityItem["status"]) =>
+    request<{ qualityItem: QualityItem }>("/quality", {
+      method: "POST", body: JSON.stringify({ projectId, title, description, category, ownerName, status }),
+    }),
+  updateQuality: (id: string, patch: Partial<Pick<QualityItem, "status" | "title" | "description" | "category" | "owner_name">>) =>
+    request<{ qualityItem: QualityItem }>("/quality", {
+      method: "PATCH", body: JSON.stringify({ id, ...patch, ownerName: patch.owner_name }),
+    }),
+  deleteQuality: (id: string) => request<{ ok: true }>(`/quality?id=${id}`, { method: "DELETE" }),
+
   listMembers: (projectId: string) =>
     request<{ owner: { id: string; email: string }; members: ProjectMember[] }>(`/members?projectId=${projectId}`),
   inviteMember: (projectId: string, email: string) =>
@@ -609,8 +633,8 @@ export const api = {
   getWeeklyReport: (projectId: string) => request<WeeklyReport>(`/weekly-report?projectId=${projectId}`),
 
   getBudget: (projectId: string) => request<BudgetData>(`/budget?projectId=${projectId}`),
-  setBudget: (projectId: string, budgetAtCompletion: number | null) =>
-    request<{ ok: true }>("/budget", { method: "PATCH", body: JSON.stringify({ projectId, budgetAtCompletion }) }),
+  setBudget: (projectId: string, budgetAtCompletion: number | null, contingencyReserve: number | null) =>
+    request<{ ok: true }>("/budget", { method: "PATCH", body: JSON.stringify({ projectId, budgetAtCompletion, contingencyReserve }) }),
   addCostEntry: (projectId: string, description: string, amount: number, incurredDate?: string) =>
     request<{ costEntry: CostEntry }>("/budget", {
       method: "POST",

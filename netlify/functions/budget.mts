@@ -39,7 +39,7 @@ export default withSentry(async (req: Request) => {
     if (!(await hasProjectAccess(userId, projectId))) return json({ error: "Not found" }, { status: 404 });
 
     const [[project], costEntries, [taskStats]] = await Promise.all([
-      database.sql`SELECT budget_at_completion FROM projects WHERE id = ${projectId}`,
+      database.sql`SELECT budget_at_completion, contingency_reserve FROM projects WHERE id = ${projectId}`,
       database.sql`
         SELECT id, description, amount, incurred_date, created_at FROM cost_entries
         WHERE project_id = ${projectId} ORDER BY incurred_date DESC, created_at DESC
@@ -57,6 +57,8 @@ export default withSentry(async (req: Request) => {
 
     const bac = project?.budget_at_completion !== null && project?.budget_at_completion !== undefined
       ? Number(project.budget_at_completion) : null;
+    const contingencyReserve = project?.contingency_reserve !== null && project?.contingency_reserve !== undefined
+      ? Number(project.contingency_reserve) : null;
     const ac = round2(costEntries.reduce((sum: number, c: any) => sum + Number(c.amount), 0));
     const totalTasks = taskStats?.total_tasks || 0;
     const doneTasks = taskStats?.done_tasks || 0;
@@ -66,6 +68,7 @@ export default withSentry(async (req: Request) => {
 
     return json({
       budgetAtCompletion: bac,
+      contingencyReserve,
       costEntries,
       taskStats: { totalTasks, doneTasks, dueTasks },
       metrics,
@@ -78,10 +81,21 @@ export default withSentry(async (req: Request) => {
     if (!projectId) return json({ error: "projectId required" }, { status: 400 });
     if (!(await hasProjectAccess(userId, projectId))) return json({ error: "Not found" }, { status: 404 });
     const bac = body?.budgetAtCompletion;
-    if (bac !== null && (typeof bac !== "number" || bac < 0)) {
+    if (bac !== null && bac !== undefined && (typeof bac !== "number" || bac < 0)) {
       return json({ error: "budgetAtCompletion must be a non-negative number or null." }, { status: 400 });
     }
-    await database.sql`UPDATE projects SET budget_at_completion = ${bac} WHERE id = ${projectId}`;
+    const reserve = body?.contingencyReserve;
+    if (reserve !== null && reserve !== undefined && (typeof reserve !== "number" || reserve < 0)) {
+      return json({ error: "contingencyReserve must be a non-negative number or null." }, { status: 400 });
+    }
+    // Both fields are always sent together by the client (the Budget tab's
+    // one baseline form edits BAC and the reserve side by side), so this
+    // stays a plain overwrite -- same shape as the original BAC-only PATCH,
+    // just widened to two columns instead of partial-update semantics.
+    await database.sql`
+      UPDATE projects SET budget_at_completion = ${bac ?? null}, contingency_reserve = ${reserve ?? null}
+      WHERE id = ${projectId}
+    `;
     return json({ ok: true });
   }
 
