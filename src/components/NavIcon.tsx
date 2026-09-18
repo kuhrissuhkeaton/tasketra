@@ -28,6 +28,7 @@ export type NavIconName =
   | "stakeholders"
   | "decisions"
   | "team"
+  | "procurement"
   | "documents"
   | "report"
   | "templates"
@@ -86,6 +87,11 @@ const SHAPES: Record<NavIconName, Shape[]> = {
     { tag: "circle", attrs: { cx: 7, cy: 8, r: 2.3 } },
     { tag: "circle", attrs: { cx: 13, cy: 8, r: 2.3 } },
     { tag: "circle", attrs: { cx: 10, cy: 13.3, r: 2.3 } },
+  ],
+  procurement: [
+    { tag: "path", attrs: { d: "M4 7.2 10 4l6 3.2v7a1 1 0 0 1-.6.9l-5 2.3a1 1 0 0 1-.8 0l-5-2.3A1 1 0 0 1 4 14.2Z" } },
+    { tag: "path", attrs: { d: "M4 7.2 10 10l6-2.8" } },
+    { tag: "path", attrs: { d: "M10 10v7.4" } },
   ],
   documents: [
     { tag: "path", attrs: { d: "M6 3h6l3 3v11a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" } },

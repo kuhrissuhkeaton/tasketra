@@ -1,9 +1,10 @@
 import { useEffect, useState, useRef, Fragment } from "react";
 import { useParams, useSearchParams, useNavigate, useLocation, Link } from "react-router-dom";
-import { api, ApiError, type Project, type Task, type Stakeholder, type Decision, type Issue, type Risk, type Assumption, type Dependency, type ChangeRequest, type Lesson, type TodayData, type WeeklyReport, type BudgetData, type FeedItem, type TrashItem, type ProjectMember, type Meeting, type MeetingActionItem, type ProjectDocument, type StorageUsage, type RoadmapItem, type RoadmapItemType, type QualityItem } from "../lib/api";
+import { api, ApiError, type Project, type Task, type Stakeholder, type Decision, type Issue, type Risk, type Assumption, type Dependency, type ChangeRequest, type Lesson, type TodayData, type WeeklyReport, type BudgetData, type FeedItem, type TrashItem, type ProjectMember, type Meeting, type MeetingActionItem, type ProjectDocument, type StorageUsage, type RoadmapItem, type RoadmapItemType, type QualityItem, type ProcurementItem } from "../lib/api";
 import { RoadmapTimeline, ROADMAP_TYPE_LABEL, ROADMAP_STATUS_LABEL, fmtRoadmapDate } from "../components/RoadmapTimeline";
 import { tasksToICS, downloadICS } from "../lib/ics";
 import { fmtDate, fmtDateTime, fmtLocalDate } from "../lib/format";
+import { capacityLevel, CAPACITY_LABEL, CAPACITY_PILL, type CapacityLevel } from "../lib/capacity";
 import { useAuth } from "../lib/auth-context";
 import { AppSidebar, NavGroup } from "../components/AppSidebar";
 import { NavIcon, type NavIconName } from "../components/NavIcon";
@@ -13,7 +14,7 @@ import { avatarColor, initials } from "../lib/avatar";
 import { TourOverlay, useProductTour } from "../components/ProductTour";
 
 
-export type Tab = "home" | "roadmap" | "tasks" | "raid" | "budget" | "meetings" | "documents" | "stakeholders" | "decisions" | "team" | "report" | "templates" | "export" | "connections" | "trash";
+export type Tab = "home" | "roadmap" | "tasks" | "raid" | "budget" | "meetings" | "documents" | "stakeholders" | "decisions" | "team" | "procurement" | "report" | "templates" | "export" | "connections" | "trash";
 
 function daysAgo(dateStr: string): number {
   return Math.max(0, Math.floor((Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24)));
@@ -154,6 +155,7 @@ const SECONDARY_NAV_GROUPS: { label: string; tabs: { id: Tab; label: string }[] 
     { id: "stakeholders", label: "Stakeholders" },
     { id: "decisions", label: "Decisions" },
     { id: "team", label: "Team" },
+    { id: "procurement", label: "Vendors" },
   ] },
   { label: "Documents & output", tabs: [
     { id: "documents", label: "Documents" },
@@ -265,6 +267,7 @@ export default function ProjectHome() {
         {tab === "stakeholders" && <StakeholdersTab projectId={id} />}
         {tab === "decisions" && <DecisionsTab projectId={id} />}
         {tab === "team" && <TeamTab projectId={id} isOwner={project?.is_owner ?? false} />}
+        {tab === "procurement" && <ProcurementTab projectId={id} />}
         {tab === "report" && <ReportTab projectId={id} projectName={project?.name || "Project"} />}
         {tab === "templates" && <TemplatesTab projectId={id} projectName={project?.name || "project"} />}
         {tab === "export" && <ExportTab projectId={id} projectName={project?.name || ""} />}
@@ -695,6 +698,7 @@ const TRASH_ENTITY_LABEL: Record<TrashItem["entity_type"], string> = {
   document: "Document",
   roadmap_item: "Roadmap item",
   quality_item: "Quality item",
+  procurement_item: "Vendor / procurement item",
 };
 
 function TrashTab({ projectId }: { projectId: string }) {
@@ -2358,6 +2362,283 @@ function QualityTab({ projectId }: { projectId: string }) {
     </div>
   );
 }
+const PROCUREMENT_CATEGORY_LABEL: Record<ProcurementItem["category"], string> = {
+  vendor: "Vendor",
+  contract: "Contract",
+  purchase_order: "Purchase order",
+};
+
+const PROCUREMENT_STATUS_LABEL: Record<ProcurementItem["status"], string> = {
+  requested: "Requested",
+  in_progress: "Sourcing",
+  active: "Active",
+  completed: "Completed",
+  cancelled: "Cancelled",
+};
+
+function ProcurementTab({ projectId }: { projectId: string }) {
+  const confirmDialog = useConfirm();
+  const [items, setItems] = useState<ProcurementItem[]>([]);
+  const [vendorName, setVendorName] = useState("");
+  const [description, setDescription] = useState("");
+  const [category, setCategory] = useState<ProcurementItem["category"]>("vendor");
+  const [owner, setOwner] = useState("");
+  const [newStatus, setNewStatus] = useState<ProcurementItem["status"]>("requested");
+  const [cost, setCost] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [view, setView] = useState<"list" | "board">("list");
+  const [dragOverStatus, setDragOverStatus] = useState<ProcurementItem["status"] | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editVendorName, setEditVendorName] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editCategory, setEditCategory] = useState<ProcurementItem["category"]>("vendor");
+  const [editOwner, setEditOwner] = useState("");
+  const [editCost, setEditCost] = useState("");
+  const [editStartDate, setEditStartDate] = useState("");
+  const [editEndDate, setEditEndDate] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  async function load() {
+    setLoading(true);
+    const { procurementItems } = await api.listProcurement(projectId);
+    setItems(procurementItems);
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    load();
+  }, [projectId]);
+
+  async function addItem(e: React.FormEvent) {
+    e.preventDefault();
+    if (!vendorName.trim()) return;
+    setError("");
+    try {
+      await api.createProcurement(
+        projectId, vendorName.trim(), description || undefined, category, owner || undefined,
+        newStatus, cost.trim() ? Number(cost) : null, startDate || undefined, endDate || undefined,
+      );
+      setVendorName("");
+      setDescription("");
+      setCategory("vendor");
+      setOwner("");
+      setNewStatus("requested");
+      setCost("");
+      setStartDate("");
+      setEndDate("");
+      load();
+    } catch (err: any) {
+      setError(err.message || "Couldn't log that vendor.");
+    }
+  }
+
+  async function setStatus(id: string, status: ProcurementItem["status"]) {
+    await api.updateProcurement(id, { status });
+    load();
+  }
+
+  function onDropOnColumn(e: React.DragEvent, status: ProcurementItem["status"]) {
+    e.preventDefault();
+    setDragOverStatus(null);
+    const itemId = e.dataTransfer.getData("text/plain");
+    if (itemId) setStatus(itemId, status);
+  }
+
+  function startEdit(p: ProcurementItem) {
+    setEditingId(p.id);
+    setEditVendorName(p.vendor_name);
+    setEditDescription(p.description || "");
+    setEditCategory(p.category);
+    setEditOwner(p.owner_name || "");
+    setEditCost(p.cost === null ? "" : String(p.cost));
+    setEditStartDate(p.start_date || "");
+    setEditEndDate(p.end_date || "");
+  }
+
+  async function saveEdit(id: string) {
+    if (!editVendorName.trim()) return;
+    await api.updateProcurement(id, {
+      vendor_name: editVendorName.trim(),
+      description: editDescription || undefined,
+      category: editCategory,
+      owner_name: editOwner || undefined,
+      cost: editCost.trim() ? Number(editCost) : null,
+      start_date: editStartDate || undefined,
+      end_date: editEndDate || undefined,
+    } as any);
+    setEditingId(null);
+    load();
+  }
+
+  async function removeItem(id: string, label: string) {
+    if (!(await confirmDialog(`Delete "${label}"? You can restore it from Trash.`))) return;
+    await api.deleteProcurement(id);
+    load();
+  }
+
+  if (loading) return <div className="skel-loading-block"><div className="skel skel-text" style={{ width: "45%" }} /><div className="skel skel-text" style={{ width: "80%" }} /><div className="skel skel-text" style={{ width: "60%", marginBottom: 0 }} /></div>;
+
+  return (
+    <div>
+      <p className="muted" style={{ marginBottom: 16, maxWidth: 640 }}>
+        Who you're buying from or contracting with, what it costs, and where it stands -- tracked
+        the same way as the rest of RAID, since "do we have an agreement with this vendor" is a
+        different question from "is this task done."
+      </p>
+      <form className="stacked-form" onSubmit={addItem}>
+        <label>Vendor or contract</label>
+        <input placeholder="Who are you buying from, or what's the agreement?" value={vendorName} onChange={(e) => setVendorName(e.target.value)} />
+        <label>Description (optional)</label>
+        <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
+        <div className="inline-form" style={{ marginTop: 8, marginBottom: 0 }}>
+          <select value={category} onChange={(e) => setCategory(e.target.value as ProcurementItem["category"])}>
+            {Object.entries(PROCUREMENT_CATEGORY_LABEL).map(([value, label]) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
+          </select>
+          <input placeholder="Owner (optional)" value={owner} onChange={(e) => setOwner(e.target.value)} />
+          <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as ProcurementItem["status"])} title="Status">
+            {Object.entries(PROCUREMENT_STATUS_LABEL).map(([value, label]) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
+          </select>
+        </div>
+        <div className="inline-form" style={{ marginTop: 8, marginBottom: 0 }}>
+          <input type="number" step="0.01" placeholder="Cost (optional)" value={cost} onChange={(e) => setCost(e.target.value)} style={{ maxWidth: 140 }} />
+          <input type="date" title="Start date (optional)" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+          <input type="date" title="End date (optional)" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+          <button className="btn btn-primary">Log vendor</button>
+        </div>
+      </form>
+      {error && <p className="form-error">{error}</p>}
+
+      <div className="inline-form" style={{ marginBottom: 16 }}>
+        <button
+          className={view === "list" ? "btn btn-primary" : "btn btn-ghost"}
+          type="button"
+          onClick={() => setView("list")}
+        >
+          List
+        </button>
+        <button
+          className={view === "board" ? "btn btn-primary" : "btn btn-ghost"}
+          type="button"
+          onClick={() => setView("board")}
+        >
+          Board
+        </button>
+      </div>
+
+      {view === "board" ? (
+        <div className="kanban-board">
+          {(Object.keys(PROCUREMENT_STATUS_LABEL) as ProcurementItem["status"][]).map((status) => (
+            <div
+              key={status}
+              className={dragOverStatus === status ? "kanban-column kanban-column-over" : "kanban-column"}
+              onDragOver={(e) => { e.preventDefault(); setDragOverStatus(status); }}
+              onDragLeave={() => setDragOverStatus(null)}
+              onDrop={(e) => onDropOnColumn(e, status)}
+            >
+              <div className="kanban-column-head">
+                {PROCUREMENT_STATUS_LABEL[status]}
+                <span className="kanban-column-count">{items.filter((p) => p.status === status).length}</span>
+              </div>
+              {items.filter((p) => p.status === status).map((p) => (
+                <div
+                  key={p.id}
+                  className="kanban-card"
+                  draggable
+                  onDragStart={(e) => e.dataTransfer.setData("text/plain", p.id)}
+                >
+                  <span className="pill pill-navy" style={{ marginBottom: 6, display: "inline-block" }}>
+                    {PROCUREMENT_CATEGORY_LABEL[p.category]}
+                  </span>
+                  <div>{p.vendor_name}</div>
+                  <div className="muted">{p.owner_name || "unassigned"}{p.cost !== null ? ` -- ${fmtMoney(p.cost)}` : ""}</div>
+                </div>
+              ))}
+              {items.filter((p) => p.status === status).length === 0 && (
+                <div className="muted kanban-empty">Drop vendors here</div>
+              )}
+            </div>
+          ))}
+        </div>
+      ) : (
+      <ResizableTable id="procurement-vendors">
+        <thead>
+          <tr><th>Vendor / contract</th><th>Category</th><th>Owner</th><th>Cost</th><th>Dates</th><th>Status</th><th></th></tr>
+        </thead>
+        <tbody>
+          {items.map((p) => (
+            editingId === p.id ? (
+              <tr key={p.id}>
+                <td>
+                  <input value={editVendorName} onChange={(e) => setEditVendorName(e.target.value)} style={{ marginBottom: 4 }} />
+                  <textarea value={editDescription} onChange={(e) => setEditDescription(e.target.value)} rows={2} placeholder="Description" />
+                </td>
+                <td>
+                  <select value={editCategory} onChange={(e) => setEditCategory(e.target.value as ProcurementItem["category"])}>
+                    {Object.entries(PROCUREMENT_CATEGORY_LABEL).map(([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
+                  </select>
+                </td>
+                <td><input value={editOwner} onChange={(e) => setEditOwner(e.target.value)} /></td>
+                <td><input type="number" step="0.01" value={editCost} onChange={(e) => setEditCost(e.target.value)} style={{ maxWidth: 100 }} /></td>
+                <td>
+                  <input type="date" title="Start date" value={editStartDate} onChange={(e) => setEditStartDate(e.target.value)} style={{ marginBottom: 4 }} />
+                  <input type="date" title="End date" value={editEndDate} onChange={(e) => setEditEndDate(e.target.value)} />
+                </td>
+                <td className="muted">{PROCUREMENT_STATUS_LABEL[p.status]}</td>
+                <td className="row-actions">
+                  <button className="btn btn-primary" type="button" onClick={() => saveEdit(p.id)}>Save</button>
+                  <button className="btn btn-ghost" type="button" onClick={() => setEditingId(null)}>Cancel</button>
+                </td>
+              </tr>
+            ) : (
+              <tr key={p.id}>
+                <td>
+                  {p.vendor_name}
+                  {p.description && <div className="muted">{p.description}</div>}
+                </td>
+                <td><span className="pill pill-navy">{PROCUREMENT_CATEGORY_LABEL[p.category]}</span></td>
+                <td>{p.owner_name || "--"}</td>
+                <td>{p.cost !== null ? fmtMoney(p.cost) : "--"}</td>
+                <td className="muted">
+                  {p.start_date || p.end_date
+                    ? `${p.start_date ? fmtLocalDate(p.start_date) : "?"} -- ${p.end_date ? fmtLocalDate(p.end_date) : "?"}`
+                    : "--"}
+                </td>
+                <td>
+                  <select
+                    className={`status-select status-select-${p.status}`}
+                    value={p.status}
+                    onChange={(e) => setStatus(p.id, e.target.value as ProcurementItem["status"])}
+                  >
+                    {Object.entries(PROCUREMENT_STATUS_LABEL).map(([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
+                  </select>
+                </td>
+                <td className="row-actions">
+                  <button className="btn-link" type="button" onClick={() => startEdit(p)}>Edit</button>
+                  <button className="btn-link btn-link-danger" type="button" onClick={() => removeItem(p.id, p.vendor_name)}>Delete</button>
+                </td>
+              </tr>
+            )
+          ))}
+          {items.length === 0 && (
+            <tr><td colSpan={7} className="muted">No vendors or contracts logged yet. Add one above when you're sourcing or have an agreement in place.</td></tr>
+          )}
+        </tbody>
+      </ResizableTable>
+      )}
+    </div>
+  );
+}
+
 function BudgetTab({ projectId }: { projectId: string }) {
   const [data, setData] = useState<BudgetData | null>(null);
   const [bacInput, setBacInput] = useState("");
@@ -3729,17 +4010,18 @@ type WorkloadRow = {
   open: number;
   blocked: number;
   overdue: number;
+  capacity: CapacityLevel;
 };
 
 function computeWorkload(tasks: Task[]): WorkloadRow[] {
   const todayStr = new Date().toISOString().slice(0, 10);
-  const byOwner = new Map<string, WorkloadRow>();
-  let unassigned: WorkloadRow | null = null;
+  const byOwner = new Map<string, Omit<WorkloadRow, "capacity">>();
+  let unassigned: Omit<WorkloadRow, "capacity"> | null = null;
 
   for (const t of tasks) {
     if (t.status === "done") continue; // capacity is about what's still on someone's plate
     const key = (t.owner_name || "").trim();
-    let row: WorkloadRow;
+    let row: Omit<WorkloadRow, "capacity">;
     if (!key) {
       unassigned = unassigned || { owner: "Unassigned", open: 0, blocked: 0, overdue: 0 };
       row = unassigned;
@@ -3752,8 +4034,17 @@ function computeWorkload(tasks: Task[]): WorkloadRow[] {
     if (t.due_date && t.due_date.slice(0, 10) < todayStr) row.overdue += 1;
   }
 
-  const rows = [...byOwner.values()].sort((a, b) => b.open - a.open);
-  return unassigned ? [...rows, unassigned] : rows;
+  const withCapacity = (r: Omit<WorkloadRow, "capacity">): WorkloadRow => ({
+    ...r,
+    capacity: capacityLevel(r.open, r.blocked, r.overdue),
+  });
+
+  const rows = [...byOwner.values()].map(withCapacity).sort((a, b) => {
+    const order: Record<CapacityLevel, number> = { overloaded: 0, busy: 1, ok: 2 };
+    if (order[a.capacity] !== order[b.capacity]) return order[a.capacity] - order[b.capacity];
+    return b.open - a.open;
+  });
+  return unassigned ? [...rows, withCapacity(unassigned)] : rows;
 }
 
 function TeamTab({ projectId, isOwner }: { projectId: string; isOwner: boolean }) {
@@ -3976,10 +4267,12 @@ function TeamTab({ projectId, isOwner }: { projectId: string; isOwner: boolean }
         <p className="settings-card-label">Workload</p>
         <p className="muted" style={{ marginBottom: 12, fontSize: 13 }}>
           Grouped by the Owner field on each open task -- as clean as what's typed in, not tied to accounts.
+          Capacity is a lightweight signal from open, blocked, and overdue counts, not hours -- overloaded
+          means someone's plate looks heavier than what they can realistically move this week.
         </p>
         <ResizableTable id="team-workload">
           <thead>
-            <tr><th>Owner</th><th>Open tasks</th><th>Blocked</th><th>Overdue</th></tr>
+            <tr><th>Owner</th><th>Open tasks</th><th>Blocked</th><th>Overdue</th><th>Capacity</th></tr>
           </thead>
           <tbody>
             {workload.map((w) => (
@@ -3988,10 +4281,11 @@ function TeamTab({ projectId, isOwner }: { projectId: string; isOwner: boolean }
                 <td>{w.open}</td>
                 <td>{w.blocked > 0 ? <span className="pill pill-red">{w.blocked}</span> : "--"}</td>
                 <td>{w.overdue > 0 ? <span className="pill pill-red">{w.overdue}</span> : <span className="pill pill-green">0</span>}</td>
+                <td><span className={`pill ${CAPACITY_PILL[w.capacity]}`}>{CAPACITY_LABEL[w.capacity]}</span></td>
               </tr>
             ))}
             {workload.length === 0 && (
-              <tr><td colSpan={4} className="muted">No open tasks to show workload for.</td></tr>
+              <tr><td colSpan={5} className="muted">No open tasks to show workload for.</td></tr>
             )}
           </tbody>
         </ResizableTable>

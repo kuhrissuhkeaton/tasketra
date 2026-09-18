@@ -310,10 +310,10 @@ textarea { resize: vertical; }
 }
 .status-select:hover { filter: brightness(0.97); }
 .status-select:focus { box-shadow: 0 0 0 3px rgba(207, 234, 70, 0.4); }
-.status-select-not_started { background-color: var(--surface-muted); color: var(--slate); }
+.status-select-not_started, .status-select-requested, .status-select-cancelled { background-color: var(--surface-muted); color: var(--slate); }
 .status-select-in_progress, .status-select-monitoring, .status-select-unconfirmed, .status-select-proposed { background-color: var(--tag-tan); color: #6B4A1C; }
 .status-select-blocked, .status-select-open, .status-select-invalidated, .status-select-rejected, .status-select-failed { background-color: var(--red-border); color: var(--red); }
-.status-select-done, .status-select-resolved, .status-select-confirmed, .status-select-approved, .status-select-implemented, .status-select-passed { background-color: var(--tag-sage); color: #3D5F24; }
+.status-select-done, .status-select-resolved, .status-select-confirmed, .status-select-approved, .status-select-implemented, .status-select-passed, .status-select-active, .status-select-completed { background-color: var(--tag-sage); color: #3D5F24; }
 
 /* --- Table --- */
 .table { width: 100%; border-collapse: collapse; background: var(--cream); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow-sm); }

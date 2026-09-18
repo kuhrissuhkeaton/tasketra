@@ -46,6 +46,8 @@ export default withSentry(async (req: Request) => {
     SELECT 'roadmap_item' AS entity_type, id, title, deleted_at FROM roadmap_items WHERE project_id = ${projectId} AND deleted_at IS NOT NULL
     UNION ALL
     SELECT 'quality_item' AS entity_type, id, title, deleted_at FROM quality_items WHERE project_id = ${projectId} AND deleted_at IS NOT NULL
+    UNION ALL
+    SELECT 'procurement_item' AS entity_type, id, vendor_name AS title, deleted_at FROM procurement_items WHERE project_id = ${projectId} AND deleted_at IS NOT NULL
     ORDER BY deleted_at DESC
   `;
 

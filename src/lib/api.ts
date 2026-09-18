@@ -205,7 +205,7 @@ export type FeedItem = {
 };
 
 export type TrashItem = {
-  entity_type: "task" | "issue" | "risk" | "stakeholder" | "decision" | "assumption" | "dependency" | "change_request" | "lesson" | "meeting" | "document" | "roadmap_item" | "quality_item";
+  entity_type: "task" | "issue" | "risk" | "stakeholder" | "decision" | "assumption" | "dependency" | "change_request" | "lesson" | "meeting" | "document" | "roadmap_item" | "quality_item" | "procurement_item";
   id: string;
   title: string;
   deleted_at: string;
@@ -304,6 +304,21 @@ export type QualityItem = {
   created_at: string;
   updated_at: string;
   resolved_at: string | null;
+};
+
+export type ProcurementItem = {
+  id: string;
+  vendor_name: string;
+  description: string | null;
+  category: "vendor" | "contract" | "purchase_order";
+  status: "requested" | "in_progress" | "active" | "completed" | "cancelled";
+  owner_name: string | null;
+  cost: number | null;
+  start_date: string | null;
+  end_date: string | null;
+  created_at: string;
+  updated_at: string;
+  closed_at: string | null;
 };
 
 export type TodayData = {
@@ -501,7 +516,7 @@ export const api = {
       task: "/tasks", issue: "/issues", risk: "/risks", stakeholder: "/stakeholders", decision: "/decisions",
       assumption: "/assumptions", dependency: "/dependencies",
       change_request: "/change-requests", lesson: "/lessons", meeting: "/meetings", document: "/documents",
-      roadmap_item: "/roadmap", quality_item: "/quality",
+      roadmap_item: "/roadmap", quality_item: "/quality", procurement_item: "/procurement",
     };
     return request<{ ok: true }>(path[entityType], { method: "PATCH", body: JSON.stringify({ id, restore: true }) });
   },
@@ -620,6 +635,24 @@ export const api = {
       method: "PATCH", body: JSON.stringify({ id, ...patch, ownerName: patch.owner_name }),
     }),
   deleteQuality: (id: string) => request<{ ok: true }>(`/quality?id=${id}`, { method: "DELETE" }),
+
+  listProcurement: (projectId: string) => request<{ procurementItems: ProcurementItem[] }>(`/procurement?projectId=${projectId}`),
+  createProcurement: (
+    projectId: string, vendorName: string, description?: string, category?: ProcurementItem["category"],
+    ownerName?: string, status?: ProcurementItem["status"], cost?: number | null, startDate?: string, endDate?: string,
+  ) =>
+    request<{ procurementItem: ProcurementItem }>("/procurement", {
+      method: "POST", body: JSON.stringify({ projectId, vendorName, description, category, ownerName, status, cost, startDate, endDate }),
+    }),
+  updateProcurement: (id: string, patch: Partial<Pick<ProcurementItem, "status" | "vendor_name" | "description" | "category" | "owner_name" | "cost" | "start_date" | "end_date">>) =>
+    request<{ procurementItem: ProcurementItem }>("/procurement", {
+      method: "PATCH",
+      body: JSON.stringify({
+        id, ...patch, vendorName: patch.vendor_name, ownerName: patch.owner_name,
+        startDate: patch.start_date, endDate: patch.end_date,
+      }),
+    }),
+  deleteProcurement: (id: string) => request<{ ok: true }>(`/procurement?id=${id}`, { method: "DELETE" }),
 
   listMembers: (projectId: string) =>
     request<{ owner: { id: string; email: string }; members: ProjectMember[] }>(`/members?projectId=${projectId}`),

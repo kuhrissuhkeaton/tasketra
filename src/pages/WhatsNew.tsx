@@ -9,6 +9,12 @@ type ChangeEntry = { version: string; date: string; title: string; body: string 
 // they can do.
 const CHANGES: ChangeEntry[] = [
   {
+    version: "v61",
+    date: "September 2026",
+    title: "Vendor tracking and a capacity read on your team",
+    body: "There's a new Vendors tab under People & decisions for procurement -- log a vendor, contract, or purchase order with a category, owner, cost, and start/end dates, and track it from requested through active to completed, the same list/board pattern as the rest of RAID. Team's Workload table now shows a Capacity column too, reading each owner's open, blocked, and overdue tasks into an On track / Busy / Overloaded signal -- no hour estimates, just a faster read on who's underwater.",
+  },
+  {
     version: "v60",
     date: "September 2026",
     title: "Quality tracking, risk-to-issue, and a contingency reserve",
