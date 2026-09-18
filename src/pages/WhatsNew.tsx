@@ -9,6 +9,12 @@ type ChangeEntry = { version: string; date: string; title: string; body: string 
 // they can do.
 const CHANGES: ChangeEntry[] = [
   {
+    version: "v59",
+    date: "September 2026",
+    title: "Click a chart item to edit it",
+    body: "Clicking a bar or milestone on the Roadmap chart now jumps straight to that item in the list below and opens it for editing, so you no longer have to scroll down and hunt for the matching row.",
+  },
+  {
     version: "v58",
     date: "September 2026",
     title: "A clearer roadmap",

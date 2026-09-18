@@ -93,7 +93,13 @@ function packLanes(items: RoadmapItem[], pxPerDay: number): { item: RoadmapItem;
   return placements;
 }
 
-export function RoadmapTimeline({ items }: { items: RoadmapItem[] }) {
+export function RoadmapTimeline({
+  items,
+  onSelect,
+}: {
+  items: RoadmapItem[];
+  onSelect?: (item: RoadmapItem) => void;
+}) {
   const dated = items.filter((i) => i.start_date);
   const undated = items.filter((i) => !i.start_date);
   const swimlanes = Array.from(new Set(items.map((i) => i.swimlane))).sort();
@@ -200,7 +206,8 @@ export function RoadmapTimeline({ items }: { items: RoadmapItem[] }) {
                       <div
                         key={item.id}
                         className="roadmap-marker-wrap"
-                        style={{ left: startOffset * pxPerDay - 6, top }}
+                        style={{ left: startOffset * pxPerDay - 6, top, cursor: onSelect ? "pointer" : undefined }}
+                        onClick={onSelect ? () => onSelect(item) : undefined}
                       >
                         <div
                           className={`roadmap-marker gantt-bar-${item.status}`}
@@ -220,8 +227,9 @@ export function RoadmapTimeline({ items }: { items: RoadmapItem[] }) {
                     <div
                       key={item.id}
                       className={`roadmap-bar gantt-bar-${item.status}`}
-                      style={{ left, width, top, borderLeftColor: typeColor }}
+                      style={{ left, width, top, borderLeftColor: typeColor, cursor: onSelect ? "pointer" : undefined }}
                       title={`${ROADMAP_TYPE_LABEL[item.type]}: ${item.title} (${fmtRoadmapDate(item.start_date)} → ${fmtRoadmapDate(item.end_date)})`}
+                      onClick={onSelect ? () => onSelect(item) : undefined}
                     >
                       <span className="roadmap-bar-label">{item.title}</span>
                     </div>

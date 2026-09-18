@@ -1,4 +1,4 @@
-import { useEffect, useState, Fragment } from "react";
+import { useEffect, useState, useRef, Fragment } from "react";
 import { useParams, useSearchParams, useNavigate, useLocation, Link } from "react-router-dom";
 import { api, ApiError, type Project, type Task, type Stakeholder, type Decision, type Issue, type Risk, type Assumption, type Dependency, type ChangeRequest, type Lesson, type TodayData, type WeeklyReport, type BudgetData, type FeedItem, type TrashItem, type ProjectMember, type Meeting, type MeetingActionItem, type ProjectDocument, type StorageUsage, type RoadmapItem, type RoadmapItemType } from "../lib/api";
 import { RoadmapTimeline, ROADMAP_TYPE_LABEL, ROADMAP_STATUS_LABEL, fmtRoadmapDate } from "../components/RoadmapTimeline";
@@ -2290,6 +2290,7 @@ function RoadmapTab({ projectId, isOwner }: { projectId: string; isOwner: boolea
   const [project, setProject] = useState<Project | null>(null);
   const [shareBusy, setShareBusy] = useState(false);
   const [copied, setCopied] = useState(false);
+  const rowRefs = useRef<Map<string, HTMLTableRowElement>>(new Map());
 
   async function load() {
     setLoading(true);
@@ -2337,6 +2338,18 @@ function RoadmapTab({ projectId, isOwner }: { projectId: string; isOwner: boolea
     setEditEnd(item.end_date || "");
     setEditStatus(item.status);
     setEditDescription(item.description || "");
+  }
+
+  // Clicking a bar/marker in the chart jumps straight to that item's row in
+  // the table below and opens its edit form -- the chart itself stays
+  // read-only (no drag-to-reschedule), this just closes the gap between
+  // "I can see it on the timeline" and "I have to go hunt for it in the
+  // table to actually edit it."
+  function selectFromChart(item: RoadmapItem) {
+    startEdit(item);
+    requestAnimationFrame(() => {
+      rowRefs.current.get(item.id)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
   }
 
   async function saveEdit(id: string) {
@@ -2442,7 +2455,7 @@ function RoadmapTab({ projectId, isOwner }: { projectId: string; isOwner: boolea
       {error && <p className="form-error">{error}</p>}
 
       <div style={{ marginTop: 28 }}>
-        <RoadmapTimeline items={items} />
+        <RoadmapTimeline items={items} onSelect={selectFromChart} />
       </div>
 
       <div style={{ marginTop: 28 }}>
@@ -2453,7 +2466,7 @@ function RoadmapTab({ projectId, isOwner }: { projectId: string; isOwner: boolea
         <tbody>
           {items.map((item) => (
             <Fragment key={item.id}>
-              <tr>
+              <tr ref={(el) => { if (el) rowRefs.current.set(item.id, el); else rowRefs.current.delete(item.id); }}>
                 <td>{item.title}</td>
                 <td><span className="pill pill-navy">{ROADMAP_TYPE_LABEL[item.type]}</span></td>
                 <td className="muted">{item.swimlane}</td>
