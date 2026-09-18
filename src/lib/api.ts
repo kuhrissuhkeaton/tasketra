@@ -77,6 +77,9 @@ export type Project = {
   roadmap_share_token?: string | null;
   archived?: boolean;
   deleted_at?: string | null;
+  closure_checklist?: Record<string, boolean>;
+  closure_notes?: string | null;
+  closed_at?: string | null;
 };
 
 export type ProjectMember = {
@@ -205,7 +208,7 @@ export type FeedItem = {
 };
 
 export type TrashItem = {
-  entity_type: "task" | "issue" | "risk" | "stakeholder" | "decision" | "assumption" | "dependency" | "change_request" | "lesson" | "meeting" | "document" | "roadmap_item" | "quality_item" | "procurement_item";
+  entity_type: "task" | "issue" | "risk" | "stakeholder" | "decision" | "assumption" | "dependency" | "change_request" | "lesson" | "meeting" | "document" | "roadmap_item" | "quality_item" | "procurement_item" | "comm_plan_item" | "compliance_item";
   id: string;
   title: string;
   deleted_at: string;
@@ -321,6 +324,31 @@ export type ProcurementItem = {
   closed_at: string | null;
 };
 
+export type CommPlanItem = {
+  id: string;
+  audience: string;
+  topic: string;
+  frequency: "daily" | "weekly" | "biweekly" | "monthly" | "milestone" | "as_needed";
+  channel: "email" | "meeting" | "chat" | "report" | "other";
+  owner_name: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ComplianceItem = {
+  id: string;
+  title: string;
+  description: string | null;
+  category: "regulatory" | "policy" | "standard" | "contractual";
+  status: "not_started" | "in_progress" | "compliant" | "non_compliant";
+  owner_name: string | null;
+  due_date: string | null;
+  created_at: string;
+  updated_at: string;
+  resolved_at: string | null;
+};
+
 export type TodayData = {
   blockedTasks: { id: string; title: string; owner_name: string | null; due_date: string | null; updated_at: string }[];
   staleTasks: { id: string; title: string; status: Task["status"]; owner_name: string | null; updated_at: string }[];
@@ -405,11 +433,18 @@ export const api = {
   createProject: (name: string, description?: string, seedExample?: boolean) =>
     request<{ project: Project }>("/projects", { method: "POST", body: JSON.stringify({ name, description, seedExample }) }),
   getProject: (id: string) => request<{ project: Project }>(`/project?id=${id}`),
-  updateProject: (id: string, patch: { name?: string; description?: string; ccb_enabled?: boolean }) =>
+  updateProject: (id: string, patch: {
+    name?: string; description?: string; ccb_enabled?: boolean;
+    closureChecklist?: Record<string, boolean>; closureNotes?: string;
+  }) =>
     request<{ project: Project }>("/project", { method: "PATCH", body: JSON.stringify({ id, ...patch }) }),
   deleteProject: (id: string) => request<{ ok: true }>(`/project?id=${id}`, { method: "DELETE" }),
   restoreProject: (id: string) =>
     request<{ project: Project }>("/project", { method: "PATCH", body: JSON.stringify({ id, restore: true }) }),
+  setProjectClosed: (id: string, closed: boolean) =>
+    request<{ project: Project }>("/project", {
+      method: "PATCH", body: JSON.stringify(closed ? { id, closeProject: true } : { id, reopenProject: true }),
+    }),
 
   listStakeholders: (projectId: string) =>
     request<{ stakeholders: Stakeholder[] }>(`/stakeholders?projectId=${projectId}`),
@@ -517,6 +552,7 @@ export const api = {
       assumption: "/assumptions", dependency: "/dependencies",
       change_request: "/change-requests", lesson: "/lessons", meeting: "/meetings", document: "/documents",
       roadmap_item: "/roadmap", quality_item: "/quality", procurement_item: "/procurement",
+      comm_plan_item: "/communications", compliance_item: "/compliance",
     };
     return request<{ ok: true }>(path[entityType], { method: "PATCH", body: JSON.stringify({ id, restore: true }) });
   },
@@ -653,6 +689,34 @@ export const api = {
       }),
     }),
   deleteProcurement: (id: string) => request<{ ok: true }>(`/procurement?id=${id}`, { method: "DELETE" }),
+
+  listCommPlan: (projectId: string) => request<{ commPlanItems: CommPlanItem[] }>(`/communications?projectId=${projectId}`),
+  createCommPlanItem: (
+    projectId: string, audience: string, topic: string, frequency?: CommPlanItem["frequency"],
+    channel?: CommPlanItem["channel"], ownerName?: string, notes?: string,
+  ) =>
+    request<{ commPlanItem: CommPlanItem }>("/communications", {
+      method: "POST", body: JSON.stringify({ projectId, audience, topic, frequency, channel, ownerName, notes }),
+    }),
+  updateCommPlanItem: (id: string, patch: Partial<Pick<CommPlanItem, "audience" | "topic" | "frequency" | "channel" | "owner_name" | "notes">>) =>
+    request<{ commPlanItem: CommPlanItem }>("/communications", {
+      method: "PATCH", body: JSON.stringify({ id, ...patch, ownerName: patch.owner_name }),
+    }),
+  deleteCommPlanItem: (id: string) => request<{ ok: true }>(`/communications?id=${id}`, { method: "DELETE" }),
+
+  listCompliance: (projectId: string) => request<{ complianceItems: ComplianceItem[] }>(`/compliance?projectId=${projectId}`),
+  createCompliance: (
+    projectId: string, title: string, description?: string, category?: ComplianceItem["category"],
+    ownerName?: string, status?: ComplianceItem["status"], dueDate?: string,
+  ) =>
+    request<{ complianceItem: ComplianceItem }>("/compliance", {
+      method: "POST", body: JSON.stringify({ projectId, title, description, category, ownerName, status, dueDate }),
+    }),
+  updateCompliance: (id: string, patch: Partial<Pick<ComplianceItem, "status" | "title" | "description" | "category" | "owner_name" | "due_date">>) =>
+    request<{ complianceItem: ComplianceItem }>("/compliance", {
+      method: "PATCH", body: JSON.stringify({ id, ...patch, ownerName: patch.owner_name, dueDate: patch.due_date }),
+    }),
+  deleteCompliance: (id: string) => request<{ ok: true }>(`/compliance?id=${id}`, { method: "DELETE" }),
 
   listMembers: (projectId: string) =>
     request<{ owner: { id: string; email: string }; members: ProjectMember[] }>(`/members?projectId=${projectId}`),

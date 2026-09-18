@@ -312,8 +312,8 @@ textarea { resize: vertical; }
 .status-select:focus { box-shadow: 0 0 0 3px rgba(207, 234, 70, 0.4); }
 .status-select-not_started, .status-select-requested, .status-select-cancelled { background-color: var(--surface-muted); color: var(--slate); }
 .status-select-in_progress, .status-select-monitoring, .status-select-unconfirmed, .status-select-proposed { background-color: var(--tag-tan); color: #6B4A1C; }
-.status-select-blocked, .status-select-open, .status-select-invalidated, .status-select-rejected, .status-select-failed { background-color: var(--red-border); color: var(--red); }
-.status-select-done, .status-select-resolved, .status-select-confirmed, .status-select-approved, .status-select-implemented, .status-select-passed, .status-select-active, .status-select-completed { background-color: var(--tag-sage); color: #3D5F24; }
+.status-select-blocked, .status-select-open, .status-select-invalidated, .status-select-rejected, .status-select-failed, .status-select-non_compliant { background-color: var(--red-border); color: var(--red); }
+.status-select-done, .status-select-resolved, .status-select-confirmed, .status-select-approved, .status-select-implemented, .status-select-passed, .status-select-active, .status-select-completed, .status-select-compliant { background-color: var(--tag-sage); color: #3D5F24; }
 
 /* --- Table --- */
 .table { width: 100%; border-collapse: collapse; background: var(--cream); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow-sm); }
@@ -567,6 +567,42 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
 .kanban-card .muted { font-size: 12px; color: var(--slate-2); font-weight: 500; margin-top: 6px; }
 .kanban-empty { font-size: 13px; padding: 4px 0; color: var(--slate-2); }
 .kanban-parent { font-size: 11px; margin-bottom: 2px; }
+
+/* --- Risk probability x impact matrix --- */
+.risk-matrix-wrap { display: flex; align-items: stretch; gap: 8px; }
+.risk-matrix-axis-y {
+  writing-mode: vertical-rl; transform: rotate(180deg); font-size: 12px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.05em; color: var(--slate); display: flex;
+  align-items: center; justify-content: center; padding: 4px 0; flex-shrink: 0;
+}
+.risk-matrix { display: grid; grid-template-columns: 90px repeat(3, minmax(140px, 1fr)); gap: 6px; flex: 1; }
+.risk-matrix-corner { }
+.risk-matrix-col-label, .risk-matrix-row-label {
+  font-size: 12px; font-weight: 700; color: var(--slate); display: flex; align-items: center; justify-content: center;
+  text-transform: uppercase; letter-spacing: 0.04em;
+}
+.risk-matrix-row-label { justify-content: flex-end; padding-right: 6px; text-align: right; }
+.risk-matrix-cell {
+  border-radius: var(--radius-sm); padding: 10px; min-height: 84px; border: 1px solid var(--border);
+  display: flex; flex-direction: column; gap: 4px;
+}
+.risk-matrix-cell-low { background: var(--tag-sage); border-color: transparent; }
+.risk-matrix-cell-medium { background: var(--tag-tan); border-color: transparent; }
+.risk-matrix-cell-high { background: var(--red-border); border-color: transparent; }
+.risk-matrix-cell-count { font-size: 20px; font-weight: 700; color: var(--navy); font-variant-numeric: tabular-nums; }
+.risk-matrix-chip {
+  font-size: 12px; color: var(--navy); background: rgba(255, 255, 255, 0.55); border-radius: 4px; padding: 2px 6px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.risk-matrix-axis-x {
+  text-align: center; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--slate); margin-top: 8px; margin-left: 98px;
+}
+@media (max-width: 700px) {
+  .risk-matrix { grid-template-columns: 56px repeat(3, minmax(80px, 1fr)); }
+  .risk-matrix-chip { display: none; }
+  .risk-matrix-axis-x { margin-left: 64px; }
+}
 
 /* --- WBS / task hierarchy --- */
 .wbs-cell { display: inline-block; }

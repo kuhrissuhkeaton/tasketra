@@ -9,6 +9,12 @@ type ChangeEntry = { version: string; date: string; title: string; body: string 
 // they can do.
 const CHANGES: ChangeEntry[] = [
   {
+    version: "v62",
+    date: "September 2026",
+    title: "Closure, a risk matrix, a comms plan, and compliance tracking",
+    body: "Four more PMI-aligned additions, all shipping together. Risks now has a Matrix view alongside List and Board -- a probability-by-impact grid so exposure is visible at a glance instead of read off a table. There's a new Comms plan tab (under People & decisions) for who needs what information, how often, and by what channel. RAID gets a sixth tab, Compliance, for regulatory, policy, standard, or contractual obligations, tracked the same way as Quality. And a new Closure tab (under Documents & output) gives every project a lightweight close-out checklist, an at-a-glance read on what's still open, and a way to mark a project closed (and reopen it any time) without archiving or locking anything.",
+  },
+  {
     version: "v61",
     date: "September 2026",
     title: "Vendor tracking and a capacity read on your team",

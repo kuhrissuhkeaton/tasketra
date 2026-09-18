@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, Fragment } from "react";
 import { useParams, useSearchParams, useNavigate, useLocation, Link } from "react-router-dom";
-import { api, ApiError, type Project, type Task, type Stakeholder, type Decision, type Issue, type Risk, type Assumption, type Dependency, type ChangeRequest, type Lesson, type TodayData, type WeeklyReport, type BudgetData, type FeedItem, type TrashItem, type ProjectMember, type Meeting, type MeetingActionItem, type ProjectDocument, type StorageUsage, type RoadmapItem, type RoadmapItemType, type QualityItem, type ProcurementItem } from "../lib/api";
+import { api, ApiError, type Project, type Task, type Stakeholder, type Decision, type Issue, type Risk, type Assumption, type Dependency, type ChangeRequest, type Lesson, type TodayData, type WeeklyReport, type BudgetData, type FeedItem, type TrashItem, type ProjectMember, type Meeting, type MeetingActionItem, type ProjectDocument, type StorageUsage, type RoadmapItem, type RoadmapItemType, type QualityItem, type ProcurementItem, type CommPlanItem, type ComplianceItem } from "../lib/api";
 import { RoadmapTimeline, ROADMAP_TYPE_LABEL, ROADMAP_STATUS_LABEL, fmtRoadmapDate } from "../components/RoadmapTimeline";
 import { tasksToICS, downloadICS } from "../lib/ics";
 import { fmtDate, fmtDateTime, fmtLocalDate } from "../lib/format";
@@ -14,7 +14,7 @@ import { avatarColor, initials } from "../lib/avatar";
 import { TourOverlay, useProductTour } from "../components/ProductTour";
 
 
-export type Tab = "home" | "roadmap" | "tasks" | "raid" | "budget" | "meetings" | "documents" | "stakeholders" | "decisions" | "team" | "procurement" | "report" | "templates" | "export" | "connections" | "trash";
+export type Tab = "home" | "roadmap" | "tasks" | "raid" | "budget" | "meetings" | "documents" | "stakeholders" | "decisions" | "team" | "procurement" | "comms" | "closure" | "report" | "templates" | "export" | "connections" | "trash";
 
 function daysAgo(dateStr: string): number {
   return Math.max(0, Math.floor((Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24)));
@@ -156,6 +156,7 @@ const SECONDARY_NAV_GROUPS: { label: string; tabs: { id: Tab; label: string }[] 
     { id: "decisions", label: "Decisions" },
     { id: "team", label: "Team" },
     { id: "procurement", label: "Vendors" },
+    { id: "comms", label: "Comms plan" },
   ] },
   { label: "Documents & output", tabs: [
     { id: "documents", label: "Documents" },
@@ -163,6 +164,7 @@ const SECONDARY_NAV_GROUPS: { label: string; tabs: { id: Tab; label: string }[] 
     { id: "templates", label: "Templates" },
     { id: "export", label: "Export" },
     { id: "connections", label: "Connections" },
+    { id: "closure", label: "Closure" },
   ] },
 ];
 
@@ -268,6 +270,8 @@ export default function ProjectHome() {
         {tab === "decisions" && <DecisionsTab projectId={id} />}
         {tab === "team" && <TeamTab projectId={id} isOwner={project?.is_owner ?? false} />}
         {tab === "procurement" && <ProcurementTab projectId={id} />}
+        {tab === "comms" && <CommsPlanTab projectId={id} />}
+        {tab === "closure" && <ClosureTab projectId={id} />}
         {tab === "report" && <ReportTab projectId={id} projectName={project?.name || "Project"} />}
         {tab === "templates" && <TemplatesTab projectId={id} projectName={project?.name || "project"} />}
         {tab === "export" && <ExportTab projectId={id} projectName={project?.name || ""} />}
@@ -699,6 +703,8 @@ const TRASH_ENTITY_LABEL: Record<TrashItem["entity_type"], string> = {
   roadmap_item: "Roadmap item",
   quality_item: "Quality item",
   procurement_item: "Vendor / procurement item",
+  comm_plan_item: "Comms plan item",
+  compliance_item: "Compliance item",
 };
 
 function TrashTab({ projectId }: { projectId: string }) {
@@ -1129,13 +1135,14 @@ function TimelineView({ tasks }: { tasks: Task[] }) {
 }
 
 function RaidTab({ projectId }: { projectId: string }) {
-  const [view, setView] = useState<"issues" | "risks" | "assumptions" | "dependencies" | "quality">("issues");
+  const [view, setView] = useState<"issues" | "risks" | "assumptions" | "dependencies" | "quality" | "compliance">("issues");
   const VIEWS: { id: typeof view; label: string }[] = [
     { id: "issues", label: "Issues" },
     { id: "risks", label: "Risks" },
     { id: "assumptions", label: "Assumptions" },
     { id: "dependencies", label: "Dependencies" },
     { id: "quality", label: "Quality" },
+    { id: "compliance", label: "Compliance" },
   ];
   return (
     <div>
@@ -1156,6 +1163,7 @@ function RaidTab({ projectId }: { projectId: string }) {
       {view === "assumptions" && <AssumptionsTab projectId={projectId} />}
       {view === "dependencies" && <DependenciesTab projectId={projectId} />}
       {view === "quality" && <QualityTab projectId={projectId} />}
+      {view === "compliance" && <ComplianceTab projectId={projectId} />}
     </div>
   );
 }
@@ -1403,7 +1411,7 @@ function RisksTab({ projectId }: { projectId: string }) {
   const [mitigation, setMitigation] = useState("");
   const [owner, setOwner] = useState("");
   const [newStatus, setNewStatus] = useState<Risk["status"]>("open");
-  const [view, setView] = useState<"list" | "board">("list");
+  const [view, setView] = useState<"list" | "board" | "matrix">("list");
   const [dragOverStatus, setDragOverStatus] = useState<Risk["status"] | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
@@ -1549,9 +1557,51 @@ function RisksTab({ projectId }: { projectId: string }) {
         >
           Board
         </button>
+        <button
+          className={view === "matrix" ? "btn btn-primary" : "btn btn-ghost"}
+          type="button"
+          onClick={() => setView("matrix")}
+        >
+          Matrix
+        </button>
       </div>
 
-      {view === "board" ? (
+      {view === "matrix" ? (
+        <div>
+          <p className="muted" style={{ marginBottom: 12, fontSize: 13 }}>
+            Open and monitoring risks only, placed by probability and impact. Exposure (low/medium/high)
+            is the same read used everywhere else in RAID.
+          </p>
+          <div className="risk-matrix-wrap">
+            <div className="risk-matrix-axis-y">Impact</div>
+            <div className="risk-matrix">
+              <div className="risk-matrix-corner" />
+              {(["low", "medium", "high"] as Risk["probability"][]).map((p) => (
+                <div key={p} className="risk-matrix-col-label">{LEVEL_LABEL[p]}</div>
+              ))}
+              {(["high", "medium", "low"] as Risk["impact"][]).map((impact) => (
+                <Fragment key={impact}>
+                  <div className="risk-matrix-row-label">{LEVEL_LABEL[impact]}</div>
+                  {(["low", "medium", "high"] as Risk["probability"][]).map((probability) => {
+                    const cellRisks = risks.filter((r) => r.status !== "resolved" && r.probability === probability && r.impact === impact);
+                    const exposure = riskExposure(probability, impact);
+                    return (
+                      <div key={probability} className={`risk-matrix-cell risk-matrix-cell-${exposure}`}>
+                        <div className="risk-matrix-cell-count">{cellRisks.length}</div>
+                        {cellRisks.slice(0, 4).map((r) => (
+                          <div key={r.id} className="risk-matrix-chip" title={r.title}>{r.title}</div>
+                        ))}
+                        {cellRisks.length > 4 && <div className="risk-matrix-chip muted">+{cellRisks.length - 4} more</div>}
+                      </div>
+                    );
+                  })}
+                </Fragment>
+              ))}
+            </div>
+          </div>
+          <div className="risk-matrix-axis-x">Probability</div>
+        </div>
+      ) : view === "board" ? (
         <div className="kanban-board">
           {(Object.keys(RISK_STATUS_LABEL) as Risk["status"][]).map((status) => (
             <div
@@ -2362,6 +2412,437 @@ function QualityTab({ projectId }: { projectId: string }) {
     </div>
   );
 }
+const COMPLIANCE_CATEGORY_LABEL: Record<ComplianceItem["category"], string> = {
+  regulatory: "Regulatory",
+  policy: "Policy",
+  standard: "Standard",
+  contractual: "Contractual",
+};
+
+const COMPLIANCE_STATUS_LABEL: Record<ComplianceItem["status"], string> = {
+  not_started: "Not started",
+  in_progress: "In progress",
+  compliant: "Compliant",
+  non_compliant: "Non-compliant",
+};
+
+function ComplianceTab({ projectId }: { projectId: string }) {
+  const confirmDialog = useConfirm();
+  const [items, setItems] = useState<ComplianceItem[]>([]);
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [category, setCategory] = useState<ComplianceItem["category"]>("regulatory");
+  const [owner, setOwner] = useState("");
+  const [newStatus, setNewStatus] = useState<ComplianceItem["status"]>("not_started");
+  const [dueDate, setDueDate] = useState("");
+  const [view, setView] = useState<"list" | "board">("list");
+  const [dragOverStatus, setDragOverStatus] = useState<ComplianceItem["status"] | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editCategory, setEditCategory] = useState<ComplianceItem["category"]>("regulatory");
+  const [editOwner, setEditOwner] = useState("");
+  const [editDueDate, setEditDueDate] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  async function load() {
+    setLoading(true);
+    const { complianceItems } = await api.listCompliance(projectId);
+    setItems(complianceItems);
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    load();
+  }, [projectId]);
+
+  async function addItem(e: React.FormEvent) {
+    e.preventDefault();
+    if (!title.trim()) return;
+    setError("");
+    try {
+      await api.createCompliance(projectId, title.trim(), description || undefined, category, owner || undefined, newStatus, dueDate || undefined);
+      setTitle("");
+      setDescription("");
+      setCategory("regulatory");
+      setOwner("");
+      setNewStatus("not_started");
+      setDueDate("");
+      load();
+    } catch (err: any) {
+      setError(err.message || "Couldn't log that compliance item.");
+    }
+  }
+
+  async function setStatus(id: string, status: ComplianceItem["status"]) {
+    await api.updateCompliance(id, { status });
+    load();
+  }
+
+  function onDropOnColumn(e: React.DragEvent, status: ComplianceItem["status"]) {
+    e.preventDefault();
+    setDragOverStatus(null);
+    const itemId = e.dataTransfer.getData("text/plain");
+    if (itemId) setStatus(itemId, status);
+  }
+
+  function startEdit(c: ComplianceItem) {
+    setEditingId(c.id);
+    setEditTitle(c.title);
+    setEditDescription(c.description || "");
+    setEditCategory(c.category);
+    setEditOwner(c.owner_name || "");
+    setEditDueDate(c.due_date || "");
+  }
+
+  async function saveEdit(id: string) {
+    if (!editTitle.trim()) return;
+    await api.updateCompliance(id, {
+      title: editTitle.trim(), description: editDescription || undefined, category: editCategory,
+      owner_name: editOwner || undefined, due_date: editDueDate || undefined,
+    } as any);
+    setEditingId(null);
+    load();
+  }
+
+  async function removeItem(id: string, label: string) {
+    if (!(await confirmDialog(`Delete compliance item "${label}"? You can restore it from Trash.`))) return;
+    await api.deleteCompliance(id);
+    load();
+  }
+
+  if (loading) return <div className="skel-loading-block"><div className="skel skel-text" style={{ width: "45%" }} /><div className="skel skel-text" style={{ width: "80%" }} /><div className="skel skel-text" style={{ width: "60%", marginBottom: 0 }} /></div>;
+
+  return (
+    <div>
+      <p className="muted" style={{ marginBottom: 16, maxWidth: 640 }}>
+        Regulatory, policy, standard, or contractual obligations this project needs to satisfy --
+        tracked alongside the rest of RAID, since "are we compliant with this" is a different
+        question from "is this good enough" (Quality) or "is something broken" (Issues).
+      </p>
+      <form className="stacked-form" onSubmit={addItem}>
+        <label>Compliance item</label>
+        <input placeholder="What regulation, policy, or standard applies here?" value={title} onChange={(e) => setTitle(e.target.value)} />
+        <label>Description (optional)</label>
+        <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
+        <div className="inline-form" style={{ marginTop: 8, marginBottom: 0 }}>
+          <select value={category} onChange={(e) => setCategory(e.target.value as ComplianceItem["category"])}>
+            {Object.entries(COMPLIANCE_CATEGORY_LABEL).map(([value, label]) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
+          </select>
+          <input placeholder="Owner (optional)" value={owner} onChange={(e) => setOwner(e.target.value)} />
+          <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as ComplianceItem["status"])} title="Status">
+            {Object.entries(COMPLIANCE_STATUS_LABEL).map(([value, label]) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
+          </select>
+          <input type="date" title="Due date (optional)" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+          <button className="btn btn-primary">Log compliance item</button>
+        </div>
+      </form>
+      {error && <p className="form-error">{error}</p>}
+
+      <div className="inline-form" style={{ marginBottom: 16 }}>
+        <button
+          className={view === "list" ? "btn btn-primary" : "btn btn-ghost"}
+          type="button"
+          onClick={() => setView("list")}
+        >
+          List
+        </button>
+        <button
+          className={view === "board" ? "btn btn-primary" : "btn btn-ghost"}
+          type="button"
+          onClick={() => setView("board")}
+        >
+          Board
+        </button>
+      </div>
+
+      {view === "board" ? (
+        <div className="kanban-board">
+          {(Object.keys(COMPLIANCE_STATUS_LABEL) as ComplianceItem["status"][]).map((status) => (
+            <div
+              key={status}
+              className={dragOverStatus === status ? "kanban-column kanban-column-over" : "kanban-column"}
+              onDragOver={(e) => { e.preventDefault(); setDragOverStatus(status); }}
+              onDragLeave={() => setDragOverStatus(null)}
+              onDrop={(e) => onDropOnColumn(e, status)}
+            >
+              <div className="kanban-column-head">
+                {COMPLIANCE_STATUS_LABEL[status]}
+                <span className="kanban-column-count">{items.filter((c) => c.status === status).length}</span>
+              </div>
+              {items.filter((c) => c.status === status).map((c) => (
+                <div
+                  key={c.id}
+                  className="kanban-card"
+                  draggable
+                  onDragStart={(e) => e.dataTransfer.setData("text/plain", c.id)}
+                >
+                  <span className="pill pill-navy" style={{ marginBottom: 6, display: "inline-block" }}>
+                    {COMPLIANCE_CATEGORY_LABEL[c.category]}
+                  </span>
+                  <div>{c.title}</div>
+                  <div className="muted">{c.owner_name || "unassigned"}{c.due_date ? ` -- due ${fmtLocalDate(c.due_date)}` : ""}</div>
+                </div>
+              ))}
+              {items.filter((c) => c.status === status).length === 0 && (
+                <div className="muted kanban-empty">Drop compliance items here</div>
+              )}
+            </div>
+          ))}
+        </div>
+      ) : (
+      <ResizableTable id="raid-compliance">
+        <thead>
+          <tr><th>Compliance item</th><th>Category</th><th>Owner</th><th>Due</th><th>Status</th><th></th></tr>
+        </thead>
+        <tbody>
+          {items.map((c) => (
+            editingId === c.id ? (
+              <tr key={c.id}>
+                <td>
+                  <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} style={{ marginBottom: 4 }} />
+                  <textarea value={editDescription} onChange={(e) => setEditDescription(e.target.value)} rows={2} placeholder="Description" />
+                </td>
+                <td>
+                  <select value={editCategory} onChange={(e) => setEditCategory(e.target.value as ComplianceItem["category"])}>
+                    {Object.entries(COMPLIANCE_CATEGORY_LABEL).map(([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
+                  </select>
+                </td>
+                <td><input value={editOwner} onChange={(e) => setEditOwner(e.target.value)} /></td>
+                <td><input type="date" value={editDueDate} onChange={(e) => setEditDueDate(e.target.value)} /></td>
+                <td className="muted">{COMPLIANCE_STATUS_LABEL[c.status]}</td>
+                <td className="row-actions">
+                  <button className="btn btn-primary" type="button" onClick={() => saveEdit(c.id)}>Save</button>
+                  <button className="btn btn-ghost" type="button" onClick={() => setEditingId(null)}>Cancel</button>
+                </td>
+              </tr>
+            ) : (
+              <tr key={c.id}>
+                <td>
+                  {c.title}
+                  {c.description && <div className="muted">{c.description}</div>}
+                </td>
+                <td><span className="pill pill-navy">{COMPLIANCE_CATEGORY_LABEL[c.category]}</span></td>
+                <td>{c.owner_name || "--"}</td>
+                <td>{c.due_date ? fmtLocalDate(c.due_date) : "--"}</td>
+                <td>
+                  <select
+                    className={`status-select status-select-${c.status}`}
+                    value={c.status}
+                    onChange={(e) => setStatus(c.id, e.target.value as ComplianceItem["status"])}
+                  >
+                    {Object.entries(COMPLIANCE_STATUS_LABEL).map(([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
+                  </select>
+                </td>
+                <td className="row-actions">
+                  <button className="btn-link" type="button" onClick={() => startEdit(c)}>Edit</button>
+                  <button className="btn-link btn-link-danger" type="button" onClick={() => removeItem(c.id, c.title)}>Delete</button>
+                </td>
+              </tr>
+            )
+          ))}
+          {items.length === 0 && (
+            <tr><td colSpan={6} className="muted">No compliance items logged yet. Add a regulation, policy, or standard this project needs to satisfy.</td></tr>
+          )}
+        </tbody>
+      </ResizableTable>
+      )}
+    </div>
+  );
+}
+
+const FREQUENCY_LABEL: Record<CommPlanItem["frequency"], string> = {
+  daily: "Daily",
+  weekly: "Weekly",
+  biweekly: "Every 2 weeks",
+  monthly: "Monthly",
+  milestone: "At milestones",
+  as_needed: "As needed",
+};
+
+const CHANNEL_LABEL: Record<CommPlanItem["channel"], string> = {
+  email: "Email",
+  meeting: "Meeting",
+  chat: "Chat",
+  report: "Report",
+  other: "Other",
+};
+
+function CommsPlanTab({ projectId }: { projectId: string }) {
+  const confirmDialog = useConfirm();
+  const [items, setItems] = useState<CommPlanItem[]>([]);
+  const [audience, setAudience] = useState("");
+  const [topic, setTopic] = useState("");
+  const [frequency, setFrequency] = useState<CommPlanItem["frequency"]>("weekly");
+  const [channel, setChannel] = useState<CommPlanItem["channel"]>("email");
+  const [owner, setOwner] = useState("");
+  const [notes, setNotes] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editAudience, setEditAudience] = useState("");
+  const [editTopic, setEditTopic] = useState("");
+  const [editFrequency, setEditFrequency] = useState<CommPlanItem["frequency"]>("weekly");
+  const [editChannel, setEditChannel] = useState<CommPlanItem["channel"]>("email");
+  const [editOwner, setEditOwner] = useState("");
+  const [editNotes, setEditNotes] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  async function load() {
+    setLoading(true);
+    const { commPlanItems } = await api.listCommPlan(projectId);
+    setItems(commPlanItems);
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    load();
+  }, [projectId]);
+
+  async function addItem(e: React.FormEvent) {
+    e.preventDefault();
+    if (!audience.trim() || !topic.trim()) return;
+    setError("");
+    try {
+      await api.createCommPlanItem(projectId, audience.trim(), topic.trim(), frequency, channel, owner || undefined, notes || undefined);
+      setAudience("");
+      setTopic("");
+      setFrequency("weekly");
+      setChannel("email");
+      setOwner("");
+      setNotes("");
+      load();
+    } catch (err: any) {
+      setError(err.message || "Couldn't add that to the plan.");
+    }
+  }
+
+  function startEdit(item: CommPlanItem) {
+    setEditingId(item.id);
+    setEditAudience(item.audience);
+    setEditTopic(item.topic);
+    setEditFrequency(item.frequency);
+    setEditChannel(item.channel);
+    setEditOwner(item.owner_name || "");
+    setEditNotes(item.notes || "");
+  }
+
+  async function saveEdit(id: string) {
+    if (!editAudience.trim() || !editTopic.trim()) return;
+    await api.updateCommPlanItem(id, {
+      audience: editAudience.trim(), topic: editTopic.trim(), frequency: editFrequency, channel: editChannel,
+      owner_name: editOwner || undefined, notes: editNotes || undefined,
+    } as any);
+    setEditingId(null);
+    load();
+  }
+
+  async function removeItem(id: string, label: string) {
+    if (!(await confirmDialog(`Remove "${label}" from the communications plan? You can restore it from Trash.`))) return;
+    await api.deleteCommPlanItem(id);
+    load();
+  }
+
+  if (loading) return <div className="skel-loading-block"><div className="skel skel-text" style={{ width: "45%" }} /><div className="skel skel-text" style={{ width: "80%" }} /><div className="skel skel-text" style={{ width: "60%", marginBottom: 0 }} /></div>;
+
+  return (
+    <div>
+      <p className="muted" style={{ marginBottom: 16, maxWidth: 640 }}>
+        Who needs what information, how often, and by what channel -- a reference plan rather than
+        a tracked workflow, so entries don't have a status; edit or remove one when the arrangement
+        changes.
+      </p>
+      <form className="stacked-form" onSubmit={addItem}>
+        <label>Audience</label>
+        <input placeholder="Who needs this information? (a stakeholder, a group, the sponsor...)" value={audience} onChange={(e) => setAudience(e.target.value)} />
+        <label>What they need</label>
+        <input placeholder="Status update, budget summary, milestone report..." value={topic} onChange={(e) => setTopic(e.target.value)} />
+        <label>Notes (optional)</label>
+        <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
+        <div className="inline-form" style={{ marginTop: 8, marginBottom: 0 }}>
+          <select value={frequency} onChange={(e) => setFrequency(e.target.value as CommPlanItem["frequency"])}>
+            {Object.entries(FREQUENCY_LABEL).map(([value, label]) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
+          </select>
+          <select value={channel} onChange={(e) => setChannel(e.target.value as CommPlanItem["channel"])}>
+            {Object.entries(CHANNEL_LABEL).map(([value, label]) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
+          </select>
+          <input placeholder="Owner (optional)" value={owner} onChange={(e) => setOwner(e.target.value)} />
+          <button className="btn btn-primary">Add to plan</button>
+        </div>
+      </form>
+      {error && <p className="form-error">{error}</p>}
+
+      <ResizableTable id="comms-plan">
+        <thead>
+          <tr><th>Audience</th><th>What they need</th><th>Frequency</th><th>Channel</th><th>Owner</th><th></th></tr>
+        </thead>
+        <tbody>
+          {items.map((item) => (
+            editingId === item.id ? (
+              <tr key={item.id}>
+                <td><input value={editAudience} onChange={(e) => setEditAudience(e.target.value)} /></td>
+                <td>
+                  <input value={editTopic} onChange={(e) => setEditTopic(e.target.value)} style={{ marginBottom: 4 }} />
+                  <textarea value={editNotes} onChange={(e) => setEditNotes(e.target.value)} rows={2} placeholder="Notes" />
+                </td>
+                <td>
+                  <select value={editFrequency} onChange={(e) => setEditFrequency(e.target.value as CommPlanItem["frequency"])}>
+                    {Object.entries(FREQUENCY_LABEL).map(([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
+                  </select>
+                </td>
+                <td>
+                  <select value={editChannel} onChange={(e) => setEditChannel(e.target.value as CommPlanItem["channel"])}>
+                    {Object.entries(CHANNEL_LABEL).map(([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
+                  </select>
+                </td>
+                <td><input value={editOwner} onChange={(e) => setEditOwner(e.target.value)} /></td>
+                <td className="row-actions">
+                  <button className="btn btn-primary" type="button" onClick={() => saveEdit(item.id)}>Save</button>
+                  <button className="btn btn-ghost" type="button" onClick={() => setEditingId(null)}>Cancel</button>
+                </td>
+              </tr>
+            ) : (
+              <tr key={item.id}>
+                <td>{item.audience}</td>
+                <td>
+                  {item.topic}
+                  {item.notes && <div className="muted">{item.notes}</div>}
+                </td>
+                <td><span className="pill pill-navy">{FREQUENCY_LABEL[item.frequency]}</span></td>
+                <td>{CHANNEL_LABEL[item.channel]}</td>
+                <td>{item.owner_name || "--"}</td>
+                <td className="row-actions">
+                  <button className="btn-link" type="button" onClick={() => startEdit(item)}>Edit</button>
+                  <button className="btn-link btn-link-danger" type="button" onClick={() => removeItem(item.id, `${item.audience}: ${item.topic}`)}>Delete</button>
+                </td>
+              </tr>
+            )
+          ))}
+          {items.length === 0 && (
+            <tr><td colSpan={6} className="muted">No communications plan yet. Add a row for who needs to hear what, and how often.</td></tr>
+          )}
+        </tbody>
+      </ResizableTable>
+    </div>
+  );
+}
+
 const PROCUREMENT_CATEGORY_LABEL: Record<ProcurementItem["category"], string> = {
   vendor: "Vendor",
   contract: "Contract",
@@ -4303,6 +4784,145 @@ function TeamTab({ projectId, isOwner }: { projectId: string; isOwner: boolean }
             {deleting ? "Deleting..." : "Delete project"}
           </button>
         </div>
+      )}
+    </div>
+  );
+}
+
+const CLOSURE_CHECKLIST_ITEMS: { key: string; label: string }[] = [
+  { key: "finalLessons", label: "Final lessons learned captured" },
+  { key: "openItemsResolved", label: "Outstanding risks and issues resolved or explicitly accepted" },
+  { key: "budgetReconciled", label: "Budget reconciled against actuals" },
+  { key: "stakeholderSignoff", label: "Stakeholder sign-off obtained" },
+  { key: "documentsArchived", label: "Documents archived or handed off" },
+];
+
+function ClosureTab({ projectId }: { projectId: string }) {
+  const confirmDialog = useConfirm();
+  const [project, setProject] = useState<Project | null>(null);
+  const [openRisks, setOpenRisks] = useState(0);
+  const [openIssues, setOpenIssues] = useState(0);
+  const [checklist, setChecklist] = useState<Record<string, boolean>>({});
+  const [notes, setNotes] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [savedAt, setSavedAt] = useState<number | null>(null);
+  const [error, setError] = useState("");
+
+  async function load() {
+    setLoading(true);
+    const [{ project }, { risks }, { issues }] = await Promise.all([
+      api.getProject(projectId),
+      api.listRisks(projectId),
+      api.listIssues(projectId),
+    ]);
+    setProject(project);
+    setChecklist(project.closure_checklist || {});
+    setNotes(project.closure_notes || "");
+    setOpenRisks(risks.filter((r) => r.status !== "resolved").length);
+    setOpenIssues(issues.filter((i) => i.status !== "resolved").length);
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    load();
+  }, [projectId]);
+
+  async function toggleItem(key: string) {
+    const next = { ...checklist, [key]: !checklist[key] };
+    setChecklist(next);
+    setSaving(true);
+    setError("");
+    try {
+      await api.updateProject(projectId, { closureChecklist: next });
+      setSavedAt(Date.now());
+    } catch (err: any) {
+      setChecklist(checklist); // revert on failure
+      setError(err.message || "Couldn't save that.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveNotes() {
+    setSaving(true);
+    setError("");
+    try {
+      await api.updateProject(projectId, { closureNotes: notes });
+      setSavedAt(Date.now());
+    } catch (err: any) {
+      setError(err.message || "Couldn't save the notes.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function closeProject() {
+    if (!(await confirmDialog("Mark this project closed? You can reopen it any time -- this doesn't archive or delete anything, it's just a record of when the work wrapped up."))) return;
+    await api.setProjectClosed(projectId, true);
+    load();
+  }
+
+  async function reopenProject() {
+    await api.setProjectClosed(projectId, false);
+    load();
+  }
+
+  if (loading) return <div className="skel-loading-block"><div className="skel skel-text" style={{ width: "45%" }} /><div className="skel skel-text" style={{ width: "80%" }} /><div className="skel skel-text" style={{ width: "60%", marginBottom: 0 }} /></div>;
+
+  const checkedCount = CLOSURE_CHECKLIST_ITEMS.filter((item) => checklist[item.key]).length;
+
+  return (
+    <div className="settings-max">
+      {project?.closed_at ? (
+        <div className="settings-card" style={{ borderColor: "var(--success)" }}>
+          <p className="settings-card-label">Closed</p>
+          <p style={{ marginBottom: 12 }}>
+            This project was marked closed on {fmtDate(project.closed_at)}. Every tab, tool, and
+            record stays exactly as it was -- closing is just a status, not an archive or a lock.
+          </p>
+          <button className="btn btn-ghost" type="button" onClick={reopenProject}>Reopen project</button>
+        </div>
+      ) : (
+        <>
+          <div className="settings-card">
+            <p className="settings-card-label">Before you close</p>
+            <p className="muted" style={{ marginBottom: 12, fontSize: 13 }}>
+              A quick read on what's still open, not a blocker -- close whenever you're ready.
+            </p>
+            <div className="inline-form" style={{ marginBottom: 0 }}>
+              <span className={openRisks > 0 ? "pill pill-gold" : "pill pill-green"}>{openRisks} open {openRisks === 1 ? "risk" : "risks"}</span>
+              <span className={openIssues > 0 ? "pill pill-gold" : "pill pill-green"}>{openIssues} open {openIssues === 1 ? "issue" : "issues"}</span>
+            </div>
+          </div>
+
+          <div className="settings-card">
+            <p className="settings-card-label">Closure checklist ({checkedCount}/{CLOSURE_CHECKLIST_ITEMS.length})</p>
+            {CLOSURE_CHECKLIST_ITEMS.map((item) => (
+              <label key={item.key} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", marginBottom: 10 }}>
+                <input type="checkbox" checked={!!checklist[item.key]} onChange={() => toggleItem(item.key)} />
+                {item.label}
+              </label>
+            ))}
+          </div>
+
+          <div className="settings-card">
+            <p className="settings-card-label">Closure notes</p>
+            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} onBlur={saveNotes} rows={4} placeholder="Anything worth recording about how this project wrapped up..." />
+            {saving && <p className="muted" style={{ fontSize: 12, marginTop: 6 }}>Saving...</p>}
+            {!saving && savedAt && <p className="muted" style={{ fontSize: 12, marginTop: 6 }}>Saved.</p>}
+            {error && <p className="form-error">{error}</p>}
+          </div>
+
+          <div className="settings-card">
+            <p className="settings-card-label">Close out</p>
+            <p className="muted" style={{ marginBottom: 12 }}>
+              Marking a project closed is just a record of when the work wrapped up -- it doesn't
+              archive, lock, or delete anything, and you can reopen it any time.
+            </p>
+            <button className="btn btn-primary" type="button" onClick={closeProject}>Mark project closed</button>
+          </div>
+        </>
       )}
     </div>
   );

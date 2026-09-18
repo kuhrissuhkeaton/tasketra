@@ -21,6 +21,7 @@ export default withSentry(async (req: Request) => {
     const [project] = await database.sql`
       SELECT p.id, p.name, p.description, p.created_at, p.owner_id, p.webhook_enabled,
         p.ccb_enabled, p.archived, p.deleted_at, p.roadmap_share_enabled, p.roadmap_share_token,
+        p.closure_checklist, p.closure_notes, p.closed_at,
         (p.owner_id = ${userId}) AS is_owner
       FROM projects p
       WHERE p.id = ${id}
@@ -40,10 +41,25 @@ export default withSentry(async (req: Request) => {
     if (body.restore) {
       await database.sql`UPDATE projects SET archived = false, deleted_at = NULL WHERE id = ${id}`;
       const [project] = await database.sql`
-        SELECT id, name, description, created_at, owner_id, webhook_enabled, ccb_enabled, archived, deleted_at
+        SELECT id, name, description, created_at, owner_id, webhook_enabled, ccb_enabled, archived, deleted_at,
+          closure_checklist, closure_notes, closed_at
         FROM projects WHERE id = ${id}
       `;
       await logActivity(database, { projectId: id, entityType: "project", entityId: id, entityTitle: project.name, action: "restored" });
+      return json({ project });
+    }
+
+    // Closure is its own pair of explicit actions rather than an ordinary
+    // field update, same reasoning as restore above -- "close" and "reopen"
+    // are discrete events worth their own audit-log entries, not something
+    // that should also happen as a side effect of an unrelated field patch.
+    if (body.closeProject || body.reopenProject) {
+      const [project] = await database.sql`
+        UPDATE projects SET closed_at = ${body.closeProject ? new Date() : null} WHERE id = ${id}
+        RETURNING id, name, description, created_at, owner_id, webhook_enabled, ccb_enabled, archived, deleted_at,
+          closure_checklist, closure_notes, closed_at
+      `;
+      await logActivity(database, { projectId: id, entityType: "project", entityId: id, entityTitle: project.name, action: "updated", summary: body.closeProject ? "project marked closed" : "project reopened" });
       return json({ project });
     }
 
@@ -64,11 +80,18 @@ export default withSentry(async (req: Request) => {
     const hasWebhook = typeof body?.webhook_enabled === "boolean";
     const hasCcb = typeof body?.ccb_enabled === "boolean";
     const hasRoadmapShare = typeof body?.roadmap_share_enabled === "boolean";
+    // The frontend always sends the whole checklist object (a small fixed
+    // set of keys) rather than one key at a time, so this replaces it
+    // wholesale -- simpler than merging partial JSONB in SQL, and there's
+    // no concurrent-editor scenario here worth guarding against (closure is
+    // a one-person, one-sitting task in practice).
+    const hasClosureChecklist = body?.closureChecklist !== undefined && body?.closureChecklist !== null && typeof body.closureChecklist === "object";
+    const hasClosureNotes = typeof body?.closureNotes === "string";
 
     if (hasName && !body.name.trim()) {
       return json({ error: "Project name can't be empty." }, { status: 400 });
     }
-    if (!hasName && !hasDescription && !hasWebhook && !hasCcb && !hasRoadmapShare) {
+    if (!hasName && !hasDescription && !hasWebhook && !hasCcb && !hasRoadmapShare && !hasClosureChecklist && !hasClosureNotes) {
       return json({ error: "Nothing to update." }, { status: 400 });
     }
 
@@ -88,10 +111,12 @@ export default withSentry(async (req: Request) => {
         webhook_enabled = COALESCE(${hasWebhook ? body.webhook_enabled : null}, webhook_enabled),
         ccb_enabled = COALESCE(${hasCcb ? body.ccb_enabled : null}, ccb_enabled),
         roadmap_share_enabled = COALESCE(${hasRoadmapShare ? body.roadmap_share_enabled : null}, roadmap_share_enabled),
-        roadmap_share_token = COALESCE(${newShareToken}, roadmap_share_token)
+        roadmap_share_token = COALESCE(${newShareToken}, roadmap_share_token),
+        closure_checklist = CASE WHEN ${hasClosureChecklist} THEN ${hasClosureChecklist ? JSON.stringify(body.closureChecklist) : null}::jsonb ELSE closure_checklist END,
+        closure_notes = COALESCE(${hasClosureNotes ? body.closureNotes : null}, closure_notes)
       WHERE id = ${id}
       RETURNING id, name, description, created_at, owner_id, webhook_enabled, ccb_enabled, archived, deleted_at,
-        roadmap_share_enabled, roadmap_share_token
+        roadmap_share_enabled, roadmap_share_token, closure_checklist, closure_notes, closed_at
     `;
 
     if (hasName || hasDescription) {

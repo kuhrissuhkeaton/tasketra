@@ -29,6 +29,8 @@ export type NavIconName =
   | "decisions"
   | "team"
   | "procurement"
+  | "comms"
+  | "closure"
   | "documents"
   | "report"
   | "templates"
@@ -92,6 +94,15 @@ const SHAPES: Record<NavIconName, Shape[]> = {
     { tag: "path", attrs: { d: "M4 7.2 10 4l6 3.2v7a1 1 0 0 1-.6.9l-5 2.3a1 1 0 0 1-.8 0l-5-2.3A1 1 0 0 1 4 14.2Z" } },
     { tag: "path", attrs: { d: "M4 7.2 10 10l6-2.8" } },
     { tag: "path", attrs: { d: "M10 10v7.4" } },
+  ],
+  comms: [
+    { tag: "path", attrs: { d: "M4 8 4 12 11 15 11 5Z" } },
+    { tag: "path", attrs: { d: "M13.5 7 15.5 5.5" } },
+    { tag: "path", attrs: { d: "M13.5 13 15.5 14.5" } },
+  ],
+  closure: [
+    { tag: "circle", attrs: { cx: 10, cy: 10, r: 7 } },
+    { tag: "path", attrs: { d: "M6.5 10 9 12.5 13.5 7.5" } },
   ],
   documents: [
     { tag: "path", attrs: { d: "M6 3h6l3 3v11a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" } },
