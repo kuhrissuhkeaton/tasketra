@@ -74,6 +74,30 @@ function buildTaskRows(tasks: Task[]): { task: Task; depth: number }[] {
   return rows;
 }
 
+// Scrolls a just-arrived-at row into view and gives it a brief flash, used
+// when a tab is opened via a "jump to this item" link (e.g. clicking a
+// blocked task on Today's attention list) rather than by browsing here
+// directly. The ref map is keyed by item id and populated by both a row's
+// read state and its edit state (same key, different <tr>), so the jump
+// still finds the row after startEdit() swaps which one is rendered.
+function useRowHighlight() {
+  const rowRefs = useRef<Map<string, HTMLTableRowElement>>(new Map());
+  function setRowRef(id: string, el: HTMLTableRowElement | null) {
+    if (el) rowRefs.current.set(id, el);
+    else rowRefs.current.delete(id);
+  }
+  function jumpTo(id: string) {
+    requestAnimationFrame(() => {
+      const el = rowRefs.current.get(id);
+      if (!el) return;
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      el.classList.add("row-jump-highlight");
+      setTimeout(() => el.classList.remove("row-jump-highlight"), 1600);
+    });
+  }
+  return { setRowRef, jumpTo };
+}
+
 const STATUS_LABEL: Record<Task["status"], string> = {
   not_started: "Not started",
   in_progress: "In progress",
@@ -188,6 +212,7 @@ export default function ProjectHome() {
   const { id } = useParams<{ id: string }>();
   const [params, setParams] = useSearchParams();
   const tab = (params.get("tab") as Tab) || "home";
+  const highlightId = params.get("highlight");
   const [project, setProject] = useState<Project | null>(null);
   const { user } = useAuth();
   const location = useLocation();
@@ -277,10 +302,10 @@ export default function ProjectHome() {
 
         {tab === "home" && <HomeTab projectId={id} />}
         {tab === "roadmap" && <RoadmapTab projectId={id} isOwner={project?.is_owner ?? false} />}
-        {tab === "tasks" && <TasksTab projectId={id} projectName={project?.name || "Project"} />}
+        {tab === "tasks" && <TasksTab projectId={id} projectName={project?.name || "Project"} highlightId={tab === "tasks" ? highlightId : null} />}
         {tab === "okrs" && <OkrsTab projectId={id} />}
-        {tab === "issues" && <IssuesTab projectId={id} />}
-        {tab === "risks" && <RisksTab projectId={id} />}
+        {tab === "issues" && <IssuesTab projectId={id} highlightId={tab === "issues" ? highlightId : null} />}
+        {tab === "risks" && <RisksTab projectId={id} highlightId={tab === "risks" ? highlightId : null} />}
         {tab === "assumptions" && <AssumptionsTab projectId={id} />}
         {tab === "dependencies" && <DependenciesTab projectId={id} />}
         {tab === "quality" && <QualityTab projectId={id} />}
@@ -503,7 +528,14 @@ function TodayTab({ projectId }: { projectId: string }) {
             {data.blockedTasks.map((t) => (
               <li key={t.id} className="today-list-row">
                 <div>
-                  <strong>{t.title}</strong> -- {t.owner_name || "unassigned"}
+                  <button
+                    className="today-title-link"
+                    type="button"
+                    onClick={() => setParams({ tab: "tasks", highlight: t.id })}
+                  >
+                    {t.title}
+                  </button>
+                  {" -- "}{t.owner_name || "unassigned"}
                   <span className="muted"> -- blocked {daysAgo(t.updated_at)}d</span>
                 </div>
                 {reassignId === t.id ? (
@@ -546,7 +578,14 @@ function TodayTab({ projectId }: { projectId: string }) {
             {data.staleTasks.map((t) => (
               <li key={t.id} className="today-list-row">
                 <div>
-                  <strong>{t.title}</strong> -- {t.owner_name || "unassigned"}
+                  <button
+                    className="today-title-link"
+                    type="button"
+                    onClick={() => setParams({ tab: "tasks", highlight: t.id })}
+                  >
+                    {t.title}
+                  </button>
+                  {" -- "}{t.owner_name || "unassigned"}
                   <span className="muted"> -- untouched {daysAgo(t.updated_at)}d</span>
                 </div>
                 {reassignId === t.id ? (
@@ -611,7 +650,14 @@ function TodayTab({ projectId }: { projectId: string }) {
             {data.urgentIssues.map((i) => (
               <li key={i.id} className="today-list-row">
                 <div>
-                  <strong>{i.title}</strong> -- {i.owner_name || "unassigned"}
+                  <button
+                    className="today-title-link"
+                    type="button"
+                    onClick={() => setParams({ tab: "issues", highlight: i.id })}
+                  >
+                    {i.title}
+                  </button>
+                  {" -- "}{i.owner_name || "unassigned"}
                   <span className="muted"> -- {i.severity}</span>
                 </div>
                 {reassignId === i.id ? (
@@ -654,7 +700,14 @@ function TodayTab({ projectId }: { projectId: string }) {
             {data.urgentRisks.map((r) => (
               <li key={r.id} className="today-list-row">
                 <div>
-                  <strong>{r.title}</strong> -- {r.owner_name || "unassigned"}
+                  <button
+                    className="today-title-link"
+                    type="button"
+                    onClick={() => setParams({ tab: "risks", highlight: r.id })}
+                  >
+                    {r.title}
+                  </button>
+                  {" -- "}{r.owner_name || "unassigned"}
                   <span className="muted"> -- {r.probability} probability / {r.impact} impact</span>
                 </div>
                 {reassignId === r.id ? (
@@ -793,8 +846,10 @@ function TrashTab({ projectId }: { projectId: string }) {
   );
 }
 
-function TasksTab({ projectId, projectName }: { projectId: string; projectName: string }) {
+function TasksTab({ projectId, projectName, highlightId }: { projectId: string; projectName: string; highlightId?: string | null }) {
   const confirmDialog = useConfirm();
+  const { setRowRef, jumpTo } = useRowHighlight();
+  const [, setLocalParams] = useSearchParams();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [title, setTitle] = useState("");
   const [owner, setOwner] = useState("");
@@ -826,6 +881,20 @@ function TasksTab({ projectId, projectName }: { projectId: string; projectName: 
   useEffect(() => {
     load();
   }, [projectId]);
+
+  useEffect(() => {
+    if (!highlightId || loading) return;
+    const match = tasks.find((t) => t.id === highlightId);
+    if (!match) return;
+    if (view !== "list") setView("list");
+    startEdit(match);
+    jumpTo(highlightId);
+    setLocalParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete("highlight");
+      return next;
+    }, { replace: true });
+  }, [highlightId, loading, tasks]);
 
   async function addTask(e: React.FormEvent) {
     e.preventDefault();
@@ -955,7 +1024,7 @@ function TasksTab({ projectId, projectName }: { projectId: string; projectName: 
             {buildTaskRows(tasks).map(({ task: t, depth }) => (
               <Fragment key={t.id}>
                 {editingId === t.id ? (
-                  <tr>
+                  <tr ref={(el) => setRowRef(t.id, el)}>
                     <td style={{ paddingLeft: depth * 20 }}>
                       <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
                     </td>
@@ -971,7 +1040,7 @@ function TasksTab({ projectId, projectName }: { projectId: string; projectName: 
                     </td>
                   </tr>
                 ) : (
-                  <tr>
+                  <tr ref={(el) => setRowRef(t.id, el)}>
                     <td>
                       <span className="wbs-cell" style={{ paddingLeft: depth * 20 }}>
                         {depth > 0 && <span className="wbs-connector">&#8627;</span>}
@@ -1160,8 +1229,10 @@ function TimelineView({ tasks }: { tasks: Task[] }) {
   );
 }
 
-function IssuesTab({ projectId }: { projectId: string }) {
+function IssuesTab({ projectId, highlightId }: { projectId: string; highlightId?: string | null }) {
   const confirmDialog = useConfirm();
+  const { setRowRef, jumpTo } = useRowHighlight();
+  const [, setLocalParams] = useSearchParams();
   const [issues, setIssues] = useState<Issue[]>([]);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -1189,6 +1260,20 @@ function IssuesTab({ projectId }: { projectId: string }) {
   useEffect(() => {
     load();
   }, [projectId]);
+
+  useEffect(() => {
+    if (!highlightId || loading) return;
+    const match = issues.find((i) => i.id === highlightId);
+    if (!match) return;
+    if (view !== "list") setView("list");
+    startEdit(match);
+    jumpTo(highlightId);
+    setLocalParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete("highlight");
+      return next;
+    }, { replace: true });
+  }, [highlightId, loading, issues]);
 
   async function addIssue(e: React.FormEvent) {
     e.preventDefault();
@@ -1330,7 +1415,7 @@ function IssuesTab({ projectId }: { projectId: string }) {
         <tbody>
           {issues.map((i) => (
             editingId === i.id ? (
-              <tr key={i.id}>
+              <tr key={i.id} ref={(el) => setRowRef(i.id, el)}>
                 <td>
                   <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} style={{ marginBottom: 4 }} />
                   <textarea value={editDescription} onChange={(e) => setEditDescription(e.target.value)} rows={2} placeholder="Description" />
@@ -1356,7 +1441,7 @@ function IssuesTab({ projectId }: { projectId: string }) {
                 </td>
               </tr>
             ) : (
-              <tr key={i.id}>
+              <tr key={i.id} ref={(el) => setRowRef(i.id, el)}>
                 <td>
                   {i.title}
                   {i.status === "resolved" && i.resolution && (
@@ -1393,8 +1478,10 @@ function IssuesTab({ projectId }: { projectId: string }) {
   );
 }
 
-function RisksTab({ projectId }: { projectId: string }) {
+function RisksTab({ projectId, highlightId }: { projectId: string; highlightId?: string | null }) {
   const confirmDialog = useConfirm();
+  const { setRowRef, jumpTo } = useRowHighlight();
+  const [, setLocalParams] = useSearchParams();
   const [risks, setRisks] = useState<Risk[]>([]);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -1425,6 +1512,20 @@ function RisksTab({ projectId }: { projectId: string }) {
   useEffect(() => {
     load();
   }, [projectId]);
+
+  useEffect(() => {
+    if (!highlightId || loading) return;
+    const match = risks.find((r) => r.id === highlightId);
+    if (!match) return;
+    if (view !== "list") setView("list");
+    startEdit(match);
+    jumpTo(highlightId);
+    setLocalParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete("highlight");
+      return next;
+    }, { replace: true });
+  }, [highlightId, loading, risks]);
 
   async function addRisk(e: React.FormEvent) {
     e.preventDefault();
@@ -1643,7 +1744,7 @@ function RisksTab({ projectId }: { projectId: string }) {
         <tbody>
           {risks.map((r) => (
             editingId === r.id ? (
-              <tr key={r.id}>
+              <tr key={r.id} ref={(el) => setRowRef(r.id, el)}>
                 <td>
                   <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} style={{ marginBottom: 4 }} />
                   <textarea value={editDescription} onChange={(e) => setEditDescription(e.target.value)} rows={2} placeholder="Description" style={{ marginBottom: 4 }} />
@@ -1669,7 +1770,7 @@ function RisksTab({ projectId }: { projectId: string }) {
                 </td>
               </tr>
             ) : (
-              <tr key={r.id}>
+              <tr key={r.id} ref={(el) => setRowRef(r.id, el)}>
                 <td>
                   {r.title}
                   {r.mitigation && <div className="muted">Mitigation: {r.mitigation}</div>}

@@ -168,6 +168,17 @@ h1 { font-size: 36px; }
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* Brief background flash on a table row you've just been sent to (e.g.
+   clicking a "needs attention" item on Today jumps to its row on the
+   Tasks/Issues/Risks tab). Fades on its own; the row's own state (its
+   edit form opens at the same time) is the lasting signal, this just
+   closes the "did it actually take me anywhere" gap for a couple seconds. */
+@keyframes row-jump-flash {
+  from { background-color: var(--tint); }
+  to { background-color: transparent; }
+}
+.row-jump-highlight { animation: row-jump-flash 1.6s ease-out; }
+
 /* --- Forms --- */
 label { display: block; font-size: 13px; font-weight: 600; margin: 12px 0 4px; color: var(--navy); }
 input, textarea, select {
@@ -264,6 +275,17 @@ textarea { resize: vertical; }
 .btn-link:hover { color: var(--navy); text-decoration: underline; }
 .btn-link-danger { color: var(--red); }
 .btn-link-danger:hover { color: var(--red); }
+
+/* Today's "needs attention" cards used to show a task/issue/risk title as
+   plain bold text -- a dead end with no way to get to the thing itself.
+   This keeps the same bold look but makes it a real jump to that item's
+   row on its own tab (see .row-jump-highlight in the keyframes above). */
+.today-title-link {
+  background: none; border: none; padding: 0; margin: 0; font: inherit; font-weight: 700;
+  color: inherit; cursor: pointer; text-align: left; font-family: inherit;
+  transition: color var(--ease);
+}
+.today-title-link:hover { text-decoration: underline; }
 
 /* --- Tabs --- */
 .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 24px; overflow-x: auto; }
