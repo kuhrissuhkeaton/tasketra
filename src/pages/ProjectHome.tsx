@@ -1,7 +1,8 @@
 import { useEffect, useState, useRef, Fragment } from "react";
 import { useParams, useSearchParams, useNavigate, useLocation, Link } from "react-router-dom";
-import { api, ApiError, type Project, type Task, type Stakeholder, type Decision, type Issue, type Risk, type Assumption, type Dependency, type ChangeRequest, type Lesson, type TodayData, type WeeklyReport, type BudgetData, type FeedItem, type TrashItem, type ProjectMember, type Meeting, type MeetingActionItem, type ProjectDocument, type StorageUsage, type RoadmapItem, type RoadmapItemType, type QualityItem, type ProcurementItem, type CommPlanItem, type ComplianceItem, type Objective, type KeyResult } from "../lib/api";
-import { RoadmapTimeline, ROADMAP_TYPE_LABEL, ROADMAP_STATUS_LABEL, fmtRoadmapDate } from "../components/RoadmapTimeline";
+import { api, ApiError, type Project, type Task, type Stakeholder, type Decision, type Issue, type Risk, type Assumption, type Dependency, type ChangeRequest, type Lesson, type TodayData, type WeeklyReport, type BudgetData, type FeedItem, type TrashItem, type ProjectMember, type Meeting, type MeetingActionItem, type ProjectDocument, type StorageUsage, type RoadmapItem, type RoadmapItemType, type QualityItem, type ProcurementItem, type CommPlanItem, type ComplianceItem, type Objective, type KeyResult, type RiskTaskLink, type IssueTaskLink } from "../lib/api";
+import { RoadmapTimeline, ROADMAP_TYPE_LABEL, ROADMAP_STATUS_LABEL, ROADMAP_TYPE_COLOR, fmtRoadmapDate } from "../components/RoadmapTimeline";
+import { Drawer } from "../components/ItemDrawer";
 import { tasksToICS, downloadICS } from "../lib/ics";
 import { fmtDate, fmtDateTime, fmtLocalDate } from "../lib/format";
 import { capacityLevel, CAPACITY_LABEL, CAPACITY_PILL, type CapacityLevel } from "../lib/capacity";
@@ -103,13 +104,6 @@ const STATUS_LABEL: Record<Task["status"], string> = {
   in_progress: "In progress",
   blocked: "Blocked",
   done: "Done",
-};
-
-const TASK_STATUS_PILL: Record<Task["status"], string> = {
-  not_started: "pill-navy",
-  in_progress: "pill-gold",
-  blocked: "pill-red",
-  done: "pill-green",
 };
 
 const ISSUE_STATUS_LABEL: Record<Issue["status"], string> = {
@@ -851,6 +845,8 @@ function TasksTab({ projectId, projectName, highlightId }: { projectId: string; 
   const { setRowRef, jumpTo } = useRowHighlight();
   const [, setLocalParams] = useSearchParams();
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [riskLinks, setRiskLinks] = useState<RiskTaskLink[]>([]);
+  const [issueLinks, setIssueLinks] = useState<IssueTaskLink[]>([]);
   const [title, setTitle] = useState("");
   const [owner, setOwner] = useState("");
   const [start, setStart] = useState("");
@@ -863,18 +859,24 @@ function TasksTab({ projectId, projectName, highlightId }: { projectId: string; 
   const [subOwner, setSubOwner] = useState("");
   const [subStart, setSubStart] = useState("");
   const [subDue, setSubDue] = useState("");
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [drawerTaskId, setDrawerTaskId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editOwner, setEditOwner] = useState("");
   const [editStart, setEditStart] = useState("");
   const [editDue, setEditDue] = useState("");
+  const [editDescription, setEditDescription] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   async function load() {
     setLoading(true);
-    const { tasks } = await api.listTasks(projectId);
+    const [{ tasks }, { riskLinks, issueLinks }] = await Promise.all([
+      api.listTasks(projectId),
+      api.listRaidTaskLinks(projectId),
+    ]);
     setTasks(tasks);
+    setRiskLinks(riskLinks);
+    setIssueLinks(issueLinks);
     setLoading(false);
   }
 
@@ -887,7 +889,7 @@ function TasksTab({ projectId, projectName, highlightId }: { projectId: string; 
     const match = tasks.find((t) => t.id === highlightId);
     if (!match) return;
     if (view !== "list") setView("list");
-    startEdit(match);
+    openDrawer(match);
     jumpTo(highlightId);
     setLocalParams((prev) => {
       const next = new URLSearchParams(prev);
@@ -937,21 +939,27 @@ function TasksTab({ projectId, projectName, highlightId }: { projectId: string; 
     if (taskId) setStatus(taskId, status);
   }
 
-  function startEdit(t: Task) {
-    setEditingId(t.id);
+  function openDrawer(t: Task) {
+    setDrawerTaskId(t.id);
     setEditTitle(t.title);
     setEditOwner(t.owner_name || "");
     setEditStart(t.start_date || "");
     setEditDue(t.due_date || "");
+    setEditDescription(t.description || "");
   }
 
-  async function saveEdit(id: string) {
-    if (!editTitle.trim()) return;
-    await api.updateTask(id, {
+  function closeDrawer() {
+    setDrawerTaskId(null);
+  }
+
+  async function saveDrawer() {
+    if (!drawerTaskId || !editTitle.trim()) return;
+    await api.updateTask(drawerTaskId, {
       title: editTitle.trim(), owner_name: editOwner || undefined,
       start_date: editStart || undefined, due_date: editDue || undefined,
+      description: editDescription || undefined,
     } as any);
-    setEditingId(null);
+    closeDrawer();
     load();
   }
 
@@ -962,6 +970,25 @@ function TasksTab({ projectId, projectName, highlightId }: { projectId: string; 
   }
 
   const taskById = new Map(tasks.map((t) => [t.id, t]));
+  const drawerTask = drawerTaskId ? taskById.get(drawerTaskId) || null : null;
+  // A task's "blocked by" list -- risks/issues that named this task via the
+  // Blocks-tasks control in their own drawer. Linking only happens from the
+  // risk/issue side; this is a read-only (but unlinkable) reflection of it.
+  const blockers = drawerTaskId
+    ? [
+        ...riskLinks.filter((l) => l.task_id === drawerTaskId).map((l) => ({ linkId: l.id, kind: "risk" as const, title: l.risk_title, sourceId: l.risk_id })),
+        ...issueLinks.filter((l) => l.task_id === drawerTaskId).map((l) => ({ linkId: l.id, kind: "issue" as const, title: l.issue_title, sourceId: l.issue_id })),
+      ]
+    : [];
+
+  async function unlinkBlocker(linkId: string, kind: "risk" | "issue") {
+    await api.unlinkRaidFromTask(linkId, kind);
+    load();
+  }
+
+  function jumpToBlocker(kind: "risk" | "issue", sourceId: string) {
+    setLocalParams({ tab: kind === "risk" ? "risks" : "issues", highlight: sourceId });
+  }
 
   if (loading) return <div className="skel-loading-block"><div className="skel skel-text" style={{ width: "45%" }} /><div className="skel skel-text" style={{ width: "80%" }} /><div className="skel skel-text" style={{ width: "60%", marginBottom: 0 }} /></div>;
 
@@ -1023,57 +1050,39 @@ function TasksTab({ projectId, projectName, highlightId }: { projectId: string; 
           <tbody>
             {buildTaskRows(tasks).map(({ task: t, depth }) => (
               <Fragment key={t.id}>
-                {editingId === t.id ? (
-                  <tr ref={(el) => setRowRef(t.id, el)}>
-                    <td style={{ paddingLeft: depth * 20 }}>
-                      <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
-                    </td>
-                    <td><input value={editOwner} onChange={(e) => setEditOwner(e.target.value)} placeholder="Owner" /></td>
-                    <td>
-                      <input type="date" title="Start date" value={editStart} onChange={(e) => setEditStart(e.target.value)} style={{ marginBottom: 4 }} />
-                      <input type="date" title="Due date" value={editDue} onChange={(e) => setEditDue(e.target.value)} />
-                    </td>
-                    <td><span className={`pill ${TASK_STATUS_PILL[t.status]}`}>{STATUS_LABEL[t.status]}</span></td>
-                    <td className="row-actions">
-                      <button className="btn btn-primary" type="button" onClick={() => saveEdit(t.id)}>Save</button>
-                      <button className="btn btn-ghost" type="button" onClick={() => setEditingId(null)}>Cancel</button>
-                    </td>
-                  </tr>
-                ) : (
-                  <tr ref={(el) => setRowRef(t.id, el)}>
-                    <td>
-                      <span className="wbs-cell" style={{ paddingLeft: depth * 20 }}>
-                        {depth > 0 && <span className="wbs-connector">&#8627;</span>}
-                        {t.title}
-                      </span>
-                      <button
-                        className="wbs-add-btn"
-                        type="button"
-                        title="Add sub-task"
-                        onClick={() => setAddingSubtaskFor(addingSubtaskFor === t.id ? null : t.id)}
-                      >
-                        +
-                      </button>
-                    </td>
-                    <td>{t.owner_name || "--"}</td>
-                    <td>{t.due_date ? fmtLocalDate(t.due_date) : "--"}</td>
-                    <td>
-                      <select
-                        className={`status-select status-select-${t.status}`}
-                        value={t.status}
-                        onChange={(e) => setStatus(t.id, e.target.value as Task["status"])}
-                      >
-                        {Object.entries(STATUS_LABEL).map(([value, label]) => (
-                          <option key={value} value={value}>{label}</option>
-                        ))}
-                      </select>
-                    </td>
-                    <td className="row-actions">
-                      <button className="btn-link" type="button" onClick={() => startEdit(t)}>Edit</button>
-                      <button className="btn-link btn-link-danger" type="button" onClick={() => removeTask(t.id, t.title)}>Delete</button>
-                    </td>
-                  </tr>
-                )}
+                <tr ref={(el) => setRowRef(t.id, el)}>
+                  <td>
+                    <span className="wbs-cell" style={{ paddingLeft: depth * 20 }}>
+                      {depth > 0 && <span className="wbs-connector">&#8627;</span>}
+                      {t.title}
+                    </span>
+                    <button
+                      className="wbs-add-btn"
+                      type="button"
+                      title="Add sub-task"
+                      onClick={() => setAddingSubtaskFor(addingSubtaskFor === t.id ? null : t.id)}
+                    >
+                      +
+                    </button>
+                  </td>
+                  <td>{t.owner_name || "--"}</td>
+                  <td>{t.due_date ? fmtLocalDate(t.due_date) : "--"}</td>
+                  <td>
+                    <select
+                      className={`status-select status-select-${t.status}`}
+                      value={t.status}
+                      onChange={(e) => setStatus(t.id, e.target.value as Task["status"])}
+                    >
+                      {Object.entries(STATUS_LABEL).map(([value, label]) => (
+                        <option key={value} value={value}>{label}</option>
+                      ))}
+                    </select>
+                  </td>
+                  <td className="row-actions">
+                    <button className="btn-link" type="button" onClick={() => openDrawer(t)}>Details</button>
+                    <button className="btn-link btn-link-danger" type="button" onClick={() => removeTask(t.id, t.title)}>Delete</button>
+                  </td>
+                </tr>
                 {addingSubtaskFor === t.id && (
                   <tr>
                     <td colSpan={5}>
@@ -1137,6 +1146,91 @@ function TasksTab({ projectId, projectName, highlightId }: { projectId: string; 
       ) : (
         <TimelineView tasks={tasks} />
       )}
+
+      <Drawer
+        open={!!drawerTask}
+        onClose={closeDrawer}
+        eyebrow="Task"
+        title={drawerTask?.title || ""}
+        footer={
+          <>
+            <button className="btn btn-primary" type="button" onClick={saveDrawer}>Save</button>
+            <button className="btn btn-ghost" type="button" onClick={closeDrawer}>Cancel</button>
+          </>
+        }
+      >
+        {drawerTask && (
+          <>
+            <div className="drawer-field">
+              <label>Title</label>
+              <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
+            </div>
+            <div className="drawer-field-row">
+              <div className="drawer-field">
+                <label>Owner</label>
+                <input value={editOwner} onChange={(e) => setEditOwner(e.target.value)} placeholder="Unassigned" />
+              </div>
+              <div className="drawer-field">
+                <label>Status</label>
+                <select
+                  className={`status-select status-select-${drawerTask.status}`}
+                  value={drawerTask.status}
+                  onChange={(e) => setStatus(drawerTask.id, e.target.value as Task["status"])}
+                >
+                  {Object.entries(STATUS_LABEL).map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="drawer-field-row">
+              <div className="drawer-field">
+                <label>Start date</label>
+                <input type="date" value={editStart} onChange={(e) => setEditStart(e.target.value)} />
+              </div>
+              <div className="drawer-field">
+                <label>Due date</label>
+                <input type="date" value={editDue} onChange={(e) => setEditDue(e.target.value)} />
+              </div>
+            </div>
+            <div className="drawer-field">
+              <label>Notes</label>
+              <textarea
+                rows={5}
+                value={editDescription}
+                onChange={(e) => setEditDescription(e.target.value)}
+                placeholder="Add context, links, anything worth keeping with this task."
+              />
+            </div>
+
+            <div className="drawer-section">
+              <h4>Blocked by</h4>
+              {blockers.length === 0 ? (
+                <p className="muted" style={{ fontSize: 13 }}>No risks or issues are linked as blockers.</p>
+              ) : (
+                <div className="link-chip-list">
+                  {blockers.map((b) => (
+                    <div key={b.linkId} className="link-chip">
+                      <button
+                        type="button"
+                        className="link-chip-label link-chip-label-btn"
+                        onClick={() => jumpToBlocker(b.kind, b.sourceId)}
+                      >
+                        <span className={`pill ${b.kind === "risk" ? "pill-red" : "pill-gold"}`}>{b.kind === "risk" ? "Risk" : "Issue"}</span>
+                        <span>{b.title}</span>
+                      </button>
+                      <button className="link-chip-remove" type="button" onClick={() => unlinkBlocker(b.linkId, b.kind)} title="Unlink" aria-label="Unlink">&times;</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <p className="muted" style={{ fontSize: 12, marginTop: 2 }}>
+                Link a risk or issue to this task from its own Details panel in Issues or Risks.
+              </p>
+            </div>
+          </>
+        )}
+      </Drawer>
     </div>
   );
 }
@@ -1234,6 +1328,8 @@ function IssuesTab({ projectId, highlightId }: { projectId: string; highlightId?
   const { setRowRef, jumpTo } = useRowHighlight();
   const [, setLocalParams] = useSearchParams();
   const [issues, setIssues] = useState<Issue[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [issueLinks, setIssueLinks] = useState<IssueTaskLink[]>([]);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [severity, setSeverity] = useState<Issue["severity"]>("medium");
@@ -1241,19 +1337,26 @@ function IssuesTab({ projectId, highlightId }: { projectId: string; highlightId?
   const [newStatus, setNewStatus] = useState<Issue["status"]>("open");
   const [view, setView] = useState<"list" | "board">("list");
   const [dragOverStatus, setDragOverStatus] = useState<Issue["status"] | null>(null);
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [drawerIssueId, setDrawerIssueId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [editSeverity, setEditSeverity] = useState<Issue["severity"]>("medium");
   const [editOwner, setEditOwner] = useState("");
   const [editResolution, setEditResolution] = useState("");
+  const [linkTaskId, setLinkTaskId] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   async function load() {
     setLoading(true);
-    const { issues } = await api.listIssues(projectId);
+    const [{ issues }, { tasks }, { issueLinks }] = await Promise.all([
+      api.listIssues(projectId),
+      api.listTasks(projectId),
+      api.listRaidTaskLinks(projectId),
+    ]);
     setIssues(issues);
+    setTasks(tasks);
+    setIssueLinks(issueLinks);
     setLoading(false);
   }
 
@@ -1266,7 +1369,7 @@ function IssuesTab({ projectId, highlightId }: { projectId: string; highlightId?
     const match = issues.find((i) => i.id === highlightId);
     if (!match) return;
     if (view !== "list") setView("list");
-    startEdit(match);
+    openDrawer(match);
     jumpTo(highlightId);
     setLocalParams((prev) => {
       const next = new URLSearchParams(prev);
@@ -1304,23 +1407,28 @@ function IssuesTab({ projectId, highlightId }: { projectId: string; highlightId?
     if (issueId) setStatus(issueId, status);
   }
 
-  function startEdit(i: Issue) {
-    setEditingId(i.id);
+  function openDrawer(i: Issue) {
+    setDrawerIssueId(i.id);
     setEditTitle(i.title);
     setEditDescription(i.description || "");
     setEditSeverity(i.severity);
     setEditOwner(i.owner_name || "");
     setEditResolution(i.resolution || "");
+    setLinkTaskId("");
   }
 
-  async function saveEdit(id: string) {
-    if (!editTitle.trim()) return;
-    await api.updateIssue(id, {
+  function closeDrawer() {
+    setDrawerIssueId(null);
+  }
+
+  async function saveDrawer() {
+    if (!drawerIssueId || !editTitle.trim()) return;
+    await api.updateIssue(drawerIssueId, {
       title: editTitle.trim(), description: editDescription || undefined,
       severity: editSeverity, owner_name: editOwner || undefined,
       resolution: editResolution || undefined,
     } as any);
-    setEditingId(null);
+    closeDrawer();
     load();
   }
 
@@ -1329,6 +1437,30 @@ function IssuesTab({ projectId, highlightId }: { projectId: string; highlightId?
     await api.deleteIssue(id);
     load();
   }
+
+  // "Blocks tasks" -- the task(s) this issue is preventing progress on,
+  // set from this drawer and reflected read-only in the task's own drawer.
+  async function addTaskLink() {
+    if (!drawerIssueId || !linkTaskId) return;
+    await api.linkRaidToTask(projectId, "issue", drawerIssueId, linkTaskId);
+    setLinkTaskId("");
+    load();
+  }
+
+  async function removeTaskLink(linkId: string) {
+    await api.unlinkRaidFromTask(linkId, "issue");
+    load();
+  }
+
+  function jumpToTask(taskId: string) {
+    setLocalParams({ tab: "tasks", highlight: taskId });
+  }
+
+  const drawerIssue = drawerIssueId ? issues.find((i) => i.id === drawerIssueId) || null : null;
+  const linkedTasksForDrawer = drawerIssueId ? issueLinks.filter((l) => l.issue_id === drawerIssueId) : [];
+  const unlinkedTasksForDrawer = drawerIssueId
+    ? tasks.filter((t) => !linkedTasksForDrawer.some((l) => l.task_id === t.id))
+    : [];
 
   if (loading) return <div className="skel-loading-block"><div className="skel skel-text" style={{ width: "45%" }} /><div className="skel skel-text" style={{ width: "80%" }} /><div className="skel skel-text" style={{ width: "60%", marginBottom: 0 }} /></div>;
 
@@ -1414,59 +1546,31 @@ function IssuesTab({ projectId, highlightId }: { projectId: string; highlightId?
         </thead>
         <tbody>
           {issues.map((i) => (
-            editingId === i.id ? (
-              <tr key={i.id} ref={(el) => setRowRef(i.id, el)}>
-                <td>
-                  <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} style={{ marginBottom: 4 }} />
-                  <textarea value={editDescription} onChange={(e) => setEditDescription(e.target.value)} rows={2} placeholder="Description" />
-                </td>
-                <td>
-                  <select value={editSeverity} onChange={(e) => setEditSeverity(e.target.value as Issue["severity"])}>
-                    {Object.entries(SEVERITY_LABEL).map(([value, label]) => (
-                      <option key={value} value={value}>{label}</option>
-                    ))}
-                  </select>
-                </td>
-                <td><input value={editOwner} onChange={(e) => setEditOwner(e.target.value)} /></td>
-                <td className="muted">
-                  {ISSUE_STATUS_LABEL[i.status]}
-                  <input
-                    value={editResolution} onChange={(e) => setEditResolution(e.target.value)}
-                    placeholder="Resolution" style={{ marginTop: 4 }}
-                  />
-                </td>
-                <td className="row-actions">
-                  <button className="btn btn-primary" type="button" onClick={() => saveEdit(i.id)}>Save</button>
-                  <button className="btn btn-ghost" type="button" onClick={() => setEditingId(null)}>Cancel</button>
-                </td>
-              </tr>
-            ) : (
-              <tr key={i.id} ref={(el) => setRowRef(i.id, el)}>
-                <td>
-                  {i.title}
-                  {i.status === "resolved" && i.resolution && (
-                    <div className="muted">Resolved: {i.resolution}</div>
-                  )}
-                </td>
-                <td><span className={`pill ${SEVERITY_PILL[i.severity]}`}>{SEVERITY_LABEL[i.severity]}</span></td>
-                <td>{i.owner_name || "--"}</td>
-                <td>
-                  <select
-                    className={`status-select status-select-${i.status}`}
-                    value={i.status}
-                    onChange={(e) => setStatus(i.id, e.target.value as Issue["status"])}
-                  >
-                    {Object.entries(ISSUE_STATUS_LABEL).map(([value, label]) => (
-                      <option key={value} value={value}>{label}</option>
-                    ))}
-                  </select>
-                </td>
-                <td className="row-actions">
-                  <button className="btn-link" type="button" onClick={() => startEdit(i)}>Edit</button>
-                  <button className="btn-link btn-link-danger" type="button" onClick={() => removeIssue(i.id, i.title)}>Delete</button>
-                </td>
-              </tr>
-            )
+            <tr key={i.id} ref={(el) => setRowRef(i.id, el)}>
+              <td>
+                {i.title}
+                {i.status === "resolved" && i.resolution && (
+                  <div className="muted">Resolved: {i.resolution}</div>
+                )}
+              </td>
+              <td><span className={`pill ${SEVERITY_PILL[i.severity]}`}>{SEVERITY_LABEL[i.severity]}</span></td>
+              <td>{i.owner_name || "--"}</td>
+              <td>
+                <select
+                  className={`status-select status-select-${i.status}`}
+                  value={i.status}
+                  onChange={(e) => setStatus(i.id, e.target.value as Issue["status"])}
+                >
+                  {Object.entries(ISSUE_STATUS_LABEL).map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
+                </select>
+              </td>
+              <td className="row-actions">
+                <button className="btn-link" type="button" onClick={() => openDrawer(i)}>Details</button>
+                <button className="btn-link btn-link-danger" type="button" onClick={() => removeIssue(i.id, i.title)}>Delete</button>
+              </td>
+            </tr>
           ))}
           {issues.length === 0 && (
             <tr><td colSpan={5} className="muted">No issues logged. Nice.</td></tr>
@@ -1474,6 +1578,91 @@ function IssuesTab({ projectId, highlightId }: { projectId: string; highlightId?
         </tbody>
       </ResizableTable>
       )}
+
+      <Drawer
+        open={!!drawerIssue}
+        onClose={closeDrawer}
+        eyebrow="Issue"
+        title={drawerIssue?.title || ""}
+        footer={
+          <>
+            <button className="btn btn-primary" type="button" onClick={saveDrawer}>Save</button>
+            <button className="btn btn-ghost" type="button" onClick={closeDrawer}>Cancel</button>
+          </>
+        }
+      >
+        {drawerIssue && (
+          <>
+            <div className="drawer-field">
+              <label>Title</label>
+              <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
+            </div>
+            <div className="drawer-field">
+              <label>Description</label>
+              <textarea rows={4} value={editDescription} onChange={(e) => setEditDescription(e.target.value)} />
+            </div>
+            <div className="drawer-field-row">
+              <div className="drawer-field">
+                <label>Severity</label>
+                <select value={editSeverity} onChange={(e) => setEditSeverity(e.target.value as Issue["severity"])}>
+                  {Object.entries(SEVERITY_LABEL).map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="drawer-field">
+                <label>Owner</label>
+                <input value={editOwner} onChange={(e) => setEditOwner(e.target.value)} placeholder="Unassigned" />
+              </div>
+            </div>
+            <div className="drawer-field">
+              <label>Status</label>
+              <select
+                className={`status-select status-select-${drawerIssue.status}`}
+                value={drawerIssue.status}
+                onChange={(e) => setStatus(drawerIssue.id, e.target.value as Issue["status"])}
+              >
+                {Object.entries(ISSUE_STATUS_LABEL).map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
+            </div>
+            <div className="drawer-field">
+              <label>Resolution</label>
+              <textarea rows={2} value={editResolution} onChange={(e) => setEditResolution(e.target.value)} placeholder="How was this resolved?" />
+            </div>
+
+            <div className="drawer-section">
+              <h4>Blocks tasks</h4>
+              {linkedTasksForDrawer.length === 0 ? (
+                <p className="muted" style={{ fontSize: 13 }}>Not linked to any task yet.</p>
+              ) : (
+                <div className="link-chip-list">
+                  {linkedTasksForDrawer.map((l) => (
+                    <div key={l.id} className="link-chip">
+                      <button type="button" className="link-chip-label link-chip-label-btn" onClick={() => jumpToTask(l.task_id)}>
+                        <span>{l.task_title}</span>
+                      </button>
+                      <button className="link-chip-remove" type="button" onClick={() => removeTaskLink(l.id)} title="Unlink" aria-label="Unlink">&times;</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {unlinkedTasksForDrawer.length > 0 && (
+                <div className="link-add-row">
+                  <select value={linkTaskId} onChange={(e) => setLinkTaskId(e.target.value)}>
+                    <option value="">Link a task...</option>
+                    {unlinkedTasksForDrawer.map((t) => (
+                      <option key={t.id} value={t.id}>{t.title}</option>
+                    ))}
+                  </select>
+                  <button className="btn btn-ghost" type="button" onClick={addTaskLink} disabled={!linkTaskId}>Link</button>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </Drawer>
     </div>
   );
 }
@@ -1483,6 +1672,8 @@ function RisksTab({ projectId, highlightId }: { projectId: string; highlightId?:
   const { setRowRef, jumpTo } = useRowHighlight();
   const [, setLocalParams] = useSearchParams();
   const [risks, setRisks] = useState<Risk[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [riskLinks, setRiskLinks] = useState<RiskTaskLink[]>([]);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [probability, setProbability] = useState<Risk["probability"]>("medium");
@@ -1492,20 +1683,27 @@ function RisksTab({ projectId, highlightId }: { projectId: string; highlightId?:
   const [newStatus, setNewStatus] = useState<Risk["status"]>("open");
   const [view, setView] = useState<"list" | "board" | "matrix">("list");
   const [dragOverStatus, setDragOverStatus] = useState<Risk["status"] | null>(null);
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [drawerRiskId, setDrawerRiskId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [editProbability, setEditProbability] = useState<Risk["probability"]>("medium");
   const [editImpact, setEditImpact] = useState<Risk["impact"]>("medium");
   const [editMitigation, setEditMitigation] = useState("");
   const [editOwner, setEditOwner] = useState("");
+  const [linkTaskId, setLinkTaskId] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   async function load() {
     setLoading(true);
-    const { risks } = await api.listRisks(projectId);
+    const [{ risks }, { tasks }, { riskLinks }] = await Promise.all([
+      api.listRisks(projectId),
+      api.listTasks(projectId),
+      api.listRaidTaskLinks(projectId),
+    ]);
     setRisks(risks);
+    setTasks(tasks);
+    setRiskLinks(riskLinks);
     setLoading(false);
   }
 
@@ -1518,7 +1716,7 @@ function RisksTab({ projectId, highlightId }: { projectId: string; highlightId?:
     const match = risks.find((r) => r.id === highlightId);
     if (!match) return;
     if (view !== "list") setView("list");
-    startEdit(match);
+    openDrawer(match);
     jumpTo(highlightId);
     setLocalParams((prev) => {
       const next = new URLSearchParams(prev);
@@ -1558,23 +1756,28 @@ function RisksTab({ projectId, highlightId }: { projectId: string; highlightId?:
     if (riskId) setStatus(riskId, status);
   }
 
-  function startEdit(r: Risk) {
-    setEditingId(r.id);
+  function openDrawer(r: Risk) {
+    setDrawerRiskId(r.id);
     setEditTitle(r.title);
     setEditDescription(r.description || "");
     setEditProbability(r.probability);
     setEditImpact(r.impact);
     setEditMitigation(r.mitigation || "");
     setEditOwner(r.owner_name || "");
+    setLinkTaskId("");
   }
 
-  async function saveEdit(id: string) {
-    if (!editTitle.trim()) return;
-    await api.updateRisk(id, {
+  function closeDrawer() {
+    setDrawerRiskId(null);
+  }
+
+  async function saveDrawer() {
+    if (!drawerRiskId || !editTitle.trim()) return;
+    await api.updateRisk(drawerRiskId, {
       title: editTitle.trim(), description: editDescription || undefined, probability: editProbability,
       impact: editImpact, mitigation: editMitigation || undefined, owner_name: editOwner || undefined,
     } as any);
-    setEditingId(null);
+    closeDrawer();
     load();
   }
 
@@ -1582,6 +1785,24 @@ function RisksTab({ projectId, highlightId }: { projectId: string; highlightId?:
     if (!(await confirmDialog(`Delete risk "${label}"? You can restore it from Trash.`))) return;
     await api.deleteRisk(id);
     load();
+  }
+
+  // "Blocks tasks" -- the task(s) this risk would block if it hits, set
+  // from this drawer and reflected read-only in the task's own drawer.
+  async function addTaskLink() {
+    if (!drawerRiskId || !linkTaskId) return;
+    await api.linkRaidToTask(projectId, "risk", drawerRiskId, linkTaskId);
+    setLinkTaskId("");
+    load();
+  }
+
+  async function removeTaskLink(linkId: string) {
+    await api.unlinkRaidFromTask(linkId, "risk");
+    load();
+  }
+
+  function jumpToTask(taskId: string) {
+    setLocalParams({ tab: "tasks", highlight: taskId });
   }
 
   // "Recognize when a risk becomes an issue" (PMI) -- one action that
@@ -1601,6 +1822,12 @@ function RisksTab({ projectId, highlightId }: { projectId: string; highlightId?:
       setError(err.message || "Couldn't turn that risk into an issue.");
     }
   }
+
+  const drawerRisk = drawerRiskId ? risks.find((r) => r.id === drawerRiskId) || null : null;
+  const linkedTasksForDrawer = drawerRiskId ? riskLinks.filter((l) => l.risk_id === drawerRiskId) : [];
+  const unlinkedTasksForDrawer = drawerRiskId
+    ? tasks.filter((t) => !linkedTasksForDrawer.some((l) => l.task_id === t.id))
+    : [];
 
   if (loading) return <div className="skel-loading-block"><div className="skel skel-text" style={{ width: "45%" }} /><div className="skel skel-text" style={{ width: "80%" }} /><div className="skel skel-text" style={{ width: "60%", marginBottom: 0 }} /></div>;
 
@@ -1743,64 +1970,36 @@ function RisksTab({ projectId, highlightId }: { projectId: string; highlightId?:
         </thead>
         <tbody>
           {risks.map((r) => (
-            editingId === r.id ? (
-              <tr key={r.id} ref={(el) => setRowRef(r.id, el)}>
-                <td>
-                  <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} style={{ marginBottom: 4 }} />
-                  <textarea value={editDescription} onChange={(e) => setEditDescription(e.target.value)} rows={2} placeholder="Description" style={{ marginBottom: 4 }} />
-                  <textarea value={editMitigation} onChange={(e) => setEditMitigation(e.target.value)} rows={2} placeholder="Mitigation" />
-                </td>
-                <td>
-                  <select value={editProbability} onChange={(e) => setEditProbability(e.target.value as Risk["probability"])} style={{ marginBottom: 4 }}>
-                    {Object.entries(LEVEL_LABEL).map(([value, label]) => (
-                      <option key={value} value={value}>{label} probability</option>
-                    ))}
-                  </select>
-                  <select value={editImpact} onChange={(e) => setEditImpact(e.target.value as Risk["impact"])}>
-                    {Object.entries(LEVEL_LABEL).map(([value, label]) => (
-                      <option key={value} value={value}>{label} impact</option>
-                    ))}
-                  </select>
-                </td>
-                <td><input value={editOwner} onChange={(e) => setEditOwner(e.target.value)} /></td>
-                <td className="muted">{RISK_STATUS_LABEL[r.status]}</td>
-                <td className="row-actions">
-                  <button className="btn btn-primary" type="button" onClick={() => saveEdit(r.id)}>Save</button>
-                  <button className="btn btn-ghost" type="button" onClick={() => setEditingId(null)}>Cancel</button>
-                </td>
-              </tr>
-            ) : (
-              <tr key={r.id} ref={(el) => setRowRef(r.id, el)}>
-                <td>
-                  {r.title}
-                  {r.mitigation && <div className="muted">Mitigation: {r.mitigation}</div>}
-                </td>
-                <td>
-                  <span className={`pill ${EXPOSURE_PILL[riskExposure(r.probability, r.impact)]}`}>
-                    {LEVEL_LABEL[riskExposure(r.probability, r.impact)]}
-                  </span>
-                </td>
-                <td>{r.owner_name || "--"}</td>
-                <td>
-                  <select
-                    className={`status-select status-select-${r.status}`}
-                    value={r.status}
-                    onChange={(e) => setStatus(r.id, e.target.value as Risk["status"])}
-                  >
-                    {Object.entries(RISK_STATUS_LABEL).map(([value, label]) => (
-                      <option key={value} value={value}>{label}</option>
-                    ))}
-                  </select>
-                </td>
-                <td className="row-actions">
-                  <button className="btn-link" type="button" onClick={() => startEdit(r)}>Edit</button>
-                  {r.status !== "resolved" && (
-                    <button className="btn-link" type="button" onClick={() => promoteToIssue(r)}>This became an issue</button>
-                  )}
-                  <button className="btn-link btn-link-danger" type="button" onClick={() => removeRisk(r.id, r.title)}>Delete</button>
-                </td>
-              </tr>
-            )
+            <tr key={r.id} ref={(el) => setRowRef(r.id, el)}>
+              <td>
+                {r.title}
+                {r.mitigation && <div className="muted">Mitigation: {r.mitigation}</div>}
+              </td>
+              <td>
+                <span className={`pill ${EXPOSURE_PILL[riskExposure(r.probability, r.impact)]}`}>
+                  {LEVEL_LABEL[riskExposure(r.probability, r.impact)]}
+                </span>
+              </td>
+              <td>{r.owner_name || "--"}</td>
+              <td>
+                <select
+                  className={`status-select status-select-${r.status}`}
+                  value={r.status}
+                  onChange={(e) => setStatus(r.id, e.target.value as Risk["status"])}
+                >
+                  {Object.entries(RISK_STATUS_LABEL).map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
+                </select>
+              </td>
+              <td className="row-actions">
+                <button className="btn-link" type="button" onClick={() => openDrawer(r)}>Details</button>
+                {r.status !== "resolved" && (
+                  <button className="btn-link" type="button" onClick={() => promoteToIssue(r)}>This became an issue</button>
+                )}
+                <button className="btn-link btn-link-danger" type="button" onClick={() => removeRisk(r.id, r.title)}>Delete</button>
+              </td>
+            </tr>
           ))}
           {risks.length === 0 && (
             <tr><td colSpan={5} className="muted">No risks logged yet. Add one above if something's worth tracking.</td></tr>
@@ -1808,6 +2007,101 @@ function RisksTab({ projectId, highlightId }: { projectId: string; highlightId?:
         </tbody>
       </ResizableTable>
       )}
+
+      <Drawer
+        open={!!drawerRisk}
+        onClose={closeDrawer}
+        eyebrow="Risk"
+        title={drawerRisk?.title || ""}
+        footer={
+          <>
+            <button className="btn btn-primary" type="button" onClick={saveDrawer}>Save</button>
+            <button className="btn btn-ghost" type="button" onClick={closeDrawer}>Cancel</button>
+          </>
+        }
+      >
+        {drawerRisk && (
+          <>
+            <div className="drawer-field">
+              <label>Title</label>
+              <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
+            </div>
+            <div className="drawer-field">
+              <label>Description</label>
+              <textarea rows={4} value={editDescription} onChange={(e) => setEditDescription(e.target.value)} />
+            </div>
+            <div className="drawer-field-row">
+              <div className="drawer-field">
+                <label>Probability</label>
+                <select value={editProbability} onChange={(e) => setEditProbability(e.target.value as Risk["probability"])}>
+                  {Object.entries(LEVEL_LABEL).map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="drawer-field">
+                <label>Impact</label>
+                <select value={editImpact} onChange={(e) => setEditImpact(e.target.value as Risk["impact"])}>
+                  {Object.entries(LEVEL_LABEL).map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="drawer-field">
+              <label>Mitigation plan</label>
+              <textarea rows={3} value={editMitigation} onChange={(e) => setEditMitigation(e.target.value)} />
+            </div>
+            <div className="drawer-field-row">
+              <div className="drawer-field">
+                <label>Owner</label>
+                <input value={editOwner} onChange={(e) => setEditOwner(e.target.value)} placeholder="Unassigned" />
+              </div>
+              <div className="drawer-field">
+                <label>Status</label>
+                <select
+                  className={`status-select status-select-${drawerRisk.status}`}
+                  value={drawerRisk.status}
+                  onChange={(e) => setStatus(drawerRisk.id, e.target.value as Risk["status"])}
+                >
+                  {Object.entries(RISK_STATUS_LABEL).map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="drawer-section">
+              <h4>Blocks tasks</h4>
+              {linkedTasksForDrawer.length === 0 ? (
+                <p className="muted" style={{ fontSize: 13 }}>Not linked to any task yet.</p>
+              ) : (
+                <div className="link-chip-list">
+                  {linkedTasksForDrawer.map((l) => (
+                    <div key={l.id} className="link-chip">
+                      <button type="button" className="link-chip-label link-chip-label-btn" onClick={() => jumpToTask(l.task_id)}>
+                        <span>{l.task_title}</span>
+                      </button>
+                      <button className="link-chip-remove" type="button" onClick={() => removeTaskLink(l.id)} title="Unlink" aria-label="Unlink">&times;</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {unlinkedTasksForDrawer.length > 0 && (
+                <div className="link-add-row">
+                  <select value={linkTaskId} onChange={(e) => setLinkTaskId(e.target.value)}>
+                    <option value="">Link a task...</option>
+                    {unlinkedTasksForDrawer.map((t) => (
+                      <option key={t.id} value={t.id}>{t.title}</option>
+                    ))}
+                  </select>
+                  <button className="btn btn-ghost" type="button" onClick={addTaskLink} disabled={!linkTaskId}>Link</button>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </Drawer>
     </div>
   );
 }
@@ -3755,6 +4049,15 @@ const MEETING_TEMPLATES: Record<Meeting["meeting_type"], string> = {
   other: "",
 };
 
+// Mirrors the gantt-bar-<status> fill colors in index.css, so the status
+// filter chips read as the same colors the chart already uses for status.
+const ROADMAP_STATUS_COLOR: Record<RoadmapItem["status"], string> = {
+  not_started: "var(--slate)",
+  in_progress: "var(--navy)",
+  blocked: "var(--red)",
+  done: "var(--success)",
+};
+
 function RoadmapTab({ projectId, isOwner }: { projectId: string; isOwner: boolean }) {
   const confirmDialog = useConfirm();
   const [items, setItems] = useState<RoadmapItem[]>([]);
@@ -3784,6 +4087,42 @@ function RoadmapTab({ projectId, isOwner }: { projectId: string; isOwner: boolea
   const [copied, setCopied] = useState(false);
   const rowRefs = useRef<Map<string, HTMLTableRowElement>>(new Map());
 
+  // Type/status filter chips above the chart -- everything shown by default,
+  // click a chip to hide that type or status from both the chart and the
+  // list below. Local view state only, not persisted or sent to the API.
+  const ALL_TYPES = Object.keys(ROADMAP_TYPE_LABEL) as RoadmapItemType[];
+  const ALL_STATUSES = Object.keys(ROADMAP_STATUS_LABEL) as RoadmapItem["status"][];
+  const [typeFilter, setTypeFilter] = useState<Set<RoadmapItemType>>(new Set(ALL_TYPES));
+  const [statusFilter, setStatusFilter] = useState<Set<RoadmapItem["status"]>>(new Set(ALL_STATUSES));
+  const filtersActive = typeFilter.size < ALL_TYPES.length || statusFilter.size < ALL_STATUSES.length;
+
+  function toggleType(t: RoadmapItemType) {
+    setTypeFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(t)) { if (next.size > 1) next.delete(t); } else next.add(t);
+      return next;
+    });
+  }
+  function toggleStatus(s: RoadmapItem["status"]) {
+    setStatusFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(s)) { if (next.size > 1) next.delete(s); } else next.add(s);
+      return next;
+    });
+  }
+  function resetFilters() {
+    setTypeFilter(new Set(ALL_TYPES));
+    setStatusFilter(new Set(ALL_STATUSES));
+  }
+
+  // Manual zoom override -- "auto" keeps the chart's existing fit-to-span
+  // scaling; picking a density pins pxPerDay instead, handy for a long
+  // roadmap where auto-fit compresses everything into illegibility, or a
+  // short one where auto-fit is more zoomed in than you want. Not persisted
+  // -- a viewing preference, not project data.
+  const ZOOM_PX_PER_DAY: Record<"week" | "month" | "quarter", number> = { week: 12, month: 5, quarter: 2 };
+  const [zoom, setZoom] = useState<"auto" | "week" | "month" | "quarter">("auto");
+
   async function load() {
     setLoading(true);
     const { items } = await api.listRoadmapItems(projectId);
@@ -3797,6 +4136,7 @@ function RoadmapTab({ projectId, isOwner }: { projectId: string; isOwner: boolea
   }, [projectId, isOwner]);
 
   const swimlaneNames = Array.from(new Set(items.map((i) => i.swimlane))).sort();
+  const visibleItems = items.filter((i) => typeFilter.has(i.type) && statusFilter.has(i.status));
 
   async function addItem(e: React.FormEvent) {
     e.preventDefault();
@@ -3946,8 +4286,73 @@ function RoadmapTab({ projectId, isOwner }: { projectId: string; isOwner: boolea
       )}
       {error && <p className="form-error">{error}</p>}
 
-      <div style={{ marginTop: 28 }}>
-        <RoadmapTimeline items={items} onSelect={selectFromChart} />
+      <div className="roadmap-filter-bar" style={{ marginTop: 24 }}>
+        <div className="roadmap-filter-group">
+          <span className="roadmap-filter-label">Type</span>
+          {ALL_TYPES.map((t) => {
+            const active = typeFilter.has(t);
+            const color = ROADMAP_TYPE_COLOR[t];
+            return (
+              <button
+                key={t}
+                type="button"
+                className={`filter-chip${active ? " filter-chip-active" : ""}`}
+                style={active ? { color, background: `color-mix(in srgb, ${color} 24%, transparent)` } : undefined}
+                onClick={() => toggleType(t)}
+              >
+                {ROADMAP_TYPE_LABEL[t]}
+              </button>
+            );
+          })}
+        </div>
+        <div className="roadmap-filter-group">
+          <span className="roadmap-filter-label">Status</span>
+          {ALL_STATUSES.map((s) => {
+            const active = statusFilter.has(s);
+            const color = ROADMAP_STATUS_COLOR[s];
+            return (
+              <button
+                key={s}
+                type="button"
+                className={`filter-chip${active ? " filter-chip-active" : ""}`}
+                style={active ? { color, background: `color-mix(in srgb, ${color} 24%, transparent)` } : undefined}
+                onClick={() => toggleStatus(s)}
+              >
+                {ROADMAP_STATUS_LABEL[s]}
+              </button>
+            );
+          })}
+        </div>
+        {filtersActive && (
+          <button type="button" className="btn-link" onClick={resetFilters}>Reset filters</button>
+        )}
+        <div className="view-toggle" style={{ marginBottom: 0, marginLeft: "auto" }}>
+          {(["auto", "week", "month", "quarter"] as const).map((z) => (
+            <button
+              key={z}
+              type="button"
+              className={zoom === z ? "btn btn-primary" : "btn btn-ghost"}
+              onClick={() => setZoom(z)}
+            >
+              {z === "auto" ? "Auto" : z[0].toUpperCase() + z.slice(1)}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ marginTop: 20 }}>
+        {items.length > 0 && visibleItems.length === 0 ? (
+          <p className="muted">
+            No items match the current filters.{" "}
+            <button type="button" className="btn-link" onClick={resetFilters}>Reset filters</button>
+          </p>
+        ) : (
+          <RoadmapTimeline
+            items={visibleItems}
+            onSelect={selectFromChart}
+            pxPerDayOverride={zoom === "auto" ? null : ZOOM_PX_PER_DAY[zoom]}
+          />
+        )}
       </div>
 
       <div style={{ marginTop: 28 }}>
@@ -3956,7 +4361,7 @@ function RoadmapTab({ projectId, isOwner }: { projectId: string; isOwner: boolea
           <tr><th>Item</th><th>Type</th><th>Swimlane</th><th>Dates</th><th>Status</th><th></th></tr>
         </thead>
         <tbody>
-          {items.map((item) => (
+          {visibleItems.map((item) => (
             <Fragment key={item.id}>
               <tr ref={(el) => { if (el) rowRefs.current.set(item.id, el); else rowRefs.current.delete(item.id); }}>
                 <td>{item.title}</td>
@@ -4017,6 +4422,14 @@ function RoadmapTab({ projectId, isOwner }: { projectId: string; isOwner: boolea
           ))}
           {items.length === 0 && (
             <tr><td colSpan={6} className="muted">No roadmap items yet. Add phases, milestones, releases, events, or notes above to sketch out the plan.</td></tr>
+          )}
+          {items.length > 0 && visibleItems.length === 0 && (
+            <tr>
+              <td colSpan={6} className="muted">
+                No items match the current filters.{" "}
+                <button type="button" className="btn-link" onClick={resetFilters}>Reset filters</button>
+              </td>
+            </tr>
           )}
         </tbody>
         </ResizableTable>

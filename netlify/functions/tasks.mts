@@ -14,6 +14,7 @@ const TASK_FIELDS = [
   { key: "owner_name", label: "owner" },
   { key: "start_date", label: "start" },
   { key: "due_date", label: "due" },
+  { key: "description", label: "description" },
 ];
 
 export default withSentry(async (req: Request) => {
@@ -28,7 +29,7 @@ export default withSentry(async (req: Request) => {
     if (!(await hasProjectAccess(userId, projectId))) return json({ error: "Not found" }, { status: 404 });
 
     const tasks = await database.sql`
-      SELECT id, title, status, owner_name, start_date, due_date, stakeholder_id, parent_task_id, created_at, updated_at
+      SELECT id, title, description, status, owner_name, start_date, due_date, stakeholder_id, parent_task_id, created_at, updated_at
       FROM tasks WHERE project_id = ${projectId} AND deleted_at IS NULL
       ORDER BY
         CASE status WHEN 'blocked' THEN 0 WHEN 'in_progress' THEN 1 WHEN 'not_started' THEN 2 ELSE 3 END,
@@ -58,9 +59,9 @@ export default withSentry(async (req: Request) => {
     const status = VALID_STATUSES.includes(body?.status) ? body.status : "not_started";
 
     const [task] = await database.sql`
-      INSERT INTO tasks (project_id, title, owner_name, start_date, due_date, stakeholder_id, parent_task_id, status)
-      VALUES (${projectId}, ${title}, ${body?.ownerName || null}, ${body?.startDate || null}, ${body?.dueDate || null}, ${body?.stakeholderId || null}, ${parentTaskId}, ${status})
-      RETURNING id, title, status, owner_name, start_date, due_date, stakeholder_id, parent_task_id, created_at, updated_at
+      INSERT INTO tasks (project_id, title, description, owner_name, start_date, due_date, stakeholder_id, parent_task_id, status)
+      VALUES (${projectId}, ${title}, ${body?.description || null}, ${body?.ownerName || null}, ${body?.startDate || null}, ${body?.dueDate || null}, ${body?.stakeholderId || null}, ${parentTaskId}, ${status})
+      RETURNING id, title, description, status, owner_name, start_date, due_date, stakeholder_id, parent_task_id, created_at, updated_at
     `;
     await logActivity(database, { projectId, entityType: "task", entityId: task.id, entityTitle: task.title, action: "created" });
     return json({ task }, { status: 201 });
@@ -106,6 +107,7 @@ export default withSentry(async (req: Request) => {
     const [task] = await database.sql`
       UPDATE tasks SET
         title = COALESCE(${body.title ?? null}, title),
+        description = COALESCE(${body.description ?? null}, description),
         status = COALESCE(${body.status ?? null}, status),
         owner_name = COALESCE(${body.ownerName ?? null}, owner_name),
         start_date = COALESCE(${body.startDate ?? null}, start_date),
@@ -113,12 +115,12 @@ export default withSentry(async (req: Request) => {
         parent_task_id = COALESCE(${body.parentTaskId ?? null}, parent_task_id),
         updated_at = now()
       WHERE id = ${id}
-      RETURNING id, title, status, owner_name, start_date, due_date, stakeholder_id, parent_task_id, created_at, updated_at
+      RETURNING id, title, description, status, owner_name, start_date, due_date, stakeholder_id, parent_task_id, created_at, updated_at
     `;
 
     const summary = diffSummary(existing, {
       title: body.title, status: body.status, owner_name: body.ownerName,
-      start_date: body.startDate, due_date: body.dueDate,
+      start_date: body.startDate, due_date: body.dueDate, description: body.description,
     }, TASK_FIELDS);
     await logActivity(database, { projectId: existing.project_id, entityType: "task", entityId: id, entityTitle: task.title, action: "updated", summary });
 

@@ -123,6 +123,7 @@ export type Stakeholder = {
 export type Task = {
   id: string;
   title: string;
+  description: string | null;
   status: "not_started" | "in_progress" | "blocked" | "done";
   owner_name: string | null;
   start_date: string | null;
@@ -130,6 +131,9 @@ export type Task = {
   stakeholder_id: string | null;
   parent_task_id: string | null;
 };
+
+export type RiskTaskLink = { id: string; risk_id: string; task_id: string; risk_title: string; task_title: string };
+export type IssueTaskLink = { id: string; issue_id: string; task_id: string; issue_title: string; task_title: string };
 
 export type Decision = {
   id: string;
@@ -533,22 +537,35 @@ export const api = {
     request<{ ok: true }>("/stakeholders", { method: "PATCH", body: JSON.stringify({ id, restore: true }) }),
 
   listTasks: (projectId: string) => request<{ tasks: Task[] }>(`/tasks?projectId=${projectId}`),
-  createTask: (projectId: string, title: string, ownerName?: string, dueDate?: string, parentTaskId?: string, startDate?: string, status?: Task["status"]) =>
+  createTask: (projectId: string, title: string, ownerName?: string, dueDate?: string, parentTaskId?: string, startDate?: string, status?: Task["status"], description?: string) =>
     request<{ task: Task }>("/tasks", {
       method: "POST",
-      body: JSON.stringify({ projectId, title, ownerName, dueDate, parentTaskId, startDate, status }),
+      body: JSON.stringify({ projectId, title, ownerName, dueDate, parentTaskId, startDate, status, description }),
     }),
-  updateTask: (id: string, patch: Partial<Pick<Task, "status" | "title" | "owner_name" | "due_date" | "parent_task_id" | "start_date">>) =>
+  updateTask: (id: string, patch: Partial<Pick<Task, "status" | "title" | "owner_name" | "due_date" | "parent_task_id" | "start_date" | "description">>) =>
     request<{ task: Task }>("/tasks", {
       method: "PATCH",
       body: JSON.stringify({
         id, status: patch.status, title: patch.title, ownerName: patch.owner_name,
         dueDate: patch.due_date, parentTaskId: patch.parent_task_id, startDate: patch.start_date,
+        description: patch.description,
       }),
     }),
   deleteTask: (id: string) => request<{ ok: true }>(`/tasks?id=${id}`, { method: "DELETE" }),
   restoreTask: (id: string) =>
     request<{ ok: true }>("/tasks", { method: "PATCH", body: JSON.stringify({ id, restore: true }) }),
+
+  // RAID-to-task cross-linking (a risk/issue naming the task(s) it blocks).
+  // Fetched whole per project, like tasks/risks/issues themselves.
+  listRaidTaskLinks: (projectId: string) =>
+    request<{ riskLinks: RiskTaskLink[]; issueLinks: IssueTaskLink[] }>(`/raid-task-links?projectId=${projectId}`),
+  linkRaidToTask: (projectId: string, sourceType: "risk" | "issue", sourceId: string, taskId: string) =>
+    request<{ link: RiskTaskLink | IssueTaskLink }>("/raid-task-links", {
+      method: "POST",
+      body: JSON.stringify({ projectId, sourceType, sourceId, taskId }),
+    }),
+  unlinkRaidFromTask: (id: string, sourceType: "risk" | "issue") =>
+    request<{ ok: true }>(`/raid-task-links?id=${id}&sourceType=${sourceType}`, { method: "DELETE" }),
 
   createStatusUpdate: (projectId: string, body: string) =>
     request<{ statusUpdate: unknown }>("/status-updates", { method: "POST", body: JSON.stringify({ projectId, body }) }),

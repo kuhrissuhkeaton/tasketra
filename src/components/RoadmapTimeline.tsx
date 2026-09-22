@@ -25,7 +25,7 @@ export const ROADMAP_STATUS_LABEL: Record<RoadmapItem["status"], string> = {
 // it in" via fill color; this answers "what kind of thing is this" via a
 // left-edge stripe (bars) or a ring (markers), so type reads at a glance
 // instead of only on hover.
-const ROADMAP_TYPE_COLOR: Record<RoadmapItem["type"], string> = {
+export const ROADMAP_TYPE_COLOR: Record<RoadmapItem["type"], string> = {
   phase: "#6E56A5",
   milestone: "#B4790C",
   release: "#2E7D89",
@@ -96,9 +96,15 @@ function packLanes(items: RoadmapItem[], pxPerDay: number): { item: RoadmapItem;
 export function RoadmapTimeline({
   items,
   onSelect,
+  pxPerDayOverride,
 }: {
   items: RoadmapItem[];
   onSelect?: (item: RoadmapItem) => void;
+  // Manual zoom override (Week/Month/Quarter) from the owner-facing Roadmap
+  // tab. When set, this replaces the auto-scaled pxPerDay below entirely --
+  // null/undefined keeps the existing auto-fit-to-span behavior, which the
+  // read-only public share page still uses unmodified.
+  pxPerDayOverride?: number | null;
 }) {
   const dated = items.filter((i) => i.start_date);
   const undated = items.filter((i) => !i.start_date);
@@ -126,7 +132,7 @@ export function RoadmapTimeline({
   maxDate.setDate(maxDate.getDate() + 14);
 
   const totalDays = Math.max(1, Math.round((maxDate.getTime() - minDate.getTime()) / 86400000));
-  const pxPerDay = totalDays > 400 ? 3 : totalDays > 200 ? 4.5 : 6;
+  const pxPerDay = pxPerDayOverride ?? (totalDays > 400 ? 3 : totalDays > 200 ? 4.5 : 6);
   const trackWidth = totalDays * pxPerDay;
 
   function dayOffset(dateStr: string) {

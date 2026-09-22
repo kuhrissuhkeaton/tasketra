@@ -6,6 +6,7 @@ function makeTask(overrides: Partial<Task> = {}): Task {
   return {
     id: "task-1",
     title: "Ship the report",
+    description: null,
     status: "in_progress",
     owner_name: "Jane",
     start_date: null,

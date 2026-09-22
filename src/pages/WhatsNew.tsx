@@ -9,6 +9,24 @@ type ChangeEntry = { version: string; date: string; title: string; body: string 
 // they can do.
 const CHANGES: ChangeEntry[] = [
   {
+    version: "v67",
+    date: "September 2026",
+    title: "A softer, less boxed-in look",
+    body: "A visual pass on cards, tables, and lists across the app -- less 1px-border-around-everything, more breathing room. Today's \"needs attention\" list drops the boxed card look for a plain list with a status dot. Tables (Tasks, Issues, Risks, Vendors, Quality, and the rest) lose the heavy outline in favor of a soft shadow and lighter row lines. The Roadmap's filter chips are now solid-filled instead of outlined. Same information, same colors -- just a calmer surface underneath it.",
+  },
+  {
+    version: "v66",
+    date: "September 2026",
+    title: "Detail panels for tasks, issues, and risks -- plus task notes and RAID-to-task links",
+    body: "Tasks, Issues, and Risks each get a proper Details panel now instead of a cramped inline edit row -- click \"Details\" on any row to open it. Tasks also have a Notes field for the first time, for context that doesn't fit in a title. And a Risk or Issue can now name the specific task(s) it blocks, right from its own Details panel -- that task's own panel shows a \"Blocked by\" list linking back, so the connection between a risk and the work it threatens is finally something the app tracks, not just something you remember. The Roadmap chart also grew a row of type/status filter chips to hide what you don't need to see, and a manual zoom (Week/Month/Quarter) to override the automatic fit when you want more or less detail.",
+  },
+  {
+    version: "v65",
+    date: "September 2026",
+    title: "Click through from Home",
+    body: "The \"needs attention\" cards on Home -- blocked tasks, stale tasks, high-severity issues, high-exposure risks -- used to be plain text. Click one now and it jumps straight to that item on its own tab and highlights it, the same click-through Roadmap items already had.",
+  },
+  {
     version: "v64",
     date: "September 2026",
     title: "A real Dashboard, and OKR tracking",
