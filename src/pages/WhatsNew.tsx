@@ -12,7 +12,7 @@ const CHANGES: ChangeEntry[] = [
     version: "v67",
     date: "September 2026",
     title: "A softer, less boxed-in look",
-    body: "A visual pass on cards, tables, and lists across the app -- less 1px-border-around-everything, more breathing room. Today's \"needs attention\" list drops the boxed card look for a plain list with a status dot. Tables (Tasks, Issues, Risks, Vendors, Quality, and the rest) lose the heavy outline in favor of a soft shadow and lighter row lines. The Roadmap's filter chips are now solid-filled instead of outlined. Same information, same colors -- just a calmer surface underneath it.",
+    body: "A visual pass on cards, tables, and lists across the entire app -- less 1px-border-around-everything, more breathing room. Today's \"needs attention\" list, the feed, and the activity/decision log all drop the boxed card look for soft shadows (with color-coded left accents kept where they carry meaning). Tables (Tasks, Issues, Risks, Vendors, Quality, and the rest), the Roadmap timeline, and project/resource/template/kanban cards all lose their heavy outlines in favor of a soft shadow. The Roadmap's filter chips are now solid-filled instead of outlined. Same information, same colors -- just a calmer surface underneath all of it.",
   },
   {
     version: "v66",

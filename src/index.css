@@ -107,7 +107,6 @@ h1 { font-size: 36px; }
 }
 .auth-card {
   background: var(--cream);
-  border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-lift);
   padding: 40px;
@@ -224,7 +223,7 @@ textarea { resize: vertical; }
 .view-toggle .btn-ghost { background: transparent; color: var(--slate); border: 1px solid var(--border); }
 .view-toggle .btn-ghost:hover { background: var(--tint); border-color: var(--border); color: var(--navy); }
 .stacked-form {
-  background: var(--cream); border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--cream); border-radius: var(--radius);
   box-shadow: var(--shadow-sm); padding: 20px; margin: 16px 0; max-width: 480px;
 }
 
@@ -259,7 +258,7 @@ textarea { resize: vertical; }
   z-index: 1000; padding: 20px; animation: confirm-fade 150ms ease-out;
 }
 .confirm-card {
-  background: var(--cream); border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--cream); border-radius: var(--radius);
   box-shadow: var(--shadow-lift); padding: 24px; max-width: 420px; width: 100%;
 }
 .confirm-message { color: var(--navy); font-size: 15px; line-height: 1.5; margin: 0 0 20px; }
@@ -299,12 +298,12 @@ textarea { resize: vertical; }
 /* --- Projects grid --- */
 .project-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 18px; }
 .project-card {
-  display: block; background: var(--cream); border: 1px solid var(--border); border-radius: var(--radius);
+  display: block; background: var(--cream); border-radius: var(--radius); box-shadow: var(--shadow-sm);
   padding: 22px; text-decoration: none; color: inherit;
-  transition: border-color var(--ease), transform var(--ease);
+  transition: box-shadow var(--ease), transform var(--ease);
 }
 .project-card h3 { font-size: 20px; margin-bottom: 6px; padding-right: 22px; }
-.project-card:hover { border-color: var(--gold); transform: translateY(-2px); }
+.project-card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
 .project-card-stats { margin-top: 12px; display: flex; gap: 6px; flex-wrap: wrap; }
 
 /* Kebab menu sits as a sibling of the card's <Link>, not nested inside it
@@ -319,7 +318,7 @@ textarea { resize: vertical; }
 .project-card-menu-btn:hover { background: var(--surface-muted); color: var(--navy); }
 .project-card-menu {
   position: absolute; top: 46px; right: 10px; z-index: 5; min-width: 160px;
-  background: var(--cream); border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--cream); border-radius: var(--radius);
   box-shadow: var(--shadow-md); padding: 6px; display: flex; flex-direction: column;
 }
 .project-card-menu-item {
@@ -481,7 +480,7 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
   display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin-top: 12px;
 }
 .evm-card {
-  background: var(--cream); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px;
+  background: var(--cream); border-radius: var(--radius); padding: 14px 16px;
   box-shadow: var(--shadow-sm); cursor: help; transition: box-shadow var(--ease), transform var(--ease);
 }
 .evm-card:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
@@ -592,14 +591,14 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
 /* --- Settings-style cards (used by Team tab) --- */
 .settings-max { max-width: 640px; }
 .settings-card {
-  background: var(--cream); border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--cream); border-radius: var(--radius); box-shadow: var(--shadow-sm);
   padding: 24px; margin-bottom: 20px;
 }
 .settings-card-label {
   font-size: 12px; font-weight: 700; letter-spacing: 0.06em; color: var(--slate-2);
   text-transform: uppercase; margin: 0 0 14px;
 }
-.settings-card.danger-zone { border-color: var(--red-border); }
+.settings-card.danger-zone { border-left: 3px solid var(--red); }
 .settings-card.danger-zone .settings-card-label { color: var(--red); }
 .member-row {
   display: flex; align-items: center; gap: 12px; padding: 10px 0;
@@ -625,7 +624,7 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
 
 /* --- Billing --- */
 .billing-card {
-  background: var(--cream); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px 24px;
+  background: var(--cream); border-radius: var(--radius); padding: 20px 24px;
   box-shadow: var(--shadow-sm);
 }
 .form-success { color: var(--success); font-size: 14px; }
@@ -633,7 +632,7 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
 /* --- Resource hub --- */
 .resource-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; margin-top: 16px; }
 .resource-card {
-  background: var(--cream); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px;
+  background: var(--cream); border-radius: var(--radius); padding: 18px 20px;
   box-shadow: var(--shadow-sm); transition: box-shadow var(--ease), transform var(--ease);
 }
 .resource-card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
@@ -647,7 +646,7 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
 /* --- Templates --- */
 .template-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
 .template-card {
-  background: var(--cream); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px;
+  background: var(--cream); border-radius: var(--radius); padding: 20px;
   box-shadow: var(--shadow-sm); display: flex; flex-direction: column; gap: 10px;
   transition: box-shadow var(--ease), transform var(--ease);
 }
@@ -673,11 +672,11 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
   font-weight: 700; color: var(--slate-2); text-transform: none; letter-spacing: 0;
 }
 .kanban-card {
-  background: var(--cream); border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; margin-bottom: 8px;
-  font-size: 14.5px; font-weight: 600; cursor: grab;
-  transition: border-color var(--ease), transform var(--ease);
+  background: var(--cream); border-radius: 14px; padding: 14px 16px; margin-bottom: 8px;
+  font-size: 14.5px; font-weight: 600; cursor: grab; box-shadow: var(--shadow-sm);
+  transition: box-shadow var(--ease), transform var(--ease);
 }
-.kanban-card:hover { border-color: var(--gold); transform: translateY(-1px); }
+.kanban-card:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
 .kanban-card:active { cursor: grabbing; }
 .kanban-card .muted { font-size: 12px; color: var(--slate-2); font-weight: 500; margin-top: 6px; }
 .kanban-empty { font-size: 13px; padding: 4px 0; color: var(--slate-2); }
@@ -730,7 +729,7 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
 .wbs-add-btn:hover { border-color: var(--gold); color: var(--navy); }
 
 /* --- Timeline / Gantt --- */
-.gantt-wrap { display: flex; border: 1px solid var(--border); border-radius: var(--radius); background: var(--cream); box-shadow: var(--shadow-sm); overflow: hidden; }
+.gantt-wrap { display: flex; border-radius: var(--radius); background: var(--cream); box-shadow: var(--shadow-sm); overflow: hidden; }
 .gantt-labels { width: 200px; flex-shrink: 0; border-right: 1px solid var(--border); }
 .gantt-header-spacer { height: 28px; border-bottom: 1px solid var(--border); background: var(--surface-muted); }
 .gantt-label-row {
@@ -808,7 +807,7 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
 /* --- Feed --- */
 .feed { list-style: none; margin: 0; padding: 0; }
 .feed-item {
-  background: var(--cream); border: 1px solid var(--border); border-left: 3px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--cream); border-left: 3px solid var(--border); border-radius: var(--radius-sm);
   padding: 14px 16px; margin-bottom: 10px; box-shadow: var(--shadow-sm);
   transition: box-shadow var(--ease), border-color var(--ease);
 }
@@ -829,7 +828,7 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
 .checkbox-row, .option-row { display: flex; align-items: center; gap: 8px; font-weight: 400; font-size: 14px; margin: 4px 0; }
 .decision-list { margin-top: 24px; display: flex; flex-direction: column; gap: 12px; }
 .decision-card {
-  background: var(--cream); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px;
+  background: var(--cream); border-radius: var(--radius); padding: 16px;
   box-shadow: var(--shadow-sm); transition: box-shadow var(--ease);
 }
 .decision-card:hover { box-shadow: var(--shadow-md); }
@@ -842,7 +841,7 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
 /* --- Export / audit view --- */
 .export-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
 .decision-record-card {
-  background: var(--cream); border: 1px solid var(--border); border-left: 4px solid var(--gold);
+  background: var(--cream); border-left: 4px solid var(--gold);
   border-radius: var(--radius-sm); padding: 16px 20px; margin-bottom: 14px; box-shadow: var(--shadow-sm);
 }
 @media print {
@@ -853,14 +852,14 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
 /* --- Public decision page --- */
 .public-decision {
   max-width: 480px; margin: 60px auto; padding: 32px; background: var(--cream);
-  border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-lift);
+  border-radius: var(--radius); box-shadow: var(--shadow-lift);
 }
 .decision-context { color: var(--slate); margin: 12px 0; }
 .option-list { margin: 8px 0 16px; }
 
 .public-roadmap {
   max-width: 1100px; margin: 40px auto; padding: 32px; background: var(--cream);
-  border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-lift);
+  border-radius: var(--radius); box-shadow: var(--shadow-lift);
 }
 
 /* --- Landing page --- */
