@@ -478,6 +478,7 @@ export type PortfolioData = {
     avgObjectiveProgress: number | null;
   };
   taskStatusBreakdown: { status: Task["status"]; count: number }[];
+  issueSeverityBreakdown: { severity: Issue["severity"]; count: number }[];
   projects: PortfolioProjectSummary[];
   upcomingMilestones: { id: string; title: string; date: string; status: RoadmapItem["status"]; projectId: string; projectName: string }[];
 };
@@ -949,5 +950,5 @@ export const api = {
 
   getReferrals: () => request<ReferralInfo>("/referrals"),
 
-  getPortfolio: () => request<PortfolioData>("/portfolio"),
+  getPortfolio: (projectId?: string) => request<PortfolioData>(`/portfolio${projectId ? `?projectId=${projectId}` : ""}`),
 };

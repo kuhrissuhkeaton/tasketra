@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { api, ApiError, type Project, type PortfolioData, type PortfolioProjectSummary, type Task } from "../lib/api";
+import { api, ApiError, type Project, type PortfolioData, type PortfolioProjectSummary, type Task, type Issue } from "../lib/api";
 import { AppSidebar } from "../components/AppSidebar";
 import { useConfirm } from "../components/ConfirmDialog";
 import { ResizableTable } from "../components/ResizableTable";
@@ -75,6 +75,65 @@ function TaskStatusChart({ breakdown }: { breakdown: PortfolioData["taskStatusBr
   );
 }
 
+// Donut for open issues by severity. Collapses high + critical into one
+// visual "High / Critical" arc + legend row, same as ProjectHome.tsx's own
+// SEVERITY_PILL already collapses high/critical to the same pill-red --
+// kept consistent with that instead of inventing a 4th on-chart color.
+// The three fill colors (--chart-good/--chart-warn/--chart-crit) are a
+// colorblind-safe status triad validated separately from the app's
+// --tag-*/pill-* pastels, which are tuned for small text badges, not large
+// chart fills -- see the comment above them in index.css.
+const DONUT_SEGMENTS: { key: "low" | "medium" | "highCritical"; label: string; color: string }[] = [
+  { key: "low", label: "Low", color: "var(--chart-good)" },
+  { key: "medium", label: "Medium", color: "var(--chart-warn)" },
+  { key: "highCritical", label: "High / Critical", color: "var(--chart-crit)" },
+];
+
+function IssueSeverityDonut({ breakdown }: { breakdown: PortfolioData["issueSeverityBreakdown"] }) {
+  const bySeverity = Object.fromEntries(breakdown.map((b) => [b.severity, b.count])) as Partial<Record<Issue["severity"], number>>;
+  const counts: Record<"low" | "medium" | "highCritical", number> = {
+    low: bySeverity.low || 0,
+    medium: bySeverity.medium || 0,
+    highCritical: (bySeverity.high || 0) + (bySeverity.critical || 0),
+  };
+  const total = counts.low + counts.medium + counts.highCritical;
+
+  if (total === 0) {
+    return <p className="muted">No open issues right now.</p>;
+  }
+
+  let acc = 0;
+  const stops: string[] = [];
+  for (const seg of DONUT_SEGMENTS) {
+    const count = counts[seg.key];
+    if (count === 0) continue;
+    const pct = (count / total) * 100;
+    stops.push(`${seg.color} ${acc}% ${acc + pct}%`);
+    acc += pct;
+  }
+  const gradient = `conic-gradient(${stops.join(", ")})`;
+
+  return (
+    <div className="dashboard-donut-wrap">
+      <div className="dashboard-donut" style={{ background: gradient }}>
+        <div className="dashboard-donut-hole">
+          <strong>{total}</strong>
+          <span>open</span>
+        </div>
+      </div>
+      <div className="dashboard-donut-legend">
+        {DONUT_SEGMENTS.map((seg) => (
+          <div className="row-item" key={seg.key}>
+            <span className="sw" style={{ background: seg.color }} />
+            {seg.label}
+            <strong>{counts[seg.key]}</strong>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function PortfolioOverview({ data }: { data: PortfolioData }) {
   const { kpis } = data;
   return (
@@ -113,11 +172,15 @@ function PortfolioOverview({ data }: { data: PortfolioData }) {
       </div>
 
       <div style={{ display: "flex", gap: 24, flexWrap: "wrap", marginTop: 24 }}>
-        <div style={{ flex: "2 1 420px", minWidth: 320 }}>
+        <div style={{ flex: "2 1 380px", minWidth: 320 }}>
           <h3 style={{ marginBottom: 12 }}>Tasks by status</h3>
           <TaskStatusChart breakdown={data.taskStatusBreakdown} />
         </div>
-        <div style={{ flex: "1 1 280px", minWidth: 260 }}>
+        <div style={{ flex: "1 1 260px", minWidth: 240 }}>
+          <h3 style={{ marginBottom: 12 }}>Open issues by severity</h3>
+          <IssueSeverityDonut breakdown={data.issueSeverityBreakdown} />
+        </div>
+        <div style={{ flex: "1 1 260px", minWidth: 240 }}>
           <h3 style={{ marginBottom: 12 }}>Upcoming milestones</h3>
           {data.upcomingMilestones.length === 0 ? (
             <p className="muted">No upcoming milestones on any roadmap.</p>
@@ -184,6 +247,8 @@ export default function Dashboard() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [deletedProjects, setDeletedProjects] = useState<Project[]>([]);
   const [portfolio, setPortfolio] = useState<PortfolioData | null>(null);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [portfolioLoading, setPortfolioLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [newName, setNewName] = useState("");
   const [seedExample, setSeedExample] = useState(false);
@@ -208,6 +273,16 @@ export default function Dashboard() {
     setDeletedProjects(deleted);
     setPortfolio(portfolioData);
     setLoading(false);
+  }
+
+  // Filter bar only re-fetches the portfolio rollup, not the whole page --
+  // the project grid/deleted list below don't depend on this filter.
+  async function selectProject(id: string | null) {
+    setSelectedProjectId(id);
+    setPortfolioLoading(true);
+    const portfolioData = await api.getPortfolio(id ?? undefined);
+    setPortfolio(portfolioData);
+    setPortfolioLoading(false);
   }
 
   useEffect(() => {
@@ -276,6 +351,30 @@ export default function Dashboard() {
           </div>
         </div>
 
+        {!loading && projects.length > 1 && (
+          <div className="roadmap-filter-bar" style={{ marginBottom: 4 }}>
+            <div className="roadmap-filter-group">
+              <button
+                type="button"
+                className={`filter-chip${selectedProjectId === null ? " filter-chip-active" : ""}`}
+                onClick={() => selectProject(null)}
+              >
+                All projects
+              </button>
+              {projects.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  className={`filter-chip${selectedProjectId === p.id ? " filter-chip-active" : ""}`}
+                  onClick={() => selectProject(p.id)}
+                >
+                  {p.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {loading ? (
           <div className="evm-grid" style={{ marginBottom: 32 }}>
             {[0, 1, 2, 3].map((i) => (
@@ -286,7 +385,9 @@ export default function Dashboard() {
             ))}
           </div>
         ) : portfolio && projects.length > 0 ? (
-          <PortfolioOverview data={portfolio} />
+          <div style={{ opacity: portfolioLoading ? 0.6 : 1, transition: "opacity 120ms ease" }}>
+            <PortfolioOverview data={portfolio} />
+          </div>
         ) : null}
 
         <h3 style={{ marginBottom: 12 }}>Your projects</h3>

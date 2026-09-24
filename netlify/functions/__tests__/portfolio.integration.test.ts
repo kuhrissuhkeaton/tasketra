@@ -174,6 +174,63 @@ describe("portfolio", () => {
     expect(data.upcomingMilestones.every((m: any) => m.projectName === "Project A" || m.projectName === "Project B")).toBe(true);
   });
 
+  it("breaks open issues down by severity, excluding resolved issues and inaccessible projects", async () => {
+    const owner = await createTestUser("pf-severity@example.com");
+    const outsider = await createTestUser("pf-severity-outsider@example.com");
+
+    const mine = await createTestProject(owner.id, "Severity Project");
+    await insertIssue(mine.id, { severity: "low" });
+    await insertIssue(mine.id, { severity: "low" });
+    await insertIssue(mine.id, { severity: "high" });
+    await insertIssue(mine.id, { severity: "critical" });
+    await insertIssue(mine.id, { severity: "medium", status: "resolved" }); // resolved -- must not count as open
+
+    const notMine = await createTestProject(outsider.id, "Not Mine");
+    await insertIssue(notMine.id, { severity: "critical" });
+
+    const res = await portfolioHandler(asUser(owner, { method: "GET", url: "https://tasketra.com/api/portfolio" }));
+    expect(res.status).toBe(200);
+    const data = await jsonBody<any>(res);
+
+    const bySeverity = Object.fromEntries(data.issueSeverityBreakdown.map((s: any) => [s.severity, s.count]));
+    expect(bySeverity.low).toBe(2);
+    expect(bySeverity.high).toBe(1);
+    expect(bySeverity.critical).toBe(1); // the outsider's critical issue must not be counted
+    expect(bySeverity.medium).toBeUndefined(); // the resolved issue must not appear at all
+  });
+
+  it("scopes every aggregate to a single project when ?projectId= is given, and checks access first", async () => {
+    const owner = await createTestUser("pf-filter@example.com");
+    const outsider = await createTestUser("pf-filter-outsider@example.com");
+
+    const a = await createTestProject(owner.id, "Filter Project A");
+    await insertTask(a.id, { status: "done" });
+    await insertIssue(a.id, { severity: "critical" });
+
+    const b = await createTestProject(owner.id, "Filter Project B");
+    await insertTask(b.id, { status: "not_started" });
+    await insertIssue(b.id, { severity: "low" });
+
+    const notMine = await createTestProject(outsider.id, "Not Mine");
+
+    const filtered = await portfolioHandler(
+      asUser(owner, { method: "GET", url: `https://tasketra.com/api/portfolio?projectId=${a.id}` })
+    );
+    expect(filtered.status).toBe(200);
+    const data = await jsonBody<any>(filtered);
+
+    expect(data.kpis.activeProjects).toBe(1);
+    expect(data.projects.map((p: any) => p.name)).toEqual(["Filter Project A"]);
+    const bySeverity = Object.fromEntries(data.issueSeverityBreakdown.map((s: any) => [s.severity, s.count]));
+    expect(bySeverity.critical).toBe(1);
+    expect(bySeverity.low).toBeUndefined(); // Project B's issue must not leak in
+
+    const forbidden = await portfolioHandler(
+      asUser(owner, { method: "GET", url: `https://tasketra.com/api/portfolio?projectId=${notMine.id}` })
+    );
+    expect(forbidden.status).toBe(404);
+  });
+
   it("rejects an unauthenticated request", async () => {
     const res = await portfolioHandler(new Request("https://tasketra.com/api/portfolio", { method: "GET" }));
     expect(res.status).toBe(401);

@@ -1,6 +1,7 @@
 import type { Config } from "@netlify/functions";
 import { db } from "../lib/db.ts";
 import { getUserIdFromRequest } from "../lib/auth.ts";
+import { hasProjectAccess } from "../lib/ownership.ts";
 import { json } from "../lib/http.ts";
 import { computeEvmMetrics } from "../lib/evm.ts";
 import { objectiveProgress } from "../lib/okr.ts";
@@ -21,16 +22,37 @@ import { withSentry } from "../lib/sentry.ts";
 // separate tagged-template calls, and parameterized interpolation
 // (${userId}) is what keeps this safe from injection, so the subquery is
 // repeated rather than built via string concatenation.
+//
+// Optional `?projectId=` filter (added for the Dashboard filter bar):
+// every query below carries the same
+// `AND (${filterProjectId}::uuid IS NULL OR p.id = ${filterProjectId}::uuid)`
+// clause, so passing no filter behaves exactly as before (the OR NULL branch
+// is always true) and passing a projectId narrows every aggregate to that
+// one project without duplicating each query into a filtered/unfiltered
+// pair. Access to that one project is checked once, up front, via the same
+// hasProjectAccess() helper every single-project endpoint already uses --
+// not by trusting the WHERE clause alone to keep a stranger's project out.
 
 export default withSentry(async (req: Request) => {
   const userId = getUserIdFromRequest(req);
   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
   if (req.method !== "GET") return json({ error: "Method not allowed" }, { status: 405 });
+
+  const url = new URL(req.url);
+  const requestedProjectId = url.searchParams.get("projectId");
+  let filterProjectId: string | null = null;
+  if (requestedProjectId) {
+    const allowed = await hasProjectAccess(userId, requestedProjectId);
+    if (!allowed) return json({ error: "Not found" }, { status: 404 });
+    filterProjectId = requestedProjectId;
+  }
+
   const database = db();
 
   const [
     projects,
     taskStatusRows,
+    issueSeverityRows,
     perProjectTaskRows,
     perProjectBudgetRows,
     perProjectRiskRows,
@@ -44,6 +66,7 @@ export default withSentry(async (req: Request) => {
       WHERE p.archived = false
         AND (p.owner_id = ${userId}
           OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = ${userId} AND pm.status = 'active'))
+        AND (${filterProjectId}::uuid IS NULL OR p.id = ${filterProjectId}::uuid)
       ORDER BY p.created_at DESC
     `,
     database.sql`
@@ -54,8 +77,25 @@ export default withSentry(async (req: Request) => {
           SELECT p.id FROM projects p
           WHERE p.archived = false
             AND (p.owner_id = ${userId} OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = ${userId} AND pm.status = 'active'))
+            AND (${filterProjectId}::uuid IS NULL OR p.id = ${filterProjectId}::uuid)
         )
       GROUP BY t.status
+    `,
+    // Same shape as taskStatusRows, one grouped count per severity, open
+    // issues only (matches the "Open issues" KPI's own definition of open:
+    // status != 'resolved') -- feeds the Dashboard's new severity donut.
+    database.sql`
+      SELECT i.severity, count(*)::int AS count
+      FROM issues i
+      WHERE i.deleted_at IS NULL
+        AND i.status != 'resolved'
+        AND i.project_id IN (
+          SELECT p.id FROM projects p
+          WHERE p.archived = false
+            AND (p.owner_id = ${userId} OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = ${userId} AND pm.status = 'active'))
+            AND (${filterProjectId}::uuid IS NULL OR p.id = ${filterProjectId}::uuid)
+        )
+      GROUP BY i.severity
     `,
     database.sql`
       SELECT t.project_id,
@@ -79,6 +119,7 @@ export default withSentry(async (req: Request) => {
           SELECT p.id FROM projects p
           WHERE p.archived = false
             AND (p.owner_id = ${userId} OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = ${userId} AND pm.status = 'active'))
+            AND (${filterProjectId}::uuid IS NULL OR p.id = ${filterProjectId}::uuid)
         )
       GROUP BY t.project_id
     `,
@@ -88,6 +129,7 @@ export default withSentry(async (req: Request) => {
       FROM projects p
       WHERE p.archived = false
         AND (p.owner_id = ${userId} OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = ${userId} AND pm.status = 'active'))
+        AND (${filterProjectId}::uuid IS NULL OR p.id = ${filterProjectId}::uuid)
     `,
     database.sql`
       SELECT r.project_id,
@@ -99,6 +141,7 @@ export default withSentry(async (req: Request) => {
           SELECT p.id FROM projects p
           WHERE p.archived = false
             AND (p.owner_id = ${userId} OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = ${userId} AND pm.status = 'active'))
+            AND (${filterProjectId}::uuid IS NULL OR p.id = ${filterProjectId}::uuid)
         )
       GROUP BY r.project_id
     `,
@@ -112,6 +155,7 @@ export default withSentry(async (req: Request) => {
           SELECT p.id FROM projects p
           WHERE p.archived = false
             AND (p.owner_id = ${userId} OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = ${userId} AND pm.status = 'active'))
+            AND (${filterProjectId}::uuid IS NULL OR p.id = ${filterProjectId}::uuid)
         )
       GROUP BY i.project_id
     `,
@@ -130,6 +174,7 @@ export default withSentry(async (req: Request) => {
           SELECT p.id FROM projects p
           WHERE p.archived = false
             AND (p.owner_id = ${userId} OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = ${userId} AND pm.status = 'active'))
+            AND (${filterProjectId}::uuid IS NULL OR p.id = ${filterProjectId}::uuid)
         )
       GROUP BY o.id
     `,
@@ -141,6 +186,7 @@ export default withSentry(async (req: Request) => {
         AND COALESCE(r.start_date, r.end_date) IS NOT NULL
         AND p.archived = false
         AND (p.owner_id = ${userId} OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = ${userId} AND pm.status = 'active'))
+        AND (${filterProjectId}::uuid IS NULL OR p.id = ${filterProjectId}::uuid)
       ORDER BY COALESCE(r.start_date, r.end_date) ASC
       LIMIT 5
     `,
@@ -209,6 +255,7 @@ export default withSentry(async (req: Request) => {
   });
 
   const taskStatusBreakdown = (taskStatusRows as any[]).map((r) => ({ status: r.status, count: r.count }));
+  const issueSeverityBreakdown = (issueSeverityRows as any[]).map((r) => ({ severity: r.severity, count: r.count }));
   const allObjectives = Array.from(objectivesByProject.values()).flat();
   const objectiveProgressValues = allObjectives.map((o) => o.progress).filter((p): p is number => p !== null);
 
@@ -235,7 +282,7 @@ export default withSentry(async (req: Request) => {
     projectId: r.project_id, projectName: r.project_name,
   }));
 
-  return json({ kpis, taskStatusBreakdown, projects: projectSummaries, upcomingMilestones });
+  return json({ kpis, taskStatusBreakdown, issueSeverityBreakdown, projects: projectSummaries, upcomingMilestones });
 });
 
 export const config: Config = { path: "/api/portfolio" };

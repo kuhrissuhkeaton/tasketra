@@ -19,6 +19,17 @@
   --success: #4F7A2E;
   --border: #E7DFC8;
 
+  /* Status colors for chart FILLS specifically (donut/pie arcs), distinct
+     from the --tag- and pill- pastels above. Those pastels are tuned for
+     small text-pill backgrounds and fail colorblind-separation when used
+     as large solid chart fills (checked against the dataviz accessibility
+     validator before adding these) -- these three are a validated,
+     colorblind-safe status triad used only for chart marks + legend
+     swatches, never for pills/badges/text (--tag- and pill- remain those). */
+  --chart-good: #0ca30c;
+  --chart-warn: #fab219;
+  --chart-crit: #d03b3b;
+
   /* Lime-tinted surfaces -- hover/active/focus-adjacent + "pending" pills */
   --tint: #F1F6D2;
   --tint-strong: #E3EEA0;
@@ -489,6 +500,31 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
 .evm-sub { font-size: 12px; color: var(--slate); margin-top: 4px; }
 .evm-good .evm-value { color: var(--success); }
 .evm-bad .evm-value { color: var(--red); }
+
+/* --- Dashboard donut chart (issues-by-severity, portfolio dashboard) ---
+   Conic-gradient fill, a 2px surface ring between the mark and the page
+   background, and a surface-colored center hole so the mark never sits
+   flush against the KPI number inside it (mark spec: surface gap between
+   fills / around overlapping marks). Legend is always present with direct
+   counts, per the dataviz accessibility pass this chart's colors went
+   through -- the WARN on contrast-vs-surface for these hues is mitigated
+   by the legend + counts, never by color alone. */
+.dashboard-donut-wrap { display: flex; gap: 18px; align-items: center; }
+.dashboard-donut {
+  width: 120px; height: 120px; border-radius: 50%; flex-shrink: 0;
+  box-shadow: 0 0 0 2px var(--cream);
+  display: flex; align-items: center; justify-content: center;
+}
+.dashboard-donut-hole {
+  width: 72px; height: 72px; border-radius: 50%; background: #fff;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+}
+.dashboard-donut-hole strong { font-family: 'Fraunces', serif; font-size: 20px; line-height: 1; color: var(--navy); }
+.dashboard-donut-hole span { font-size: 10.5px; color: var(--slate); margin-top: 2px; }
+.dashboard-donut-legend { display: flex; flex-direction: column; gap: 8px; font-size: 12.5px; }
+.dashboard-donut-legend .row-item { display: flex; align-items: center; gap: 8px; color: var(--navy); }
+.dashboard-donut-legend .sw { width: 10px; height: 10px; border-radius: 3px; display: inline-block; flex-shrink: 0; }
+.dashboard-donut-legend strong { margin-left: auto; padding-left: 14px; font-variant-numeric: tabular-nums; }
 
 /* --- Project sidebar layout --- */
 .project-shell { display: flex; min-height: 100vh; }

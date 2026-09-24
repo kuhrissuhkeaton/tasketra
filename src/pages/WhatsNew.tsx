@@ -9,6 +9,12 @@ type ChangeEntry = { version: string; date: string; title: string; body: string 
 // they can do.
 const CHANGES: ChangeEntry[] = [
   {
+    version: "v68",
+    date: "September 2026",
+    title: "Filter the Dashboard by project, and see issues by severity",
+    body: "The Dashboard now has a filter bar -- pick a single project to see just its numbers, or stay on \"All projects\" for the full portfolio rollup. And there's a new chart: open issues broken down by severity (Low, Medium, High/Critical), right next to the tasks-by-status chart, so you can see where the risk is concentrated without opening every project's Issues tab.",
+  },
+  {
     version: "v67",
     date: "September 2026",
     title: "A softer, less boxed-in look",
