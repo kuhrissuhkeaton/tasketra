@@ -76,6 +76,32 @@ describe("procurement", () => {
       expect(Number(body.procurementItem.cost)).toBe(12500.5);
       expect(body.procurementItem.closed_at).toBeNull();
     });
+
+    it("saves vendor category, sub-category, and role, defaulting to null when omitted", async () => {
+      const owner = await createTestUser("p-vendorcat@example.com");
+      const project = await createTestProject(owner.id);
+      const withFields = await procurementHandler(
+        asUser(owner, {
+          method: "POST", url: "https://tasketra.com/api/procurement",
+          body: {
+            projectId: project.id, vendorName: "Acme Catering",
+            vendorCategory: "Catering", vendorSubcategory: "Event catering", role: "Vendor for",
+          },
+        })
+      );
+      const withFieldsBody = await jsonBody<{ procurementItem: any }>(withFields);
+      expect(withFieldsBody.procurementItem.vendor_category).toBe("Catering");
+      expect(withFieldsBody.procurementItem.vendor_subcategory).toBe("Event catering");
+      expect(withFieldsBody.procurementItem.role).toBe("Vendor for");
+
+      const withoutFields = await procurementHandler(
+        asUser(owner, { method: "POST", url: "https://tasketra.com/api/procurement", body: { projectId: project.id, vendorName: "No categorization yet" } })
+      );
+      const withoutFieldsBody = await jsonBody<{ procurementItem: any }>(withoutFields);
+      expect(withoutFieldsBody.procurementItem.vendor_category).toBeNull();
+      expect(withoutFieldsBody.procurementItem.vendor_subcategory).toBeNull();
+      expect(withoutFieldsBody.procurementItem.role).toBeNull();
+    });
   });
 
   describe("GET /api/procurement", () => {
@@ -130,6 +156,28 @@ describe("procurement", () => {
       );
       const body = await jsonBody<{ procurementItem: any }>(res);
       expect(Number(body.procurementItem.cost)).toBe(250);
+      expect(body.procurementItem.vendor_name).toBe("Acme");
+    });
+
+    it("updates vendor category, sub-category, and role without clobbering other fields", async () => {
+      const owner = await createTestUser("p-vendorcatpatch@example.com");
+      const project = await createTestProject(owner.id);
+      const create = await procurementHandler(
+        asUser(owner, { method: "POST", url: "https://tasketra.com/api/procurement", body: { projectId: project.id, vendorName: "Acme", cost: 100 } })
+      );
+      const { procurementItem } = await jsonBody<{ procurementItem: any }>(create);
+
+      const res = await procurementHandler(
+        asUser(owner, {
+          method: "PATCH", url: "https://tasketra.com/api/procurement",
+          body: { id: procurementItem.id, vendorCategory: "Software", vendorSubcategory: "SaaS", role: "Vendor for" },
+        })
+      );
+      const body = await jsonBody<{ procurementItem: any }>(res);
+      expect(body.procurementItem.vendor_category).toBe("Software");
+      expect(body.procurementItem.vendor_subcategory).toBe("SaaS");
+      expect(body.procurementItem.role).toBe("Vendor for");
+      expect(Number(body.procurementItem.cost)).toBe(100);
       expect(body.procurementItem.vendor_name).toBe("Acme");
     });
 

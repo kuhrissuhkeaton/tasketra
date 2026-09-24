@@ -22,6 +22,9 @@ const PROCUREMENT_FIELDS = [
   { key: "category", label: "category" },
   { key: "status", label: "status" },
   { key: "owner_name", label: "owner" },
+  { key: "vendor_category", label: "vendor category" },
+  { key: "vendor_subcategory", label: "vendor sub-category" },
+  { key: "role", label: "role" },
   { key: "cost", label: "cost" },
   { key: "start_date", label: "start date" },
   { key: "end_date", label: "end date" },
@@ -39,8 +42,8 @@ export default withSentry(async (req: Request) => {
     if (!(await hasProjectAccess(userId, projectId))) return json({ error: "Not found" }, { status: 404 });
 
     const procurementItems = await database.sql`
-      SELECT id, vendor_name, description, category, status, owner_name, cost, start_date, end_date,
-        created_at, updated_at, closed_at
+      SELECT id, vendor_name, description, category, status, owner_name, vendor_category, vendor_subcategory, role,
+        cost, start_date, end_date, created_at, updated_at, closed_at
       FROM procurement_items WHERE project_id = ${projectId} AND deleted_at IS NULL
       ORDER BY
         CASE status WHEN 'in_progress' THEN 0 WHEN 'requested' THEN 1 WHEN 'active' THEN 2 ELSE 3 END,
@@ -66,9 +69,9 @@ export default withSentry(async (req: Request) => {
     if (cost !== null && !Number.isFinite(cost)) return json({ error: "Cost must be a number." }, { status: 400 });
 
     const [procurementItem] = await database.sql`
-      INSERT INTO procurement_items (project_id, vendor_name, description, category, owner_name, status, cost, start_date, end_date, closed_at)
-      VALUES (${projectId}, ${vendorName}, ${body?.description || null}, ${category}, ${body?.ownerName || null}, ${status}, ${cost}, ${body?.startDate || null}, ${body?.endDate || null}, ${closedAt})
-      RETURNING id, vendor_name, description, category, status, owner_name, cost, start_date, end_date, created_at, updated_at, closed_at
+      INSERT INTO procurement_items (project_id, vendor_name, description, category, owner_name, vendor_category, vendor_subcategory, role, status, cost, start_date, end_date, closed_at)
+      VALUES (${projectId}, ${vendorName}, ${body?.description || null}, ${category}, ${body?.ownerName || null}, ${body?.vendorCategory || null}, ${body?.vendorSubcategory || null}, ${body?.role || null}, ${status}, ${cost}, ${body?.startDate || null}, ${body?.endDate || null}, ${closedAt})
+      RETURNING id, vendor_name, description, category, status, owner_name, vendor_category, vendor_subcategory, role, cost, start_date, end_date, created_at, updated_at, closed_at
     `;
     await logActivity(database, { projectId, entityType: "procurement_item", entityId: procurementItem.id, entityTitle: procurementItem.vendor_name, action: "created" });
     return json({ procurementItem }, { status: 201 });
@@ -107,6 +110,9 @@ export default withSentry(async (req: Request) => {
         description = COALESCE(${body.description ?? null}, description),
         category = COALESCE(${body.category ?? null}, category),
         owner_name = COALESCE(${body.ownerName ?? null}, owner_name),
+        vendor_category = COALESCE(${body.vendorCategory ?? null}, vendor_category),
+        vendor_subcategory = COALESCE(${body.vendorSubcategory ?? null}, vendor_subcategory),
+        role = COALESCE(${body.role ?? null}, role),
         status = COALESCE(${body.status ?? null}, status),
         cost = COALESCE(${cost}, cost),
         start_date = COALESCE(${body.startDate ?? null}, start_date),
@@ -114,12 +120,13 @@ export default withSentry(async (req: Request) => {
         closed_at = CASE WHEN ${body.status ?? null} IN ('completed','cancelled') THEN now() ELSE closed_at END,
         updated_at = now()
       WHERE id = ${id}
-      RETURNING id, vendor_name, description, category, status, owner_name, cost, start_date, end_date, created_at, updated_at, closed_at
+      RETURNING id, vendor_name, description, category, status, owner_name, vendor_category, vendor_subcategory, role, cost, start_date, end_date, created_at, updated_at, closed_at
     `;
 
     const summary = diffSummary(existing, {
       vendor_name: body.vendorName, description: body.description, category: body.category,
-      owner_name: body.ownerName, status: body.status, cost: body.cost,
+      owner_name: body.ownerName, vendor_category: body.vendorCategory, vendor_subcategory: body.vendorSubcategory,
+      role: body.role, status: body.status, cost: body.cost,
       start_date: body.startDate, end_date: body.endDate,
     }, PROCUREMENT_FIELDS);
     await logActivity(database, { projectId: existing.project_id, entityType: "procurement_item", entityId: id, entityTitle: procurementItem.vendor_name, action: "updated", summary });

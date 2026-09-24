@@ -3607,6 +3607,9 @@ function ProcurementTab({ projectId }: { projectId: string }) {
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState<ProcurementItem["category"]>("vendor");
   const [owner, setOwner] = useState("");
+  const [vendorCategory, setVendorCategory] = useState("");
+  const [vendorSubcategory, setVendorSubcategory] = useState("");
+  const [role, setRole] = useState("");
   const [newStatus, setNewStatus] = useState<ProcurementItem["status"]>("requested");
   const [cost, setCost] = useState("");
   const [startDate, setStartDate] = useState("");
@@ -3618,6 +3621,9 @@ function ProcurementTab({ projectId }: { projectId: string }) {
   const [editDescription, setEditDescription] = useState("");
   const [editCategory, setEditCategory] = useState<ProcurementItem["category"]>("vendor");
   const [editOwner, setEditOwner] = useState("");
+  const [editVendorCategory, setEditVendorCategory] = useState("");
+  const [editVendorSubcategory, setEditVendorSubcategory] = useState("");
+  const [editRole, setEditRole] = useState("");
   const [editCost, setEditCost] = useState("");
   const [editStartDate, setEditStartDate] = useState("");
   const [editEndDate, setEditEndDate] = useState("");
@@ -3643,11 +3649,15 @@ function ProcurementTab({ projectId }: { projectId: string }) {
       await api.createProcurement(
         projectId, vendorName.trim(), description || undefined, category, owner || undefined,
         newStatus, cost.trim() ? Number(cost) : null, startDate || undefined, endDate || undefined,
+        vendorCategory || undefined, vendorSubcategory || undefined, role || undefined,
       );
       setVendorName("");
       setDescription("");
       setCategory("vendor");
       setOwner("");
+      setVendorCategory("");
+      setVendorSubcategory("");
+      setRole("");
       setNewStatus("requested");
       setCost("");
       setStartDate("");
@@ -3676,6 +3686,9 @@ function ProcurementTab({ projectId }: { projectId: string }) {
     setEditDescription(p.description || "");
     setEditCategory(p.category);
     setEditOwner(p.owner_name || "");
+    setEditVendorCategory(p.vendor_category || "");
+    setEditVendorSubcategory(p.vendor_subcategory || "");
+    setEditRole(p.role || "");
     setEditCost(p.cost === null ? "" : String(p.cost));
     setEditStartDate(p.start_date || "");
     setEditEndDate(p.end_date || "");
@@ -3688,6 +3701,9 @@ function ProcurementTab({ projectId }: { projectId: string }) {
       description: editDescription || undefined,
       category: editCategory,
       owner_name: editOwner || undefined,
+      vendor_category: editVendorCategory || undefined,
+      vendor_subcategory: editVendorSubcategory || undefined,
+      role: editRole || undefined,
       cost: editCost.trim() ? Number(editCost) : null,
       start_date: editStartDate || undefined,
       end_date: editEndDate || undefined,
@@ -3728,6 +3744,11 @@ function ProcurementTab({ projectId }: { projectId: string }) {
               <option key={value} value={value}>{label}</option>
             ))}
           </select>
+        </div>
+        <div className="inline-form" style={{ marginTop: 8, marginBottom: 0 }}>
+          <input placeholder="Role (optional), e.g. Vendor for, Subcontractor to" value={role} onChange={(e) => setRole(e.target.value)} />
+          <input placeholder="Category (optional), e.g. Software, Catering" value={vendorCategory} onChange={(e) => setVendorCategory(e.target.value)} />
+          <input placeholder="Sub-category (optional)" value={vendorSubcategory} onChange={(e) => setVendorSubcategory(e.target.value)} />
         </div>
         <div className="inline-form" style={{ marginTop: 8, marginBottom: 0 }}>
           <input type="number" step="0.01" placeholder="Cost (optional)" value={cost} onChange={(e) => setCost(e.target.value)} style={{ maxWidth: 140 }} />
@@ -3781,6 +3802,7 @@ function ProcurementTab({ projectId }: { projectId: string }) {
                   </span>
                   <div>{p.vendor_name}</div>
                   <div className="muted">{p.owner_name || "unassigned"}{p.cost !== null ? ` -- ${fmtMoney(p.cost)}` : ""}</div>
+                  {p.role && <div className="muted">{p.role}</div>}
                 </div>
               ))}
               {items.filter((p) => p.status === status).length === 0 && (
@@ -3792,7 +3814,7 @@ function ProcurementTab({ projectId }: { projectId: string }) {
       ) : (
       <ResizableTable id="procurement-vendors">
         <thead>
-          <tr><th>Vendor / contract</th><th>Category</th><th>Owner</th><th>Cost</th><th>Dates</th><th>Status</th><th></th></tr>
+          <tr><th>Vendor / contract</th><th>Type</th><th>Role</th><th>Category</th><th>Sub-category</th><th>Owner</th><th>Cost</th><th>Dates</th><th>Status</th><th></th></tr>
         </thead>
         <tbody>
           {items.map((p) => (
@@ -3809,6 +3831,9 @@ function ProcurementTab({ projectId }: { projectId: string }) {
                     ))}
                   </select>
                 </td>
+                <td><input value={editRole} onChange={(e) => setEditRole(e.target.value)} placeholder="Role" /></td>
+                <td><input value={editVendorCategory} onChange={(e) => setEditVendorCategory(e.target.value)} placeholder="Category" /></td>
+                <td><input value={editVendorSubcategory} onChange={(e) => setEditVendorSubcategory(e.target.value)} placeholder="Sub-category" /></td>
                 <td><input value={editOwner} onChange={(e) => setEditOwner(e.target.value)} /></td>
                 <td><input type="number" step="0.01" value={editCost} onChange={(e) => setEditCost(e.target.value)} style={{ maxWidth: 100 }} /></td>
                 <td>
@@ -3828,6 +3853,9 @@ function ProcurementTab({ projectId }: { projectId: string }) {
                   {p.description && <div className="muted">{p.description}</div>}
                 </td>
                 <td><span className="pill pill-navy">{PROCUREMENT_CATEGORY_LABEL[p.category]}</span></td>
+                <td>{p.role || "--"}</td>
+                <td>{p.vendor_category || "--"}</td>
+                <td>{p.vendor_subcategory || "--"}</td>
                 <td>{p.owner_name || "--"}</td>
                 <td>{p.cost !== null ? fmtMoney(p.cost) : "--"}</td>
                 <td className="muted">
@@ -3854,7 +3882,7 @@ function ProcurementTab({ projectId }: { projectId: string }) {
             )
           ))}
           {items.length === 0 && (
-            <tr><td colSpan={7} className="muted">No vendors or contracts logged yet. Add one above when you're sourcing or have an agreement in place.</td></tr>
+            <tr><td colSpan={10} className="muted">No vendors or contracts logged yet. Add one above when you're sourcing or have an agreement in place.</td></tr>
           )}
         </tbody>
       </ResizableTable>

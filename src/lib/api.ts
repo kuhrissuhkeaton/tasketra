@@ -320,6 +320,9 @@ export type ProcurementItem = {
   category: "vendor" | "contract" | "purchase_order";
   status: "requested" | "in_progress" | "active" | "completed" | "cancelled";
   owner_name: string | null;
+  vendor_category: string | null;
+  vendor_subcategory: string | null;
+  role: string | null;
   cost: number | null;
   start_date: string | null;
   end_date: string | null;
@@ -764,16 +767,18 @@ export const api = {
   createProcurement: (
     projectId: string, vendorName: string, description?: string, category?: ProcurementItem["category"],
     ownerName?: string, status?: ProcurementItem["status"], cost?: number | null, startDate?: string, endDate?: string,
+    vendorCategory?: string, vendorSubcategory?: string, role?: string,
   ) =>
     request<{ procurementItem: ProcurementItem }>("/procurement", {
-      method: "POST", body: JSON.stringify({ projectId, vendorName, description, category, ownerName, status, cost, startDate, endDate }),
+      method: "POST", body: JSON.stringify({ projectId, vendorName, description, category, ownerName, status, cost, startDate, endDate, vendorCategory, vendorSubcategory, role }),
     }),
-  updateProcurement: (id: string, patch: Partial<Pick<ProcurementItem, "status" | "vendor_name" | "description" | "category" | "owner_name" | "cost" | "start_date" | "end_date">>) =>
+  updateProcurement: (id: string, patch: Partial<Pick<ProcurementItem, "status" | "vendor_name" | "description" | "category" | "owner_name" | "cost" | "start_date" | "end_date" | "vendor_category" | "vendor_subcategory" | "role">>) =>
     request<{ procurementItem: ProcurementItem }>("/procurement", {
       method: "PATCH",
       body: JSON.stringify({
         id, ...patch, vendorName: patch.vendor_name, ownerName: patch.owner_name,
         startDate: patch.start_date, endDate: patch.end_date,
+        vendorCategory: patch.vendor_category, vendorSubcategory: patch.vendor_subcategory, role: patch.role,
       }),
     }),
   deleteProcurement: (id: string) => request<{ ok: true }>(`/procurement?id=${id}`, { method: "DELETE" }),

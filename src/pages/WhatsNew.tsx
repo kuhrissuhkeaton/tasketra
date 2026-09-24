@@ -9,6 +9,12 @@ type ChangeEntry = { version: string; date: string; title: string; body: string 
 // they can do.
 const CHANGES: ChangeEntry[] = [
   {
+    version: "v69",
+    date: "September 2026",
+    title: "Categorize vendors by role, category, and sub-category",
+    body: "The Vendors tab now has three optional new fields: Role (e.g. \"Vendor for,\" \"Subcontractor to\"), Category, and Sub-category. Use them however fits your vendor list -- free text, not a fixed list -- so it's easy to scan who's who at a glance instead of just names and dollar amounts.",
+  },
+  {
     version: "v68",
     date: "September 2026",
     title: "Filter the Dashboard by project, and see issues by severity",
