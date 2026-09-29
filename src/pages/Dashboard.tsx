@@ -259,6 +259,7 @@ export default function Dashboard() {
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [selectedStage, setSelectedStage] = useState<ProjectStage | null>(null);
   const [escalations, setEscalations] = useState<Record<string, string[]>>({});
+  const [nextUps, setNextUps] = useState<Record<string, string | null>>({});
   const [portfolioLoading, setPortfolioLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [newName, setNewName] = useState("");
@@ -287,6 +288,7 @@ export default function Dashboard() {
     setDeletedProjects(deleted);
     setPortfolio(portfolioData);
     setEscalations(Object.fromEntries(portfolioData.projects.map((x) => [x.id, x.escalations])));
+    setNextUps(Object.fromEntries(portfolioData.projects.map((x) => [x.id, x.nextUp])));
     setLoading(false);
   }
 
@@ -523,6 +525,7 @@ export default function Dashboard() {
                       <span className="pill pill-red">{p.overdue_tasks} overdue</span>
                     )}
                   </div>
+                  {nextUps[p.id] && <p className="project-card-next"><span>Next up</span> {nextUps[p.id]}</p>}
                 </Link>
 
                 {p.is_owner !== false && (

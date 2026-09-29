@@ -4,6 +4,9 @@ import { getUserIdFromRequest } from "../lib/auth.ts";
 import { hasProjectAccess } from "../lib/ownership.ts";
 import { json } from "../lib/http.ts";
 import { withSentry } from "../lib/sentry.ts";
+import { sanitizeCharter } from "../lib/charter.ts";
+import { approvalStatus } from "../lib/charterApproval.ts";
+import { isStage } from "../lib/stageChecklist.ts";
 
 // One-click weekly status report: everything that moved on a project in the
 // last 7 days, plus a current-state snapshot. Pure aggregation, no new
@@ -28,6 +31,7 @@ export default withSentry(async (req: Request) => {
     decisionsMade,
     statusUpdates,
     snapshot,
+    [projectRow],
   ] = await Promise.all([
     database.sql`
       SELECT id, title, owner_name, updated_at FROM tasks
@@ -80,7 +84,31 @@ export default withSentry(async (req: Request) => {
         (SELECT count(*) FROM risks WHERE project_id = ${projectId} AND status != 'resolved' AND deleted_at IS NULL) AS open_risks,
         (SELECT count(*) FROM decision_requests WHERE project_id = ${projectId} AND status = 'open' AND deleted_at IS NULL) AS open_decisions
     `,
+    database.sql`
+      SELECT p.stage, p.charter, dr.status AS approval_status, rec.chosen_option, rec.responder_name
+      FROM projects p
+      LEFT JOIN decision_requests dr ON dr.id = p.charter_decision_id AND dr.deleted_at IS NULL
+      LEFT JOIN decision_records rec ON rec.decision_request_id = dr.id
+      WHERE p.id = ${projectId}
+    `,
   ]);
+
+  // The charter rides along so a stakeholder reading the report sees what the
+  // project is for. It stays null until a purpose has been written.
+  const charter = sanitizeCharter(projectRow?.charter) ?? {};
+  const charterBlock = charter.purpose
+    ? {
+        purpose: charter.purpose,
+        sponsor: charter.sponsor ?? null,
+        success: charter.success ?? null,
+        approval: projectRow?.approval_status
+          ? {
+              status: approvalStatus({ status: String(projectRow.approval_status), chosen_option: (projectRow.chosen_option as string | null) ?? null }),
+              responderName: (projectRow.responder_name as string | null) ?? null,
+            }
+          : null,
+      }
+    : null;
 
   return json({
     rangeDays: 7,
@@ -94,6 +122,8 @@ export default withSentry(async (req: Request) => {
     decisionsMade,
     statusUpdates,
     snapshot: snapshot[0],
+    stage: isStage(projectRow?.stage) ? projectRow.stage : null,
+    charter: charterBlock,
   });
 });
 

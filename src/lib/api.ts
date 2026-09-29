@@ -487,6 +487,13 @@ export type WeeklyReport = {
     open_risks: number;
     open_decisions: number;
   };
+  stage: ProjectStage | null;
+  charter: {
+    purpose: string;
+    sponsor: string | null;
+    success: string | null;
+    approval: { status: "pending" | "approved" | "changes_requested"; responderName: string | null } | null;
+  } | null;
 };
 
 export type CostEntry = {
@@ -522,6 +529,7 @@ export type PortfolioProjectSummary = {
   id: string;
   name: string;
   stage: ProjectStage;
+  nextUp: string | null;
   escalations: string[];
   totalTasks: number;
   doneTasks: number;

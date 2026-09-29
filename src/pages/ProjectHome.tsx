@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, Fragment } from "react";
 import { useParams, useSearchParams, useNavigate, useLocation, Link } from "react-router-dom";
-import { api, ApiError, type Project, type Task, type Stakeholder, type Decision, type Issue, type Risk, type Assumption, type Dependency, type ChangeRequest, type Lesson, type TodayData, type WeeklyReport, type BudgetData, type FeedItem, type TrashItem, type ProjectMember, type Meeting, type MeetingActionItem, type ProjectDocument, type StorageUsage, type RoadmapItem, type RoadmapItemType, type QualityItem, type ProcurementItem, type CommPlanItem, type ComplianceItem, type Objective, type KeyResult, type RiskTaskLink, type IssueTaskLink, type ProjectStage, type BaselineData } from "../lib/api";
+import { api, ApiError, type Project, type Task, type Stakeholder, type Decision, type Issue, type Risk, type Assumption, type Dependency, type ChangeRequest, type Lesson, type TodayData, type WeeklyReport, type BudgetData, type FeedItem, type TrashItem, type ProjectMember, type Meeting, type MeetingActionItem, type ProjectDocument, type StorageUsage, type RoadmapItem, type RoadmapItemType, type QualityItem, type ProcurementItem, type CommPlanItem, type ComplianceItem, type Objective, type KeyResult, type RiskTaskLink, type IssueTaskLink, type ProjectStage, type BaselineData, type CharterApproval } from "../lib/api";
 import { RoadmapTimeline, ROADMAP_TYPE_LABEL, ROADMAP_STATUS_LABEL, ROADMAP_TYPE_COLOR, fmtRoadmapDate } from "../components/RoadmapTimeline";
 import { Drawer } from "../components/ItemDrawer";
 import { tasksToICS, downloadICS } from "../lib/ics";
@@ -13,7 +13,7 @@ import { useConfirm } from "../components/ConfirmDialog";
 import { ResizableTable } from "../components/ResizableTable";
 import { avatarColor, initials } from "../lib/avatar";
 import { TourOverlay, useProductTour } from "../components/ProductTour";
-import { StageRail, StageChip } from "../components/StageRail";
+import { StageRail, StageChip, STAGE_LABEL } from "../components/StageRail";
 import { ProjectSetupPicker } from "../components/ProjectSetup";
 import { CharterTab } from "../components/CharterTab";
 import { BaselineCard } from "../components/BaselineCard";
@@ -5849,6 +5849,7 @@ function ClosureTab({ projectId }: { projectId: string }) {
   const [openIssues, setOpenIssues] = useState(0);
   const [checklist, setChecklist] = useState<Record<string, boolean>>({});
   const [notes, setNotes] = useState("");
+  const [approval, setApproval] = useState<CharterApproval | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
@@ -5866,6 +5867,7 @@ function ClosureTab({ projectId }: { projectId: string }) {
     setNotes(project.closure_notes || "");
     setOpenRisks(risks.filter((r) => r.status !== "resolved").length);
     setOpenIssues(issues.filter((i) => i.status !== "resolved").length);
+    api.getCharterApproval(projectId).then(({ approval }) => setApproval(approval)).catch(() => {});
     setLoading(false);
   }
 
@@ -5940,6 +5942,36 @@ function ClosureTab({ projectId }: { projectId: string }) {
               <span className={openIssues > 0 ? "pill pill-gold" : "pill pill-green"}>{openIssues} open {openIssues === 1 ? "issue" : "issues"}</span>
             </div>
           </div>
+
+          {project?.charter?.purpose && (
+            <div className="settings-card closure-charter">
+              <p className="settings-card-label">Charter check</p>
+              <p className="muted" style={{ marginBottom: 12, fontSize: 13 }}>
+                Read what you set out to do against what the project delivered. Nothing here blocks closing.
+              </p>
+              <p className="closure-charter-label">Purpose</p>
+              <p>{project.charter.purpose}</p>
+              {project.charter.success && (
+                <>
+                  <p className="closure-charter-label">Success measures</p>
+                  <p style={{ whiteSpace: "pre-wrap" }}>{project.charter.success}</p>
+                </>
+              )}
+              {!project.charter.success && project.charter.objectives && (
+                <>
+                  <p className="closure-charter-label">Objectives</p>
+                  <p style={{ whiteSpace: "pre-wrap" }}>{project.charter.objectives}</p>
+                </>
+              )}
+              {approval && (
+                <p className="muted" style={{ marginTop: 8 }}>
+                  {approval.status === "pending" && "The sponsor has not answered the charter approval yet."}
+                  {approval.status === "approved" && `Charter approved by ${approval.responderName}.`}
+                  {approval.status === "changes_requested" && `${approval.responderName} asked for changes to the charter.`}
+                </p>
+              )}
+            </div>
+          )}
 
           <div className="settings-card">
             <p className="settings-card-label">Closure checklist ({checkedCount}/{CLOSURE_CHECKLIST_ITEMS.length})</p>
@@ -6030,6 +6062,22 @@ function WeeklyReportView({ projectId, projectName }: { projectId: string; proje
         </div>
         <button className="btn btn-ghost no-print" onClick={() => window.print()} type="button">Print / Save as PDF</button>
       </div>
+
+      {report.charter && (
+        <div className="today-section report-charter">
+          <h4>Project charter{report.stage ? ` -- ${STAGE_LABEL[report.stage]} stage` : ""}</h4>
+          <p>{report.charter.purpose}</p>
+          {report.charter.sponsor && <p className="muted">Sponsor: {report.charter.sponsor}</p>}
+          {report.charter.success && <p className="muted">Success looks like: {report.charter.success}</p>}
+          {report.charter.approval && (
+            <p className="muted">
+              {report.charter.approval.status === "pending" && "Charter approval: waiting on the sponsor"}
+              {report.charter.approval.status === "approved" && `Charter approved by ${report.charter.approval.responderName}`}
+              {report.charter.approval.status === "changes_requested" && `Charter: ${report.charter.approval.responderName} asked for changes`}
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="stat-row" style={{ marginBottom: 24, flexWrap: "wrap" }}>
         <div className="stat"><strong>{snapshot.open_tasks}</strong> open tasks</div>

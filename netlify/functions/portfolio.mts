@@ -8,7 +8,8 @@ import { objectiveProgress } from "../lib/okr.ts";
 import { projectHealth } from "../lib/portfolioHealth.ts";
 import { withSentry } from "../lib/sentry.ts";
 import { evaluateTolerances, sanitizeTolerances } from "../lib/tolerances.ts";
-import { isStage } from "../lib/stageChecklist.ts";
+import { isStage, stageChecklist } from "../lib/stageChecklist.ts";
+import { loadStageInputs } from "../lib/stageData.ts";
 
 // The one call the portfolio Dashboard needs -- everything on it is a
 // read-only rollup across every project the signed-in user can see (owned or
@@ -216,6 +217,22 @@ export default withSentry(async (req: Request) => {
     objectivesByProject.set(o.project_id, list);
   }
 
+  // The first unfinished suggestion for each project's current stage, shown as
+  // a "Next up" line on Dashboard cards. Capped so a very large portfolio does
+  // not fan out into hundreds of count queries on every load.
+  const NEXT_UP_LIMIT = 30;
+  const nextUpByProject = new Map<string, string | null>();
+  await Promise.all((projects as any[]).slice(0, NEXT_UP_LIMIT).map(async (p) => {
+    try {
+      const inputs = await loadStageInputs(database, p.id);
+      if (!inputs) return;
+      const item = stageChecklist(inputs.stage, inputs.counts, inputs.size).items.find((i) => i.status !== "done");
+      nextUpByProject.set(p.id, item ? item.title : null);
+    } catch {
+      // Guidance is optional on the Dashboard; a failed count just hides the line.
+    }
+  }));
+
   const projectSummaries = (projects as any[]).map((p) => {
     const taskRow = taskById.get(p.id) || { total_tasks: 0, done_tasks: 0, overdue_tasks: 0, leaf_total_tasks: 0, leaf_done_tasks: 0, leaf_due_tasks: 0 };
     const budgetRow = budgetById.get(p.id);
@@ -252,6 +269,7 @@ export default withSentry(async (req: Request) => {
       id: p.id,
       name: p.name,
       stage: p.stage,
+      nextUp: nextUpByProject.get(p.id) ?? null,
       escalations: evaluateTolerances(sanitizeTolerances(p.tolerances), {
         cpi: evm.cpi, spi: evm.spi, overdueTasks: Number(taskRow.overdue_tasks) || 0, highRisks: riskRow.high_count,
       }),

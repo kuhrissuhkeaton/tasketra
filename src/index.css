@@ -1182,6 +1182,10 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
 
 .stage-pending { background: white; border-radius: 14px; padding: 14px 18px; }
 .stage-pending p { margin: 0 0 10px; font-size: 14px; line-height: 1.5; }
+.closure-charter-label { margin: 10px 0 2px; font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--slate); }
+.report-charter p { margin: 0 0 6px; white-space: pre-line; }
+.project-card-next { margin: 10px 0 0; font-size: 13px; color: var(--slate); }
+.project-card-next span { font-weight: 600; color: var(--navy); margin-right: 4px; }
 .stage-gate-status { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: white; border-radius: 14px; padding: 10px 18px; font-size: 14px; }
 .stage-pending-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .stage-pending-actions .btn { padding: 8px 18px; font-size: 13px; }

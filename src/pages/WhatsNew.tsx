@@ -9,6 +9,18 @@ type ChangeEntry = { version: string; date: string; title: string; body: string 
 // they can do.
 const CHANGES: ChangeEntry[] = [
   {
+    version: "v80",
+    date: "September 2026",
+    title: "See what's next on every project card",
+    body: "Each project card on the Dashboard now shows a Next up line: the first suggestion still open for that project's current stage, such as Lock the baseline or Finish the closure checklist. It is the same list you see on the project's Home tab, just visible without opening the project.",
+  },
+  {
+    version: "v79",
+    date: "September 2026",
+    title: "The charter now shows up in your report and at closure",
+    body: "The weekly status report now opens with the project's charter: why the project exists, the sponsor, what success looks like, and whether the sponsor has approved it, along with the current stage. The Closure tab has a new Charter check card so you can read your purpose and success measures against what the project delivered before you close it. Both only appear once a charter has been written, and nothing is blocked.",
+  },
+  {
     version: "v78",
     date: "September 2026",
     title: "Ask your sponsor to sign off at a stage change",
