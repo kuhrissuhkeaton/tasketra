@@ -1293,3 +1293,5 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
 .charter-dot-approved { background: var(--success); }
 .charter-dot-changes_requested { background: var(--red); }
 .charter-link code { font-size: 12px; word-break: break-all; }
+
+.filter-group-label { font-size: 12px; font-weight: 700; color: var(--slate); margin-right: 2px; align-self: center; }

@@ -9,6 +9,12 @@ type ChangeEntry = { version: string; date: string; title: string; body: string 
 // they can do.
 const CHANGES: ChangeEntry[] = [
   {
+    version: "v75",
+    date: "September 2026",
+    title: "Filter the Dashboard by stage",
+    body: "The Dashboard filter bar now has a Stage row: All stages, Initiate, Plan, Execute, or Close, each with a count. Pick one and the numbers, charts, health table and project cards all narrow to the projects in that stage. You can combine it with the single-project filter.",
+  },
+  {
     version: "v74",
     date: "September 2026",
     title: "See every project's stage on the Dashboard",

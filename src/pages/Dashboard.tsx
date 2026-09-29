@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { api, ApiError, type Project, type PortfolioData, type PortfolioProjectSummary, type Task, type Issue } from "../lib/api";
+import { api, ApiError, type Project, type ProjectStage, type PortfolioData, type PortfolioProjectSummary, type Task, type Issue } from "../lib/api";
 import { AppSidebar } from "../components/AppSidebar";
-import { StageChip } from "../components/StageRail";
+import { StageChip, STAGES } from "../components/StageRail";
 import { ProjectSetupPicker } from "../components/ProjectSetup";
 import type { ProjectSize, ProjectApproach } from "../lib/projectView";
 import { useConfirm } from "../components/ConfirmDialog";
@@ -252,6 +252,7 @@ export default function Dashboard() {
   const [deletedProjects, setDeletedProjects] = useState<Project[]>([]);
   const [portfolio, setPortfolio] = useState<PortfolioData | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [selectedStage, setSelectedStage] = useState<ProjectStage | null>(null);
   const [portfolioLoading, setPortfolioLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [newName, setNewName] = useState("");
@@ -284,13 +285,25 @@ export default function Dashboard() {
 
   // Filter bar only re-fetches the portfolio rollup, not the whole page --
   // the project grid/deleted list below don't depend on this filter.
-  async function selectProject(id: string | null) {
+  async function refreshPortfolio(id: string | null, stage: ProjectStage | null) {
     setSelectedProjectId(id);
+    setSelectedStage(stage);
     setPortfolioLoading(true);
-    const portfolioData = await api.getPortfolio(id ?? undefined);
+    const portfolioData = await api.getPortfolio(id ?? undefined, stage ?? undefined);
     setPortfolio(portfolioData);
     setPortfolioLoading(false);
   }
+
+  const selectProject = (id: string | null) => refreshPortfolio(id, selectedStage);
+
+  // Picking a stage drops a project filter that no longer matches it.
+  function selectStage(stage: ProjectStage | null) {
+    const stillMatches = selectedProjectId !== null && projects.some((p) => p.id === selectedProjectId && (!stage || p.stage === stage));
+    refreshPortfolio(stillMatches ? selectedProjectId : null, stage);
+  }
+
+  const visibleProjects = selectedStage ? projects.filter((p) => p.stage === selectedStage) : projects;
+  const stageCount = (stage: ProjectStage) => projects.filter((p) => p.stage === stage).length;
 
   useEffect(() => {
     load();
@@ -363,6 +376,26 @@ export default function Dashboard() {
 
         {!loading && projects.length > 1 && (
           <div className="roadmap-filter-bar" style={{ marginBottom: 4 }}>
+            <div className="roadmap-filter-group" role="group" aria-label="Filter by stage">
+              <span className="filter-group-label">Stage</span>
+              <button
+                type="button"
+                className={`filter-chip${selectedStage === null ? " filter-chip-active" : ""}`}
+                onClick={() => selectStage(null)}
+              >
+                All stages
+              </button>
+              {STAGES.map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  className={`filter-chip${selectedStage === s.id ? " filter-chip-active" : ""}`}
+                  onClick={() => selectStage(s.id)}
+                >
+                  {s.label} {stageCount(s.id)}
+                </button>
+              ))}
+            </div>
             <div className="roadmap-filter-group">
               <button
                 type="button"
@@ -371,7 +404,7 @@ export default function Dashboard() {
               >
                 All projects
               </button>
-              {projects.map((p) => (
+              {visibleProjects.map((p) => (
                 <button
                   key={p.id}
                   type="button"
@@ -462,9 +495,11 @@ export default function Dashboard() {
           </div>
         ) : projects.length === 0 ? (
           <p className="muted">No projects yet. Create your first one above.</p>
+        ) : visibleProjects.length === 0 ? (
+          <p className="muted">No projects in this stage yet.</p>
         ) : (
           <div className="project-grid">
-            {projects.map((p) => (
+            {visibleProjects.map((p) => (
               <div className="project-card-wrap" key={p.id} style={{ opacity: deletingId === p.id ? 0.5 : 1 }}>
                 <Link to={`/app/projects/${p.id}`} className="project-card">
                   <h3>{p.name}</h3>

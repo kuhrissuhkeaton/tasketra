@@ -1002,5 +1002,11 @@ export const api = {
 
   getReferrals: () => request<ReferralInfo>("/referrals"),
 
-  getPortfolio: (projectId?: string) => request<PortfolioData>(`/portfolio${projectId ? `?projectId=${projectId}` : ""}`),
+  getPortfolio: (projectId?: string, stage?: ProjectStage) => {
+    const qs = new URLSearchParams();
+    if (projectId) qs.set("projectId", projectId);
+    if (stage) qs.set("stage", stage);
+    const q = qs.toString();
+    return request<PortfolioData>(`/portfolio${q ? `?${q}` : ""}`);
+  },
 };

@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { api, type ProjectStage, type StageData } from "../lib/api";
 
-const STAGES: { id: ProjectStage; label: string }[] = [
+export const STAGES: { id: ProjectStage; label: string }[] = [
   { id: "initiate", label: "Initiate" },
   { id: "plan", label: "Plan" },
   { id: "execute", label: "Execute" },
   { id: "close", label: "Close" },
 ];
 
-const STAGE_LABEL: Record<ProjectStage, string> = {
+export const STAGE_LABEL: Record<ProjectStage, string> = {
   initiate: "Initiate",
   plan: "Plan",
   execute: "Execute",

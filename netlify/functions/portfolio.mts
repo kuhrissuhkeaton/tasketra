@@ -7,6 +7,7 @@ import { computeEvmMetrics } from "../lib/evm.ts";
 import { objectiveProgress } from "../lib/okr.ts";
 import { projectHealth } from "../lib/portfolioHealth.ts";
 import { withSentry } from "../lib/sentry.ts";
+import { isStage } from "../lib/stageChecklist.ts";
 
 // The one call the portfolio Dashboard needs -- everything on it is a
 // read-only rollup across every project the signed-in user can see (owned or
@@ -25,13 +26,17 @@ import { withSentry } from "../lib/sentry.ts";
 //
 // Optional `?projectId=` filter (added for the Dashboard filter bar):
 // every query below carries the same
-// `AND (${filterProjectId}::uuid IS NULL OR p.id = ${filterProjectId}::uuid)`
+// `AND (${filterProjectId}::uuid IS NULL OR p.id = ${filterProjectId}::uuid) AND (${filterStage}::text IS NULL OR p.stage = ${filterStage}::text)`
 // clause, so passing no filter behaves exactly as before (the OR NULL branch
 // is always true) and passing a projectId narrows every aggregate to that
 // one project without duplicating each query into a filtered/unfiltered
 // pair. Access to that one project is checked once, up front, via the same
 // hasProjectAccess() helper every single-project endpoint already uses --
 // not by trusting the WHERE clause alone to keep a stranger's project out.
+//
+// Optional `?stage=` filter works the same way, narrowing every aggregate to
+// projects in one stage (initiate, plan, execute, close). Both filters can
+// combine.
 
 export default withSentry(async (req: Request) => {
   const userId = getUserIdFromRequest(req);
@@ -46,6 +51,12 @@ export default withSentry(async (req: Request) => {
     if (!allowed) return json({ error: "Not found" }, { status: 404 });
     filterProjectId = requestedProjectId;
   }
+
+  const requestedStage = url.searchParams.get("stage");
+  if (requestedStage && !isStage(requestedStage)) {
+    return json({ error: "stage must be one of initiate, plan, execute, close." }, { status: 400 });
+  }
+  const filterStage: string | null = requestedStage || null;
 
   const database = db();
 
@@ -66,7 +77,7 @@ export default withSentry(async (req: Request) => {
       WHERE p.archived = false
         AND (p.owner_id = ${userId}
           OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = ${userId} AND pm.status = 'active'))
-        AND (${filterProjectId}::uuid IS NULL OR p.id = ${filterProjectId}::uuid)
+        AND (${filterProjectId}::uuid IS NULL OR p.id = ${filterProjectId}::uuid) AND (${filterStage}::text IS NULL OR p.stage = ${filterStage}::text)
       ORDER BY p.created_at DESC
     `,
     database.sql`
@@ -77,7 +88,7 @@ export default withSentry(async (req: Request) => {
           SELECT p.id FROM projects p
           WHERE p.archived = false
             AND (p.owner_id = ${userId} OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = ${userId} AND pm.status = 'active'))
-            AND (${filterProjectId}::uuid IS NULL OR p.id = ${filterProjectId}::uuid)
+            AND (${filterProjectId}::uuid IS NULL OR p.id = ${filterProjectId}::uuid) AND (${filterStage}::text IS NULL OR p.stage = ${filterStage}::text)
         )
       GROUP BY t.status
     `,
@@ -93,7 +104,7 @@ export default withSentry(async (req: Request) => {
           SELECT p.id FROM projects p
           WHERE p.archived = false
             AND (p.owner_id = ${userId} OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = ${userId} AND pm.status = 'active'))
-            AND (${filterProjectId}::uuid IS NULL OR p.id = ${filterProjectId}::uuid)
+            AND (${filterProjectId}::uuid IS NULL OR p.id = ${filterProjectId}::uuid) AND (${filterStage}::text IS NULL OR p.stage = ${filterStage}::text)
         )
       GROUP BY i.severity
     `,
@@ -119,7 +130,7 @@ export default withSentry(async (req: Request) => {
           SELECT p.id FROM projects p
           WHERE p.archived = false
             AND (p.owner_id = ${userId} OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = ${userId} AND pm.status = 'active'))
-            AND (${filterProjectId}::uuid IS NULL OR p.id = ${filterProjectId}::uuid)
+            AND (${filterProjectId}::uuid IS NULL OR p.id = ${filterProjectId}::uuid) AND (${filterStage}::text IS NULL OR p.stage = ${filterStage}::text)
         )
       GROUP BY t.project_id
     `,
@@ -129,7 +140,7 @@ export default withSentry(async (req: Request) => {
       FROM projects p
       WHERE p.archived = false
         AND (p.owner_id = ${userId} OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = ${userId} AND pm.status = 'active'))
-        AND (${filterProjectId}::uuid IS NULL OR p.id = ${filterProjectId}::uuid)
+        AND (${filterProjectId}::uuid IS NULL OR p.id = ${filterProjectId}::uuid) AND (${filterStage}::text IS NULL OR p.stage = ${filterStage}::text)
     `,
     database.sql`
       SELECT r.project_id,
@@ -141,7 +152,7 @@ export default withSentry(async (req: Request) => {
           SELECT p.id FROM projects p
           WHERE p.archived = false
             AND (p.owner_id = ${userId} OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = ${userId} AND pm.status = 'active'))
-            AND (${filterProjectId}::uuid IS NULL OR p.id = ${filterProjectId}::uuid)
+            AND (${filterProjectId}::uuid IS NULL OR p.id = ${filterProjectId}::uuid) AND (${filterStage}::text IS NULL OR p.stage = ${filterStage}::text)
         )
       GROUP BY r.project_id
     `,
@@ -155,7 +166,7 @@ export default withSentry(async (req: Request) => {
           SELECT p.id FROM projects p
           WHERE p.archived = false
             AND (p.owner_id = ${userId} OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = ${userId} AND pm.status = 'active'))
-            AND (${filterProjectId}::uuid IS NULL OR p.id = ${filterProjectId}::uuid)
+            AND (${filterProjectId}::uuid IS NULL OR p.id = ${filterProjectId}::uuid) AND (${filterStage}::text IS NULL OR p.stage = ${filterStage}::text)
         )
       GROUP BY i.project_id
     `,
@@ -174,7 +185,7 @@ export default withSentry(async (req: Request) => {
           SELECT p.id FROM projects p
           WHERE p.archived = false
             AND (p.owner_id = ${userId} OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = ${userId} AND pm.status = 'active'))
-            AND (${filterProjectId}::uuid IS NULL OR p.id = ${filterProjectId}::uuid)
+            AND (${filterProjectId}::uuid IS NULL OR p.id = ${filterProjectId}::uuid) AND (${filterStage}::text IS NULL OR p.stage = ${filterStage}::text)
         )
       GROUP BY o.id
     `,
@@ -186,7 +197,7 @@ export default withSentry(async (req: Request) => {
         AND COALESCE(r.start_date, r.end_date) IS NOT NULL
         AND p.archived = false
         AND (p.owner_id = ${userId} OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = ${userId} AND pm.status = 'active'))
-        AND (${filterProjectId}::uuid IS NULL OR p.id = ${filterProjectId}::uuid)
+        AND (${filterProjectId}::uuid IS NULL OR p.id = ${filterProjectId}::uuid) AND (${filterStage}::text IS NULL OR p.stage = ${filterStage}::text)
       ORDER BY COALESCE(r.start_date, r.end_date) ASC
       LIMIT 5
     `,

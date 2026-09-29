@@ -36,4 +36,35 @@ describe("stage on the Dashboard", () => {
     expect(pById[a.id]).toBe("plan");
     expect(pById[b.id]).toBe("execute");
   });
+
+  it("narrows the portfolio to one stage, and can combine with a project filter", async () => {
+    const owner = await createTestUser("dash-stage-filter@example.com");
+    const a = await createTestProject(owner.id, "Alpha");
+    const b = await createTestProject(owner.id, "Beta");
+    const c = await createTestProject(owner.id, "Gamma");
+    const setStage = (id: string, stage: string) =>
+      projectHandler(asUser(owner, { method: "PATCH", url: "https://tasketra.com/api/project", body: { id, stage } }));
+    await setStage(b.id, "execute");
+    await setStage(c.id, "execute");
+    const get = async (qs: string) =>
+      jsonBody<{ projects: { id: string }[]; kpis: { activeProjects: number } }>(
+        await portfolioHandler(asUser(owner, { method: "GET", url: `https://tasketra.com/api/portfolio${qs}` })),
+      );
+
+    const execute = await get("?stage=execute");
+    expect(execute.projects.map((p) => p.id).sort()).toEqual([b.id, c.id].sort());
+    expect(execute.kpis.activeProjects).toBe(2);
+
+    expect((await get("?stage=plan")).projects.map((p) => p.id)).toEqual([a.id]);
+    expect((await get("?stage=close")).projects).toEqual([]);
+    expect((await get(`?stage=execute&projectId=${b.id}`)).projects.map((p) => p.id)).toEqual([b.id]);
+    expect((await get(`?stage=plan&projectId=${b.id}`)).projects).toEqual([]);
+    expect((await get("")).projects.length).toBe(3);
+  });
+
+  it("rejects an unknown stage", async () => {
+    const owner = await createTestUser("dash-stage-bad@example.com");
+    const res = await portfolioHandler(asUser(owner, { method: "GET", url: "https://tasketra.com/api/portfolio?stage=nope" }));
+    expect(res.status).toBe(400);
+  });
 });
