@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api, ApiError, type Project, type PortfolioData, type PortfolioProjectSummary, type Task, type Issue } from "../lib/api";
 import { AppSidebar } from "../components/AppSidebar";
+import { ProjectSetupPicker } from "../components/ProjectSetup";
+import type { ProjectSize, ProjectApproach } from "../lib/projectView";
 import { useConfirm } from "../components/ConfirmDialog";
 import { ResizableTable } from "../components/ResizableTable";
 import { useAuth } from "../lib/auth-context";
@@ -252,6 +254,9 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [newName, setNewName] = useState("");
   const [seedExample, setSeedExample] = useState(false);
+  const [showSetup, setShowSetup] = useState(false);
+  const [setupSize, setSetupSize] = useState<ProjectSize>("standard");
+  const [setupApproach, setSetupApproach] = useState<ProjectApproach>("hybrid");
   const [creating, setCreating] = useState(false);
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const [showDeleted, setShowDeleted] = useState(false);
@@ -319,9 +324,12 @@ export default function Dashboard() {
     setCreating(true);
     setUpgradeNotice(null);
     try {
-      const { project } = await api.createProject(newName.trim(), undefined, seedExample);
+      const { project } = await api.createProject(newName.trim(), undefined, seedExample, { size: setupSize, approach: setupApproach });
       setNewName("");
       setSeedExample(false);
+      setShowSetup(false);
+      setSetupSize("standard");
+      setSetupApproach("hybrid");
       const shouldStartTour = isFirstProjectEver && !user?.tour_completed_at;
       navigate(`/app/projects/${project.id}`, shouldStartTour ? { state: { startTour: true } } : undefined);
     } catch (err) {
@@ -406,8 +414,25 @@ export default function Dashboard() {
             />
             Start with example data
           </label>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={() => setShowSetup((v) => !v)}
+            aria-expanded={showSetup}
+          >
+            {showSetup ? "Hide setup" : "Set up"}
+          </button>
           <button className="btn btn-primary" disabled={creating}>Create project</button>
         </form>
+        {showSetup && (
+          <div className="setup-panel">
+            <ProjectSetupPicker
+              size={setupSize}
+              approach={setupApproach}
+              onChange={(n) => { setSetupSize(n.size); setSetupApproach(n.approach); }}
+            />
+          </div>
+        )}
         {seedExample && (
           <p className="muted" style={{ marginTop: -12, marginBottom: 20 }}>
             We'll pre-fill this project with sample tasks, a roadmap, and one issue, risk,

@@ -9,6 +9,12 @@ type ChangeEntry = { version: string; date: string; title: string; body: string 
 // they can do.
 const CHANGES: ChangeEntry[] = [
   {
+    version: "v71",
+    date: "September 2026",
+    title: "Set up a project to fit its size",
+    body: "When you create a project, tap Set up to choose how much structure it needs (Light, Standard, or Full) and how the work runs (Predictive, Hybrid, or Agile). Light and Standard hide the tabs a smaller project rarely needs, so the sidebar stays calm, and nothing is ever deleted. Agile puts Tasks before the Roadmap and opens tasks as a board. You can change either choice, or show every tab, any time in the Team tab's project setup. Existing projects keep every tab.",
+  },
+  {
     version: "v70",
     date: "September 2026",
     title: "See where your project is, and what to do next",

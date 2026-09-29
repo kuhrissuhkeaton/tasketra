@@ -1,3 +1,4 @@
+import type { ProjectSize, ProjectApproach } from "./projectView";
 const BASE = "/api";
 
 // Thrown by request()/uploadRequest() on non-2xx responses. Carries the HTTP
@@ -81,6 +82,9 @@ export type Project = {
   closure_notes?: string | null;
   closed_at?: string | null;
   stage?: ProjectStage;
+  size?: ProjectSize;
+  approach?: ProjectApproach;
+  show_all_tabs?: boolean;
 };
 
 export type ProjectStage = "initiate" | "plan" | "execute" | "close";
@@ -532,12 +536,13 @@ export const api = {
 
   listProjects: () => request<{ projects: Project[] }>("/projects"),
   listDeletedProjects: () => request<{ projects: Project[] }>("/projects?deleted=true"),
-  createProject: (name: string, description?: string, seedExample?: boolean) =>
-    request<{ project: Project }>("/projects", { method: "POST", body: JSON.stringify({ name, description, seedExample }) }),
+  createProject: (name: string, description?: string, seedExample?: boolean, setup?: { size?: ProjectSize; approach?: ProjectApproach }) =>
+    request<{ project: Project }>("/projects", { method: "POST", body: JSON.stringify({ name, description, seedExample, ...setup }) }),
   getProject: (id: string) => request<{ project: Project }>(`/project?id=${id}`),
   updateProject: (id: string, patch: {
     name?: string; description?: string; ccb_enabled?: boolean;
     closureChecklist?: Record<string, boolean>; closureNotes?: string; stage?: ProjectStage;
+    size?: ProjectSize; approach?: ProjectApproach; show_all_tabs?: boolean;
   }) =>
     request<{ project: Project }>("/project", { method: "PATCH", body: JSON.stringify({ id, ...patch }) }),
   deleteProject: (id: string) => request<{ ok: true }>(`/project?id=${id}`, { method: "DELETE" }),

@@ -14,6 +14,8 @@ import { ResizableTable } from "../components/ResizableTable";
 import { avatarColor, initials } from "../lib/avatar";
 import { TourOverlay, useProductTour } from "../components/ProductTour";
 import { StageRail, StageChip } from "../components/StageRail";
+import { ProjectSetupPicker } from "../components/ProjectSetup";
+import { isTabHidden, primaryTabOrder, defaultTasksView, hiddenTabLabels, SIZE_LABEL, type ProjectSize, type ProjectApproach } from "../lib/projectView";
 
 
 export type Tab = "home" | "roadmap" | "tasks" | "okrs" | "issues" | "risks" | "assumptions" | "dependencies" | "quality" | "compliance" | "budget" | "meetings" | "documents" | "stakeholders" | "decisions" | "team" | "procurement" | "comms" | "closure" | "report" | "templates" | "export" | "connections" | "trash";
@@ -237,13 +239,27 @@ export default function ProjectHome() {
 
   if (!id) return null;
 
+  // Size hides tabs (never data). The product tour and "show all tabs" both
+  // reveal everything, and the tab someone is on is never hidden from them.
+  const size: ProjectSize = project?.size ?? "full";
+  const approach: ProjectApproach = project?.approach ?? "hybrid";
+  const showAll = (project?.show_all_tabs ?? false) || tour.active;
+  const primaryIds = primaryTabOrder(approach, size, showAll);
+  const primaryTabs = primaryIds
+    .map((pid) => PRIMARY_TABS.find((t) => t.id === pid))
+    .filter((t): t is { id: Tab; label: string } => !!t)
+    .concat(PRIMARY_TABS.filter((t) => t.id === tab && !primaryIds.includes(t.id)));
+  const visibleGroups = SECONDARY_NAV_GROUPS
+    .map((g) => ({ ...g, tabs: g.tabs.filter((t) => t.id === tab || !isTabHidden(t.id, size, showAll)) }))
+    .filter((g) => g.tabs.length > 0);
+
   return (
     <div className="project-shell">
       <AppSidebar>
         <div className="side-nav-group">
           <div className="side-nav-label">{project?.name || "Project"}</div>
         </div>
-        {SECONDARY_NAV_GROUPS.map((group) => (
+        {visibleGroups.map((group) => (
           <NavGroup
             key={group.label}
             label={group.label}
@@ -283,7 +299,7 @@ export default function ProjectHome() {
         </div>
 
         <div className="inline-form primary-tabs">
-          {PRIMARY_TABS.map((t) => (
+          {primaryTabs.map((t) => (
             <button
               key={t.id}
               type="button"
@@ -300,12 +316,18 @@ export default function ProjectHome() {
           <HomeTab
             projectId={id}
             isOwner={project?.is_owner ?? false}
+            size={size}
+            showAll={project?.show_all_tabs ?? false}
+            onShowAllTabs={async () => {
+              await api.updateProject(id, { show_all_tabs: true });
+              setProject((p) => (p ? { ...p, show_all_tabs: true } : p));
+            }}
             onStageChange={(stage: ProjectStage) => setProject((p) => (p ? { ...p, stage } : p))}
             onOpenTab={(t) => setParams({ tab: t })}
           />
         )}
         {tab === "roadmap" && <RoadmapTab projectId={id} isOwner={project?.is_owner ?? false} />}
-        {tab === "tasks" && <TasksTab projectId={id} projectName={project?.name || "Project"} highlightId={tab === "tasks" ? highlightId : null} />}
+        {tab === "tasks" && <TasksTab projectId={id} defaultView={defaultTasksView(approach)} projectName={project?.name || "Project"} highlightId={tab === "tasks" ? highlightId : null} />}
         {tab === "okrs" && <OkrsTab projectId={id} />}
         {tab === "issues" && <IssuesTab projectId={id} highlightId={tab === "issues" ? highlightId : null} />}
         {tab === "risks" && <RisksTab projectId={id} highlightId={tab === "risks" ? highlightId : null} />}
@@ -318,7 +340,7 @@ export default function ProjectHome() {
         {tab === "documents" && <DocumentsTab projectId={id} />}
         {tab === "stakeholders" && <StakeholdersTab projectId={id} />}
         {tab === "decisions" && <DecisionsTab projectId={id} />}
-        {tab === "team" && <TeamTab projectId={id} isOwner={project?.is_owner ?? false} />}
+        {tab === "team" && <TeamTab projectId={id} isOwner={project?.is_owner ?? false} onSetupChange={(patch) => setProject((p) => (p ? { ...p, ...patch } : p))} />}
         {tab === "procurement" && <ProcurementTab projectId={id} />}
         {tab === "comms" && <CommsPlanTab projectId={id} />}
         {tab === "closure" && <ClosureTab projectId={id} />}
@@ -342,15 +364,26 @@ export default function ProjectHome() {
   );
 }
 
-function HomeTab({ projectId, isOwner, onStageChange, onOpenTab }: {
+function HomeTab({ projectId, isOwner, size, showAll, onShowAllTabs, onStageChange, onOpenTab }: {
   projectId: string;
   isOwner: boolean;
+  size: ProjectSize;
+  showAll: boolean;
+  onShowAllTabs: () => void;
   onStageChange: (stage: ProjectStage) => void;
   onOpenTab: (tab: string) => void;
 }) {
   const [view, setView] = useState<"today" | "feed">("today");
   return (
     <div>
+      {size !== "full" && !showAll && (
+        <p className="view-banner">
+          Showing the {SIZE_LABEL[size]} view, which hides {hiddenTabLabels(size).length} tabs.{" "}
+          {isOwner && (
+            <button type="button" className="view-banner-link" onClick={onShowAllTabs}>Show all tabs</button>
+          )}
+        </p>
+      )}
       <StageRail projectId={projectId} isOwner={isOwner} onStageChange={onStageChange} onOpenTab={onOpenTab} />
       <div className="view-toggle">
         <button
@@ -855,7 +888,7 @@ function TrashTab({ projectId }: { projectId: string }) {
   );
 }
 
-function TasksTab({ projectId, projectName, highlightId }: { projectId: string; projectName: string; highlightId?: string | null }) {
+function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }: { projectId: string; projectName: string; highlightId?: string | null; defaultView?: "list" | "board" }) {
   const confirmDialog = useConfirm();
   const { setRowRef, jumpTo } = useRowHighlight();
   const [, setLocalParams] = useSearchParams();
@@ -867,7 +900,7 @@ function TasksTab({ projectId, projectName, highlightId }: { projectId: string; 
   const [start, setStart] = useState("");
   const [due, setDue] = useState("");
   const [newStatus, setNewStatus] = useState<Task["status"]>("not_started");
-  const [view, setView] = useState<"list" | "board" | "timeline">("list");
+  const [view, setView] = useState<"list" | "board" | "timeline">(defaultView);
   const [dragOverStatus, setDragOverStatus] = useState<Task["status"] | null>(null);
   const [addingSubtaskFor, setAddingSubtaskFor] = useState<string | null>(null);
   const [subTitle, setSubTitle] = useState("");
@@ -5433,11 +5466,13 @@ function computeWorkload(tasks: Task[]): WorkloadRow[] {
   return unassigned ? [...rows, withCapacity(unassigned)] : rows;
 }
 
-function TeamTab({ projectId, isOwner }: { projectId: string; isOwner: boolean }) {
+function TeamTab({ projectId, isOwner, onSetupChange }: { projectId: string; isOwner: boolean; onSetupChange: (patch: Partial<Project>) => void }) {
   const confirmDialog = useConfirm();
   const navigate = useNavigate();
   const { user } = useAuth();
   const [owner, setOwner] = useState<{ id: string; email: string } | null>(null);
+  const [savingSetup, setSavingSetup] = useState(false);
+  const [setupError, setSetupError] = useState("");
   const [members, setMembers] = useState<ProjectMember[]>([]);
   const [workload, setWorkload] = useState<WorkloadRow[]>([]);
   const [project, setProject] = useState<Project | null>(null);
@@ -5517,6 +5552,23 @@ function TeamTab({ projectId, isOwner }: { projectId: string; isOwner: boolean }
     }
   }
 
+  async function saveSetup(patch: { size?: ProjectSize; approach?: ProjectApproach; show_all_tabs?: boolean }) {
+    if (!project) return;
+    const before = project;
+    setProject({ ...project, ...patch });
+    setSavingSetup(true);
+    setSetupError("");
+    try {
+      await api.updateProject(projectId, patch);
+      onSetupChange(patch);
+    } catch (err: any) {
+      setProject(before);
+      setSetupError(err.message || "Couldn't save the setup.");
+    } finally {
+      setSavingSetup(false);
+    }
+  }
+
   async function toggleReviewer(m: ProjectMember) {
     await api.setCcbReviewer(projectId, m.id, !m.is_ccb_reviewer);
     load();
@@ -5557,6 +5609,28 @@ function TeamTab({ projectId, isOwner }: { projectId: string; isOwner: boolean }
           </div>
           {nameSaved && <p style={{ color: "var(--success)", fontSize: 13, marginTop: 6 }}>Saved.</p>}
           {nameError && <p className="form-error">{nameError}</p>}
+        </div>
+      )}
+
+      {isOwner && project && (
+        <div className="settings-card">
+          <p className="settings-card-label">Project setup</p>
+          <ProjectSetupPicker
+            size={project.size ?? "full"}
+            approach={project.approach ?? "hybrid"}
+            disabled={savingSetup}
+            onChange={(next) => saveSetup(next)}
+          />
+          <label className="checkbox-row" style={{ marginTop: 10 }}>
+            <input
+              type="checkbox"
+              checked={project.show_all_tabs ?? false}
+              disabled={savingSetup}
+              onChange={(e) => saveSetup({ show_all_tabs: e.target.checked })}
+            />
+            Show all tabs, whatever the size
+          </label>
+          {setupError && <p className="form-error">{setupError}</p>}
         </div>
       )}
 

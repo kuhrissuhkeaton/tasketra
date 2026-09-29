@@ -3,6 +3,8 @@
 // never from a separate checkbox someone has to tick. Pure functions, no
 // database, so the rules can be unit tested on their own.
 
+import type { ProjectSize } from "./projectSetup.ts";
+
 export type Stage = "initiate" | "plan" | "execute" | "close";
 
 export const STAGES: Stage[] = ["initiate", "plan", "execute", "close"];
@@ -92,7 +94,7 @@ function initiateItems(c: StageCounts): ChecklistItem[] {
   ];
 }
 
-function planItems(c: StageCounts): ChecklistItem[] {
+function planItems(c: StageCounts, size: ProjectSize): ChecklistItem[] {
   const wbs: ChecklistItem =
     c.tasks >= 3
       ? { id: "wbs", title: "Work breakdown built", meta: `${plural(c.tasks, "task")} in the plan`, status: "done", tab: "tasks", action: "View tasks" }
@@ -115,7 +117,7 @@ function planItems(c: StageCounts): ChecklistItem[] {
     schedule = { id: "schedule", title: "Set the schedule", meta: `None of your ${plural(c.tasks, "task")} have dates yet`, status: "todo", tab: "tasks", action: "Add dates" };
   }
 
-  return [
+  const rows: ChecklistItem[] = [
     wbs,
     schedule,
     {
@@ -143,9 +145,11 @@ function planItems(c: StageCounts): ChecklistItem[] {
       action: c.risks > 0 ? "View risks" : "Add a risk",
     },
   ];
+  // Light projects hide the Budget tab, so never send them there.
+  return size === "light" ? rows.filter((r) => r.id !== "budget") : rows;
 }
 
-function executeItems(c: StageCounts): ChecklistItem[] {
+function executeItems(c: StageCounts, size: ProjectSize): ChecklistItem[] {
   const items: ChecklistItem[] = [];
 
   items.push(
@@ -160,18 +164,21 @@ function executeItems(c: StageCounts): ChecklistItem[] {
       : { id: "risk-review", title: "Risks reviewed recently", meta: c.openRisks > 0 ? `${plural(c.openRisks, "open risk")}, all reviewed in the last 30 days` : "No open risks", status: "done", tab: "risks", action: "View risks" }
   );
 
-  if (c.hasBudgetBaseline && c.cpi !== null) {
-    const ok = c.cpi >= 0.9;
-    items.push({
-      id: "budget-check",
-      title: ok ? "Budget compared to baseline" : "Cost is running over baseline",
-      meta: `Cost index ${c.cpi.toFixed(2)}${ok ? ", within a normal range" : ", below 0.90"}`,
-      status: ok ? "done" : "todo",
-      tab: "budget",
-      action: ok ? "View budget" : "Open budget",
-    });
-  } else if (!c.hasBudgetBaseline) {
-    items.push({ id: "budget-check", title: "Add a budget baseline", meta: "Needed to compare cost against plan", status: "todo", tab: "budget", action: "Open budget" });
+  // Budget tab is hidden in Light, so its cost rows are skipped there.
+  if (size !== "light") {
+    if (c.hasBudgetBaseline && c.cpi !== null) {
+      const ok = c.cpi >= 0.9;
+      items.push({
+        id: "budget-check",
+        title: ok ? "Budget compared to baseline" : "Cost is running over baseline",
+        meta: `Cost index ${c.cpi.toFixed(2)}${ok ? ", within a normal range" : ", below 0.90"}`,
+        status: ok ? "done" : "todo",
+        tab: "budget",
+        action: ok ? "View budget" : "Open budget",
+      });
+    } else if (!c.hasBudgetBaseline) {
+      items.push({ id: "budget-check", title: "Add a budget baseline", meta: "Needed to compare cost against plan", status: "todo", tab: "budget", action: "Open budget" });
+    }
   }
 
   items.push(
@@ -220,25 +227,25 @@ const TITLES: Record<Stage, string> = {
   close: "Before you close",
 };
 
-const OPTIONAL_NOTES: Record<Stage, string | null> = {
-  initiate: null,
-  plan: "Optional in Plan: comms plan, quality standards, vendors",
-  execute: null,
-  close: null,
-};
+// Names only the optional Plan work this project's size actually shows.
+function planOptionalNote(size: ProjectSize): string | null {
+  if (size === "light") return null;
+  if (size === "standard") return "Optional in Plan: vendors";
+  return "Optional in Plan: comms plan, quality standards, vendors";
+}
 
-export function stageChecklist(stage: Stage, counts: StageCounts): StageChecklist {
+export function stageChecklist(stage: Stage, counts: StageCounts, size: ProjectSize = "standard"): StageChecklist {
   const items =
     stage === "initiate" ? initiateItems(counts)
-    : stage === "plan" ? planItems(counts)
-    : stage === "execute" ? executeItems(counts)
+    : stage === "plan" ? planItems(counts, size)
+    : stage === "execute" ? executeItems(counts, size)
     : closeItems(counts);
   return {
     title: TITLES[stage],
     items,
     done: items.filter((i) => i.status === "done").length,
     total: items.length,
-    optionalNote: OPTIONAL_NOTES[stage],
+    optionalNote: stage === "plan" ? planOptionalNote(size) : null,
   };
 }
 

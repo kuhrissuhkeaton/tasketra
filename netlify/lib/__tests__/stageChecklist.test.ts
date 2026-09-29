@@ -128,3 +128,32 @@ describe("monitorBand", () => {
     expect(monitorBand("plan", { ...EMPTY, blockedTasks: 1 }).message).toBe("1 blocked task");
   });
 });
+
+describe("size-aware checklist", () => {
+  it("never sends a Light project to the hidden Budget tab", () => {
+    const plan = stageChecklist("plan", EMPTY, "light");
+    expect(plan.items.map((i) => i.id)).not.toContain("budget");
+    expect(plan.total).toBe(4);
+    const exec = stageChecklist("execute", { ...EMPTY, hasBudgetBaseline: true, cpi: 0.8 }, "light");
+    expect(exec.items.some((i) => i.tab === "budget")).toBe(false);
+  });
+
+  it("keeps the budget rows for Standard and Full", () => {
+    expect(stageChecklist("plan", EMPTY, "standard").items.map((i) => i.id)).toContain("budget");
+    expect(stageChecklist("plan", EMPTY, "full").items.map((i) => i.id)).toContain("budget");
+  });
+
+  it("only names optional Plan work the project actually shows", () => {
+    expect(stageChecklist("plan", EMPTY, "light").optionalNote).toBeNull();
+    expect(stageChecklist("plan", EMPTY, "standard").optionalNote).toBe("Optional in Plan: vendors");
+    expect(stageChecklist("plan", EMPTY, "full").optionalNote).toBe("Optional in Plan: comms plan, quality standards, vendors");
+  });
+
+  it("no suggestion in any stage points at a tab Light hides", () => {
+    const hidden = ["budget", "meetings", "okrs", "assumptions", "dependencies", "quality", "compliance", "procurement", "comms", "templates", "export", "connections"];
+    const busy = { ...EMPTY, tasks: 5, datedTasks: 2, openRisks: 3, staleRisks: 3, openChangeRequests: 1, hasBudgetBaseline: true, cpi: 0.7, openIssues: 1 };
+    for (const stage of ["initiate", "plan", "execute", "close"] as const) {
+      for (const it of stageChecklist(stage, busy, "light").items) expect(hidden).not.toContain(it.tab);
+    }
+  });
+});

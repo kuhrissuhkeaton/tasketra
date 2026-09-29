@@ -5,6 +5,7 @@ import { hasProjectAccess } from "../lib/ownership.ts";
 import { json } from "../lib/http.ts";
 import { withSentry } from "../lib/sentry.ts";
 import { computeEvmMetrics, round2 } from "../lib/evm.ts";
+import { isProjectSize } from "../lib/projectSetup.ts";
 import { isStage, monitorBand, stageChecklist, type Stage, type StageCounts } from "../lib/stageChecklist.ts";
 
 // Read-only lens behind the stage rail and "Next up" panel on Home. It counts
@@ -23,7 +24,7 @@ export default withSentry(async (req: Request) => {
   const database = db();
   const [[project], [taskStats], [stakeholderRow], [riskRow], [issueRow], [crRow], [statusRow], costRows] = await Promise.all([
     database.sql`
-      SELECT stage, budget_at_completion, closure_checklist
+      SELECT stage, size, budget_at_completion, closure_checklist
       FROM projects WHERE id = ${projectId}
     `,
     database.sql`
@@ -59,6 +60,7 @@ export default withSentry(async (req: Request) => {
   if (!project) return json({ error: "Not found" }, { status: 404 });
 
   const stage: Stage = isStage(project.stage) ? project.stage : "plan";
+  const size = isProjectSize(project.size) ? project.size : "standard";
   const bac = project.budget_at_completion !== null && project.budget_at_completion !== undefined
     ? Number(project.budget_at_completion) : null;
 
@@ -99,7 +101,7 @@ export default withSentry(async (req: Request) => {
     closureChecked: checklistValues.filter((v) => v === true).length,
   };
 
-  return json({ stage, checklist: stageChecklist(stage, counts), band: monitorBand(stage, counts) });
+  return json({ stage, checklist: stageChecklist(stage, counts, size), band: monitorBand(stage, counts) });
 });
 
 export const config: Config = { path: "/api/stage" };

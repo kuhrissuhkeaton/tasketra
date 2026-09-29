@@ -1219,3 +1219,41 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
   .stage-item-text { flex-basis: calc(100% - 40px); }
   .stage-item .btn, .stage-item-link { margin-left: 36px; }
 }
+
+/* --- Project setup pickers (size and approach) --- */
+.setup-panel {
+  background: var(--cream); border-radius: var(--radius); box-shadow: var(--shadow-sm);
+  padding: 20px 24px; margin: -8px 0 24px;
+}
+.setup-picker { display: flex; flex-direction: column; gap: 18px; }
+.setup-group { border: none; padding: 0; margin: 0; min-width: 0; }
+.setup-group:disabled { opacity: 0.6; }
+.setup-legend { font-size: 13px; font-weight: 700; padding: 0; margin-bottom: 8px; }
+.setup-size-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.setup-size-card {
+  display: flex; flex-direction: column; gap: 4px; background: white; border: 2px solid white;
+  border-radius: 14px; padding: 12px 14px; cursor: pointer; transition: border-color var(--ease), background var(--ease);
+}
+.setup-size-card, .setup-seg-item { margin: 0; }
+.setup-size-card:hover { border-color: var(--tint-strong); }
+.setup-size-card-on { background: var(--tint); border-color: var(--navy); }
+.setup-size-card:focus-within { outline: 2px solid var(--gold); outline-offset: 2px; }
+.setup-size-name { font-size: 15px; font-weight: 700; }
+.setup-size-blurb { font-size: 13px; color: var(--slate); line-height: 1.45; }
+.setup-seg { display: flex; background: var(--surface-muted); border-radius: var(--radius-pill); padding: 4px; gap: 4px; }
+.setup-seg-item {
+  flex: 1; text-align: center; padding: 8px 0; border-radius: var(--radius-pill); font-size: 14px; font-weight: 700;
+  color: var(--slate); cursor: pointer; transition: background var(--ease), color var(--ease);
+}
+.setup-seg-item-on { background: var(--gold); color: var(--navy); box-shadow: var(--shadow-sm); }
+.setup-seg-item:focus-within { outline: 2px solid var(--navy); outline-offset: 1px; }
+.setup-note, .setup-summary { margin: 8px 0 0; font-size: 13px; color: var(--slate); line-height: 1.5; }
+.setup-summary { margin: 0; }
+.view-banner { margin: 0 0 14px; font-size: 13px; color: var(--slate); }
+.view-banner-link {
+  background: none; border: none; padding: 0; font-family: inherit; font-size: 13px; font-weight: 700;
+  color: var(--navy); text-decoration: underline; cursor: pointer;
+}
+@media (max-width: 560px) {
+  .setup-size-grid { grid-template-columns: 1fr; }
+}

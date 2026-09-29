@@ -5,6 +5,7 @@ import { json } from "../lib/http.ts";
 import { canCreateProject, FREE_PROJECT_LIMIT } from "../lib/billing.ts";
 import { seedExampleData } from "../lib/exampleData.ts";
 import { withSentry } from "../lib/sentry.ts";
+import { isProjectSize, isProjectApproach } from "../lib/projectSetup.ts";
 
 export default withSentry(async (req: Request) => {
   const userId = getUserIdFromRequest(req);
@@ -48,10 +49,16 @@ export default withSentry(async (req: Request) => {
         { status: 402 }
       );
     }
+    if (body?.size !== undefined && !isProjectSize(body.size)) {
+      return json({ error: "size must be one of light, standard, full." }, { status: 400 });
+    }
+    if (body?.approach !== undefined && !isProjectApproach(body.approach)) {
+      return json({ error: "approach must be one of predictive, hybrid, agile." }, { status: 400 });
+    }
     const [project] = await database.sql`
-      INSERT INTO projects (owner_id, name, description)
-      VALUES (${userId}, ${name}, ${body?.description || null})
-      RETURNING id, name, description, created_at
+      INSERT INTO projects (owner_id, name, description, size, approach)
+      VALUES (${userId}, ${name}, ${body?.description || null}, COALESCE(${body?.size ?? null}, 'standard'), COALESCE(${body?.approach ?? null}, 'hybrid'))
+      RETURNING id, name, description, created_at, size, approach
     `;
 
     if (body?.seedExample === true) {
