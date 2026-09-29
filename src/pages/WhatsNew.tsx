@@ -9,6 +9,12 @@ type ChangeEntry = { version: string; date: string; title: string; body: string 
 // they can do.
 const CHANGES: ChangeEntry[] = [
   {
+    version: "v74",
+    date: "September 2026",
+    title: "See every project's stage on the Dashboard",
+    body: "Each project card on the Dashboard now shows its stage (Initiate, Plan, Execute, or Close), and the Project health table has a Stage column, so you can tell at a glance where each project sits.",
+  },
+  {
     version: "v73",
     date: "September 2026",
     title: "Ask your sponsor to approve the charter",

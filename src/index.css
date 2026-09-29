@@ -1116,6 +1116,8 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
   display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600;
   background: var(--tint); border-radius: var(--radius-pill); padding: 5px 12px; color: var(--navy);
 }
+.stage-chip-sm { font-size: 12px; gap: 6px; padding: 3px 10px; }
+.stage-chip-sm .stage-chip-dot { width: 7px; height: 7px; }
 .stage-chip-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--navy); }
 
 .stage-rail {

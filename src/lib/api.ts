@@ -490,6 +490,7 @@ export type BudgetData = {
 export type PortfolioProjectSummary = {
   id: string;
   name: string;
+  stage: ProjectStage;
   totalTasks: number;
   doneTasks: number;
   overdueTasks: number;

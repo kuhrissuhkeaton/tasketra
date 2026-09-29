@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api, ApiError, type Project, type PortfolioData, type PortfolioProjectSummary, type Task, type Issue } from "../lib/api";
 import { AppSidebar } from "../components/AppSidebar";
+import { StageChip } from "../components/StageRail";
 import { ProjectSetupPicker } from "../components/ProjectSetup";
 import type { ProjectSize, ProjectApproach } from "../lib/projectView";
 import { useConfirm } from "../components/ConfirmDialog";
@@ -223,12 +224,13 @@ function PortfolioOverview({ data }: { data: PortfolioData }) {
           <h3 style={{ marginBottom: 12 }}>Project health</h3>
           <ResizableTable id="dashboard-health">
             <thead>
-              <tr><th>Project</th><th>Health</th><th>Tasks</th><th>Overdue</th><th>Risks</th><th>Issues</th><th>OKR progress</th></tr>
+              <tr><th>Project</th><th>Stage</th><th>Health</th><th>Tasks</th><th>Overdue</th><th>Risks</th><th>Issues</th><th>OKR progress</th></tr>
             </thead>
             <tbody>
               {data.projects.map((p) => (
                 <tr key={p.id}>
                   <td><Link to={`/app/projects/${p.id}`}>{p.name}</Link></td>
+                  <td><StageChip stage={p.stage} small /></td>
                   <td><span className={`pill ${HEALTH_PILL[p.health]}`}>{HEALTH_LABEL[p.health]}</span></td>
                   <td className="muted">{p.doneTasks}/{p.totalTasks}</td>
                   <td className="muted" style={p.overdueTasks > 0 ? { color: "var(--red)" } : undefined}>{p.overdueTasks}</td>
@@ -468,6 +470,7 @@ export default function Dashboard() {
                   <h3>{p.name}</h3>
                   {p.description && <p className="muted">{p.description}</p>}
                   <div className="project-card-stats">
+                    <StageChip stage={p.stage} small />
                     {(p.open_decisions ?? 0) > 0 && (
                       <span className="pill pill-gold">{p.open_decisions} awaiting decision</span>
                     )}

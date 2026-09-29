@@ -61,7 +61,7 @@ export default withSentry(async (req: Request) => {
     milestoneRows,
   ] = await Promise.all([
     database.sql`
-      SELECT p.id, p.name, p.created_at
+      SELECT p.id, p.name, p.created_at, p.stage
       FROM projects p
       WHERE p.archived = false
         AND (p.owner_id = ${userId}
@@ -239,6 +239,7 @@ export default withSentry(async (req: Request) => {
     return {
       id: p.id,
       name: p.name,
+      stage: p.stage,
       totalTasks: Number(taskRow.total_tasks) || 0,
       doneTasks: Number(taskRow.done_tasks) || 0,
       overdueTasks: Number(taskRow.overdue_tasks) || 0,

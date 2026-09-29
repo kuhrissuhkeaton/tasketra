@@ -22,12 +22,12 @@ const CheckIcon = () => (
 );
 
 /** Small "Stage: Plan" chip shown in the page header on every project tab. */
-export function StageChip({ stage }: { stage: ProjectStage | undefined }) {
+export function StageChip({ stage, small }: { stage: ProjectStage | undefined; small?: boolean }) {
   if (!stage) return null;
   return (
-    <span className="stage-chip">
+    <span className={small ? "stage-chip stage-chip-sm" : "stage-chip"}>
       <span className="stage-chip-dot" aria-hidden="true" />
-      Stage: {STAGE_LABEL[stage]}
+      {small ? STAGE_LABEL[stage] : `Stage: ${STAGE_LABEL[stage]}`}
     </span>
   );
 }
