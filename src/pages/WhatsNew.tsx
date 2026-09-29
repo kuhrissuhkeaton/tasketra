@@ -9,6 +9,12 @@ type ChangeEntry = { version: string; date: string; title: string; body: string 
 // they can do.
 const CHANGES: ChangeEntry[] = [
   {
+    version: "v77",
+    date: "September 2026",
+    title: "Set escalation thresholds and get a red flag",
+    body: "In the Team tab, project owners can now set optional escalation thresholds: a cost index (CPI) or schedule index (SPI) below a number you choose, more overdue tasks than you allow, or more high risks than you allow. Leave a box blank and that limit is off. When a limit is crossed, the Monitor and control band on Home turns red and says why, and the project shows a red Needs escalation tag on the Dashboard cards and health table. It only raises a flag, and nothing is ever blocked.",
+  },
+  {
     version: "v76",
     date: "September 2026",
     title: "Lock your baseline and see what moves",

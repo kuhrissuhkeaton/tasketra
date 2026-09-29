@@ -1177,6 +1177,9 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
 .stage-band-attention { background: var(--tint); border-top-color: var(--success); }
 .stage-band-attention .stage-band-msg { color: #3D5F24; font-weight: 600; }
 
+.stage-band-escalate { background: var(--red-border); border-top-color: var(--red); }
+.stage-band-escalate .stage-band-title, .stage-band-escalate .stage-band-msg { color: var(--red); font-weight: 700; }
+
 .stage-pending { background: white; border-radius: 14px; padding: 14px 18px; }
 .stage-pending p { margin: 0 0 10px; font-size: 14px; line-height: 1.5; }
 .stage-pending-actions { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -1309,3 +1312,11 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
 .baseline-moved th, .baseline-moved td { text-align: left; padding: 7px 12px; border-bottom: 1px solid var(--border); }
 .baseline-moved th { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--slate); }
 .baseline-note { margin: 10px 0 0; font-size: 13px; color: var(--slate); }
+
+/* --- Escalation thresholds --- */
+.tolerance-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 18px; margin-bottom: 14px; }
+.tolerance-field label { margin: 0 0 6px; font-size: 13px; font-weight: 700; }
+.tolerance-field input { width: 100%; box-sizing: border-box; }
+.tolerance-hint { display: block; margin-top: 4px; font-size: 12px; color: var(--slate-2); }
+@media (max-width: 560px) { .tolerance-grid { grid-template-columns: 1fr; } }
+.escalate-pill { margin-left: 6px; }

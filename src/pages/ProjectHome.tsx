@@ -17,6 +17,7 @@ import { StageRail, StageChip } from "../components/StageRail";
 import { ProjectSetupPicker } from "../components/ProjectSetup";
 import { CharterTab } from "../components/CharterTab";
 import { BaselineCard } from "../components/BaselineCard";
+import { EscalationSettings } from "../components/EscalationSettings";
 import { isTabHidden, primaryTabOrder, defaultTasksView, hiddenTabLabels, SIZE_LABEL, type ProjectSize, type ProjectApproach } from "../lib/projectView";
 
 
@@ -5677,6 +5678,17 @@ function TeamTab({ projectId, isOwner, onSetupChange }: { projectId: string; isO
           </label>
           {setupError && <p className="form-error">{setupError}</p>}
         </div>
+      )}
+
+      {isOwner && project && (
+        <EscalationSettings
+          projectId={projectId}
+          tolerances={project.tolerances}
+          onSaved={(tolerances) => {
+            setProject((p) => (p ? { ...p, tolerances } : p));
+            onSetupChange({ tolerances });
+          }}
+        />
       )}
 
       <div className="settings-card">

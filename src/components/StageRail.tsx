@@ -161,7 +161,7 @@ export function StageRail({
         })}
       </ol>
 
-      <div className={data.band.state === "attention" ? "stage-band stage-band-attention" : "stage-band"}>
+      <div className={data.band.state === "escalate" ? "stage-band stage-band-escalate" : data.band.state === "attention" ? "stage-band stage-band-attention" : "stage-band"} role={data.band.state === "escalate" ? "alert" : undefined}>
         <span className="stage-band-title">Monitor and control</span>
         <span className="stage-band-msg">{data.band.message}</span>
       </div>

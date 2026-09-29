@@ -9,6 +9,7 @@ import { withSentry } from "../lib/sentry.ts";
 import { isStage, STAGE_LABEL } from "../lib/stageChecklist.ts";
 import { isProjectSize, isProjectApproach } from "../lib/projectSetup.ts";
 import { sanitizeCharter } from "../lib/charter.ts";
+import { sanitizeTolerances } from "../lib/tolerances.ts";
 
 export default withSentry(async (req: Request) => {
   const userId = getUserIdFromRequest(req);
@@ -24,7 +25,7 @@ export default withSentry(async (req: Request) => {
     const [project] = await database.sql`
       SELECT p.id, p.name, p.description, p.created_at, p.owner_id, p.webhook_enabled,
         p.ccb_enabled, p.archived, p.deleted_at, p.roadmap_share_enabled, p.roadmap_share_token,
-        p.closure_checklist, p.closure_notes, p.closed_at, p.stage, p.size, p.approach, p.show_all_tabs, p.charter,
+        p.closure_checklist, p.closure_notes, p.closed_at, p.stage, p.size, p.approach, p.show_all_tabs, p.charter, p.tolerances,
         (p.owner_id = ${userId}) AS is_owner
       FROM projects p
       WHERE p.id = ${id}
@@ -104,6 +105,11 @@ export default withSentry(async (req: Request) => {
     if (hasCharter && !charter) {
       return json({ error: "charter must be an object." }, { status: 400 });
     }
+    const hasTolerances = body?.tolerances !== undefined;
+    const tolerances = hasTolerances ? sanitizeTolerances(body.tolerances) : null;
+    if (hasTolerances && !tolerances) {
+      return json({ error: "tolerances must be an object." }, { status: 400 });
+    }
     const hasStage = body?.stage !== undefined;
     if (hasStage && !isStage(body.stage)) {
       return json({ error: "stage must be one of initiate, plan, execute, close." }, { status: 400 });
@@ -112,7 +118,7 @@ export default withSentry(async (req: Request) => {
     if (hasName && !body.name.trim()) {
       return json({ error: "Project name can't be empty." }, { status: 400 });
     }
-    if (!hasName && !hasDescription && !hasWebhook && !hasCcb && !hasRoadmapShare && !hasClosureChecklist && !hasClosureNotes && !hasStage && !hasSize && !hasApproach && !hasShowAllTabs && !hasCharter) {
+    if (!hasName && !hasDescription && !hasWebhook && !hasCcb && !hasRoadmapShare && !hasClosureChecklist && !hasClosureNotes && !hasStage && !hasSize && !hasApproach && !hasShowAllTabs && !hasCharter && !hasTolerances) {
       return json({ error: "Nothing to update." }, { status: 400 });
     }
 
@@ -139,11 +145,12 @@ export default withSentry(async (req: Request) => {
         size = COALESCE(${hasSize ? body.size : null}, size),
         approach = COALESCE(${hasApproach ? body.approach : null}, approach),
         show_all_tabs = COALESCE(${hasShowAllTabs ? body.show_all_tabs : null}, show_all_tabs),
-        charter = CASE WHEN ${hasCharter} THEN ${hasCharter ? JSON.stringify(charter) : null}::jsonb ELSE charter END
+        charter = CASE WHEN ${hasCharter} THEN ${hasCharter ? JSON.stringify(charter) : null}::jsonb ELSE charter END,
+        tolerances = CASE WHEN ${hasTolerances} THEN ${hasTolerances ? JSON.stringify(tolerances) : null}::jsonb ELSE tolerances END
       WHERE id = ${id}
       RETURNING id, name, description, created_at, owner_id, webhook_enabled, ccb_enabled, archived, deleted_at,
         roadmap_share_enabled, roadmap_share_token, closure_checklist, closure_notes, closed_at, stage,
-        size, approach, show_all_tabs, charter
+        size, approach, show_all_tabs, charter, tolerances
     `;
 
     if (hasStage) {
@@ -152,6 +159,10 @@ export default withSentry(async (req: Request) => {
 
     if (hasSize || hasApproach || hasShowAllTabs) {
       await logActivity(database, { projectId: id, entityType: "project", entityId: id, entityTitle: project.name, action: "updated", summary: "project setup changed" });
+    }
+
+    if (hasTolerances) {
+      await logActivity(database, { projectId: id, entityType: "project", entityId: id, entityTitle: project.name, action: "updated", summary: "escalation thresholds updated" });
     }
 
     if (hasCharter) {

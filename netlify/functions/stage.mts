@@ -6,6 +6,7 @@ import { json } from "../lib/http.ts";
 import { withSentry } from "../lib/sentry.ts";
 import { computeEvmMetrics, round2 } from "../lib/evm.ts";
 import { charterWritten } from "../lib/charter.ts";
+import { evaluateTolerances, sanitizeTolerances } from "../lib/tolerances.ts";
 import { isProjectSize } from "../lib/projectSetup.ts";
 import { isStage, monitorBand, stageChecklist, type Stage, type StageCounts } from "../lib/stageChecklist.ts";
 
@@ -25,14 +26,15 @@ export default withSentry(async (req: Request) => {
   const database = db();
   const [[project], [taskStats], [stakeholderRow], [riskRow], [issueRow], [crRow], [statusRow], costRows, [baselineRow]] = await Promise.all([
     database.sql`
-      SELECT stage, size, budget_at_completion, closure_checklist, charter
+      SELECT stage, size, budget_at_completion, closure_checklist, charter, tolerances
       FROM projects WHERE id = ${projectId}
     `,
     database.sql`
       SELECT
         count(*)::int AS tasks,
         count(*) FILTER (WHERE due_date IS NOT NULL)::int AS dated_tasks,
-        count(*) FILTER (WHERE status = 'blocked')::int AS blocked_tasks
+        count(*) FILTER (WHERE status = 'blocked')::int AS blocked_tasks,
+        count(*) FILTER (WHERE status != 'done' AND due_date IS NOT NULL AND due_date < CURRENT_DATE)::int AS overdue_tasks
       FROM tasks WHERE project_id = ${projectId} AND deleted_at IS NULL
     `,
     database.sql`SELECT count(*)::int AS n FROM stakeholders WHERE project_id = ${projectId} AND deleted_at IS NULL`,
@@ -40,7 +42,8 @@ export default withSentry(async (req: Request) => {
       SELECT
         count(*)::int AS risks,
         count(*) FILTER (WHERE status != 'resolved')::int AS open_risks,
-        count(*) FILTER (WHERE status != 'resolved' AND updated_at < now() - interval '30 days')::int AS stale_risks
+        count(*) FILTER (WHERE status != 'resolved' AND updated_at < now() - interval '30 days')::int AS stale_risks,
+        count(*) FILTER (WHERE status = 'open' AND (probability = 'high' OR impact = 'high'))::int AS high_risks
       FROM risks WHERE project_id = ${projectId} AND deleted_at IS NULL
     `,
     database.sql`
@@ -68,6 +71,7 @@ export default withSentry(async (req: Request) => {
 
   // Cost index needs the same leaf-task progress the Budget tab uses.
   let cpi: number | null = null;
+  let spi: number | null = null;
   if (bac !== null) {
     const [leaf] = await database.sql`
       SELECT
@@ -79,9 +83,11 @@ export default withSentry(async (req: Request) => {
         AND id NOT IN (SELECT DISTINCT parent_task_id FROM tasks WHERE parent_task_id IS NOT NULL AND deleted_at IS NULL)
     `;
     const ac = round2(costRows.reduce((sum: number, r: any) => sum + Number(r.amount), 0));
-    cpi = computeEvmMetrics({
+    const evm = computeEvmMetrics({
       bac, ac, totalTasks: leaf?.total_tasks || 0, doneTasks: leaf?.done_tasks || 0, dueTasks: leaf?.due_tasks || 0,
-    }).cpi;
+    });
+    cpi = evm.cpi;
+    spi = evm.spi;
   }
 
   const checklistValues = project.closure_checklist && typeof project.closure_checklist === "object"
@@ -105,7 +111,11 @@ export default withSentry(async (req: Request) => {
     baselineLocked: (baselineRow?.n || 0) > 0,
   };
 
-  return json({ stage, checklist: stageChecklist(stage, counts, size), band: monitorBand(stage, counts) });
+  const escalations = evaluateTolerances(sanitizeTolerances(project.tolerances), {
+    cpi, spi, overdueTasks: taskStats?.overdue_tasks || 0, highRisks: riskRow?.high_risks || 0,
+  });
+
+  return json({ stage, checklist: stageChecklist(stage, counts, size), band: monitorBand(stage, counts, escalations) });
 });
 
 export const config: Config = { path: "/api/stage" };

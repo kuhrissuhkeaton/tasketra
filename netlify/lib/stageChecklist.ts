@@ -267,11 +267,12 @@ export function stageChecklist(stage: Stage, counts: StageCounts, size: ProjectS
   };
 }
 
-export type MonitorBand = { state: "quiet" | "attention"; message: string };
+export type MonitorBand = { state: "quiet" | "attention" | "escalate"; message: string };
 
 /** The Monitor and control band under the stage steps. It never turns red;
  *  escalation tolerances are a later slice. */
-export function monitorBand(stage: Stage, c: StageCounts): MonitorBand {
+export function monitorBand(stage: Stage, c: StageCounts, escalations: string[] = []): MonitorBand {
+  if (escalations.length > 0) return { state: "escalate", message: `Needs escalation: ${escalations.join(". ")}` };
   if (stage === "initiate") return { state: "quiet", message: "Starts once the plan is in place." };
   const parts: string[] = [];
   if (c.blockedTasks > 0) parts.push(plural(c.blockedTasks, "blocked task"));

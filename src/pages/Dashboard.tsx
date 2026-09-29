@@ -231,7 +231,12 @@ function PortfolioOverview({ data }: { data: PortfolioData }) {
                 <tr key={p.id}>
                   <td><Link to={`/app/projects/${p.id}`}>{p.name}</Link></td>
                   <td><StageChip stage={p.stage} small /></td>
-                  <td><span className={`pill ${HEALTH_PILL[p.health]}`}>{HEALTH_LABEL[p.health]}</span></td>
+                  <td>
+                    <span className={`pill ${HEALTH_PILL[p.health]}`}>{HEALTH_LABEL[p.health]}</span>
+                    {p.escalations.length > 0 && (
+                      <span className="pill pill-red escalate-pill" title={p.escalations.join(". ")}>Needs escalation</span>
+                    )}
+                  </td>
                   <td className="muted">{p.doneTasks}/{p.totalTasks}</td>
                   <td className="muted" style={p.overdueTasks > 0 ? { color: "var(--red)" } : undefined}>{p.overdueTasks}</td>
                   <td className="muted">{p.openRisks}{p.highRisks > 0 ? ` (${p.highRisks} high)` : ""}</td>
@@ -253,6 +258,7 @@ export default function Dashboard() {
   const [portfolio, setPortfolio] = useState<PortfolioData | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [selectedStage, setSelectedStage] = useState<ProjectStage | null>(null);
+  const [escalations, setEscalations] = useState<Record<string, string[]>>({});
   const [portfolioLoading, setPortfolioLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [newName, setNewName] = useState("");
@@ -280,6 +286,7 @@ export default function Dashboard() {
     setProjects(projects);
     setDeletedProjects(deleted);
     setPortfolio(portfolioData);
+    setEscalations(Object.fromEntries(portfolioData.projects.map((x) => [x.id, x.escalations])));
     setLoading(false);
   }
 
@@ -506,6 +513,9 @@ export default function Dashboard() {
                   {p.description && <p className="muted">{p.description}</p>}
                   <div className="project-card-stats">
                     <StageChip stage={p.stage} small />
+                    {(escalations[p.id]?.length ?? 0) > 0 && (
+                      <span className="pill pill-red" title={escalations[p.id].join(". ")}>Needs escalation</span>
+                    )}
                     {(p.open_decisions ?? 0) > 0 && (
                       <span className="pill pill-gold">{p.open_decisions} awaiting decision</span>
                     )}

@@ -1,5 +1,6 @@
 import type { ProjectSize, ProjectApproach } from "./projectView";
 import type { Charter } from "./charter";
+import type { Tolerances } from "./tolerances";
 const BASE = "/api";
 
 // Thrown by request()/uploadRequest() on non-2xx responses. Carries the HTTP
@@ -87,6 +88,7 @@ export type Project = {
   approach?: ProjectApproach;
   show_all_tabs?: boolean;
   charter?: Charter;
+  tolerances?: Tolerances;
 };
 
 export type CharterApproval = {
@@ -135,7 +137,7 @@ export type StageData = {
     total: number;
     optionalNote: string | null;
   };
-  band: { state: "quiet" | "attention"; message: string };
+  band: { state: "quiet" | "attention" | "escalate"; message: string };
 };
 
 export type ProjectMember = {
@@ -507,6 +509,7 @@ export type PortfolioProjectSummary = {
   id: string;
   name: string;
   stage: ProjectStage;
+  escalations: string[];
   totalTasks: number;
   doneTasks: number;
   overdueTasks: number;
@@ -571,7 +574,7 @@ export const api = {
   updateProject: (id: string, patch: {
     name?: string; description?: string; ccb_enabled?: boolean;
     closureChecklist?: Record<string, boolean>; closureNotes?: string; stage?: ProjectStage;
-    size?: ProjectSize; approach?: ProjectApproach; show_all_tabs?: boolean; charter?: Charter;
+    size?: ProjectSize; approach?: ProjectApproach; show_all_tabs?: boolean; charter?: Charter; tolerances?: Tolerances;
   }) =>
     request<{ project: Project }>("/project", { method: "PATCH", body: JSON.stringify({ id, ...patch }) }),
   getCharterApproval: (projectId: string) =>
