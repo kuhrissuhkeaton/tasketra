@@ -1182,6 +1182,7 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
 
 .stage-pending { background: white; border-radius: 14px; padding: 14px 18px; }
 .stage-pending p { margin: 0 0 10px; font-size: 14px; line-height: 1.5; }
+.stage-gate-status { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: white; border-radius: 14px; padding: 10px 18px; font-size: 14px; }
 .stage-pending-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .stage-pending-actions .btn { padding: 8px 18px; font-size: 13px; }
 .stage-error { margin: 0; font-size: 13px; color: var(--red); font-weight: 600; }

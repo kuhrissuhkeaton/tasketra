@@ -5598,7 +5598,7 @@ function TeamTab({ projectId, isOwner, onSetupChange }: { projectId: string; isO
     }
   }
 
-  async function saveSetup(patch: { size?: ProjectSize; approach?: ProjectApproach; show_all_tabs?: boolean }) {
+  async function saveSetup(patch: { size?: ProjectSize; approach?: ProjectApproach; show_all_tabs?: boolean; stage_gates?: boolean }) {
     if (!project) return;
     const before = project;
     setProject({ ...project, ...patch });
@@ -5675,6 +5675,15 @@ function TeamTab({ projectId, isOwner, onSetupChange }: { projectId: string; isO
               onChange={(e) => saveSetup({ show_all_tabs: e.target.checked })}
             />
             Show all tabs, whatever the size
+          </label>
+          <label className="checkbox-row" style={{ marginTop: 10 }}>
+            <input
+              type="checkbox"
+              checked={project.stage_gates ?? false}
+              disabled={savingSetup}
+              onChange={(e) => saveSetup({ stage_gates: e.target.checked })}
+            />
+            Offer a sponsor approval when the stage moves forward
           </label>
           {setupError && <p className="form-error">{setupError}</p>}
         </div>

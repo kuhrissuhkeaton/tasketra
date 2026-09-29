@@ -26,7 +26,7 @@ export default withSentry(async (req: Request) => {
   const database = db();
   const [[project], [taskStats], [stakeholderRow], [riskRow], [issueRow], [crRow], [statusRow], costRows, [baselineRow]] = await Promise.all([
     database.sql`
-      SELECT stage, size, budget_at_completion, closure_checklist, charter, tolerances
+      SELECT stage, size, budget_at_completion, closure_checklist, charter, tolerances, stage_gates
       FROM projects WHERE id = ${projectId}
     `,
     database.sql`
@@ -115,7 +115,7 @@ export default withSentry(async (req: Request) => {
     cpi, spi, overdueTasks: taskStats?.overdue_tasks || 0, highRisks: riskRow?.high_risks || 0,
   });
 
-  return json({ stage, checklist: stageChecklist(stage, counts, size), band: monitorBand(stage, counts, escalations) });
+  return json({ stage, gatesEnabled: project.stage_gates === true, checklist: stageChecklist(stage, counts, size), band: monitorBand(stage, counts, escalations) });
 });
 
 export const config: Config = { path: "/api/stage" };

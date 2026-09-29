@@ -9,6 +9,12 @@ type ChangeEntry = { version: string; date: string; title: string; body: string 
 // they can do.
 const CHANGES: ChangeEntry[] = [
   {
+    version: "v78",
+    date: "September 2026",
+    title: "Ask your sponsor to sign off at a stage change",
+    body: "New and optional: in the Team tab, turn on \"Offer a sponsor approval when the stage moves forward\". After that, moving a project to the next stage offers to send your sponsor an approval request, the same kind of link the charter approval uses. Skip it and nothing changes. The Stage card on Home shows whether the sponsor has approved or asked for changes. It is off by default and never blocks a stage change.",
+  },
+  {
     version: "v77",
     date: "September 2026",
     title: "Set escalation thresholds and get a red flag",

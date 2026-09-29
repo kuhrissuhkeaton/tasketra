@@ -25,7 +25,7 @@ export default withSentry(async (req: Request) => {
     const [project] = await database.sql`
       SELECT p.id, p.name, p.description, p.created_at, p.owner_id, p.webhook_enabled,
         p.ccb_enabled, p.archived, p.deleted_at, p.roadmap_share_enabled, p.roadmap_share_token,
-        p.closure_checklist, p.closure_notes, p.closed_at, p.stage, p.size, p.approach, p.show_all_tabs, p.charter, p.tolerances,
+        p.closure_checklist, p.closure_notes, p.closed_at, p.stage, p.size, p.approach, p.show_all_tabs, p.charter, p.tolerances, p.stage_gates,
         (p.owner_id = ${userId}) AS is_owner
       FROM projects p
       WHERE p.id = ${id}
@@ -94,6 +94,7 @@ export default withSentry(async (req: Request) => {
     const hasSize = body?.size !== undefined;
     const hasApproach = body?.approach !== undefined;
     const hasShowAllTabs = typeof body?.show_all_tabs === "boolean";
+    const hasStageGates = typeof body?.stage_gates === "boolean";
     if (hasSize && !isProjectSize(body.size)) {
       return json({ error: "size must be one of light, standard, full." }, { status: 400 });
     }
@@ -118,7 +119,7 @@ export default withSentry(async (req: Request) => {
     if (hasName && !body.name.trim()) {
       return json({ error: "Project name can't be empty." }, { status: 400 });
     }
-    if (!hasName && !hasDescription && !hasWebhook && !hasCcb && !hasRoadmapShare && !hasClosureChecklist && !hasClosureNotes && !hasStage && !hasSize && !hasApproach && !hasShowAllTabs && !hasCharter && !hasTolerances) {
+    if (!hasName && !hasDescription && !hasWebhook && !hasCcb && !hasRoadmapShare && !hasClosureChecklist && !hasClosureNotes && !hasStage && !hasSize && !hasApproach && !hasShowAllTabs && !hasCharter && !hasTolerances && !hasStageGates) {
       return json({ error: "Nothing to update." }, { status: 400 });
     }
 
@@ -145,19 +146,20 @@ export default withSentry(async (req: Request) => {
         size = COALESCE(${hasSize ? body.size : null}, size),
         approach = COALESCE(${hasApproach ? body.approach : null}, approach),
         show_all_tabs = COALESCE(${hasShowAllTabs ? body.show_all_tabs : null}, show_all_tabs),
+        stage_gates = COALESCE(${hasStageGates ? body.stage_gates : null}, stage_gates),
         charter = CASE WHEN ${hasCharter} THEN ${hasCharter ? JSON.stringify(charter) : null}::jsonb ELSE charter END,
         tolerances = CASE WHEN ${hasTolerances} THEN ${hasTolerances ? JSON.stringify(tolerances) : null}::jsonb ELSE tolerances END
       WHERE id = ${id}
       RETURNING id, name, description, created_at, owner_id, webhook_enabled, ccb_enabled, archived, deleted_at,
         roadmap_share_enabled, roadmap_share_token, closure_checklist, closure_notes, closed_at, stage,
-        size, approach, show_all_tabs, charter, tolerances
+        size, approach, show_all_tabs, charter, tolerances, stage_gates
     `;
 
     if (hasStage) {
       await logActivity(database, { projectId: id, entityType: "project", entityId: id, entityTitle: project.name, action: "updated", summary: `stage changed to ${STAGE_LABEL[body.stage as keyof typeof STAGE_LABEL]}` });
     }
 
-    if (hasSize || hasApproach || hasShowAllTabs) {
+    if (hasSize || hasApproach || hasShowAllTabs || hasStageGates) {
       await logActivity(database, { projectId: id, entityType: "project", entityId: id, entityTitle: project.name, action: "updated", summary: "project setup changed" });
     }
 

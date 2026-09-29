@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { api, type ProjectStage, type StageData } from "../lib/api";
+import { api, type ProjectStage, type StageData, type StageGate } from "../lib/api";
 
 export const STAGES: { id: ProjectStage; label: string }[] = [
   { id: "initiate", label: "Initiate" },
@@ -55,10 +55,18 @@ export function StageRail({
   const [pending, setPending] = useState<ProjectStage | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [gate, setGate] = useState<StageGate | null>(null);
+  const [gateOffer, setGateOffer] = useState<{ from: ProjectStage; to: ProjectStage } | null>(null);
+  const [gateBusy, setGateBusy] = useState(false);
+  const [copied, setCopied] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   function load() {
-    api.getStage(projectId).then(setData).catch(() => setError("Couldn't load stage guidance."));
+    api.getStage(projectId).then((d) => {
+      setData(d);
+      if (d.gatesEnabled) api.getStageGate(projectId).then(({ gate }) => setGate(gate)).catch(() => {});
+      else setGate(null);
+    }).catch(() => setError("Couldn't load stage guidance."));
   }
 
   useEffect(() => {
@@ -94,8 +102,11 @@ export function StageRail({
     setError("");
     try {
       await api.updateProject(projectId, { stage });
+      const from = data?.stage;
+      const forward = from ? STAGES.findIndex((s) => s.id === stage) > STAGES.findIndex((s) => s.id === from) : false;
       setPending(null);
       setMenuOpen(false);
+      setGateOffer(data?.gatesEnabled && from && forward ? { from, to: stage } : null);
       onStageChange(stage);
       load();
     } catch {
@@ -103,6 +114,28 @@ export function StageRail({
     } finally {
       setSaving(false);
     }
+  }
+
+  async function askGate() {
+    if (!gateOffer) return;
+    setGateBusy(true);
+    setError("");
+    try {
+      const { gate } = await api.requestStageGate(projectId, gateOffer.from, gateOffer.to);
+      setGate(gate);
+      setGateOffer(null);
+    } catch {
+      setError("Couldn't send the approval request. Try again.");
+    } finally {
+      setGateBusy(false);
+    }
+  }
+
+  function copyGateLink(token: string) {
+    navigator.clipboard?.writeText(`${window.location.origin}/d/${token}`).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }).catch(() => {});
   }
 
   function requestMove(stage: ProjectStage) {
@@ -175,6 +208,29 @@ export function StageRail({
             <button type="button" className="btn btn-primary" onClick={() => commit(pending)} disabled={saving}>Move anyway</button>
             <button type="button" className="btn btn-ghost" onClick={() => setPending(null)}>Finish suggestions</button>
           </div>
+        </div>
+      )}
+      {gateOffer && (
+        <div className="stage-pending" role="status">
+          <p>Want your sponsor to sign off on moving from {STAGE_LABEL[gateOffer.from]} to {STAGE_LABEL[gateOffer.to]}? This is optional and nothing waits on it.</p>
+          <div className="stage-pending-actions">
+            <button type="button" className="btn btn-primary" onClick={askGate} disabled={gateBusy}>{gateBusy ? "Sending..." : "Request approval"}</button>
+            <button type="button" className="btn btn-ghost" onClick={() => setGateOffer(null)}>Skip</button>
+          </div>
+        </div>
+      )}
+      {gate && !gateOffer && (
+        <div className="stage-gate-status">
+          <span className={`charter-dot charter-dot-${gate.status}`} aria-hidden="true" />
+          <span>
+            {STAGE_LABEL[gate.from]} to {STAGE_LABEL[gate.to]}:{" "}
+            {gate.status === "pending" && "waiting on your sponsor"}
+            {gate.status === "approved" && `approved by ${gate.responderName}`}
+            {gate.status === "changes_requested" && `${gate.responderName} asked for changes`}
+          </span>
+          {gate.status === "pending" && isOwner && (
+            <button type="button" className="btn btn-ghost" onClick={() => copyGateLink(gate.publicToken)}>{copied ? "Copied" : "Copy link"}</button>
+          )}
         </div>
       )}
       {error && <p className="stage-error" role="alert">{error}</p>}

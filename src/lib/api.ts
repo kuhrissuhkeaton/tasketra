@@ -89,6 +89,18 @@ export type Project = {
   show_all_tabs?: boolean;
   charter?: Charter;
   tolerances?: Tolerances;
+  stage_gates?: boolean;
+};
+
+export type StageGate = {
+  decisionId: string;
+  from: ProjectStage;
+  to: ProjectStage;
+  status: "pending" | "approved" | "changes_requested";
+  publicToken: string;
+  requestedAt: string;
+  responderName: string | null;
+  respondedAt: string | null;
 };
 
 export type CharterApproval = {
@@ -130,6 +142,7 @@ export type StageChecklistItem = {
 
 export type StageData = {
   stage: ProjectStage;
+  gatesEnabled: boolean;
   checklist: {
     title: string;
     items: StageChecklistItem[];
@@ -574,9 +587,13 @@ export const api = {
   updateProject: (id: string, patch: {
     name?: string; description?: string; ccb_enabled?: boolean;
     closureChecklist?: Record<string, boolean>; closureNotes?: string; stage?: ProjectStage;
-    size?: ProjectSize; approach?: ProjectApproach; show_all_tabs?: boolean; charter?: Charter; tolerances?: Tolerances;
+    size?: ProjectSize; approach?: ProjectApproach; show_all_tabs?: boolean; charter?: Charter; tolerances?: Tolerances; stage_gates?: boolean;
   }) =>
     request<{ project: Project }>("/project", { method: "PATCH", body: JSON.stringify({ id, ...patch }) }),
+  getStageGate: (projectId: string) =>
+    request<{ gate: StageGate | null }>(`/stage-gate?projectId=${projectId}`),
+  requestStageGate: (projectId: string, from: ProjectStage, to: ProjectStage) =>
+    request<{ gate: StageGate }>("/stage-gate", { method: "POST", body: JSON.stringify({ projectId, from, to }) }),
   getCharterApproval: (projectId: string) =>
     request<{ approval: CharterApproval | null }>(`/charter-approval?projectId=${projectId}`),
   requestCharterApproval: (projectId: string) =>

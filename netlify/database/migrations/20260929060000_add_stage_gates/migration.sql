@@ -1,0 +1,2 @@
+ALTER TABLE projects ADD COLUMN stage_gates BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE projects ADD COLUMN stage_gate JSONB;
