@@ -89,6 +89,16 @@ export type Project = {
   charter?: Charter;
 };
 
+export type CharterApproval = {
+  decisionId: string;
+  status: "pending" | "approved" | "changes_requested";
+  publicToken: string;
+  requestedAt: string;
+  responderName: string | null;
+  respondedAt: string | null;
+  outdated: boolean;
+};
+
 export type ProjectStage = "initiate" | "plan" | "execute" | "close";
 
 export type StageChecklistItem = {
@@ -547,6 +557,10 @@ export const api = {
     size?: ProjectSize; approach?: ProjectApproach; show_all_tabs?: boolean; charter?: Charter;
   }) =>
     request<{ project: Project }>("/project", { method: "PATCH", body: JSON.stringify({ id, ...patch }) }),
+  getCharterApproval: (projectId: string) =>
+    request<{ approval: CharterApproval | null }>(`/charter-approval?projectId=${projectId}`),
+  requestCharterApproval: (projectId: string) =>
+    request<{ approval: CharterApproval }>("/charter-approval", { method: "POST", body: JSON.stringify({ projectId }) }),
   deleteProject: (id: string) => request<{ ok: true }>(`/project?id=${id}`, { method: "DELETE" }),
   restoreProject: (id: string) =>
     request<{ project: Project }>("/project", { method: "PATCH", body: JSON.stringify({ id, restore: true }) }),

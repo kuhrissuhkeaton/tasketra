@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { api } from "../lib/api";
+import { api, type CharterApproval } from "../lib/api";
+import { fmtDate } from "../lib/format";
 import {
   CHARTER_LIGHT_FIELDS, cleanCharter, isCharterComplete, objectiveLines, sameCharter,
   type Charter, type CharterField,
@@ -41,6 +42,34 @@ export function CharterTab({
   const [error, setError] = useState("");
   const [goalsMsg, setGoalsMsg] = useState("");
   const [makingGoals, setMakingGoals] = useState(false);
+  const [approval, setApproval] = useState<CharterApproval | null>(null);
+  const [asking, setAsking] = useState(false);
+  const [approvalError, setApprovalError] = useState("");
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    api.getCharterApproval(projectId).then(({ approval }) => setApproval(approval)).catch(() => {});
+  }, [projectId]);
+
+  async function askForApproval() {
+    setAsking(true);
+    setApprovalError("");
+    try {
+      const { approval } = await api.requestCharterApproval(projectId);
+      setApproval(approval);
+    } catch (err: any) {
+      setApprovalError(err.message || "Couldn't send the charter for approval.");
+    } finally {
+      setAsking(false);
+    }
+  }
+
+  function copyLink(token: string) {
+    navigator.clipboard.writeText(`${window.location.origin}/d/${token}`).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
 
   // Follow the saved charter when it changes underneath us (another tab of
   // the same project), but never clobber unsaved typing.
@@ -163,6 +192,35 @@ export function CharterTab({
           </div>
         )}
         {error && <p className="form-error">{error}</p>}
+      </div>
+
+      <div className="settings-card charter-approval no-print">
+        <p className="settings-card-label">Approval</p>
+        <p className="muted">Optional. Turns the charter into a Decision your sponsor can approve or ask to change, from a link. Nothing is blocked either way.</p>
+        <p className="charter-approval-status">
+          <span className={`charter-dot charter-dot-${approval?.status ?? "none"}`} />
+          {!approval && "Not requested yet"}
+          {approval?.status === "pending" && "Waiting on your sponsor"}
+          {approval?.status === "approved" && `Approved by ${approval.responderName} on ${fmtDate(approval.respondedAt)}`}
+          {approval?.status === "changes_requested" && `${approval.responderName} asked for changes on ${fmtDate(approval.respondedAt)}`}
+        </p>
+        {approval?.outdated && <p className="muted">The charter has changed since this was sent.</p>}
+        {approval && approval.status === "pending" && (
+          <p className="charter-link">
+            <code>{window.location.origin}/d/{approval.publicToken}</code>{" "}
+            <button type="button" className="btn btn-ghost" onClick={() => copyLink(approval.publicToken)}>{copied ? "Copied" : "Copy link"}</button>
+          </p>
+        )}
+        {isOwner && (!approval || approval.status !== "pending" || approval.outdated) && (
+          <div>
+            <button type="button" className="btn btn-ghost" disabled={asking || dirty || !charter.purpose} onClick={askForApproval}>
+              {asking ? "Sending..." : approval ? "Send updated version" : "Ask for approval"}
+            </button>
+            {dirty && <span className="muted"> Save your changes first.</span>}
+            {!dirty && !charter.purpose && <span className="muted"> Write the purpose first.</span>}
+          </div>
+        )}
+        {approvalError && <p className="form-error">{approvalError}</p>}
       </div>
 
       <div className="settings-card charter-where no-print">

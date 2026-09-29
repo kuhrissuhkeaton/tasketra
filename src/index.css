@@ -890,7 +890,7 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
   max-width: 480px; margin: 60px auto; padding: 32px; background: var(--cream);
   border-radius: var(--radius); box-shadow: var(--shadow-lift);
 }
-.decision-context { color: var(--slate); margin: 12px 0; }
+.decision-context { color: var(--slate); margin: 12px 0; white-space: pre-wrap; }
 .option-list { margin: 8px 0 16px; }
 
 .public-roadmap {
@@ -1283,3 +1283,11 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
   .primary-tabs, .page-head .stage-chip { display: none !important; }
   .charter textarea, .charter input { border: none; background: transparent; padding: 0; resize: none; }
 }
+
+.charter-approval p:not(.settings-card-label) { margin: 6px 0; }
+.charter-approval-status { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; }
+.charter-dot { width: 8px; height: 8px; border-radius: 999px; background: var(--slate-2); flex: none; }
+.charter-dot-pending { background: #B7952B; }
+.charter-dot-approved { background: var(--success); }
+.charter-dot-changes_requested { background: var(--red); }
+.charter-link code { font-size: 12px; word-break: break-all; }

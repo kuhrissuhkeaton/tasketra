@@ -9,6 +9,12 @@ type ChangeEntry = { version: string; date: string; title: string; body: string 
 // they can do.
 const CHANGES: ChangeEntry[] = [
   {
+    version: "v73",
+    date: "September 2026",
+    title: "Ask your sponsor to approve the charter",
+    body: "The Charter tab now has an optional Approval card. It turns the charter into a Decision with two answers, Approve or Request changes, and gives you a link to send your sponsor. When they answer, the card shows who approved and when, and it tells you if the charter changed after it was sent. Nothing is ever blocked by it.",
+  },
+  {
     version: "v72",
     date: "September 2026",
     title: "Write your project charter in the app",
