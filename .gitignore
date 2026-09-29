@@ -28,3 +28,6 @@ dist-ssr
 
 # TypeScript incremental build cache
 *.tsbuildinfo
+
+# Claude working files
+Claude outputs/
