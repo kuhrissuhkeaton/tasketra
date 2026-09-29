@@ -80,6 +80,30 @@ export type Project = {
   closure_checklist?: Record<string, boolean>;
   closure_notes?: string | null;
   closed_at?: string | null;
+  stage?: ProjectStage;
+};
+
+export type ProjectStage = "initiate" | "plan" | "execute" | "close";
+
+export type StageChecklistItem = {
+  id: string;
+  title: string;
+  meta: string;
+  status: "done" | "partial" | "todo";
+  tab: string;
+  action: string;
+};
+
+export type StageData = {
+  stage: ProjectStage;
+  checklist: {
+    title: string;
+    items: StageChecklistItem[];
+    done: number;
+    total: number;
+    optionalNote: string | null;
+  };
+  band: { state: "quiet" | "attention"; message: string };
 };
 
 export type ProjectMember = {
@@ -513,7 +537,7 @@ export const api = {
   getProject: (id: string) => request<{ project: Project }>(`/project?id=${id}`),
   updateProject: (id: string, patch: {
     name?: string; description?: string; ccb_enabled?: boolean;
-    closureChecklist?: Record<string, boolean>; closureNotes?: string;
+    closureChecklist?: Record<string, boolean>; closureNotes?: string; stage?: ProjectStage;
   }) =>
     request<{ project: Project }>("/project", { method: "PATCH", body: JSON.stringify({ id, ...patch }) }),
   deleteProject: (id: string) => request<{ ok: true }>(`/project?id=${id}`, { method: "DELETE" }),
@@ -856,6 +880,7 @@ export const api = {
     request<{ ok: true }>(`/members?projectId=${projectId}&id=${id}`, { method: "DELETE" }),
 
   getFeed: (projectId: string) => request<{ feed: FeedItem[] }>(`/feed?projectId=${projectId}`),
+  getStage: (projectId: string) => request<StageData>(`/stage?projectId=${projectId}`),
   getToday: (projectId: string) => request<TodayData>(`/today?projectId=${projectId}`),
   getWeeklyReport: (projectId: string) => request<WeeklyReport>(`/weekly-report?projectId=${projectId}`),
 

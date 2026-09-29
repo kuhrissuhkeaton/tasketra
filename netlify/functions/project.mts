@@ -6,6 +6,7 @@ import { isProjectOwner } from "../lib/ownership.ts";
 import { json } from "../lib/http.ts";
 import { logActivity } from "../lib/activity.ts";
 import { withSentry } from "../lib/sentry.ts";
+import { isStage, STAGE_LABEL } from "../lib/stageChecklist.ts";
 
 export default withSentry(async (req: Request) => {
   const userId = getUserIdFromRequest(req);
@@ -21,7 +22,7 @@ export default withSentry(async (req: Request) => {
     const [project] = await database.sql`
       SELECT p.id, p.name, p.description, p.created_at, p.owner_id, p.webhook_enabled,
         p.ccb_enabled, p.archived, p.deleted_at, p.roadmap_share_enabled, p.roadmap_share_token,
-        p.closure_checklist, p.closure_notes, p.closed_at,
+        p.closure_checklist, p.closure_notes, p.closed_at, p.stage,
         (p.owner_id = ${userId}) AS is_owner
       FROM projects p
       WHERE p.id = ${id}
@@ -87,11 +88,15 @@ export default withSentry(async (req: Request) => {
     // a one-person, one-sitting task in practice).
     const hasClosureChecklist = body?.closureChecklist !== undefined && body?.closureChecklist !== null && typeof body.closureChecklist === "object";
     const hasClosureNotes = typeof body?.closureNotes === "string";
+    const hasStage = body?.stage !== undefined;
+    if (hasStage && !isStage(body.stage)) {
+      return json({ error: "stage must be one of initiate, plan, execute, close." }, { status: 400 });
+    }
 
     if (hasName && !body.name.trim()) {
       return json({ error: "Project name can't be empty." }, { status: 400 });
     }
-    if (!hasName && !hasDescription && !hasWebhook && !hasCcb && !hasRoadmapShare && !hasClosureChecklist && !hasClosureNotes) {
+    if (!hasName && !hasDescription && !hasWebhook && !hasCcb && !hasRoadmapShare && !hasClosureChecklist && !hasClosureNotes && !hasStage) {
       return json({ error: "Nothing to update." }, { status: 400 });
     }
 
@@ -113,11 +118,16 @@ export default withSentry(async (req: Request) => {
         roadmap_share_enabled = COALESCE(${hasRoadmapShare ? body.roadmap_share_enabled : null}, roadmap_share_enabled),
         roadmap_share_token = COALESCE(${newShareToken}, roadmap_share_token),
         closure_checklist = CASE WHEN ${hasClosureChecklist} THEN ${hasClosureChecklist ? JSON.stringify(body.closureChecklist) : null}::jsonb ELSE closure_checklist END,
-        closure_notes = COALESCE(${hasClosureNotes ? body.closureNotes : null}, closure_notes)
+        closure_notes = COALESCE(${hasClosureNotes ? body.closureNotes : null}, closure_notes),
+        stage = COALESCE(${hasStage ? body.stage : null}, stage)
       WHERE id = ${id}
       RETURNING id, name, description, created_at, owner_id, webhook_enabled, ccb_enabled, archived, deleted_at,
-        roadmap_share_enabled, roadmap_share_token, closure_checklist, closure_notes, closed_at
+        roadmap_share_enabled, roadmap_share_token, closure_checklist, closure_notes, closed_at, stage
     `;
+
+    if (hasStage) {
+      await logActivity(database, { projectId: id, entityType: "project", entityId: id, entityTitle: project.name, action: "updated", summary: `stage changed to ${STAGE_LABEL[body.stage as keyof typeof STAGE_LABEL]}` });
+    }
 
     if (hasName || hasDescription) {
       await logActivity(database, { projectId: id, entityType: "project", entityId: id, entityTitle: project.name, action: "updated", summary: "project details updated" });

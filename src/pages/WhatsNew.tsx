@@ -9,6 +9,12 @@ type ChangeEntry = { version: string; date: string; title: string; body: string 
 // they can do.
 const CHANGES: ChangeEntry[] = [
   {
+    version: "v70",
+    date: "September 2026",
+    title: "See where your project is, and what to do next",
+    body: "Every project now has a stage: Initiate, Plan, Execute, or Close. A rail at the top of Home shows where you are, with a Monitor and control band that runs alongside. Underneath, a short \"Next up\" list is built from what's actually in your project, like tasks without dates, no budget baseline yet, or risks nobody has reviewed lately, and each row jumps straight to the right tab. You can move between stages in either direction at any time, and nothing ever blocks you. A small stage tag also appears at the top of every project tab.",
+  },
+  {
     version: "v69",
     date: "September 2026",
     title: "Categorize vendors by role, category, and sub-category",

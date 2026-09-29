@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, Fragment } from "react";
 import { useParams, useSearchParams, useNavigate, useLocation, Link } from "react-router-dom";
-import { api, ApiError, type Project, type Task, type Stakeholder, type Decision, type Issue, type Risk, type Assumption, type Dependency, type ChangeRequest, type Lesson, type TodayData, type WeeklyReport, type BudgetData, type FeedItem, type TrashItem, type ProjectMember, type Meeting, type MeetingActionItem, type ProjectDocument, type StorageUsage, type RoadmapItem, type RoadmapItemType, type QualityItem, type ProcurementItem, type CommPlanItem, type ComplianceItem, type Objective, type KeyResult, type RiskTaskLink, type IssueTaskLink } from "../lib/api";
+import { api, ApiError, type Project, type Task, type Stakeholder, type Decision, type Issue, type Risk, type Assumption, type Dependency, type ChangeRequest, type Lesson, type TodayData, type WeeklyReport, type BudgetData, type FeedItem, type TrashItem, type ProjectMember, type Meeting, type MeetingActionItem, type ProjectDocument, type StorageUsage, type RoadmapItem, type RoadmapItemType, type QualityItem, type ProcurementItem, type CommPlanItem, type ComplianceItem, type Objective, type KeyResult, type RiskTaskLink, type IssueTaskLink, type ProjectStage } from "../lib/api";
 import { RoadmapTimeline, ROADMAP_TYPE_LABEL, ROADMAP_STATUS_LABEL, ROADMAP_TYPE_COLOR, fmtRoadmapDate } from "../components/RoadmapTimeline";
 import { Drawer } from "../components/ItemDrawer";
 import { tasksToICS, downloadICS } from "../lib/ics";
@@ -13,6 +13,7 @@ import { useConfirm } from "../components/ConfirmDialog";
 import { ResizableTable } from "../components/ResizableTable";
 import { avatarColor, initials } from "../lib/avatar";
 import { TourOverlay, useProductTour } from "../components/ProductTour";
+import { StageRail, StageChip } from "../components/StageRail";
 
 
 export type Tab = "home" | "roadmap" | "tasks" | "okrs" | "issues" | "risks" | "assumptions" | "dependencies" | "quality" | "compliance" | "budget" | "meetings" | "documents" | "stakeholders" | "decisions" | "team" | "procurement" | "comms" | "closure" | "report" | "templates" | "export" | "connections" | "trash";
@@ -278,6 +279,7 @@ export default function ProjectHome() {
       <main className="project-main">
         <div className="page-head">
           <h1>{project?.name || "Project"}</h1>
+          <StageChip stage={project?.stage} />
         </div>
 
         <div className="inline-form primary-tabs">
@@ -294,7 +296,14 @@ export default function ProjectHome() {
           ))}
         </div>
 
-        {tab === "home" && <HomeTab projectId={id} />}
+        {tab === "home" && (
+          <HomeTab
+            projectId={id}
+            isOwner={project?.is_owner ?? false}
+            onStageChange={(stage: ProjectStage) => setProject((p) => (p ? { ...p, stage } : p))}
+            onOpenTab={(t) => setParams({ tab: t })}
+          />
+        )}
         {tab === "roadmap" && <RoadmapTab projectId={id} isOwner={project?.is_owner ?? false} />}
         {tab === "tasks" && <TasksTab projectId={id} projectName={project?.name || "Project"} highlightId={tab === "tasks" ? highlightId : null} />}
         {tab === "okrs" && <OkrsTab projectId={id} />}
@@ -333,10 +342,16 @@ export default function ProjectHome() {
   );
 }
 
-function HomeTab({ projectId }: { projectId: string }) {
+function HomeTab({ projectId, isOwner, onStageChange, onOpenTab }: {
+  projectId: string;
+  isOwner: boolean;
+  onStageChange: (stage: ProjectStage) => void;
+  onOpenTab: (tab: string) => void;
+}) {
   const [view, setView] = useState<"today" | "feed">("today");
   return (
     <div>
+      <StageRail projectId={projectId} isOwner={isOwner} onStageChange={onStageChange} onOpenTab={onOpenTab} />
       <div className="view-toggle">
         <button
           className={view === "today" ? "btn btn-primary" : "btn btn-ghost"}
