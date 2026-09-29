@@ -1257,3 +1257,29 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
 @media (max-width: 560px) {
   .setup-size-grid { grid-template-columns: 1fr; }
 }
+
+/* --- Charter tab --- */
+.charter { max-width: 780px; }
+.charter-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+.charter-head h2 { margin: 0; }
+.charter-head-actions { display: flex; align-items: center; gap: 10px; }
+.charter-card { display: flex; flex-direction: column; gap: 16px; }
+.charter-field { flex: 1; min-width: 0; }
+.charter-field label { margin: 0 0 6px; font-size: 13px; font-weight: 700; }
+.charter-field textarea, .charter-field input { width: 100%; box-sizing: border-box; }
+.charter-row { display: flex; gap: 16px; }
+.charter-hint { margin: 6px 0 0; font-size: 12px; color: var(--slate-2); }
+.charter-goals { display: flex; align-items: center; gap: 12px; margin-top: 10px; flex-wrap: wrap; }
+.charter-save { display: flex; align-items: center; gap: 12px; padding-top: 4px; }
+.charter-where p:not(.settings-card-label) { margin: 4px 0; font-size: 14px; }
+.charter-note { margin-top: 4px; }
+.charter-print-title, .home-purpose-print { display: none; }
+.home-purpose { margin: 0 0 18px; font-size: 15px; line-height: 1.5; color: var(--navy); max-width: 720px; }
+.home-purpose-label { display: block; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--slate); margin-bottom: 2px; }
+@media (max-width: 640px) { .charter-row { flex-direction: column; } }
+@media print {
+  .charter-print-title { display: block; font-size: 18px; font-weight: 700; margin: 0 0 12px; }
+  .charter .settings-card { box-shadow: none; border: 1px solid var(--border); }
+  .primary-tabs, .page-head .stage-chip { display: none !important; }
+  .charter textarea, .charter input { border: none; background: transparent; padding: 0; resize: none; }
+}

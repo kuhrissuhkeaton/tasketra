@@ -38,6 +38,7 @@ export type StageCounts = {
   cpi: number | null;
   statusUpdatesLast7Days: number;
   closureChecked: number;
+  charterWritten: boolean;
 };
 
 export type ChecklistStatus = "done" | "partial" | "todo";
@@ -67,6 +68,14 @@ function plural(n: number, one: string, many: string = `${one}s`): string {
 
 function initiateItems(c: StageCounts): ChecklistItem[] {
   return [
+    {
+      id: "charter",
+      title: "Write the charter",
+      meta: c.charterWritten ? "Purpose is written down" : "Say why the project exists, what is in scope, and who sponsors it",
+      status: c.charterWritten ? "done" : "todo",
+      tab: "charter",
+      action: c.charterWritten ? "View charter" : "Write the charter",
+    },
     {
       id: "first-tasks",
       title: "Outline the first tasks",

@@ -15,10 +15,11 @@ import { avatarColor, initials } from "../lib/avatar";
 import { TourOverlay, useProductTour } from "../components/ProductTour";
 import { StageRail, StageChip } from "../components/StageRail";
 import { ProjectSetupPicker } from "../components/ProjectSetup";
+import { CharterTab } from "../components/CharterTab";
 import { isTabHidden, primaryTabOrder, defaultTasksView, hiddenTabLabels, SIZE_LABEL, type ProjectSize, type ProjectApproach } from "../lib/projectView";
 
 
-export type Tab = "home" | "roadmap" | "tasks" | "okrs" | "issues" | "risks" | "assumptions" | "dependencies" | "quality" | "compliance" | "budget" | "meetings" | "documents" | "stakeholders" | "decisions" | "team" | "procurement" | "comms" | "closure" | "report" | "templates" | "export" | "connections" | "trash";
+export type Tab = "home" | "roadmap" | "tasks" | "charter" | "okrs" | "issues" | "risks" | "assumptions" | "dependencies" | "quality" | "compliance" | "budget" | "meetings" | "documents" | "stakeholders" | "decisions" | "team" | "procurement" | "comms" | "closure" | "report" | "templates" | "export" | "connections" | "trash";
 
 function daysAgo(dateStr: string): number {
   return Math.max(0, Math.floor((Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24)));
@@ -178,6 +179,7 @@ const PRIMARY_TABS: { id: Tab; label: string }[] = [
 // the same pattern already proven for People & decisions below.
 const SECONDARY_NAV_GROUPS: { label: string; tabs: { id: Tab; label: string }[] }[] = [
   { label: "Goals", tabs: [
+    { id: "charter", label: "Charter" },
     { id: "okrs", label: "OKRs" },
   ] },
   { label: "Issues & risks", tabs: [
@@ -316,6 +318,7 @@ export default function ProjectHome() {
           <HomeTab
             projectId={id}
             isOwner={project?.is_owner ?? false}
+            purpose={project?.charter?.purpose}
             size={size}
             showAll={project?.show_all_tabs ?? false}
             onShowAllTabs={async () => {
@@ -328,6 +331,19 @@ export default function ProjectHome() {
         )}
         {tab === "roadmap" && <RoadmapTab projectId={id} isOwner={project?.is_owner ?? false} />}
         {tab === "tasks" && <TasksTab projectId={id} defaultView={defaultTasksView(approach)} projectName={project?.name || "Project"} highlightId={tab === "tasks" ? highlightId : null} />}
+        {tab === "charter" && (
+          <CharterTab
+            projectId={id}
+            projectName={project?.name || "Project"}
+            charter={project?.charter ?? {}}
+            isOwner={project?.is_owner ?? false}
+            size={size}
+            showAll={showAll}
+            okrsVisible={!isTabHidden("okrs", size, showAll)}
+            onSaved={(charter) => setProject((p) => (p ? { ...p, charter } : p))}
+            onOpenTab={(t) => setParams({ tab: t })}
+          />
+        )}
         {tab === "okrs" && <OkrsTab projectId={id} />}
         {tab === "issues" && <IssuesTab projectId={id} highlightId={tab === "issues" ? highlightId : null} />}
         {tab === "risks" && <RisksTab projectId={id} highlightId={tab === "risks" ? highlightId : null} />}
@@ -364,9 +380,10 @@ export default function ProjectHome() {
   );
 }
 
-function HomeTab({ projectId, isOwner, size, showAll, onShowAllTabs, onStageChange, onOpenTab }: {
+function HomeTab({ projectId, isOwner, purpose, size, showAll, onShowAllTabs, onStageChange, onOpenTab }: {
   projectId: string;
   isOwner: boolean;
+  purpose?: string;
   size: ProjectSize;
   showAll: boolean;
   onShowAllTabs: () => void;
@@ -382,6 +399,13 @@ function HomeTab({ projectId, isOwner, size, showAll, onShowAllTabs, onStageChan
           {isOwner && (
             <button type="button" className="view-banner-link" onClick={onShowAllTabs}>Show all tabs</button>
           )}
+        </p>
+      )}
+      {purpose && (
+        <p className="home-purpose">
+          <span className="home-purpose-label">Purpose</span>
+          {purpose}{" "}
+          <button type="button" className="view-banner-link" onClick={() => onOpenTab("charter")}>Charter</button>
         </p>
       )}
       <StageRail projectId={projectId} isOwner={isOwner} onStageChange={onStageChange} onOpenTab={onOpenTab} />

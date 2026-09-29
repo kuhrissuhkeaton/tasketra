@@ -1,4 +1,5 @@
 import type { ProjectSize, ProjectApproach } from "./projectView";
+import type { Charter } from "./charter";
 const BASE = "/api";
 
 // Thrown by request()/uploadRequest() on non-2xx responses. Carries the HTTP
@@ -85,6 +86,7 @@ export type Project = {
   size?: ProjectSize;
   approach?: ProjectApproach;
   show_all_tabs?: boolean;
+  charter?: Charter;
 };
 
 export type ProjectStage = "initiate" | "plan" | "execute" | "close";
@@ -542,7 +544,7 @@ export const api = {
   updateProject: (id: string, patch: {
     name?: string; description?: string; ccb_enabled?: boolean;
     closureChecklist?: Record<string, boolean>; closureNotes?: string; stage?: ProjectStage;
-    size?: ProjectSize; approach?: ProjectApproach; show_all_tabs?: boolean;
+    size?: ProjectSize; approach?: ProjectApproach; show_all_tabs?: boolean; charter?: Charter;
   }) =>
     request<{ project: Project }>("/project", { method: "PATCH", body: JSON.stringify({ id, ...patch }) }),
   deleteProject: (id: string) => request<{ ok: true }>(`/project?id=${id}`, { method: "DELETE" }),

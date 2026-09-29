@@ -5,6 +5,7 @@ import { hasProjectAccess } from "../lib/ownership.ts";
 import { json } from "../lib/http.ts";
 import { withSentry } from "../lib/sentry.ts";
 import { computeEvmMetrics, round2 } from "../lib/evm.ts";
+import { charterWritten } from "../lib/charter.ts";
 import { isProjectSize } from "../lib/projectSetup.ts";
 import { isStage, monitorBand, stageChecklist, type Stage, type StageCounts } from "../lib/stageChecklist.ts";
 
@@ -24,7 +25,7 @@ export default withSentry(async (req: Request) => {
   const database = db();
   const [[project], [taskStats], [stakeholderRow], [riskRow], [issueRow], [crRow], [statusRow], costRows] = await Promise.all([
     database.sql`
-      SELECT stage, size, budget_at_completion, closure_checklist
+      SELECT stage, size, budget_at_completion, closure_checklist, charter
       FROM projects WHERE id = ${projectId}
     `,
     database.sql`
@@ -99,6 +100,7 @@ export default withSentry(async (req: Request) => {
     cpi,
     statusUpdatesLast7Days: statusRow?.n || 0,
     closureChecked: checklistValues.filter((v) => v === true).length,
+    charterWritten: charterWritten(project.charter),
   };
 
   return json({ stage, checklist: stageChecklist(stage, counts, size), band: monitorBand(stage, counts) });

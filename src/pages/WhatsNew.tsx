@@ -9,6 +9,12 @@ type ChangeEntry = { version: string; date: string; title: string; body: string 
 // they can do.
 const CHANGES: ChangeEntry[] = [
   {
+    version: "v72",
+    date: "September 2026",
+    title: "Write your project charter in the app",
+    body: "There is a new Charter tab in the Goals group. It holds the essentials on one page: purpose, objectives, what is in and out of scope, sponsor, and (on Standard and Full projects) budget, timeline and success measures. Turn the objectives into OKR goals in one click, print the charter, and see the purpose at the top of Home. While a project is in Initiate, writing the charter is the first item in Next up. Light projects show just the four essentials.",
+  },
+  {
     version: "v71",
     date: "September 2026",
     title: "Set up a project to fit its size",

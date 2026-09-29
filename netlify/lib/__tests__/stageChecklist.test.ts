@@ -4,6 +4,7 @@ import { stageChecklist, monitorBand, isStage, type StageCounts } from "../stage
 const EMPTY: StageCounts = {
   tasks: 0, datedTasks: 0, stakeholders: 0, risks: 0, hasBudgetBaseline: false, blockedTasks: 0,
   openChangeRequests: 0, openRisks: 0, staleRisks: 0, openIssues: 0, cpi: null, statusUpdatesLast7Days: 0, closureChecked: 0,
+  charterWritten: false,
 };
 
 const item = (stage: Parameters<typeof stageChecklist>[0], counts: StageCounts, id: string) =>
@@ -59,10 +60,19 @@ describe("plan checklist", () => {
 });
 
 describe("initiate checklist", () => {
-  it("has three items driven by tasks, stakeholders and risks", () => {
+  it("has four items: charter, tasks, stakeholders and risks", () => {
     const c = stageChecklist("initiate", { ...EMPTY, tasks: 1, stakeholders: 1 });
-    expect(c.total).toBe(3);
+    expect(c.total).toBe(4);
     expect(c.done).toBe(2);
+  });
+
+  it("leads with the charter, and marks it done once the purpose is written", () => {
+    const todo = stageChecklist("initiate", EMPTY).items[0];
+    expect(todo.id).toBe("charter");
+    expect(todo.status).toBe("todo");
+    expect(todo.tab).toBe("charter");
+    const done = stageChecklist("initiate", { ...EMPTY, charterWritten: true }).items[0];
+    expect(done.status).toBe("done");
   });
 });
 
