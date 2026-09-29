@@ -5,6 +5,7 @@ import { hasProjectAccess } from "../lib/ownership.ts";
 import { json } from "../lib/http.ts";
 import { round2, computeEvmMetrics } from "../lib/evm.ts";
 import { withSentry } from "../lib/sentry.ts";
+import { logActivity } from "../lib/activity.ts";
 
 // Lightweight Earned Value Management: a project's budget baseline (BAC) plus
 // logged actual costs, compared against schedule/scope progress already
@@ -92,10 +93,21 @@ export default withSentry(async (req: Request) => {
     // one baseline form edits BAC and the reserve side by side), so this
     // stays a plain overwrite -- same shape as the original BAC-only PATCH,
     // just widened to two columns instead of partial-update semantics.
+    const [before] = await database.sql`SELECT name, budget_at_completion, contingency_reserve FROM projects WHERE id = ${projectId}`;
     await database.sql`
       UPDATE projects SET budget_at_completion = ${bac ?? null}, contingency_reserve = ${reserve ?? null}
       WHERE id = ${projectId}
     `;
+    // Editing the budget after the baseline is locked is allowed, but leaves a
+    // trail so the change is visible in the Feed.
+    const changed = (before?.budget_at_completion === null || before?.budget_at_completion === undefined ? null : Number(before.budget_at_completion)) !== (bac ?? null)
+      || (before?.contingency_reserve === null || before?.contingency_reserve === undefined ? null : Number(before.contingency_reserve)) !== (reserve ?? null);
+    if (changed) {
+      const [{ n }] = await database.sql`SELECT count(*)::int AS n FROM project_baselines WHERE project_id = ${projectId}`;
+      if (n > 0) {
+        await logActivity(database, { projectId, entityType: "project", entityId: projectId, entityTitle: before?.name ?? null, action: "updated", summary: "budget changed after the baseline was locked" });
+      }
+    }
     return json({ ok: true });
   }
 

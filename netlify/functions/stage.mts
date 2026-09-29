@@ -23,7 +23,7 @@ export default withSentry(async (req: Request) => {
   if (!(await hasProjectAccess(userId, projectId))) return json({ error: "Not found" }, { status: 404 });
 
   const database = db();
-  const [[project], [taskStats], [stakeholderRow], [riskRow], [issueRow], [crRow], [statusRow], costRows] = await Promise.all([
+  const [[project], [taskStats], [stakeholderRow], [riskRow], [issueRow], [crRow], [statusRow], costRows, [baselineRow]] = await Promise.all([
     database.sql`
       SELECT stage, size, budget_at_completion, closure_checklist, charter
       FROM projects WHERE id = ${projectId}
@@ -56,6 +56,7 @@ export default withSentry(async (req: Request) => {
       WHERE project_id = ${projectId} AND created_at > now() - interval '7 days'
     `,
     database.sql`SELECT amount FROM cost_entries WHERE project_id = ${projectId}`,
+    database.sql`SELECT count(*)::int AS n FROM project_baselines WHERE project_id = ${projectId}`,
   ]);
 
   if (!project) return json({ error: "Not found" }, { status: 404 });
@@ -101,6 +102,7 @@ export default withSentry(async (req: Request) => {
     statusUpdatesLast7Days: statusRow?.n || 0,
     closureChecked: checklistValues.filter((v) => v === true).length,
     charterWritten: charterWritten(project.charter),
+    baselineLocked: (baselineRow?.n || 0) > 0,
   };
 
   return json({ stage, checklist: stageChecklist(stage, counts, size), band: monitorBand(stage, counts) });

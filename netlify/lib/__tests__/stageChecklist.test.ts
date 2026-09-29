@@ -5,6 +5,7 @@ const EMPTY: StageCounts = {
   tasks: 0, datedTasks: 0, stakeholders: 0, risks: 0, hasBudgetBaseline: false, blockedTasks: 0,
   openChangeRequests: 0, openRisks: 0, staleRisks: 0, openIssues: 0, cpi: null, statusUpdatesLast7Days: 0, closureChecked: 0,
   charterWritten: false,
+  baselineLocked: false,
 };
 
 const item = (stage: Parameters<typeof stageChecklist>[0], counts: StageCounts, id: string) =>
@@ -22,7 +23,7 @@ describe("plan checklist", () => {
   it("starts with every item to do on an empty project", () => {
     const c = stageChecklist("plan", EMPTY);
     expect(c.done).toBe(0);
-    expect(c.total).toBe(5);
+    expect(c.total).toBe(6);
     expect(c.title).toBe("Next up in Plan");
     expect(c.items.every((i) => i.status === "todo")).toBe(true);
   });
@@ -51,6 +52,13 @@ describe("plan checklist", () => {
     const c = { ...EMPTY, hasBudgetBaseline: true, risks: 3 };
     expect(item("plan", c, "budget")).toMatchObject({ status: "done", tab: "budget" });
     expect(item("plan", c, "risks")).toMatchObject({ status: "done", tab: "risks" });
+  });
+
+  it("ends Plan with the baseline lock, done once it exists", () => {
+    const todo = item("plan", EMPTY, "baseline");
+    expect(todo).toMatchObject({ status: "todo", tab: "roadmap", title: "Lock the baseline" });
+    expect(item("plan", { ...EMPTY, baselineLocked: true }, "baseline")).toMatchObject({ status: "done", title: "Baseline locked" });
+    expect(stageChecklist("plan", EMPTY, "light").items.map((i) => i.id)).toContain("baseline");
   });
 
   it("counts done items", () => {
@@ -143,7 +151,7 @@ describe("size-aware checklist", () => {
   it("never sends a Light project to the hidden Budget tab", () => {
     const plan = stageChecklist("plan", EMPTY, "light");
     expect(plan.items.map((i) => i.id)).not.toContain("budget");
-    expect(plan.total).toBe(4);
+    expect(plan.total).toBe(5);
     const exec = stageChecklist("execute", { ...EMPTY, hasBudgetBaseline: true, cpi: 0.8 }, "light");
     expect(exec.items.some((i) => i.tab === "budget")).toBe(false);
   });

@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, Fragment } from "react";
 import { useParams, useSearchParams, useNavigate, useLocation, Link } from "react-router-dom";
-import { api, ApiError, type Project, type Task, type Stakeholder, type Decision, type Issue, type Risk, type Assumption, type Dependency, type ChangeRequest, type Lesson, type TodayData, type WeeklyReport, type BudgetData, type FeedItem, type TrashItem, type ProjectMember, type Meeting, type MeetingActionItem, type ProjectDocument, type StorageUsage, type RoadmapItem, type RoadmapItemType, type QualityItem, type ProcurementItem, type CommPlanItem, type ComplianceItem, type Objective, type KeyResult, type RiskTaskLink, type IssueTaskLink, type ProjectStage } from "../lib/api";
+import { api, ApiError, type Project, type Task, type Stakeholder, type Decision, type Issue, type Risk, type Assumption, type Dependency, type ChangeRequest, type Lesson, type TodayData, type WeeklyReport, type BudgetData, type FeedItem, type TrashItem, type ProjectMember, type Meeting, type MeetingActionItem, type ProjectDocument, type StorageUsage, type RoadmapItem, type RoadmapItemType, type QualityItem, type ProcurementItem, type CommPlanItem, type ComplianceItem, type Objective, type KeyResult, type RiskTaskLink, type IssueTaskLink, type ProjectStage, type BaselineData } from "../lib/api";
 import { RoadmapTimeline, ROADMAP_TYPE_LABEL, ROADMAP_STATUS_LABEL, ROADMAP_TYPE_COLOR, fmtRoadmapDate } from "../components/RoadmapTimeline";
 import { Drawer } from "../components/ItemDrawer";
 import { tasksToICS, downloadICS } from "../lib/ics";
@@ -16,6 +16,7 @@ import { TourOverlay, useProductTour } from "../components/ProductTour";
 import { StageRail, StageChip } from "../components/StageRail";
 import { ProjectSetupPicker } from "../components/ProjectSetup";
 import { CharterTab } from "../components/CharterTab";
+import { BaselineCard } from "../components/BaselineCard";
 import { isTabHidden, primaryTabOrder, defaultTasksView, hiddenTabLabels, SIZE_LABEL, type ProjectSize, type ProjectApproach } from "../lib/projectView";
 
 
@@ -329,7 +330,7 @@ export default function ProjectHome() {
             onOpenTab={(t) => setParams({ tab: t })}
           />
         )}
-        {tab === "roadmap" && <RoadmapTab projectId={id} isOwner={project?.is_owner ?? false} />}
+        {tab === "roadmap" && <RoadmapTab projectId={id} isOwner={project?.is_owner ?? false} showBudget={!isTabHidden("budget", size, showAll)} />}
         {tab === "tasks" && <TasksTab projectId={id} defaultView={defaultTasksView(approach)} projectName={project?.name || "Project"} highlightId={tab === "tasks" ? highlightId : null} />}
         {tab === "charter" && (
           <CharterTab
@@ -351,7 +352,7 @@ export default function ProjectHome() {
         {tab === "dependencies" && <DependenciesTab projectId={id} />}
         {tab === "quality" && <QualityTab projectId={id} />}
         {tab === "compliance" && <ComplianceTab projectId={id} />}
-        {tab === "budget" && <BudgetTab projectId={id} />}
+        {tab === "budget" && <BudgetTab projectId={id} onOpenTab={(t) => setParams({ tab: t })} />}
         {tab === "meetings" && <MeetingsTab projectId={id} />}
         {tab === "documents" && <DocumentsTab projectId={id} />}
         {tab === "stakeholders" && <StakeholdersTab projectId={id} />}
@@ -3963,7 +3964,9 @@ function ProcurementTab({ projectId }: { projectId: string }) {
   );
 }
 
-function BudgetTab({ projectId }: { projectId: string }) {
+function BudgetTab({ projectId, onOpenTab }: { projectId: string; onOpenTab: (tab: string) => void }) {
+  const confirmDialog = useConfirm();
+  const [baseline, setBaseline] = useState<BaselineData | null>(null);
   const [data, setData] = useState<BudgetData | null>(null);
   const [bacInput, setBacInput] = useState("");
   const [reserveInput, setReserveInput] = useState("");
@@ -3981,6 +3984,7 @@ function BudgetTab({ projectId }: { projectId: string }) {
 
   useEffect(() => {
     load();
+    api.getBaseline(projectId).then(setBaseline).catch(() => {});
   }, [projectId]);
 
   async function saveBac(e: React.FormEvent) {
@@ -3989,9 +3993,17 @@ function BudgetTab({ projectId }: { projectId: string }) {
     if (bacValue !== null && (Number.isNaN(bacValue) || bacValue < 0)) return;
     const reserveValue = reserveInput.trim() === "" ? null : Number(reserveInput);
     if (reserveValue !== null && (Number.isNaN(reserveValue) || reserveValue < 0)) return;
+    // Once the baseline is locked, a budget change is a baseline change. Ask
+    // whether a change request should come first, but never block the edit.
+    const changed = bacValue !== (data?.budgetAtCompletion ?? null) || reserveValue !== (data?.contingencyReserve ?? null);
+    if (baseline?.baseline && changed) {
+      const proceed = await confirmDialog("The baseline is locked, so this budget change is a change to the plan. Consider logging a change request first. Save the change anyway?");
+      if (!proceed) return;
+    }
     await api.setBudget(projectId, bacValue, reserveValue);
     setEditingBac(false);
     load();
+    api.getBaseline(projectId).then(setBaseline).catch(() => {});
   }
 
   async function addCost(e: React.FormEvent) {
@@ -4044,6 +4056,14 @@ function BudgetTab({ projectId }: { projectId: string }) {
           </div>
         )}
       </div>
+
+      {baseline?.baseline && baseline.variance && (
+        <p className="baseline-note">
+          Baseline locked {fmtDate(baseline.baseline.lockedAt)}: budget {fmtMoney(baseline.baseline.budget)}
+          {baseline.variance.budget.delta ? ` (now ${fmtMoney(baseline.variance.budget.current)}, ${baseline.variance.budget.delta > 0 ? "+" : "-"}${fmtMoney(Math.abs(baseline.variance.budget.delta))})` : ", unchanged"}.{" "}
+          <button type="button" className="view-banner-link" onClick={() => onOpenTab("roadmap")}>See what moved</button>
+        </p>
+      )}
 
       {taskStats.totalTasks === 0 && (
         <p className="muted" style={{ marginTop: 12 }}>Add tasks with due dates to compute schedule-based metrics (PV, SPI, SV).</p>
@@ -4158,7 +4178,7 @@ const ROADMAP_STATUS_COLOR: Record<RoadmapItem["status"], string> = {
   done: "var(--success)",
 };
 
-function RoadmapTab({ projectId, isOwner }: { projectId: string; isOwner: boolean }) {
+function RoadmapTab({ projectId, isOwner, showBudget }: { projectId: string; isOwner: boolean; showBudget: boolean }) {
   const confirmDialog = useConfirm();
   const [items, setItems] = useState<RoadmapItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -4345,6 +4365,7 @@ function RoadmapTab({ projectId, isOwner }: { projectId: string; isOwner: boolea
 
   return (
     <div>
+      <BaselineCard projectId={projectId} isOwner={isOwner} showBudget={showBudget} />
       <p className="muted" style={{ marginBottom: 20, maxWidth: 640 }}>
         The strategic view of this project -- phases, milestones, releases, events, and notes, grouped
         into swimlanes and laid out on a timeline. For day-to-day execution, use the Tasks tab.

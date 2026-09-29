@@ -1295,3 +1295,17 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
 .charter-link code { font-size: 12px; word-break: break-all; }
 
 .filter-group-label { font-size: 12px; font-weight: 700; color: var(--slate); margin-right: 2px; align-self: center; }
+
+/* --- Baseline card and note --- */
+.baseline-card { max-width: 760px; display: flex; flex-direction: column; gap: 10px; }
+.baseline-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.baseline-head .settings-card-label { margin: 0; }
+.baseline-card p { margin: 0; }
+.baseline-capture { font-size: 14px; font-weight: 600; }
+.baseline-drift { font-size: 14px; }
+.baseline-ok { color: var(--success); font-weight: 600; }
+.baseline-drift-list { margin: 0; padding-left: 18px; font-size: 14px; display: flex; flex-direction: column; gap: 4px; }
+.baseline-moved { width: 100%; border-collapse: collapse; font-size: 13px; background: #fff; border-radius: 10px; overflow: hidden; }
+.baseline-moved th, .baseline-moved td { text-align: left; padding: 7px 12px; border-bottom: 1px solid var(--border); }
+.baseline-moved th { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--slate); }
+.baseline-note { margin: 10px 0 0; font-size: 13px; color: var(--slate); }

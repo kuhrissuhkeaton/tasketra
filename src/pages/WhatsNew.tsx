@@ -9,6 +9,12 @@ type ChangeEntry = { version: string; date: string; title: string; body: string 
 // they can do.
 const CHANGES: ChangeEntry[] = [
   {
+    version: "v76",
+    date: "September 2026",
+    title: "Lock your baseline and see what moves",
+    body: "The Roadmap tab has a new Baseline card. Once your scope, schedule and budget are agreed, lock the baseline and Tasketra keeps a snapshot of every task's dates and the approved budget. After that the card shows how many tasks have moved, been added or removed, and how the budget has changed. Nothing is ever blocked: if you edit the budget after locking, you are simply asked whether a change request should come first. Re-lock any time, and earlier baselines are kept. Locking the baseline is now the last item in the Plan checklist.",
+  },
+  {
     version: "v75",
     date: "September 2026",
     title: "Filter the Dashboard by stage",

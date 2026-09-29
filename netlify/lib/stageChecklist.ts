@@ -39,6 +39,7 @@ export type StageCounts = {
   statusUpdatesLast7Days: number;
   closureChecked: number;
   charterWritten: boolean;
+  baselineLocked: boolean;
 };
 
 export type ChecklistStatus = "done" | "partial" | "todo";
@@ -152,6 +153,14 @@ function planItems(c: StageCounts, size: ProjectSize): ChecklistItem[] {
       status: c.risks > 0 ? "done" : "todo",
       tab: "risks",
       action: c.risks > 0 ? "View risks" : "Add a risk",
+    },
+    {
+      id: "baseline",
+      title: c.baselineLocked ? "Baseline locked" : "Lock the baseline",
+      meta: c.baselineLocked ? "Schedule and budget are snapshotted, so drift shows up" : "Snapshot the schedule and budget once they are agreed",
+      status: c.baselineLocked ? "done" : "todo",
+      tab: "roadmap",
+      action: c.baselineLocked ? "View baseline" : "Lock baseline",
     },
   ];
   // Light projects hide the Budget tab, so never send them there.

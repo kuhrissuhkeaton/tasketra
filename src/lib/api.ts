@@ -99,6 +99,22 @@ export type CharterApproval = {
   outdated: boolean;
 };
 
+export type BaselineData = {
+  current: { taskCount: number; datedTaskCount: number; budget: number | null; reserve: number | null };
+  history: { id: string; lockedAt: string }[];
+  baseline: {
+    id: string; lockedAt: string; lockedByEmail: string | null;
+    budget: number | null; reserve: number | null; taskCount: number; datedTaskCount: number;
+  } | null;
+  variance: {
+    movedTasks: { id: string; title: string; baselineStart: string | null; baselineDue: string | null; start: string | null; due: string | null }[];
+    addedTasks: number;
+    removedTasks: number;
+    budget: { baseline: number | null; current: number | null; delta: number | null };
+    reserve: { baseline: number | null; current: number | null; delta: number | null };
+  } | null;
+};
+
 export type ProjectStage = "initiate" | "plan" | "execute" | "close";
 
 export type StageChecklistItem = {
@@ -562,6 +578,9 @@ export const api = {
     request<{ approval: CharterApproval | null }>(`/charter-approval?projectId=${projectId}`),
   requestCharterApproval: (projectId: string) =>
     request<{ approval: CharterApproval }>("/charter-approval", { method: "POST", body: JSON.stringify({ projectId }) }),
+  getBaseline: (projectId: string) => request<BaselineData>(`/baseline?projectId=${projectId}`),
+  lockBaseline: (projectId: string) =>
+    request<BaselineData>("/baseline", { method: "POST", body: JSON.stringify({ projectId }) }),
   deleteProject: (id: string) => request<{ ok: true }>(`/project?id=${id}`, { method: "DELETE" }),
   restoreProject: (id: string) =>
     request<{ project: Project }>("/project", { method: "PATCH", body: JSON.stringify({ id, restore: true }) }),
