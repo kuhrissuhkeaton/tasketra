@@ -22,11 +22,14 @@ export default withSentry(async (req: Request) => {
   `;
   if (!project) return json({ error: "This roadmap link is not valid or is no longer shared." }, { status: 404 });
 
+  // Task counts only (for phase progress) -- never any task titles or details.
   const items = await database.sql`
-    SELECT id, type, title, description, swimlane, start_date, end_date, status
-    FROM roadmap_items
-    WHERE project_id = ${project.id} AND deleted_at IS NULL
-    ORDER BY swimlane ASC, start_date ASC NULLS LAST, created_at ASC
+    SELECT r.id, r.type, r.title, r.description, r.swimlane, r.start_date, r.end_date, r.status,
+      (SELECT count(*)::int FROM tasks t WHERE t.roadmap_item_id = r.id AND t.deleted_at IS NULL) AS task_total,
+      (SELECT count(*)::int FROM tasks t WHERE t.roadmap_item_id = r.id AND t.deleted_at IS NULL AND t.status = 'done') AS task_done
+    FROM roadmap_items r
+    WHERE r.project_id = ${project.id} AND r.deleted_at IS NULL
+    ORDER BY r.swimlane ASC, r.start_date ASC NULLS LAST, r.created_at ASC
   `;
 
   return json({ project: { name: project.name }, items });

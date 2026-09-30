@@ -34,11 +34,16 @@ export default withSentry(async (req: Request) => {
     if (!projectId) return json({ error: "projectId required" }, { status: 400 });
     if (!(await hasProjectAccess(userId, projectId))) return json({ error: "Not found" }, { status: 404 });
 
+    // task_total / task_done: how many live tasks are linked to this item
+    // (only phases can have any) and how many of those are done. Derived on
+    // read, never stored, so phase progress can't drift from the tasks.
     const items = await database.sql`
-      SELECT id, type, title, description, swimlane, start_date, end_date, status, created_by, created_at, updated_at
-      FROM roadmap_items
-      WHERE project_id = ${projectId} AND deleted_at IS NULL
-      ORDER BY swimlane ASC, start_date ASC NULLS LAST, created_at ASC
+      SELECT r.id, r.type, r.title, r.description, r.swimlane, r.start_date, r.end_date, r.status, r.created_by, r.created_at, r.updated_at,
+        (SELECT count(*)::int FROM tasks t WHERE t.roadmap_item_id = r.id AND t.deleted_at IS NULL) AS task_total,
+        (SELECT count(*)::int FROM tasks t WHERE t.roadmap_item_id = r.id AND t.deleted_at IS NULL AND t.status = 'done') AS task_done
+      FROM roadmap_items r
+      WHERE r.project_id = ${projectId} AND r.deleted_at IS NULL
+      ORDER BY r.swimlane ASC, r.start_date ASC NULLS LAST, r.created_at ASC
     `;
     return json({ items });
   }

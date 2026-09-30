@@ -13,6 +13,7 @@ function makeTask(overrides: Partial<Task> = {}): Task {
     due_date: "2026-08-15",
     stakeholder_id: null,
     parent_task_id: null,
+    roadmap_item_id: null,
     ...overrides,
   };
 }

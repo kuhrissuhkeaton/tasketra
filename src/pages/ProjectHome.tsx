@@ -2,6 +2,7 @@ import { useEffect, useState, useRef, Fragment } from "react";
 import { useParams, useSearchParams, useNavigate, useLocation, Link } from "react-router-dom";
 import { api, ApiError, type Project, type Task, type Stakeholder, type Decision, type Issue, type Risk, type Assumption, type Dependency, type ChangeRequest, type Lesson, type TodayData, type WeeklyReport, type BudgetData, type FeedItem, type TrashItem, type ProjectMember, type Meeting, type MeetingActionItem, type ProjectDocument, type StorageUsage, type RoadmapItem, type RoadmapItemType, type QualityItem, type ProcurementItem, type CommPlanItem, type ComplianceItem, type Objective, type KeyResult, type RiskTaskLink, type IssueTaskLink, type ProjectStage, type BaselineData, type CharterApproval } from "../lib/api";
 import { RoadmapTimeline, ROADMAP_TYPE_LABEL, ROADMAP_STATUS_LABEL, ROADMAP_TYPE_COLOR, fmtRoadmapDate } from "../components/RoadmapTimeline";
+import { phaseProgress } from "../lib/phaseProgress";
 import { Drawer } from "../components/ItemDrawer";
 import { tasksToICS, downloadICS } from "../lib/ics";
 import { fmtDate, fmtDateTime, fmtLocalDate } from "../lib/format";
@@ -926,6 +927,11 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
   const [start, setStart] = useState("");
   const [due, setDue] = useState("");
   const [newStatus, setNewStatus] = useState<Task["status"]>("not_started");
+  // Roadmap phases a task can optionally be tied to. The Phase picker only
+  // appears once the project has at least one phase on its roadmap.
+  const [phases, setPhases] = useState<RoadmapItem[]>([]);
+  const [newPhase, setNewPhase] = useState("");
+  const [editPhase, setEditPhase] = useState("");
   const [view, setView] = useState<"list" | "board" | "timeline">(defaultView);
   const [dragOverStatus, setDragOverStatus] = useState<Task["status"] | null>(null);
   const [addingSubtaskFor, setAddingSubtaskFor] = useState<string | null>(null);
@@ -944,13 +950,17 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
 
   async function load() {
     setLoading(true);
-    const [{ tasks }, { riskLinks, issueLinks }] = await Promise.all([
+    const [{ tasks }, { riskLinks, issueLinks }, roadmap] = await Promise.all([
       api.listTasks(projectId),
       api.listRaidTaskLinks(projectId),
+      // Phases are a nice-to-have here: if the roadmap can't load, the Tasks
+      // tab still works, it just doesn't offer the Phase picker.
+      api.listRoadmapItems(projectId).catch(() => ({ items: [] as RoadmapItem[] })),
     ]);
     setTasks(tasks);
     setRiskLinks(riskLinks);
     setIssueLinks(issueLinks);
+    setPhases(roadmap.items.filter((i) => i.type === "phase"));
     setLoading(false);
   }
 
@@ -977,12 +987,13 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
     if (!title.trim()) return;
     setError("");
     try {
-      await api.createTask(projectId, title.trim(), owner || undefined, due || undefined, undefined, start || undefined, newStatus);
+      await api.createTask(projectId, title.trim(), owner || undefined, due || undefined, undefined, start || undefined, newStatus, undefined, newPhase || undefined);
       setTitle("");
       setOwner("");
       setStart("");
       setDue("");
       setNewStatus("not_started");
+      setNewPhase("");
       load();
     } catch (err: any) {
       setError(err.message || "Couldn't add that task.");
@@ -1020,6 +1031,7 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
     setEditStart(t.start_date || "");
     setEditDue(t.due_date || "");
     setEditDescription(t.description || "");
+    setEditPhase(t.roadmap_item_id || "");
   }
 
   function closeDrawer() {
@@ -1028,10 +1040,14 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
 
   async function saveDrawer() {
     if (!drawerTaskId || !editTitle.trim()) return;
+    // Only send the phase when it actually changed, so saving other fields
+    // never disturbs a link (for instance one to a phase that's in Trash).
+    const phaseChanged = editPhase !== (taskById.get(drawerTaskId)?.roadmap_item_id || "");
     await api.updateTask(drawerTaskId, {
       title: editTitle.trim(), owner_name: editOwner || undefined,
       start_date: editStart || undefined, due_date: editDue || undefined,
       description: editDescription || undefined,
+      ...(phaseChanged ? { roadmap_item_id: editPhase || null } : {}),
     } as any);
     closeDrawer();
     load();
@@ -1044,6 +1060,7 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
   }
 
   const taskById = new Map(tasks.map((t) => [t.id, t]));
+  const phaseById = new Map(phases.map((p) => [p.id, p]));
   const drawerTask = drawerTaskId ? taskById.get(drawerTaskId) || null : null;
   // A task's "blocked by" list -- risks/issues that named this task via the
   // Blocks-tasks control in their own drawer. Linking only happens from the
@@ -1078,6 +1095,14 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
             <option key={value} value={value}>{label}</option>
           ))}
         </select>
+        {phases.length > 0 && (
+          <select value={newPhase} onChange={(e) => setNewPhase(e.target.value)} title="Phase (optional) -- tie this task to a phase on your roadmap">
+            <option value="">No phase</option>
+            {phases.map((p) => (
+              <option key={p.id} value={p.id}>{p.title}</option>
+            ))}
+          </select>
+        )}
         <button className="btn btn-primary">Add task</button>
       </form>
       {error && <p className="form-error">{error}</p>}
@@ -1129,6 +1154,11 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
                     <span className="wbs-cell" style={{ paddingLeft: depth * 20 }}>
                       {depth > 0 && <span className="wbs-connector">&#8627;</span>}
                       {t.title}
+                      {t.roadmap_item_id && phaseById.get(t.roadmap_item_id) && (
+                        <span className="pill pill-navy" style={{ marginLeft: 8, fontSize: 11 }} title="Roadmap phase">
+                          {phaseById.get(t.roadmap_item_id)!.title}
+                        </span>
+                      )}
                     </span>
                     <button
                       className="wbs-add-btn"
@@ -1267,6 +1297,20 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
                 <input type="date" value={editDue} onChange={(e) => setEditDue(e.target.value)} />
               </div>
             </div>
+            {(phases.length > 0 || !!drawerTask.roadmap_item_id) && (
+              <div className="drawer-field">
+                <label>Phase</label>
+                <select
+                  value={phaseById.has(editPhase) ? editPhase : ""}
+                  onChange={(e) => setEditPhase(e.target.value)}
+                >
+                  <option value="">No phase</option>
+                  {phases.map((p) => (
+                    <option key={p.id} value={p.id}>{p.title}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div className="drawer-field">
               <label>Notes</label>
               <textarea
@@ -4486,7 +4530,21 @@ function RoadmapTab({ projectId, isOwner, showBudget }: { projectId: string; isO
           {visibleItems.map((item) => (
             <Fragment key={item.id}>
               <tr ref={(el) => { if (el) rowRefs.current.set(item.id, el); else rowRefs.current.delete(item.id); }}>
-                <td>{item.title}</td>
+                <td>
+                  {item.title}
+                  {(() => {
+                    const progress = phaseProgress(item);
+                    if (item.type !== "phase") return null;
+                    return progress ? (
+                      <div className="phase-progress" title={`${progress.done} of ${progress.total} linked tasks are done`}>
+                        <div className="progress-track"><div className={`progress-fill${progress.pct === 100 ? " progress-fill-success" : ""}`} style={{ width: `${progress.pct}%` }} /></div>
+                        <span>{progress.done} of {progress.total} tasks done</span>
+                      </div>
+                    ) : (
+                      <div className="phase-progress">No tasks linked yet. Pick this phase on a task to track it.</div>
+                    );
+                  })()}
+                </td>
                 <td><span className="pill pill-navy">{ROADMAP_TYPE_LABEL[item.type]}</span></td>
                 <td className="muted">{item.swimlane}</td>
                 <td className="muted">

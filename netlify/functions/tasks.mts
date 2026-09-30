@@ -17,6 +17,18 @@ const TASK_FIELDS = [
   { key: "description", label: "description" },
 ];
 
+// A task's optional phase must be a live roadmap item of type 'phase' in the
+// same project. Returns an error message, or null when the link is valid.
+async function validatePhase(database: ReturnType<typeof db>, phaseId: string, projectId: string): Promise<string | null> {
+  const [phase] = await database.sql`
+    SELECT project_id, type FROM roadmap_items WHERE id = ${phaseId} AND deleted_at IS NULL
+  `;
+  if (!phase || phase.project_id !== projectId || phase.type !== "phase") {
+    return "Phase not found in this project.";
+  }
+  return null;
+}
+
 export default withSentry(async (req: Request) => {
   const userId = getUserIdFromRequest(req);
   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
@@ -29,7 +41,7 @@ export default withSentry(async (req: Request) => {
     if (!(await hasProjectAccess(userId, projectId))) return json({ error: "Not found" }, { status: 404 });
 
     const tasks = await database.sql`
-      SELECT id, title, description, status, owner_name, start_date, due_date, stakeholder_id, parent_task_id, created_at, updated_at
+      SELECT id, title, description, status, owner_name, start_date, due_date, stakeholder_id, parent_task_id, roadmap_item_id, created_at, updated_at
       FROM tasks WHERE project_id = ${projectId} AND deleted_at IS NULL
       ORDER BY
         CASE status WHEN 'blocked' THEN 0 WHEN 'in_progress' THEN 1 WHEN 'not_started' THEN 2 ELSE 3 END,
@@ -56,12 +68,18 @@ export default withSentry(async (req: Request) => {
       }
     }
 
+    const phaseId = body?.phaseId || null;
+    if (phaseId) {
+      const phaseError = await validatePhase(database, phaseId, projectId);
+      if (phaseError) return json({ error: phaseError }, { status: 400 });
+    }
+
     const status = VALID_STATUSES.includes(body?.status) ? body.status : "not_started";
 
     const [task] = await database.sql`
-      INSERT INTO tasks (project_id, title, description, owner_name, start_date, due_date, stakeholder_id, parent_task_id, status)
-      VALUES (${projectId}, ${title}, ${body?.description || null}, ${body?.ownerName || null}, ${body?.startDate || null}, ${body?.dueDate || null}, ${body?.stakeholderId || null}, ${parentTaskId}, ${status})
-      RETURNING id, title, description, status, owner_name, start_date, due_date, stakeholder_id, parent_task_id, created_at, updated_at
+      INSERT INTO tasks (project_id, title, description, owner_name, start_date, due_date, stakeholder_id, parent_task_id, roadmap_item_id, status)
+      VALUES (${projectId}, ${title}, ${body?.description || null}, ${body?.ownerName || null}, ${body?.startDate || null}, ${body?.dueDate || null}, ${body?.stakeholderId || null}, ${parentTaskId}, ${phaseId}, ${status})
+      RETURNING id, title, description, status, owner_name, start_date, due_date, stakeholder_id, parent_task_id, roadmap_item_id, created_at, updated_at
     `;
     await logActivity(database, { projectId, entityType: "task", entityId: task.id, entityTitle: task.title, action: "created" });
     return json({ task }, { status: 201 });
@@ -104,6 +122,16 @@ export default withSentry(async (req: Request) => {
       }
     }
 
+    // phaseId is set-or-clear: a string links the task to that phase, an
+    // explicit null unlinks it, and leaving the key out changes nothing (the
+    // COALESCE pattern used by the other fields can't express "clear").
+    const hasPhase = "phaseId" in body;
+    const nextPhaseId: string | null = hasPhase ? (body.phaseId || null) : null;
+    if (hasPhase && nextPhaseId) {
+      const phaseError = await validatePhase(database, nextPhaseId, existing.project_id);
+      if (phaseError) return json({ error: phaseError }, { status: 400 });
+    }
+
     const [task] = await database.sql`
       UPDATE tasks SET
         title = COALESCE(${body.title ?? null}, title),
@@ -113,9 +141,10 @@ export default withSentry(async (req: Request) => {
         start_date = COALESCE(${body.startDate ?? null}, start_date),
         due_date = COALESCE(${body.dueDate ?? null}, due_date),
         parent_task_id = COALESCE(${body.parentTaskId ?? null}, parent_task_id),
+        roadmap_item_id = CASE WHEN ${hasPhase} THEN ${nextPhaseId}::uuid ELSE roadmap_item_id END,
         updated_at = now()
       WHERE id = ${id}
-      RETURNING id, title, description, status, owner_name, start_date, due_date, stakeholder_id, parent_task_id, created_at, updated_at
+      RETURNING id, title, description, status, owner_name, start_date, due_date, stakeholder_id, parent_task_id, roadmap_item_id, created_at, updated_at
     `;
 
     const summary = diffSummary(existing, {

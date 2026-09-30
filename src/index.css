@@ -803,7 +803,19 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
   position: absolute; height: 22px; border-radius: 4px; min-width: 10px; border-left: 4px solid transparent;
   display: flex; align-items: center; overflow: hidden; cursor: default;
 }
-.roadmap-bar-label { font-size: 11px; color: white; padding: 0 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.roadmap-bar-label { font-size: 11px; color: white; padding: 0 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; position: relative; }
+/* Phase progress: a light strip along the bottom of a phase bar, as wide as
+   the share of its linked tasks that are done (a fainter strip marks the full
+   length). A light strip reads on every status color, including the dark
+   navy "in progress" bar where a darker wash disappeared. The percentage is
+   also written into the label and tooltip, so the strip is never the only
+   signal. */
+.roadmap-bar-progress-track { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: rgba(255, 255, 255, 0.28); pointer-events: none; }
+.roadmap-bar-progress { display: block; height: 100%; background: rgba(255, 255, 255, 0.95); }
+.gantt-swatch-progress { background: linear-gradient(to bottom, var(--slate) 0 65%, #fff 65% 100%); border: 1px solid var(--border); }
+/* Progress line under a phase's title in the roadmap list. */
+.phase-progress { display: flex; align-items: center; gap: 8px; margin-top: 4px; font-size: 12px; color: var(--slate); }
+.phase-progress .progress-track { width: 90px; flex-shrink: 0; }
 /* Marker (undated-time item, e.g. a milestone) is now a wrap containing the
    diamond plus a visible label -- previously the title only appeared in a
    hover tooltip, which made milestones the least legible thing on the

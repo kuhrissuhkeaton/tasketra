@@ -9,6 +9,12 @@ type ChangeEntry = { version: string; date: string; title: string; body: string 
 // they can do.
 const CHANGES: ChangeEntry[] = [
   {
+    version: "v81",
+    date: "September 2026",
+    title: "Tie tasks to a roadmap phase and watch the phase fill up",
+    body: "When you add a task you can now pick one of your roadmap phases from an optional Phase list, and you can change it later in the task's Details. Each phase on the Roadmap tab then shows how many of its tasks are done, both as a progress line in the list and as a shaded part of the phase bar on the timeline, and the shared read-only roadmap shows it too (counts only, never your task names). It is optional: tasks without a phase work exactly as before, and the Phase list only appears once your roadmap has at least one phase. Thanks to a founding member for asking for this.",
+  },
+  {
     version: "v80",
     date: "September 2026",
     title: "See what's next on every project card",

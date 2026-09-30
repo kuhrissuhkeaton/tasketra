@@ -201,6 +201,8 @@ export type Task = {
   due_date: string | null;
   stakeholder_id: string | null;
   parent_task_id: string | null;
+  // The roadmap phase this task is tied to (optional). Null = no phase.
+  roadmap_item_id: string | null;
 };
 
 export type RiskTaskLink = { id: string; risk_id: string; task_id: string; risk_title: string; task_title: string };
@@ -319,6 +321,10 @@ export type RoadmapItem = {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  // How many live tasks are linked to this item (only phases have any) and
+  // how many of those are done. Derived by the API on every read.
+  task_total?: number;
+  task_done?: number;
 };
 
 export type ChangeRequest = {
@@ -634,18 +640,20 @@ export const api = {
     request<{ ok: true }>("/stakeholders", { method: "PATCH", body: JSON.stringify({ id, restore: true }) }),
 
   listTasks: (projectId: string) => request<{ tasks: Task[] }>(`/tasks?projectId=${projectId}`),
-  createTask: (projectId: string, title: string, ownerName?: string, dueDate?: string, parentTaskId?: string, startDate?: string, status?: Task["status"], description?: string) =>
+  createTask: (projectId: string, title: string, ownerName?: string, dueDate?: string, parentTaskId?: string, startDate?: string, status?: Task["status"], description?: string, phaseId?: string) =>
     request<{ task: Task }>("/tasks", {
       method: "POST",
-      body: JSON.stringify({ projectId, title, ownerName, dueDate, parentTaskId, startDate, status, description }),
+      body: JSON.stringify({ projectId, title, ownerName, dueDate, parentTaskId, startDate, status, description, phaseId }),
     }),
-  updateTask: (id: string, patch: Partial<Pick<Task, "status" | "title" | "owner_name" | "due_date" | "parent_task_id" | "start_date" | "description">>) =>
+  updateTask: (id: string, patch: Partial<Pick<Task, "status" | "title" | "owner_name" | "due_date" | "parent_task_id" | "start_date" | "description" | "roadmap_item_id">>) =>
     request<{ task: Task }>("/tasks", {
       method: "PATCH",
       body: JSON.stringify({
         id, status: patch.status, title: patch.title, ownerName: patch.owner_name,
         dueDate: patch.due_date, parentTaskId: patch.parent_task_id, startDate: patch.start_date,
         description: patch.description,
+        // Only sent when the caller set it; an explicit null unlinks the phase.
+        ...("roadmap_item_id" in patch ? { phaseId: patch.roadmap_item_id } : {}),
       }),
     }),
   deleteTask: (id: string) => request<{ ok: true }>(`/tasks?id=${id}`, { method: "DELETE" }),

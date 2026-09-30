@@ -1,4 +1,5 @@
 import type { RoadmapItem } from "../lib/api";
+import { phaseProgress } from "../lib/phaseProgress";
 
 // Shared between the owner-facing Roadmap tab (ProjectHome.tsx) and the
 // public read-only share page (RoadmapPublic.tsx) so the two views can never
@@ -207,6 +208,8 @@ export function RoadmapTimeline({
                   const startOffset = dayOffset(item.start_date!);
                   const top = 4 + laneIdx * 30;
                   const typeColor = ROADMAP_TYPE_COLOR[item.type];
+                  const progress = phaseProgress(item);
+                  const progressNote = progress ? ` -- ${progress.done} of ${progress.total} tasks done` : "";
                   if (!item.end_date) {
                     return (
                       <div
@@ -218,7 +221,7 @@ export function RoadmapTimeline({
                         <div
                           className={`roadmap-marker gantt-bar-${item.status}`}
                           style={{ borderColor: typeColor }}
-                          title={`${ROADMAP_TYPE_LABEL[item.type]}: ${item.title} -- ${fmtRoadmapDate(item.start_date)}`}
+                          title={`${ROADMAP_TYPE_LABEL[item.type]}: ${item.title} -- ${fmtRoadmapDate(item.start_date)}${progressNote}`}
                         />
                         <span className="roadmap-marker-label" title={item.description || ""}>
                           {item.title}
@@ -234,10 +237,15 @@ export function RoadmapTimeline({
                       key={item.id}
                       className={`roadmap-bar gantt-bar-${item.status}`}
                       style={{ left, width, top, borderLeftColor: typeColor, cursor: onSelect ? "pointer" : undefined }}
-                      title={`${ROADMAP_TYPE_LABEL[item.type]}: ${item.title} (${fmtRoadmapDate(item.start_date)} → ${fmtRoadmapDate(item.end_date)})`}
+                      title={`${ROADMAP_TYPE_LABEL[item.type]}: ${item.title} (${fmtRoadmapDate(item.start_date)} → ${fmtRoadmapDate(item.end_date)})${progressNote}`}
                       onClick={onSelect ? () => onSelect(item) : undefined}
                     >
-                      <span className="roadmap-bar-label">{item.title}</span>
+                      {progress && (
+                        <span className="roadmap-bar-progress-track">
+                          <span className="roadmap-bar-progress" style={{ width: `${progress.pct}%` }} />
+                        </span>
+                      )}
+                      <span className="roadmap-bar-label">{item.title}{progress ? ` · ${progress.pct}%` : ""}</span>
                     </div>
                   );
                 })}
@@ -265,6 +273,9 @@ export function RoadmapTimeline({
         <span><span className="gantt-swatch gantt-bar-in_progress" /> In progress</span>
         <span><span className="gantt-swatch gantt-bar-blocked" /> Blocked</span>
         <span><span className="gantt-swatch gantt-bar-done" /> Done</span>
+        {items.some((i) => phaseProgress(i)) && (
+          <span><span className="gantt-swatch gantt-swatch-progress" /> Light strip on a phase = linked tasks done</span>
+        )}
       </div>
       <div className="gantt-legend gantt-legend-types">
         {(Object.keys(ROADMAP_TYPE_LABEL) as RoadmapItem["type"][]).map((t) => (
