@@ -4,7 +4,7 @@ import { getUserIdFromRequest } from "../lib/auth.ts";
 import { isProjectOwner } from "../lib/ownership.ts";
 import { json } from "../lib/http.ts";
 import { withSentry } from "../lib/sentry.ts";
-import { getTemplate } from "../../src/lib/projectTemplates.ts";
+import { resolveTemplate } from "../lib/templateResolve.ts";
 import { applyTemplateToExisting } from "../lib/applyTemplate.ts";
 
 // POST {projectId, templateId, preview?: boolean}
@@ -21,11 +21,11 @@ export default withSentry(async (req: Request) => {
   if (!projectId || typeof body?.templateId !== "string") {
     return json({ error: "projectId and templateId are required." }, { status: 400 });
   }
-  const template = getTemplate(body.templateId);
+  const database = db();
+  const template = await resolveTemplate(database, userId, body.templateId);
   if (!template) return json({ error: "templateId is not a known project template." }, { status: 400 });
   if (!(await isProjectOwner(userId, projectId))) return json({ error: "Not found" }, { status: 404 });
 
-  const database = db();
   const [project] = await database.sql`SELECT id FROM projects WHERE id = ${projectId} AND deleted_at IS NULL`;
   if (!project) return json({ error: "Not found" }, { status: 404 });
 

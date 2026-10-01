@@ -7,7 +7,7 @@ import { seedExampleData } from "../lib/exampleData.ts";
 import { withSentry } from "../lib/sentry.ts";
 import { isProjectSize, isProjectApproach } from "../lib/projectSetup.ts";
 import { applyProjectTemplate } from "../lib/applyTemplate.ts";
-import { isTemplateId } from "../../src/lib/projectTemplates.ts";
+import { resolveTemplate } from "../lib/templateResolve.ts";
 
 export default withSentry(async (req: Request) => {
   const userId = getUserIdFromRequest(req);
@@ -57,7 +57,12 @@ export default withSentry(async (req: Request) => {
     if (body?.approach !== undefined && !isProjectApproach(body.approach)) {
       return json({ error: "approach must be one of predictive, hybrid, agile." }, { status: 400 });
     }
-    if (body?.template !== undefined && body?.template !== null && !isTemplateId(body.template)) {
+    const wantsTemplate = typeof body?.template === "string" && body.template !== "";
+    if (body?.template !== undefined && body?.template !== null && !wantsTemplate) {
+      return json({ error: "template is not a known project template." }, { status: 400 });
+    }
+    // A built-in id, or one of this person's own saved templates ("custom:<id>").
+    if (wantsTemplate && !(await resolveTemplate(database, userId, body.template))) {
       return json({ error: "template is not a known project template." }, { status: 400 });
     }
     const [project] = await database.sql`
@@ -67,7 +72,7 @@ export default withSentry(async (req: Request) => {
     `;
 
     let templateApplied: boolean | undefined;
-    if (isTemplateId(body?.template)) {
+    if (wantsTemplate) {
       // Best-effort, like the example data below: the project exists and is
       // usable either way, so a seeding failure is reported, not fatal. A
       // template wins over example data -- the two would double up.

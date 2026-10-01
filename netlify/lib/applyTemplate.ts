@@ -11,7 +11,8 @@
 //    Running it twice adds nothing the second time, so a half-finished run
 //    can simply be run again.
 
-import { getTemplate, type ProjectTemplate } from "../../src/lib/projectTemplates.ts";
+import { type ProjectTemplate } from "../../src/lib/projectTemplates.ts";
+import { resolveTemplate } from "./templateResolve.ts";
 import { EMPTY_WORK, planTemplate, summarizePlan, type ExistingWork, type PlanSummary, type TemplatePlan } from "./templatePlan.ts";
 
 function dayOffset(days: number): string {
@@ -69,7 +70,7 @@ async function insertPlan(database: any, projectId: string, userId: string, plan
 
 /** For a brand-new project: everything is added and the first phase starts In progress. */
 export async function applyProjectTemplate(database: any, projectId: string, userId: string, templateId: string): Promise<boolean> {
-  const t = getTemplate(templateId);
+  const t = await resolveTemplate(database, userId, templateId);
   if (!t) return false;
   await insertPlan(database, projectId, userId, planTemplate(t, EMPTY_WORK), true);
   return true;

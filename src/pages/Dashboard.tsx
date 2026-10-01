@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { api, ApiError, type Project, type ProjectStage, type PortfolioData, type PortfolioProjectSummary, type Task, type Issue } from "../lib/api";
+import { api, ApiError, type Project, type ProjectStage, type PortfolioData, type PortfolioProjectSummary, type Task, type Issue, type UserTemplate } from "../lib/api";
 import { AppSidebar } from "../components/AppSidebar";
 import { StageChip, STAGES } from "../components/StageRail";
 import { ProjectSetupPicker } from "../components/ProjectSetup";
@@ -289,6 +289,11 @@ export default function Dashboard() {
     const fromLink = searchParams.get("template");
     return isTemplateId(fromLink) ? fromLink : "";
   });
+  // Your own saved templates, offered after the built-in ones. A failure just leaves them out.
+  const [myTemplates, setMyTemplates] = useState<UserTemplate[]>([]);
+  useEffect(() => {
+    api.listUserTemplates().then((r) => setMyTemplates(r.templates)).catch(() => {});
+  }, []);
   const [showSetup, setShowSetup] = useState(false);
   const [setupSize, setSetupSize] = useState<ProjectSize>("standard");
   const [setupApproach, setSetupApproach] = useState<ProjectApproach>("hybrid");
@@ -514,6 +519,11 @@ export default function Dashboard() {
             {PROJECT_TEMPLATES.map((t) => (
               <option key={t.id} value={t.id}>{t.name}</option>
             ))}
+            {myTemplates.length > 0 && (
+              <optgroup label="Your templates">
+                {myTemplates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </optgroup>
+            )}
           </select>
           <label className="checkbox-row" style={{ alignSelf: "center", opacity: templateId ? 0.5 : 1 }}>
             <input
@@ -548,6 +558,13 @@ export default function Dashboard() {
             {getTemplate(templateId)!.blurb} We'll add {templateSummary(getTemplate(templateId)!)}, with dates counted
             from today. It works best with the {getTemplate(templateId)!.suggestedApproach} approach (change it under Set up).
             Stakeholders are placeholder roles; replace them with real people. Delete anything you don't need.
+          </p>
+        )}
+        {templateId && !getTemplate(templateId) && myTemplates.find((t) => t.id === templateId) && (
+          <p className="muted" style={{ marginTop: -12, marginBottom: 20 }}>
+            {myTemplates.find((t) => t.id === templateId)!.description || "Your saved template."} We'll add{" "}
+            {myTemplates.find((t) => t.id === templateId)!.summary}, with dates counted from today. Statuses start fresh and no
+            people are copied. Delete anything you don't need.
           </p>
         )}
         {seedExample && !templateId && (

@@ -9,6 +9,12 @@ type ChangeEntry = { version: string; date: string; title: string; body: string 
 // they can do.
 const CHANGES: ChangeEntry[] = [
   {
+    version: "v92",
+    date: "October 2026",
+    title: "Save your own projects as templates",
+    body: "On a project's Roadmap tab (if you own it) choose Save as a template. Tasketra keeps the phases, milestones, tasks, risks and assumptions as titles and day counts, with no people, emails, owners, notes or statuses, and shows exactly what it will save before you confirm. Your templates appear under Your templates in the Start from list when you create a project, and in Add from a template for projects you already have, with the same preview-first, add-only behaviour as the built-in ones. They are private to you; you can keep up to 20 and delete any of them from the same Save as a template panel.",
+  },
+  {
     version: "v91",
     date: "October 2026",
     title: "Individual tasks in your RACI",

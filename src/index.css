@@ -1547,3 +1547,8 @@ a.btn { text-decoration: none; }
 .raci-add-task { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 14px; }
 .raci-add-task label { font-weight: 600; font-size: 13px; }
 .raci-add-task select { max-width: 320px; }
+
+/* Saved templates list in the Save as a template drawer */
+.my-templates { list-style: none; margin: 8px 0 0; padding: 0; }
+.my-templates li { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 0; border-top: 1px solid var(--border); }
+.apply-tpl textarea, .apply-tpl input { width: 100%; }

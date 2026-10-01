@@ -26,6 +26,7 @@ import WhatsNew from "../pages/WhatsNew";
 import Account from "../pages/Account";
 import Billing from "../pages/Billing";
 import { ApplyTemplateDrawer } from "../components/ApplyTemplateDrawer";
+import { SaveTemplateDrawer } from "../components/SaveTemplateDrawer";
 import { ConfirmProvider } from "../components/ConfirmDialog";
 
 let host: HTMLDivElement;
@@ -177,6 +178,75 @@ describe("ApplyTemplateDrawer", () => {
     await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
     expect(document.body.textContent).toContain("nothing to add");
     expect([...document.querySelectorAll("button")].some((b) => /^Add \d+ item/.test(b.textContent || ""))).toBe(false);
+    expect(errors).toEqual([]);
+  });
+});
+
+describe("custom templates screens", () => {
+  const mine = { id: "custom:abc", name: "Office move", description: "Our usual move", summary: "1 phases, 1 milestones, 1 starter tasks, 1 risks, 0 stakeholder roles and 1 assumptions", counts: { phases: 1, milestones: 1, tasks: 1, risks: 1, stakeholders: 0, assumptions: 1 }, created_at: "2026-10-01T00:00:00Z" };
+
+  it("save drawer: previews what is kept, saves with the typed name, then lists it with Delete", async () => {
+    const calls: any[] = [];
+    vi.stubGlobal("fetch", vi.fn((input: unknown, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/api/user-templates")) {
+        const method = init?.method ?? "GET";
+        if (method === "GET") return json({ templates: [] });
+        const body = JSON.parse(String(init?.body));
+        calls.push(body);
+        return body.preview
+          ? json({ counts: mine.counts, summary: mine.summary, truncated: false, empty: false, suggestedName: "Move project template" })
+          : json({ template: { ...mine, name: body.name }, truncated: false });
+      }
+      return new Promise(() => {});
+    }));
+    newRoot();
+    await act(async () => {
+      root.render(<MemoryRouter><ConfirmProvider><SaveTemplateDrawer open onClose={() => {}} projectId="p1" /></ConfirmProvider></MemoryRouter>);
+    });
+    await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
+    expect(document.body.textContent).toContain("1 phases, 1 milestones, 1 tasks, 1 risks, 1 assumptions");
+    const nameInput = document.querySelector('input[aria-label="Template name"]') as HTMLInputElement;
+    expect(nameInput.value).toBe("Move project template");
+    expect(calls).toEqual([{ projectId: "p1", preview: true }]);
+    const save = [...document.querySelectorAll("button")].find((b) => b.textContent === "Save template")!;
+    await act(async () => { save.click(); await new Promise((r) => setTimeout(r, 20)); });
+    expect(calls[1]).toEqual({ projectId: "p1", name: "Move project template", description: "" });
+    expect(document.body.textContent).toContain('Saved "Move project template"');
+    expect(document.body.textContent).toContain("Your templates (1)");
+    expect(errors).toEqual([]);
+  });
+
+  it("save drawer: an empty project cannot be saved", async () => {
+    vi.stubGlobal("fetch", vi.fn((input: unknown, init?: RequestInit) => {
+      if (String(input).includes("/api/user-templates")) {
+        return (init?.method ?? "GET") === "GET" ? json({ templates: [] }) : json({ counts: { ...mine.counts, phases: 0, milestones: 0, tasks: 0, risks: 0, assumptions: 0 }, summary: "", truncated: false, empty: true, suggestedName: "X template" });
+      }
+      return new Promise(() => {});
+    }));
+    newRoot();
+    await act(async () => {
+      root.render(<MemoryRouter><ConfirmProvider><SaveTemplateDrawer open onClose={() => {}} projectId="p1" /></ConfirmProvider></MemoryRouter>);
+    });
+    await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
+    expect(document.body.textContent).toContain("nothing to save yet");
+    expect((([...document.querySelectorAll("button")].find((b) => b.textContent === "Save template")) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("apply drawer offers your saved templates after the built-in ones", async () => {
+    vi.stubGlobal("fetch", vi.fn((input: unknown) => {
+      const url = String(input);
+      if (url.includes("/api/user-templates")) return json({ templates: [mine] });
+      if (url.includes("/api/projects")) return json({ projects: [{ id: "p1", name: "Target", is_owner: true }] });
+      return new Promise(() => {});
+    }));
+    newRoot();
+    await act(async () => {
+      root.render(<MemoryRouter><ApplyTemplateDrawer open onClose={() => {}} /></MemoryRouter>);
+    });
+    await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
+    const group = document.querySelector('select[aria-label="Template"] optgroup[label="Your templates"]')!;
+    expect(group.textContent).toContain("Office move");
     expect(errors).toEqual([]);
   });
 });

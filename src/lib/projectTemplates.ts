@@ -16,7 +16,8 @@ export type TemplateId = "process-improvement" | "event-campaign" | "software-la
 
 type Level = "low" | "medium" | "high";
 
-export type TemplatePhase = { title: string; days: number };
+/** `startDay` is only set on templates saved from a real project, to keep overlapping phases as they were; built-in phases run end to end. */
+export type TemplatePhase = { title: string; days: number; startDay?: number };
 /** `phase` is an index into `phases`; `day` is the due date as days after the project starts. */
 export type TemplateTask = { title: string; phase: number; day: number };
 export type TemplateMilestone = { title: string; day: number; type?: "milestone" | "release" };
@@ -24,7 +25,7 @@ export type TemplateRisk = { title: string; description: string; probability: Le
 export type TemplateStakeholder = { name: string; role: string; power: Level; interest: Level; notes: string };
 
 export type ProjectTemplate = {
-  id: TemplateId;
+  id: string;
   name: string;
   blurb: string;
   bestFor: string;
@@ -298,12 +299,19 @@ export function templateSummary(t: ProjectTemplate): string {
 
 export type PlannedPhase = { title: string; startDay: number; endDay: number };
 
-/** Phases laid end to end: each starts the day the previous one ends. */
+/** Phases laid end to end (each starts the day the previous one ends), unless a phase carries its own startDay. */
 export function planPhases(t: ProjectTemplate): PlannedPhase[] {
   let cursor = 0;
   return t.phases.map((p) => {
-    const startDay = cursor;
-    cursor += p.days;
+    const startDay = p.startDay ?? cursor;
+    cursor = startDay + p.days;
     return { title: p.title, startDay, endDay: cursor };
   });
+}
+
+export const CUSTOM_TEMPLATE_PREFIX = "custom:";
+
+/** Ids of a person's own saved templates look like "custom:<uuid>". */
+export function isCustomTemplateId(v: unknown): v is string {
+  return typeof v === "string" && v.startsWith(CUSTOM_TEMPLATE_PREFIX) && v.length > CUSTOM_TEMPLATE_PREFIX.length;
 }

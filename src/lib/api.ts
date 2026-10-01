@@ -261,6 +261,16 @@ export type Risk = {
 };
 
 export type TemplateCategorySummary = { add: string[]; skip: string[] };
+export type UserTemplate = {
+  id: string; // "custom:<uuid>"
+  name: string;
+  description: string | null;
+  summary: string;
+  counts: { phases: number; milestones: number; tasks: number; risks: number; stakeholders: number; assumptions: number };
+  created_at: string;
+};
+export type UserTemplatePreview = { counts: UserTemplate["counts"]; summary: string; truncated: boolean; empty: boolean; suggestedName: string };
+
 export type TemplatePlanSummary = {
   phases: TemplateCategorySummary;
   milestones: TemplateCategorySummary;
@@ -1078,6 +1088,13 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ projectId, templateId, preview }),
     }),
+
+  listUserTemplates: () => request<{ templates: UserTemplate[] }>("/user-templates"),
+  previewUserTemplate: (projectId: string) =>
+    request<UserTemplatePreview>("/user-templates", { method: "POST", body: JSON.stringify({ projectId, preview: true }) }),
+  saveUserTemplate: (projectId: string, name: string, description: string) =>
+    request<{ template: UserTemplate; truncated: boolean }>("/user-templates", { method: "POST", body: JSON.stringify({ projectId, name, description }) }),
+  deleteUserTemplate: (id: string) => request<{ ok: true }>(`/user-templates?id=${encodeURIComponent(id)}`, { method: "DELETE" }),
 
   getRaci: (projectId: string) => request<RaciData>(`/raci?projectId=${projectId}`),
   addRaciTask: (projectId: string, taskId: string) =>

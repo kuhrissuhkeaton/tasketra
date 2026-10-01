@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Drawer } from "./ItemDrawer";
-import { api, type Project, type TemplatePlanSummary } from "../lib/api";
+import { api, type Project, type TemplatePlanSummary, type UserTemplate } from "../lib/api";
 import { PROJECT_TEMPLATES } from "../lib/projectTemplates";
 
 const CATEGORY_LABEL: [keyof Omit<TemplatePlanSummary, "totalToAdd">, string][] = [
@@ -25,6 +25,7 @@ export function ApplyTemplateDrawer({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState<TemplatePlanSummary | null>(null);
+  const [mine, setMine] = useState<UserTemplate[]>([]);
 
   // Reset whenever it is opened again.
   useEffect(() => {
@@ -35,6 +36,12 @@ export function ApplyTemplateDrawer({
     setDone(null);
     setError("");
   }, [open, projectId, templateId]);
+
+  // Your own saved templates, listed after the built-in ones. A failure just leaves them out.
+  useEffect(() => {
+    if (!open) return;
+    api.listUserTemplates().then((r) => setMine(r.templates)).catch(() => setMine([]));
+  }, [open]);
 
   // Only projects you own can take a template.
   useEffect(() => {
@@ -73,7 +80,7 @@ export function ApplyTemplateDrawer({
     }
   }
 
-  const template = PROJECT_TEMPLATES.find((t) => t.id === pickedTemplate);
+  const template = PROJECT_TEMPLATES.find((t) => t.id === pickedTemplate) ?? mine.find((t) => t.id === pickedTemplate);
 
   return (
     <Drawer open={open} onClose={onClose} eyebrow="Template" title={template ? `Add "${template.name}"` : "Add from a template"}>
@@ -111,6 +118,11 @@ export function ApplyTemplateDrawer({
               <select value={pickedTemplate} onChange={(e) => setPickedTemplate(e.target.value)} aria-label="Template">
                 <option value="">Choose a template</option>
                 {PROJECT_TEMPLATES.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                {mine.length > 0 && (
+                  <optgroup label="Your templates">
+                    {mine.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  </optgroup>
+                )}
               </select>
             </label>
           )}

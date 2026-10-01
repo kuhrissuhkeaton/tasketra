@@ -6,6 +6,7 @@ import { phaseProgress } from "../lib/phaseProgress";
 import { mailtoHref, telHref } from "../lib/contactLinks";
 import { LEVEL_LABEL, riskExposure as riskExposureLevel } from "../lib/riskExposure";
 import { ApplyTemplateDrawer } from "../components/ApplyTemplateDrawer";
+import { SaveTemplateDrawer } from "../components/SaveTemplateDrawer";
 import { StakeholderGrid } from "../components/StakeholderGrid";
 import { RaciTab } from "../components/RaciTab";
 import { RiskMatrix } from "../components/RiskMatrix";
@@ -4229,6 +4230,7 @@ function RoadmapTab({ projectId, isOwner, showBudget }: { projectId: string; isO
 
   const [showForm, setShowForm] = useState(false);
   const [showTemplate, setShowTemplate] = useState(false);
+  const [showSaveTemplate, setShowSaveTemplate] = useState(false);
   const [project, setProject] = useState<Project | null>(null);
   const [shareBusy, setShareBusy] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -4406,6 +4408,9 @@ function RoadmapTab({ projectId, isOwner, showBudget }: { projectId: string; isO
           {" "}
           <button className="btn btn-ghost" onClick={() => setShowTemplate(true)} type="button">Add from a template</button>
           <ApplyTemplateDrawer open={showTemplate} onClose={() => setShowTemplate(false)} projectId={projectId} onApplied={load} />
+          {" "}
+          <button className="btn btn-ghost" onClick={() => setShowSaveTemplate(true)} type="button">Save as a template</button>
+          <SaveTemplateDrawer open={showSaveTemplate} onClose={() => setShowSaveTemplate(false)} projectId={projectId} />
         </>
       )}
 
