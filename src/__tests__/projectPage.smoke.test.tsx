@@ -153,6 +153,15 @@ describe("project page smoke test", () => {
     expect(errors, errors.join("\n---\n")).toEqual([]);
   });
 
+  it("table-heavy tabs get the wider column, prose tabs keep the narrow one", async () => {
+    await mountProject("standard", "procurement");
+    expect(host.querySelector("main.project-main")!.classList.contains("project-main-tables")).toBe(true);
+    await act(async () => { root.unmount(); });
+    host.innerHTML = "";
+    await mountProject("standard", "charter");
+    expect(host.querySelector("main.project-main")!.classList.contains("project-main-tables")).toBe(false);
+  });
+
   it("shows every sidebar tab with its icon when all tabs are shown", async () => {
     await mountProject("full", "home");
     const buttons = [...host.querySelectorAll(".side-tab[data-tour]")];

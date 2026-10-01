@@ -30,6 +30,14 @@ import { isTabHidden, primaryTabOrder, defaultTasksView, hiddenTabLabels, SIZE_L
 
 export type Tab = "home" | "roadmap" | "tasks" | "charter" | "okrs" | "issues" | "risks" | "assumptions" | "dependencies" | "quality" | "compliance" | "budget" | "meetings" | "documents" | "stakeholders" | "decisions" | "team" | "raci" | "procurement" | "comms" | "closure" | "report" | "templates" | "export" | "connections" | "trash";
 
+// Tabs built around a wide table (the vendor list has ten columns). They get a
+// wider column than the 960px used for forms and prose, so the table fits
+// without a sideways scrollbar. See .project-main-tables in index.css.
+const TABLE_TABS: ReadonlySet<Tab> = new Set<Tab>([
+  "roadmap", "tasks", "issues", "risks", "assumptions", "dependencies", "quality", "compliance",
+  "budget", "meetings", "documents", "stakeholders", "decisions", "team", "procurement", "comms",
+]);
+
 function daysAgo(dateStr: string): number {
   return Math.max(0, Math.floor((Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24)));
 }
@@ -293,7 +301,7 @@ export default function ProjectHome() {
         </NavGroup>
       </AppSidebar>
 
-      <main className="project-main">
+      <main className={`project-main${TABLE_TABS.has(tab) ? " project-main-tables" : ""}`}>
         <div className="page-head">
           <h1>{project?.name || "Project"}</h1>
           <StageChip stage={project?.stage} />

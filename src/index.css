@@ -594,9 +594,13 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
 
 .project-main { flex: 1; min-width: 0; max-width: 960px; padding: 32px 40px; animation: fade-in 200ms var(--ease); }
 /* The Dashboard's Project health table has 8 columns, which scrolled sideways
-   inside the 960px column on a desktop monitor. The Dashboard alone opts into
-   a wider column; project tabs keep 960px, which suits their forms and lists. */
+   inside the 960px column on a desktop monitor. The Dashboard opts into
+   a wider column, and table-heavy project tabs get a middle width (below). */
 .project-main.project-main-wide { max-width: 1400px; }
+/* Project tabs built around a wide table (vendors, tasks, risks...) get a
+   wider column too, so they fit without scrolling sideways. Forms and prose
+   tabs keep 960px. */
+.project-main.project-main-tables { max-width: 1240px; padding-left: 28px; padding-right: 28px; }
 
 @media (max-width: 860px) {
   .project-shell { flex-direction: column; }
@@ -619,13 +623,13 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
   .sidebar-footer { border-top: none; margin-top: 0; padding-top: 0; display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
   .sidebar-user { display: none; }
   .sidebar-footer .btn { padding: 7px 10px; }
-  .project-main { padding: 20px 16px; max-width: none; }
+  .project-main, .project-main.project-main-tables { padding: 20px 16px; max-width: none; }
 }
 
 @media print {
   .sidebar { display: none !important; }
   .project-shell { display: block; }
-  .project-main { max-width: none; padding: 0; }
+  .project-main, .project-main.project-main-tables { max-width: none; padding: 0; }
 }
 
 /* --- Settings-style cards (used by Team tab) --- */
