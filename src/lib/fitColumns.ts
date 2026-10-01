@@ -34,3 +34,22 @@ export function fitColumns(rendered: number[], mins: number[], available: number
   }
   return widths.map((w, i) => w - cut[i]);
 }
+
+// Re-fits columns that were already sized when their container's width
+// changes afterwards (a page scrollbar appearing, the window or a side panel
+// resizing). Narrower: take the excess back the same way fitColumns does, so
+// a table that fits never scrolls sideways. Wider: share the extra width out
+// in proportion to the current widths so the table keeps filling its box.
+// Never goes below a column's minimum, never exceeds `available` unless the
+// minimums alone do not fit.
+export function refitColumns(current: number[], mins: number[], available: number): number[] {
+  const target = Math.floor(available);
+  const total = current.reduce((sum, w) => sum + w, 0);
+  if (total > target) return fitColumns(current, mins, target);
+  if (total === target || total <= 0) return current.slice();
+  const extra = target - total;
+  const grown = current.map((w) => w + Math.floor((extra * w) / total));
+  const lost = target - grown.reduce((sum, w) => sum + w, 0);
+  if (lost > 0) grown[0] += lost;
+  return grown;
+}

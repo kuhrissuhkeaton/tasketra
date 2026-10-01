@@ -41,3 +41,36 @@ describe("fitColumns", () => {
     expect(fitColumns([400, 200], [100, 100], 520)).toEqual([340, 180]);
   });
 });
+
+import { refitColumns } from "../fitColumns";
+
+describe("refitColumns", () => {
+  const mins = [100, 80, 64];
+
+  it("is a no-op when the width is unchanged", () => {
+    expect(refitColumns([300, 200, 300], mins, 800)).toEqual([300, 200, 300]);
+  });
+
+  it("shrinks to a narrower box so nothing scrolls (a 15px scrollbar appears)", () => {
+    const out = refitColumns([300, 200, 300], mins, 785);
+    expect(sum(out)).toBe(785);
+    out.forEach((w, i) => expect(w).toBeGreaterThanOrEqual(mins[i]));
+  });
+
+  it("grows into a wider box in proportion, filling it exactly", () => {
+    const out = refitColumns([300, 200, 300], mins, 1000);
+    expect(sum(out)).toBe(1000);
+    expect(out[0]).toBeGreaterThan(300);
+    expect(out[1]).toBeGreaterThan(200);
+  });
+
+  it("never goes below a minimum, even when the box is tiny", () => {
+    const out = refitColumns([300, 200, 300], mins, 100);
+    expect(out).toEqual([100, 80, 64]);
+  });
+
+  it("round trips: shrink then grow back returns to the box width", () => {
+    const small = refitColumns([300, 200, 300], mins, 785);
+    expect(sum(refitColumns(small, mins, 800))).toBe(800);
+  });
+});

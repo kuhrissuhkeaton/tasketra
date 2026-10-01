@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { fitColumns } from "../lib/fitColumns";
+import { fitColumns, refitColumns } from "../lib/fitColumns";
 
 /**
  * Drop-in replacement for `<table className="table">` that makes every
@@ -19,10 +19,12 @@ import { fitColumns } from "../lib/fitColumns";
  * table to `table-layout: fixed` with an explicit pixel width per column
  * via a <colgroup>. From then on, dragging the strip at the right edge of
  * a header cell resizes that column; double-clicking it auto-fits the
- * column to its current content. Column widths intentionally aren't
- * clamped to the container -- once a table's columns are wider than the
- * screen, the wrapper scrolls horizontally rather than re-compressing
- * everything, same as a spreadsheet.
+ * column to its current content. Until you size a column yourself, the
+ * widths follow the container (a scrollbar appearing, a window resize), so
+ * a table that fits never scrolls sideways. Once you drag a column, or a
+ * saved layout is loaded, widths are yours: they aren't clamped to the
+ * container, and a table wider than the screen scrolls horizontally, same
+ * as a spreadsheet.
  */
 
 const MIN_COL_WIDTH = 64;
@@ -107,13 +109,37 @@ export function ResizableTable({
     // Start from the widths automatic layout gave each column, never narrower
     // than the label needs, and trim the roomier columns if that would push
     // the table past its container (fitColumns, unit tested).
+    const mins = ths.map((th) => Math.max(MIN_COL_WIDTH, labelNeededWidth(th)));
     const natural = fitColumns(
       ths.map((th) => th.getBoundingClientRect().width),
-      ths.map((th) => Math.max(MIN_COL_WIDTH, labelNeededWidth(th))),
+      mins,
       table.parentElement?.clientWidth ?? table.getBoundingClientRect().width
     );
-    const initial = saved && saved.length === ths.length ? saved : natural;
+    const hasSaved = !!saved && saved.length === ths.length;
+    const initial = hasSaved ? saved : natural;
     setWidths(initial);
+
+    // Until the user sizes a column themselves, keep the table fitted to its
+    // box as the box changes. The widths above are a snapshot taken at mount;
+    // if the container shrinks afterwards (a page scrollbar appears once the
+    // content loads, the window or a side panel resizes) a table that fit a
+    // moment ago would otherwise grow a sideways scrollbar, and if it grows
+    // the table would leave a gap. A user-set or saved layout is left alone:
+    // that is the spreadsheet-style scrolling the header comment describes.
+    let userSized = hasSaved;
+    const box = table.parentElement;
+    let observer: ResizeObserver | null = null;
+    if (box && typeof ResizeObserver !== "undefined") {
+      observer = new ResizeObserver(() => {
+        if (userSized) return;
+        setWidths((prev) => {
+          if (!prev) return prev;
+          const next = refitColumns(prev, mins, box.clientWidth);
+          return next.every((w, i) => w === prev[i]) ? prev : next;
+        });
+      });
+      observer.observe(box);
+    }
 
     function widthOf(index: number): number {
       return widthsRef.current?.[index] ?? natural[index] ?? MIN_COL_WIDTH;
@@ -151,6 +177,7 @@ export function ResizableTable({
         const rect = th.getBoundingClientRect();
         if (rect.right - e.clientX > 10) return; // only the handle strip at the right edge
         e.preventDefault();
+        userSized = true;
         const startX = e.clientX;
         const startWidth = widthOf(index);
         th.setPointerCapture(e.pointerId);
@@ -175,6 +202,7 @@ export function ResizableTable({
       function onDoubleClick(e: MouseEvent) {
         const rect = th.getBoundingClientRect();
         if (rect.right - e.clientX > 10) return;
+        userSized = true;
         const fit = Math.min(MAX_AUTOFIT_WIDTH, Math.max(MIN_COL_WIDTH, measureContentWidth(index) + 4));
         setColumnWidth(index, fit);
         if (widthsRef.current) saveWidths(id, widthsRef.current);
@@ -188,7 +216,10 @@ export function ResizableTable({
       });
     });
 
-    return () => cleanups.forEach((fn) => fn());
+    return () => {
+      observer?.disconnect();
+      cleanups.forEach((fn) => fn());
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
