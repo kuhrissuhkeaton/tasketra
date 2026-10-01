@@ -27,7 +27,7 @@ const HIDDEN: Record<ProjectSize, string[]> = {
   light: [
     "budget", "meetings",
     "okrs", "assumptions", "dependencies", "quality", "compliance",
-    "procurement", "comms", "export", "connections",
+    "procurement", "comms", "export", "connections", "raci",
   ],
   standard: ["quality", "compliance", "comms"],
   full: [],
@@ -37,7 +37,7 @@ const TAB_LABEL: Record<string, string> = {
   budget: "Budget", meetings: "Meetings", okrs: "OKRs", assumptions: "Assumptions",
   dependencies: "Dependencies", quality: "Quality", compliance: "Compliance",
   procurement: "Vendors", comms: "Comms plan", templates: "Templates", export: "Export",
-  connections: "Connections",
+  connections: "Connections", raci: "RACI",
 };
 
 export function hiddenTabIds(size: ProjectSize): string[] {

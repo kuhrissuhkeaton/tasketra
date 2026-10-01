@@ -2,6 +2,7 @@ import type { Config } from "@netlify/functions";
 import { db } from "../lib/db.ts";
 import { json } from "../lib/http.ts";
 import { withSentry } from "../lib/sentry.ts";
+import { loadRaci } from "../lib/raciData.ts";
 import { checkRateLimit, getClientIp } from "../lib/rate-limit.ts";
 
 // Public, unauthenticated, read-only. Resolves an unguessable token to ONE
@@ -42,6 +43,24 @@ export default withSentry(async (req: Request) => {
         created_at DESC
     `;
     return json({ kind: link.kind, project: { name: link.name }, risks }, { headers: HEADERS });
+  }
+  if (link.kind === "raci") {
+    // Phases and milestones, people (display name or the part of the email
+    // before the @, plus job role) and the letters. Ids are replaced with
+    // positions so no internal ids, emails or stakeholder notes leave the app.
+    const { rows, people, assignments } = await loadRaci(database, link.project_id);
+    const rowIdx = new Map(rows.map((r, i) => [r.id, `r${i}`]));
+    const personIdx = new Map(people.map((p, i) => [p.key, `p${i}`]));
+    return json(
+      {
+        kind: link.kind,
+        project: { name: link.name },
+        rows: rows.map((r) => ({ id: rowIdx.get(r.id)!, type: r.type, title: r.title, start_date: r.start_date, end_date: r.end_date })),
+        people: people.map((p) => ({ key: personIdx.get(p.key)!, name: p.name, role: p.role })),
+        assignments: assignments.map((a) => ({ itemId: rowIdx.get(a.itemId)!, personKey: personIdx.get(a.personKey)!, role: a.role })),
+      },
+      { headers: HEADERS }
+    );
   }
   return json(gone, { status: 404, headers: HEADERS });
 });

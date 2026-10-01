@@ -3,6 +3,7 @@ import {
   Document, Packer, Paragraph, TextRun, HeadingLevel,
   Table, TableRow, TableCell, WidthType, BorderStyle, ShadingType,
 } from "docx";
+import { loadRaci } from "../lib/raciData.ts";
 import { withSentry } from "../lib/sentry.ts";
 import { db } from "../lib/db.ts";
 import { getUserIdFromRequest } from "../lib/auth.ts";
@@ -172,38 +173,31 @@ async function buildRiskRegister(database: any, project: any, projectId: string)
 }
 
 async function buildRaci(database: any, project: any, projectId: string) {
-  const [stakeholders, tasks] = await Promise.all([
-    database.sql`SELECT name FROM stakeholders WHERE project_id = ${projectId} AND deleted_at IS NULL ORDER BY created_at ASC LIMIT 6`,
-    database.sql`SELECT title, owner_name FROM tasks WHERE project_id = ${projectId} AND deleted_at IS NULL ORDER BY created_at ASC LIMIT 40`,
-  ]);
+  // Live data from the RACI tab: phases and milestones as rows, the team and
+  // stakeholders as columns. Empty until someone fills it in there.
+  const { rows, people, assignments } = await loadRaci(database, projectId);
+  const cols = people.slice(0, 8);
+  const cell = new Map(assignments.map((a) => [`${a.itemId}|${a.personKey}`, a.role]));
 
   const children: any[] = [
-    h1(`${project.name} -- RACI Matrix (starter)`),
-    p("R = Responsible, A = Accountable, C = Consulted, I = Informed."),
-    p("Cells are pre-filled with “R” where a task's owner matches a stakeholder name -- fill in the rest by hand."),
+    h1(`${project.name} -- RACI Matrix`),
+    p(`Generated ${new Date().toLocaleDateString()} by Tasketra`),
+    p("R = Responsible (does the work), A = Accountable (one owner who answers for it), C = Consulted (gives input before), I = Informed (told afterwards). AR = the same person is both."),
   ];
 
-  if (stakeholders.length === 0) {
-    children.push(p("No stakeholders added yet. Add stakeholders in the Stakeholders tab, then re-download this matrix for pre-filled columns."));
-    children.push(
-      tasks.length
-        ? table(["Task", "Owner", "RACI role"], tasks.map((t: any) => [t.title, t.owner_name || "--", ""]), [4160, 2600, 2600])
-        : p("No tasks yet.")
-    );
+  if (rows.length === 0) {
+    children.push(p("No phases or milestones yet. Add them on the Roadmap tab, then fill in the RACI tab and re-download this matrix."));
   } else {
-    const taskColWidth = 3200;
-    const perStakeholder = Math.floor((CONTENT_WIDTH - taskColWidth) / stakeholders.length);
-    const widths = [taskColWidth, ...stakeholders.map(() => perStakeholder)];
-    const headers = ["Task", ...stakeholders.map((s: any) => s.name)];
-    const rows = tasks.map((t: any) => [
-      t.title,
-      ...stakeholders.map((s: any) =>
-        t.owner_name && s.name && t.owner_name.trim().toLowerCase() === s.name.trim().toLowerCase() ? "R" : ""
-      ),
-    ]);
+    const firstCol = 3000;
+    const per = Math.floor((CONTENT_WIDTH - firstCol) / cols.length);
     children.push(
-      tasks.length ? table(headers, rows, widths) : p("No tasks yet -- add tasks to build the matrix rows.")
+      table(
+        ["Phase / milestone", ...cols.map((c) => c.name)],
+        rows.map((r) => [r.title, ...cols.map((c) => cell.get(`${r.id}|${c.key}`) ?? "")]),
+        [firstCol, ...cols.map(() => per)]
+      )
     );
+    if (people.length > cols.length) children.push(p(`Showing the first ${cols.length} of ${people.length} people. See the RACI tab for all of them.`));
   }
 
   return new Document({ styles, sections: [{ properties: { page: PAGE }, children }] });

@@ -9,6 +9,12 @@ type ChangeEntry = { version: string; date: string; title: string; body: string 
 // they can do.
 const CHANGES: ChangeEntry[] = [
   {
+    version: "v87",
+    date: "October 2026",
+    title: "A real RACI chart",
+    body: "Standard and Full projects have a new RACI tab. Phases and milestones from your Roadmap are the rows; your team and stakeholders are the columns. Click a cell to mark someone Responsible, Accountable, Consulted or Informed (or both Accountable and Responsible). Tasketra points out rows with no Accountable person, more than one, no one Responsible, or a long list of people doing the work, but never stops you saving. Print it or save it as a PDF, share a read-only link with people outside Tasketra (names, job roles and letters only, never email addresses), or download it as a Word file. The old RACI starter download is replaced by this live version. Light projects can still reach it from the Resource hub's Forms & downloads. Thanks to a founding member for the idea.",
+  },
+  {
     version: "v86",
     date: "October 2026",
     title: "Printable risk matrix, share links, and a Forms & downloads section",

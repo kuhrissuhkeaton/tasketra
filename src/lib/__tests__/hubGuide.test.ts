@@ -33,8 +33,8 @@ describe("Resource hub guide", () => {
     expect(GUIDE_PRINCIPLE).toMatch(/Nothing blocks you/);
   });
 
-  it("marks only budget-dependent steps as hidden on Light", () => {
+  it("marks exactly the steps whose tabs Light hides", () => {
     const flagged = GUIDE_STAGES.flatMap((s) => s.steps.filter((x) => x.lightHides).map((x) => x.tab)).sort();
-    expect(flagged).toEqual(["Budget", "Budget", "Comms plan"]);
+    expect(flagged).toEqual(["Budget", "Budget", "Comms plan", "RACI"]);
   });
 });

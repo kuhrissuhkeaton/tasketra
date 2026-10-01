@@ -5,6 +5,7 @@ import { RoadmapTimeline, ROADMAP_TYPE_LABEL, ROADMAP_STATUS_LABEL, ROADMAP_TYPE
 import { phaseProgress } from "../lib/phaseProgress";
 import { mailtoHref, telHref } from "../lib/contactLinks";
 import { LEVEL_LABEL, riskExposure as riskExposureLevel } from "../lib/riskExposure";
+import { RaciTab } from "../components/RaciTab";
 import { RiskMatrix } from "../components/RiskMatrix";
 import { Drawer } from "../components/ItemDrawer";
 import { tasksToICS, downloadICS } from "../lib/ics";
@@ -25,7 +26,7 @@ import { EscalationSettings } from "../components/EscalationSettings";
 import { isTabHidden, primaryTabOrder, defaultTasksView, hiddenTabLabels, SIZE_LABEL, type ProjectSize, type ProjectApproach } from "../lib/projectView";
 
 
-export type Tab = "home" | "roadmap" | "tasks" | "charter" | "okrs" | "issues" | "risks" | "assumptions" | "dependencies" | "quality" | "compliance" | "budget" | "meetings" | "documents" | "stakeholders" | "decisions" | "team" | "procurement" | "comms" | "closure" | "report" | "templates" | "export" | "connections" | "trash";
+export type Tab = "home" | "roadmap" | "tasks" | "charter" | "okrs" | "issues" | "risks" | "assumptions" | "dependencies" | "quality" | "compliance" | "budget" | "meetings" | "documents" | "stakeholders" | "decisions" | "team" | "raci" | "procurement" | "comms" | "closure" | "report" | "templates" | "export" | "connections" | "trash";
 
 function daysAgo(dateStr: string): number {
   return Math.max(0, Math.floor((Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24)));
@@ -187,6 +188,7 @@ const SECONDARY_NAV_GROUPS: { label: string; tabs: { id: Tab; label: string }[] 
   ] },
   { label: "People & decisions", tabs: [
     { id: "stakeholders", label: "Stakeholders" },
+    { id: "raci", label: "RACI" },
     { id: "decisions", label: "Decisions" },
     { id: "team", label: "Team" },
     { id: "procurement", label: "Vendors" },
@@ -350,6 +352,7 @@ export default function ProjectHome() {
         {tab === "meetings" && <MeetingsTab projectId={id} />}
         {tab === "documents" && <DocumentsTab projectId={id} />}
         {tab === "stakeholders" && <StakeholdersTab projectId={id} />}
+        {tab === "raci" && <RaciTab projectId={id} />}
         {tab === "decisions" && <DecisionsTab projectId={id} />}
         {tab === "team" && <TeamTab projectId={id} isOwner={project?.is_owner ?? false} onSetupChange={(patch) => setProject((p) => (p ? { ...p, ...patch } : p))} />}
         {tab === "procurement" && <ProcurementTab projectId={id} />}
@@ -6456,8 +6459,8 @@ const TEMPLATES: { type: "charter" | "risk-register" | "raci"; title: string; bl
   },
   {
     type: "raci",
-    title: "RACI Matrix",
-    blurb: "Tasks as rows, stakeholders as columns, pre-filled with “R” wherever a task owner matches a stakeholder -- fill in A/C/I by hand.",
+    title: "RACI Matrix (Word)",
+    blurb: "Your live RACI as a Word file: phases and milestones as rows, the team and stakeholders as columns. Fill it in on the RACI tab first.",
   },
 ];
 
@@ -6502,6 +6505,11 @@ function TemplatesTab({ projectId, projectName }: { projectId: string; projectNa
           <h4>Risk matrix (print or share)</h4>
           <p className="muted">A printable probability and impact grid plus the full register. Save it as a PDF from the print dialog, or create a read-only link for someone outside Tasketra.</p>
           <Link className="btn btn-primary" to={`/app/projects/${projectId}/print/risks`}>Open printable page</Link>
+        </div>
+        <div className="template-card">
+          <h4>RACI chart (print or share)</h4>
+          <p className="muted">Your RACI as a printable page, with a read-only link for people outside Tasketra.</p>
+          <Link className="btn btn-primary" to={`/app/projects/${projectId}/print/raci`}>Open printable page</Link>
         </div>
       </div>
     </div>

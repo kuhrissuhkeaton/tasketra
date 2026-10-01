@@ -1,3 +1,4 @@
+import type { RaciRole, RaciAssignment } from "./raci";
 import type { ProjectSize, ProjectApproach } from "./projectView";
 import type { Charter } from "./charter";
 import type { Tolerances } from "./tolerances";
@@ -256,6 +257,16 @@ export type Risk = {
   updated_at: string;
   resolved_at: string | null;
 };
+
+export type ShareKind = "risk-matrix" | "raci";
+
+export type RaciRow = { id: string; type: string; title: string; start_date: string | null; end_date: string | null };
+export type RaciPerson = { key: string; kind?: "team" | "stakeholder"; name: string; role: string | null };
+export type RaciData = { rows: RaciRow[]; people: RaciPerson[]; assignments: RaciAssignment[] };
+
+export type SharedDocument =
+  | { kind: "risk-matrix"; project: { name: string }; risks: SharedRisk[] }
+  | { kind: "raci"; project: { name: string }; rows: RaciRow[]; people: RaciPerson[]; assignments: RaciAssignment[] };
 
 export type SharedRisk = {
   title: string;
@@ -1034,17 +1045,21 @@ export const api = {
     request<{ project: { name: string }; items: RoadmapItem[] }>(`/roadmap-public?token=${token}`),
 
   // Read-only share links for printable documents (owner-only to manage).
-  getShareLink: (projectId: string, kind: "risk-matrix") =>
+  getShareLink: (projectId: string, kind: ShareKind) =>
     request<{ link: { token: string; created_at: string } | null }>(`/share-links?projectId=${projectId}&kind=${kind}`),
-  createShareLink: (projectId: string, kind: "risk-matrix", regenerate = false) =>
+  createShareLink: (projectId: string, kind: ShareKind, regenerate = false) =>
     request<{ link: { token: string; created_at: string } | null }>("/share-links", {
       method: "POST",
       body: JSON.stringify({ projectId, kind, regenerate }),
     }),
-  stopShareLink: (projectId: string, kind: "risk-matrix") =>
+  stopShareLink: (projectId: string, kind: ShareKind) =>
     request<{ link: null }>(`/share-links?projectId=${projectId}&kind=${kind}`, { method: "DELETE" }),
   getSharedDocument: (token: string) =>
-    request<{ kind: "risk-matrix"; project: { name: string }; risks: SharedRisk[] }>(`/share-public?token=${encodeURIComponent(token)}`),
+    request<SharedDocument>(`/share-public?token=${encodeURIComponent(token)}`),
+
+  getRaci: (projectId: string) => request<RaciData>(`/raci?projectId=${projectId}`),
+  setRaciCell: (projectId: string, itemId: string, personKey: string, role: RaciRole | null) =>
+    request<{ ok: true }>("/raci", { method: "PUT", body: JSON.stringify({ projectId, itemId, personKey, role }) }),
 
   getWebhookSettings: () => request<{ webhook_url: string | null }>("/webhook-settings"),
   setWebhookSettings: (webhookUrl: string) =>

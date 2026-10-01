@@ -5,7 +5,7 @@ import { api, type Project } from "../lib/api";
 const FORM_DOCS = [
   { type: "charter", title: "Project Charter", blurb: "Purpose, budget, stakeholders, milestones and top risks from the project, with a sign-off block." },
   { type: "risk-register", title: "Risk Register", blurb: "Every logged risk with probability, impact, exposure, mitigation, owner and status." },
-  { type: "raci", title: "RACI starter", blurb: "Tasks as rows, stakeholders as columns, pre-filled with R where an owner matches. Fill in A, C and I by hand." },
+  { type: "raci", title: "RACI matrix (Word)", blurb: "Your live RACI: phases and milestones as rows, the team and stakeholders as columns. Fill it in on the project's RACI tab first." },
 ] as const;
 
 /** Forms the PM hands to other people, in one place. Pick a project; the
@@ -67,6 +67,11 @@ export function FormsAndDownloads() {
               <h4>Risk matrix and register</h4>
               <p className="muted">Printable page with the probability and impact grid. Save as PDF, or share a read-only link.</p>
               <Link className="btn btn-primary" to={`/app/projects/${projectId}/print/risks`}>Open printable page</Link>
+            </div>
+            <div className="template-card">
+              <h4>RACI chart</h4>
+              <p className="muted">Printable page of who is Responsible, Accountable, Consulted and Informed. Save as PDF, or share a read-only link.</p>
+              <Link className="btn btn-primary" to={`/app/projects/${projectId}/print/raci`}>Open printable page</Link>
             </div>
             <div className="template-card">
               <h4>Weekly report</h4>

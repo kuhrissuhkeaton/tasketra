@@ -51,6 +51,7 @@ export const GUIDE_STAGES: GuideStage[] = [
     steps: [
       { title: "Lay out phases and milestones", tab: "Roadmap", why: "Phases, milestones and releases on a timeline, grouped by swimlane. Share a read-only link with people outside the project." },
       { title: "Build the work breakdown and give tasks dates", tab: "Tasks", why: "Sub-tasks make a work breakdown. Pick a phase on each task and the Roadmap shows how full each phase is." },
+      { title: "Agree who does what", tab: "RACI", why: "Phases and milestones down the side, people across the top. Mark each as Responsible, Accountable, Consulted or Informed, with exactly one Accountable per row. Print it or share a link.", lightHides: true },
       { title: "Set the budget baseline", tab: "Budget", why: "Needed to compare cost against plan later. Add a contingency reserve if you hold one.", lightHides: true },
       { title: "Lock the baseline", tab: "Roadmap", why: "A snapshot of every task's dates and the budget once the plan is agreed, so you can see what moves afterwards. Only the owner can lock it, and nothing is blocked." },
       { title: "Plan how you will talk, buy and check quality", tab: "Comms plan", why: "Comms plan, Vendors, Quality and Compliance are there when the project is big or regulated enough to need them.", lightHides: true },
