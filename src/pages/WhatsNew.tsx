@@ -9,6 +9,12 @@ type ChangeEntry = { version: string; date: string; title: string; body: string 
 // they can do.
 const CHANGES: ChangeEntry[] = [
   {
+    version: "v82",
+    date: "October 2026",
+    title: "Richer stakeholder contacts, and a roomier Dashboard",
+    body: "Each stakeholder now has a Details panel where you can record a phone number, how interested they are (low, medium or high), how they prefer to be contacted, and free-form notes. Their email and phone in the register are now links, so one click starts an email or a call, and the panel has Email and Call buttons too. Everything is optional, and existing stakeholders are unchanged. The Dashboard now uses more of the width on wide screens, and tables across the app no longer show a needless sideways scrollbar when everything fits. Thanks to a founding member for the feedback behind all of this.",
+  },
+  {
     version: "v81",
     date: "September 2026",
     title: "Tie tasks to a roadmap phase and watch the phase fill up",

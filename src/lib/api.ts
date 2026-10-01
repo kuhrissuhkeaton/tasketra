@@ -182,11 +182,18 @@ export type MeetingActionItem = {
   taskId?: string | null;
 };
 
+export type StakeholderInterest = "low" | "medium" | "high";
+export type StakeholderContactMethod = "email" | "phone" | "text" | "chat" | "in_person";
+
 export type Stakeholder = {
   id: string;
   name: string;
   email: string | null;
   role: string | null;
+  phone: string | null;
+  interest_level: StakeholderInterest | null;
+  preferred_contact: StakeholderContactMethod | null;
+  notes: string | null;
   decisions_sent?: number;
   decisions_resolved?: number;
 };
@@ -625,15 +632,23 @@ export const api = {
 
   listStakeholders: (projectId: string) =>
     request<{ stakeholders: Stakeholder[] }>(`/stakeholders?projectId=${projectId}`),
-  createStakeholder: (projectId: string, name: string, email?: string, role?: string) =>
+  createStakeholder: (projectId: string, name: string, email?: string, role?: string, phone?: string) =>
     request<{ stakeholder: Stakeholder }>("/stakeholders", {
       method: "POST",
-      body: JSON.stringify({ projectId, name, email, role }),
+      body: JSON.stringify({ projectId, name, email, role, phone }),
     }),
-  updateStakeholder: (id: string, patch: Partial<Pick<Stakeholder, "name" | "role" | "email">>) =>
+  updateStakeholder: (id: string, patch: Partial<Pick<Stakeholder, "name" | "role" | "email" | "phone" | "interest_level" | "preferred_contact" | "notes">>) =>
     request<{ stakeholder: Stakeholder }>("/stakeholders", {
       method: "PATCH",
-      body: JSON.stringify({ id, name: patch.name, role: patch.role, email: patch.email }),
+      body: JSON.stringify({
+        id, name: patch.name, role: patch.role, email: patch.email,
+        // The newer contact fields are only sent when the caller set them; an
+        // empty string or null clears the value on the server.
+        ...("phone" in patch ? { phone: patch.phone ?? "" } : {}),
+        ...("interest_level" in patch ? { interestLevel: patch.interest_level ?? "" } : {}),
+        ...("preferred_contact" in patch ? { preferredContact: patch.preferred_contact ?? "" } : {}),
+        ...("notes" in patch ? { notes: patch.notes ?? "" } : {}),
+      }),
     }),
   deleteStakeholder: (id: string) => request<{ ok: true }>(`/stakeholders?id=${id}`, { method: "DELETE" }),
   restoreStakeholder: (id: string) =>

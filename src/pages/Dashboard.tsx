@@ -374,7 +374,7 @@ export default function Dashboard() {
     <div className="project-shell">
       <AppSidebar />
 
-      <main className="project-main">
+      <main className="project-main project-main-wide">
         <div className="page-head">
           <h1>Dashboard</h1>
           <div className="stat-row">

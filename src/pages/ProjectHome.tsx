@@ -1,8 +1,9 @@
 import { useEffect, useState, useRef, Fragment } from "react";
 import { useParams, useSearchParams, useNavigate, useLocation, Link } from "react-router-dom";
-import { api, ApiError, type Project, type Task, type Stakeholder, type Decision, type Issue, type Risk, type Assumption, type Dependency, type ChangeRequest, type Lesson, type TodayData, type WeeklyReport, type BudgetData, type FeedItem, type TrashItem, type ProjectMember, type Meeting, type MeetingActionItem, type ProjectDocument, type StorageUsage, type RoadmapItem, type RoadmapItemType, type QualityItem, type ProcurementItem, type CommPlanItem, type ComplianceItem, type Objective, type KeyResult, type RiskTaskLink, type IssueTaskLink, type ProjectStage, type BaselineData, type CharterApproval } from "../lib/api";
+import { api, ApiError, type Project, type Task, type Stakeholder, type Decision, type Issue, type Risk, type Assumption, type Dependency, type ChangeRequest, type Lesson, type TodayData, type WeeklyReport, type BudgetData, type FeedItem, type TrashItem, type ProjectMember, type Meeting, type MeetingActionItem, type ProjectDocument, type StorageUsage, type RoadmapItem, type RoadmapItemType, type StakeholderInterest, type StakeholderContactMethod, type QualityItem, type ProcurementItem, type CommPlanItem, type ComplianceItem, type Objective, type KeyResult, type RiskTaskLink, type IssueTaskLink, type ProjectStage, type BaselineData, type CharterApproval } from "../lib/api";
 import { RoadmapTimeline, ROADMAP_TYPE_LABEL, ROADMAP_STATUS_LABEL, ROADMAP_TYPE_COLOR, fmtRoadmapDate } from "../components/RoadmapTimeline";
 import { phaseProgress } from "../lib/phaseProgress";
+import { mailtoHref, telHref } from "../lib/contactLinks";
 import { Drawer } from "../components/ItemDrawer";
 import { tasksToICS, downloadICS } from "../lib/ics";
 import { fmtDate, fmtDateTime, fmtLocalDate } from "../lib/format";
@@ -5015,16 +5016,28 @@ function DocumentsTab({ projectId }: { projectId: string }) {
 }
 
 
+const INTEREST_LABEL: Record<StakeholderInterest, string> = { low: "Low", medium: "Medium", high: "High" };
+const CONTACT_METHOD_LABEL: Record<StakeholderContactMethod, string> = {
+  email: "Email", phone: "Phone call", text: "Text message", chat: "Chat", in_person: "In person",
+};
+
 function StakeholdersTab({ projectId }: { projectId: string }) {
   const confirmDialog = useConfirm();
   const [stakeholders, setStakeholders] = useState<Stakeholder[]>([]);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [role, setRole] = useState("");
-  const [editingId, setEditingId] = useState<string | null>(null);
+  // Details drawer: edits every field of one stakeholder at once.
+  const [drawerId, setDrawerId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editRole, setEditRole] = useState("");
   const [editEmail, setEditEmail] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+  const [editInterest, setEditInterest] = useState<StakeholderInterest | "">("");
+  const [editContact, setEditContact] = useState<StakeholderContactMethod | "">("");
+  const [editNotes, setEditNotes] = useState("");
+  const [drawerError, setDrawerError] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -5044,9 +5057,10 @@ function StakeholdersTab({ projectId }: { projectId: string }) {
     if (!name.trim()) return;
     setError("");
     try {
-      await api.createStakeholder(projectId, name.trim(), email || undefined, role || undefined);
+      await api.createStakeholder(projectId, name.trim(), email || undefined, role || undefined, phone || undefined);
       setName("");
       setEmail("");
+      setPhone("");
       setRole("");
       load();
     } catch (err: any) {
@@ -5054,19 +5068,41 @@ function StakeholdersTab({ projectId }: { projectId: string }) {
     }
   }
 
-  function startEdit(s: Stakeholder) {
-    setEditingId(s.id);
+  function openDrawer(s: Stakeholder) {
+    setDrawerId(s.id);
     setEditName(s.name);
     setEditRole(s.role || "");
     setEditEmail(s.email || "");
+    setEditPhone(s.phone || "");
+    setEditInterest(s.interest_level || "");
+    setEditContact(s.preferred_contact || "");
+    setEditNotes(s.notes || "");
+    setDrawerError("");
   }
 
-  async function saveEdit(id: string) {
-    if (!editName.trim()) return;
-    await api.updateStakeholder(id, { name: editName.trim(), role: editRole || undefined, email: editEmail || undefined } as any);
-    setEditingId(null);
-    load();
+  function closeDrawer() {
+    setDrawerId(null);
   }
+
+  async function saveDrawer() {
+    if (!drawerId || !editName.trim()) return;
+    setDrawerError("");
+    try {
+      await api.updateStakeholder(drawerId, {
+        name: editName.trim(), role: editRole || undefined, email: editEmail || undefined,
+        phone: editPhone.trim() || null,
+        interest_level: editInterest || null,
+        preferred_contact: editContact || null,
+        notes: editNotes || null,
+      } as any);
+      closeDrawer();
+      load();
+    } catch (err: any) {
+      setDrawerError(err.message || "Couldn't save those changes.");
+    }
+  }
+
+  const drawerStakeholder = drawerId ? stakeholders.find((s) => s.id === drawerId) || null : null;
 
   async function removeStakeholder(id: string, label: string) {
     if (!(await confirmDialog(`Delete stakeholder "${label}"? You can restore it from Trash.`))) return;
@@ -5081,6 +5117,7 @@ function StakeholdersTab({ projectId }: { projectId: string }) {
       <form className="inline-form inline-form-wide" onSubmit={addStakeholder}>
         <input placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} />
         <input placeholder="Email (optional)" value={email} onChange={(e) => setEmail(e.target.value)} />
+        <input placeholder="Phone (optional)" value={phone} onChange={(e) => setPhone(e.target.value)} />
         <input placeholder="Role (optional)" value={role} onChange={(e) => setRole(e.target.value)} />
         <button className="btn btn-primary">Add stakeholder</button>
       </form>
@@ -5088,39 +5125,107 @@ function StakeholdersTab({ projectId }: { projectId: string }) {
 
       <ResizableTable id="stakeholders">
         <thead>
-          <tr><th>Name</th><th>Role</th><th>Email</th><th>Decisions</th><th></th></tr>
+          <tr><th>Name</th><th>Role</th><th>Interest</th><th>Prefers</th><th>Contact</th><th>Decisions</th><th></th></tr>
         </thead>
         <tbody>
-          {stakeholders.map((s) => (
-            editingId === s.id ? (
-              <tr key={s.id}>
-                <td><input value={editName} onChange={(e) => setEditName(e.target.value)} /></td>
-                <td><input value={editRole} onChange={(e) => setEditRole(e.target.value)} /></td>
-                <td><input value={editEmail} onChange={(e) => setEditEmail(e.target.value)} /></td>
-                <td>{s.decisions_resolved ?? 0} / {s.decisions_sent ?? 0} resolved</td>
-                <td className="row-actions">
-                  <button className="btn btn-primary" type="button" onClick={() => saveEdit(s.id)}>Save</button>
-                  <button className="btn btn-ghost" type="button" onClick={() => setEditingId(null)}>Cancel</button>
-                </td>
-              </tr>
-            ) : (
+          {stakeholders.map((s) => {
+            const mailto = mailtoHref(s.email);
+            const tel = telHref(s.phone);
+            return (
               <tr key={s.id}>
                 <td>{s.name}</td>
                 <td>{s.role || "--"}</td>
-                <td>{s.email || "--"}</td>
+                <td>
+                  {s.interest_level ? <span className="pill pill-navy">{INTEREST_LABEL[s.interest_level]}</span> : "--"}
+                </td>
+                <td>{s.preferred_contact ? CONTACT_METHOD_LABEL[s.preferred_contact] : "--"}</td>
+                <td>
+                  {!s.email && !s.phone && "--"}
+                  {s.email && (mailto ? <div><a className="contact-link" href={mailto}>{s.email}</a></div> : <div>{s.email}</div>)}
+                  {s.phone && (tel ? <div><a className="contact-link" href={tel}>{s.phone}</a></div> : <div>{s.phone}</div>)}
+                </td>
                 <td>{s.decisions_resolved ?? 0} / {s.decisions_sent ?? 0} resolved</td>
                 <td className="row-actions">
-                  <button className="btn-link" type="button" onClick={() => startEdit(s)}>Edit</button>
+                  <button className="btn-link" type="button" onClick={() => openDrawer(s)}>Details</button>
                   <button className="btn-link btn-link-danger" type="button" onClick={() => removeStakeholder(s.id, s.name)}>Delete</button>
                 </td>
               </tr>
-            )
-          ))}
+            );
+          })}
           {stakeholders.length === 0 && (
-            <tr><td colSpan={5} className="muted">No stakeholders yet. Add one above to start your register.</td></tr>
+            <tr><td colSpan={7} className="muted">No stakeholders yet. Add one above to start your register.</td></tr>
           )}
         </tbody>
       </ResizableTable>
+
+      <Drawer
+        open={!!drawerStakeholder}
+        onClose={closeDrawer}
+        eyebrow="Stakeholder"
+        title={drawerStakeholder?.name || ""}
+        footer={
+          <>
+            <button className="btn btn-primary" type="button" onClick={saveDrawer}>Save</button>
+            <button className="btn btn-ghost" type="button" onClick={closeDrawer}>Cancel</button>
+          </>
+        }
+      >
+        {drawerStakeholder && (
+          <>
+            {drawerError && <p className="form-error">{drawerError}</p>}
+            <div className="drawer-field">
+              <label>Name</label>
+              <input value={editName} onChange={(e) => setEditName(e.target.value)} />
+            </div>
+            <div className="drawer-field">
+              <label>Role</label>
+              <input value={editRole} onChange={(e) => setEditRole(e.target.value)} placeholder="Sponsor, SME, vendor lead..." />
+            </div>
+            <div className="drawer-field">
+              <label>Email</label>
+              <input value={editEmail} onChange={(e) => setEditEmail(e.target.value)} />
+            </div>
+            <div className="drawer-field">
+              <label>Phone</label>
+              <input value={editPhone} onChange={(e) => setEditPhone(e.target.value)} />
+            </div>
+            {(mailtoHref(editEmail) || telHref(editPhone)) && (
+              <div className="contact-actions">
+                {mailtoHref(editEmail) && <a className="btn btn-ghost" href={mailtoHref(editEmail)!}>Email {editName.trim().split(" ")[0] || "them"}</a>}
+                {telHref(editPhone) && <a className="btn btn-ghost" href={telHref(editPhone)!}>Call</a>}
+              </div>
+            )}
+            <div className="drawer-field-row">
+              <div className="drawer-field">
+                <label>Interest level</label>
+                <select value={editInterest} onChange={(e) => setEditInterest(e.target.value as StakeholderInterest | "")}>
+                  <option value="">Not set</option>
+                  {Object.entries(INTEREST_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </select>
+              </div>
+              <div className="drawer-field">
+                <label>Prefers to be contacted by</label>
+                <select value={editContact} onChange={(e) => setEditContact(e.target.value as StakeholderContactMethod | "")}>
+                  <option value="">Not set</option>
+                  {Object.entries(CONTACT_METHOD_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="drawer-field">
+              <label>Notes</label>
+              <textarea
+                rows={6}
+                value={editNotes}
+                onChange={(e) => setEditNotes(e.target.value)}
+                placeholder="What they care about, best times to reach them, anything worth remembering."
+              />
+            </div>
+            <p className="muted" style={{ fontSize: 13 }}>
+              Decisions: {drawerStakeholder.decisions_resolved ?? 0} of {drawerStakeholder.decisions_sent ?? 0} resolved.
+            </p>
+          </>
+        )}
+      </Drawer>
     </div>
   );
 }

@@ -593,6 +593,10 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
 .sidebar-footer .btn.btn-ghost:hover { background: rgba(255, 255, 255, 0.08); }
 
 .project-main { flex: 1; min-width: 0; max-width: 960px; padding: 32px 40px; animation: fade-in 200ms var(--ease); }
+/* The Dashboard's Project health table has 8 columns, which scrolled sideways
+   inside the 960px column on a desktop monitor. The Dashboard alone opts into
+   a wider column; project tabs keep 960px, which suits their forms and lists. */
+.project-main.project-main-wide { max-width: 1400px; }
 
 @media (max-width: 860px) {
   .project-shell { flex-direction: column; }
@@ -1337,3 +1341,10 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
 .tolerance-hint { display: block; margin-top: 4px; font-size: 12px; color: var(--slate-2); }
 @media (max-width: 560px) { .tolerance-grid { grid-template-columns: 1fr; } }
 .escalate-pill { margin-left: 6px; }
+
+/* Stakeholder contact links: email and phone in the register, and the Email /
+   Call buttons in the details panel. */
+.contact-link { color: var(--navy); text-decoration: underline; text-underline-offset: 2px; word-break: break-word; }
+.contact-link:hover { text-decoration-thickness: 2px; }
+.contact-actions { display: flex; gap: 8px; flex-wrap: wrap; margin: -4px 0 14px; }
+.contact-actions a { text-decoration: none; }

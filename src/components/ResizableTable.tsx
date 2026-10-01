@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { fitColumns } from "../lib/fitColumns";
 
 /**
  * Drop-in replacement for `<table className="table">` that makes every
@@ -37,6 +38,26 @@ function loadWidths(id: string): number[] | null {
   } catch {
     return null;
   }
+}
+
+// The width a header cell needs to show its label on one line: the text's own
+// width plus the cell's horizontal padding, with a few px of slack because
+// letter-spacing isn't always fully counted. The text is measured with a
+// Range, not th.scrollWidth: scrollWidth reports the whole cell's width
+// whenever the label is narrower than the cell, which made every column
+// claim 8px more than it needed and pushed any table with a handful of
+// columns wider than its container, so it always scrolled sideways even
+// when everything would have fit.
+function labelNeededWidth(th: HTMLElement): number {
+  const prevWhiteSpace = th.style.whiteSpace;
+  th.style.whiteSpace = "nowrap";
+  const range = document.createRange();
+  range.selectNodeContents(th);
+  const textWidth = range.getBoundingClientRect().width;
+  const style = getComputedStyle(th);
+  const padding = (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0);
+  th.style.whiteSpace = prevWhiteSpace;
+  return Math.ceil(textWidth + padding) + 8;
 }
 
 function saveWidths(id: string, widths: number[]) {
@@ -83,17 +104,14 @@ export function ResizableTable({
     // "SEVERITY" or "STATUS" would otherwise start pre-wrapped into
     // "SEVERIT/Y" the moment a neighboring column (e.g. a long email with
     // no spaces to break on) claims more than its share under auto layout.
-    const natural = ths.map((th) => {
-      const renderedWidth = Math.round(th.getBoundingClientRect().width);
-      const prevWhiteSpace = th.style.whiteSpace;
-      th.style.whiteSpace = "nowrap";
-      // A few extra px of slack: scrollWidth can undercount by a hair once
-      // letter-spacing is in play (the trailing letter's spacing isn't
-      // always included), which is just enough to force an unwanted wrap.
-      const labelWidth = Math.ceil(th.scrollWidth) + 8;
-      th.style.whiteSpace = prevWhiteSpace;
-      return Math.max(MIN_COL_WIDTH, renderedWidth, labelWidth);
-    });
+    // Start from the widths automatic layout gave each column, never narrower
+    // than the label needs, and trim the roomier columns if that would push
+    // the table past its container (fitColumns, unit tested).
+    const natural = fitColumns(
+      ths.map((th) => th.getBoundingClientRect().width),
+      ths.map((th) => Math.max(MIN_COL_WIDTH, labelNeededWidth(th))),
+      table.parentElement?.clientWidth ?? table.getBoundingClientRect().width
+    );
     const initial = saved && saved.length === ths.length ? saved : natural;
     setWidths(initial);
 
