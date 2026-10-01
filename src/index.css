@@ -1357,3 +1357,22 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
 .template-details ul { margin: 2px 0 6px; }
 .resource-card .btn { margin-top: 4px; }
 .template-grid { align-items: start; }
+
+/* Resource Hub: jump links and the "how it works" guide */
+.hub-jump { display: flex; flex-wrap: wrap; gap: 8px; margin: -8px 0 28px; }
+.hub-chip {
+  background: var(--cream); border: 1px solid var(--border); border-radius: 999px;
+  padding: 6px 14px; font: inherit; font-size: 13px; font-weight: 600; color: var(--slate); cursor: pointer;
+  transition: background var(--ease), border-color var(--ease);
+}
+.hub-chip:hover { background: var(--surface-muted); border-color: var(--slate); }
+.hub-chip:focus-visible { outline: 2px solid var(--navy); outline-offset: 2px; }
+.resource-grid ~ h2[id], h2[id] { scroll-margin-top: 16px; }
+.guide-steps { margin: 10px 0 12px; padding-left: 20px; }
+.guide-steps li { margin-bottom: 10px; }
+.guide-tab {
+  display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase;
+  background: var(--surface-muted); color: var(--slate); border-radius: 999px; padding: 1px 8px; vertical-align: 1px;
+}
+.guide-why { font-size: 13px; color: var(--slate); margin-top: 2px; }
+.guide-steps li::marker { color: var(--slate); font-weight: 700; }

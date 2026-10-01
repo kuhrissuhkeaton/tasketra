@@ -4,7 +4,8 @@ import { AppSidebar } from "../components/AppSidebar";
 import { ResizableTable } from "../components/ResizableTable";
 import { api } from "../lib/api";
 import { PROJECT_TEMPLATES, planPhases, templateSummary } from "../lib/projectTemplates";
-import { APPROACH_LABEL } from "../lib/projectView";
+import { APPROACH_LABEL, SIZE_LABEL, SIZE_BLURB, APPROACH_BLURB, type ProjectSize, type ProjectApproach } from "../lib/projectView";
+import { GUIDE_STAGES, GUIDE_PRINCIPLE } from "../lib/hubGuide";
 
 type Methodology = { name: string; points: string[]; bestWhen: string };
 
@@ -223,10 +224,28 @@ export default function Resources() {
   const meetings = MEETING_TEMPLATES.filter((m) => matches(m.name, m.purpose, m.cadence, ...m.agenda, "meeting"));
   const templates = PROJECT_TEMPLATES.filter((t) =>
     matches(t.name, t.blurb, t.bestFor, "template", "templates", "skeleton", ...t.phases.map((p) => p.title), ...t.tasks.map((x) => x.title), ...t.risks.map((x) => x.title)));
+  const guideStages = GUIDE_STAGES.filter((st) =>
+    matches(st.name, st.goal, st.checklist, "tasketra", "how it works", "stage", "guide", ...st.steps.flatMap((x) => [x.title, x.tab, x.why])));
   const statusTips = STATUS_REPORT_TIPS.filter((t) => matches(t, "status report", "status update"));
 
+  const sections = [
+    { id: "templates", label: "Templates", show: templates.length > 0 },
+    { id: "how-it-works", label: "How it works", show: guideStages.length > 0 },
+    { id: "methodologies", label: "Methodologies", show: methodologies.length > 0 },
+    { id: "formulas", label: "EVM formulas", show: formulas.length > 0 },
+    { id: "raid", label: "RAID guide", show: raidItems.length > 0 },
+    { id: "stakeholder-matrix", label: "Stakeholder matrix", show: quadrants.length > 0 },
+    { id: "meetings", label: "Meetings", show: meetings.length > 0 },
+    { id: "status-reports", label: "Status reports", show: statusTips.length > 0 },
+  ].filter((x) => x.show);
+
+  function jumpTo(id: string) {
+    const reduce = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    document.getElementById(id)?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+  }
+
   const nothingMatches =
-    templates.length === 0 && methodologies.length === 0 && formulas.length === 0 && raidItems.length === 0 &&
+    templates.length === 0 && guideStages.length === 0 && methodologies.length === 0 && formulas.length === 0 && raidItems.length === 0 &&
     quadrants.length === 0 && meetings.length === 0 && statusTips.length === 0;
 
   return (
@@ -238,10 +257,11 @@ export default function Resources() {
           <h1>Resource hub</h1>
         </div>
         <p className="muted" style={{ marginBottom: 20, maxWidth: 640 }}>
-          A plain-English reference for running a project: project templates you can start from, methodologies, EVM formulas, RAID log
-          practice, stakeholder mapping, meeting templates, and status reporting. Everything here
-          is reference only -- your project's own Budget, Issues &amp; risks, Stakeholders, and
-          Weekly report tabs are where the live data lives.
+          Starting points and plain-English reference for running a project: templates to start from,
+          a map of how a project runs in Tasketra, then methodologies, EVM formulas, RAID log practice,
+          stakeholder mapping, meeting templates, and status reporting. The reference sections are
+          read-only; your project's own tabs hold the live data. Templates are the one exception:
+          starting from one creates a new project for you.
         </p>
 
         <div className="inline-form" style={{ marginBottom: 20, alignItems: "center" }}>
@@ -258,11 +278,19 @@ export default function Resources() {
           style={{ marginBottom: 28, maxWidth: 360 }}
         />
 
+        {sections.length > 1 && (
+          <nav className="hub-jump" aria-label="Jump to a section">
+            {sections.map((x) => (
+              <button key={x.id} type="button" className="hub-chip" onClick={() => jumpTo(x.id)}>{x.label}</button>
+            ))}
+          </nav>
+        )}
+
         {nothingMatches && <p className="muted">Nothing matches "{query}".</p>}
 
         {templates.length > 0 && (
           <>
-            <h2>Project templates</h2>
+            <h2 id="templates">Project templates</h2>
             <p className="muted" style={{ maxWidth: 640, marginTop: 4 }}>
               Start a new project with the skeleton already in place: phases on the roadmap, starter
               tasks tied to those phases, the risks that usually hit this kind of project, and
@@ -311,9 +339,59 @@ export default function Resources() {
           </>
         )}
 
+        {guideStages.length > 0 && (
+          <>
+            <h2 id="how-it-works" style={{ marginTop: templates.length > 0 ? 36 : undefined }}>How a project runs in Tasketra</h2>
+            <p className="muted" style={{ maxWidth: 640, marginTop: 4 }}>
+              Every project moves through four stages: Initiate, Plan, Execute and Close. Your project's
+              Home tab shows a short checklist for the stage you are in, built from what is already in
+              the project, so there are no boxes to tick by hand. Here is what to do in each stage and
+              which tab to do it in.
+            </p>
+            <div className="resource-grid template-grid">
+              {guideStages.map((st, i) => (
+                <div className="resource-card" key={st.id}>
+                  <h4>{i + 1}. {st.name}</h4>
+                  <p>{st.goal}</p>
+                  <ol className="guide-steps">
+                    {st.steps.map((step) => (
+                      <li key={step.title}>
+                        <strong>{step.title}</strong> <span className="guide-tab">{step.tab}</span>
+                        <div className="guide-why">
+                          {step.why}{step.lightHides ? " Hidden on Light projects unless you show all tabs." : ""}
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
+                  <div className="callout"><strong>Home checklist:</strong> {st.checklist}</div>
+                </div>
+              ))}
+            </div>
+            <div className="resource-grid template-grid">
+              <div className="resource-card">
+                <h4>Size: how much structure</h4>
+                <ul>
+                  {(Object.keys(SIZE_LABEL) as ProjectSize[]).map((k) => (
+                    <li key={k}><strong>{SIZE_LABEL[k]}.</strong> {SIZE_BLURB[k]}</li>
+                  ))}
+                </ul>
+              </div>
+              <div className="resource-card">
+                <h4>Approach: how the work runs</h4>
+                <ul>
+                  {(Object.keys(APPROACH_LABEL) as ProjectApproach[]).map((k) => (
+                    <li key={k}><strong>{APPROACH_LABEL[k]}.</strong> {APPROACH_BLURB[k]}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+            <div className="callout" style={{ marginTop: 16, maxWidth: 640 }}>{GUIDE_PRINCIPLE}</div>
+          </>
+        )}
+
         {methodologies.length > 0 && (
           <>
-            <h2 style={{ marginTop: templates.length > 0 ? 36 : undefined }}>Methodologies</h2>
+            <h2 id="methodologies" style={{ marginTop: templates.length > 0 || guideStages.length > 0 ? 36 : undefined }}>Methodologies</h2>
             <div className="resource-grid">
               {methodologies.map((m) => (
                 <div className="resource-card" key={m.name}>
@@ -330,7 +408,7 @@ export default function Resources() {
 
         {formulas.length > 0 && (
           <>
-            <h2 style={{ marginTop: 36 }}>EVM &amp; scheduling formulas</h2>
+            <h2 id="formulas" style={{ marginTop: 36 }}>EVM &amp; scheduling formulas</h2>
             <ResizableTable id="resources-formulas">
               <thead>
                 <tr><th>Code</th><th>Name</th><th>Formula</th><th>What it tells you</th></tr>
@@ -351,7 +429,7 @@ export default function Resources() {
 
         {raidItems.length > 0 && (
           <>
-            <h2 style={{ marginTop: 36 }}>RAID log guide</h2>
+            <h2 id="raid" style={{ marginTop: 36 }}>RAID log guide</h2>
             <p className="muted" style={{ maxWidth: 640, marginBottom: 16 }}>
               Risks, Issues, Assumptions, and Dependencies -- the four things worth tracking
               separately so nothing quietly falls through the cracks.
@@ -371,7 +449,7 @@ export default function Resources() {
 
         {quadrants.length > 0 && (
           <>
-            <h2 style={{ marginTop: 36 }}>Stakeholder engagement matrix</h2>
+            <h2 id="stakeholder-matrix" style={{ marginTop: 36 }}>Stakeholder engagement matrix</h2>
             <p className="muted" style={{ maxWidth: 640, marginBottom: 16 }}>
               Plot each stakeholder on power vs. interest, then match your effort to the quadrant --
               use this alongside your project's Stakeholders tab.
@@ -390,7 +468,7 @@ export default function Resources() {
 
         {meetings.length > 0 && (
           <>
-            <h2 style={{ marginTop: 36 }}>Meeting cadence templates</h2>
+            <h2 id="meetings" style={{ marginTop: 36 }}>Meeting cadence templates</h2>
             <div className="resource-grid">
               {meetings.map((m) => (
                 <div className="resource-card" key={m.name}>
@@ -408,7 +486,7 @@ export default function Resources() {
 
         {statusTips.length > 0 && (
           <>
-            <h2 style={{ marginTop: 36 }}>Status reporting -- what good looks like</h2>
+            <h2 id="status-reports" style={{ marginTop: 36 }}>Status reporting -- what good looks like</h2>
             <div className="resource-card" style={{ maxWidth: 640 }}>
               <ul>
                 {statusTips.map((t, i) => <li key={i}>{t}</li>)}

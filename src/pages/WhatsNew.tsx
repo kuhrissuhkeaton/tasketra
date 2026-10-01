@@ -9,6 +9,12 @@ type ChangeEntry = { version: string; date: string; title: string; body: string 
 // they can do.
 const CHANGES: ChangeEntry[] = [
   {
+    version: "v84",
+    date: "October 2026",
+    title: "A map of how a project runs, and an easier Resource hub",
+    body: "The Resource hub has a new section, How a project runs in Tasketra. For each of the four stages (Initiate, Plan, Execute, Close) it lists what to do, which tab to do it in, and why, along with what the Home checklist asks for and what the Light, Standard and Full sizes and the three approaches mean. There is also a row of jump links at the top of the hub so you can go straight to a section, and the intro now says plainly that starting from a template creates a new project while everything else in the hub is reference only.",
+  },
+  {
     version: "v83",
     date: "October 2026",
     title: "Start a project from a template",
