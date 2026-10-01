@@ -111,6 +111,18 @@ describe("signed-in pages render without errors", () => {
     expect(host.textContent).toContain("Add to an existing project");
     expect(errors).toEqual([]);
   });
+
+  it("Resource hub: the new meeting agendas and Quality / Compliance guide entries are there", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => new Promise(() => {})));
+    await mountPage(<Resources />, "/app/resources", "/app/resources");
+    for (const name of ["Sprint planning", "Risk review", "Stage-gate / phase review", "Sponsor update", "Change control review", "Project closeout"]) {
+      expect(host.textContent, name).toContain(name);
+    }
+    const raid = host.querySelector("#raid")!.nextElementSibling!.nextElementSibling!;
+    expect(raid.textContent).toContain("Quality");
+    expect(raid.textContent).toContain("Compliance");
+    expect(errors).toEqual([]);
+  });
 });
 
 describe("ApplyTemplateDrawer", () => {

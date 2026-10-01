@@ -9,10 +9,16 @@ type ChangeEntry = { version: string; date: string; title: string; body: string 
 // they can do.
 const CHANGES: ChangeEntry[] = [
   {
+    version: "v89",
+    date: "October 2026",
+    title: "More meeting agendas, and Quality and Compliance in the RAID guide",
+    body: "The Resource hub's meeting templates grew from three to nine. Alongside Kickoff, Steering and Retro you now have Sprint planning, Risk review, Stage-gate / phase review, Sponsor update, Change control review and Project closeout, each with a cadence, a purpose and a ready agenda. The RAID log guide now also covers Quality and Compliance, with an example of each and where to track it in a project.",
+  },
+  {
     version: "v88",
     date: "October 2026",
     title: "Add a template to a project you already have",
-    body: "Templates are no longer only for new projects. On a project's Roadmap tab (if you own it) choose Add from a template, or on a template card in the Resource hub choose Add to an existing project. Tasketra shows a preview first, split into what it will add and what is already there, and nothing is saved until you confirm. It only adds: anything you already have is left exactly as it is, and items with the same name as one you already have are skipped, so running it twice never doubles things up. New tasks attach to your existing phase when the names match. Thanks to a founding member for the idea.",
+    body: "Templates are no longer only for new projects. On a project's Roadmap tab (if you own it) choose Add from a template, or on a template card in the Resource hub choose Add to an existing project. Tasketra shows a preview first, split into what it will add and what is already there, and nothing is saved until you confirm. It only adds: anything you already have is left exactly as it is, and items with the same name as one you already have are skipped, so running it twice never doubles things up. New tasks attach to your existing phase when the names match.",
   },
   {
     version: "v87",

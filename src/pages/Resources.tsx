@@ -9,6 +9,7 @@ import { GUIDE_STAGES } from "../lib/hubGuide";
 import { ApplyTemplateDrawer } from "../components/ApplyTemplateDrawer";
 import { FormsAndDownloads } from "../components/FormsAndDownloads";
 import { ProjectFlowGuide } from "../components/ProjectFlowGuide";
+import { STAKEHOLDER_QUADRANTS } from "../lib/stakeholderGrid";
 
 type Methodology = { name: string; points: string[]; bestWhen: string };
 
@@ -138,15 +139,18 @@ const RAID_GUIDE: RaidItem[] = [
     example: "\"Framing can't start until the permit is approved.\"",
     whereInApp: "Tracked natively in each project's Issues & risks tab (Dependencies view), tagged internal or external with an optional needed-by date. Internal task-to-task ordering also shows up naturally in the WBS hierarchy and Timeline view.",
   },
-];
-
-type Quadrant = { name: string; axis: string; strategy: string };
-
-const STAKEHOLDER_QUADRANTS: Quadrant[] = [
-  { name: "Manage closely", axis: "High power, high interest", strategy: "Your key players. Involve them in decisions, brief them first, and never let them be surprised by news." },
-  { name: "Keep satisfied", axis: "High power, low interest", strategy: "Keep them content with outcomes, not details. Enough information that they stay supportive without needing a play-by-play." },
-  { name: "Keep informed", axis: "Low power, high interest", strategy: "They care and can influence opinion even without formal authority. Regular updates keep them as allies, not surprises." },
-  { name: "Monitor", axis: "Low power, low interest", strategy: "Minimal effort -- a periodic check-in is enough. Watch for movement into another quadrant as the project evolves." },
+  {
+    term: "Quality",
+    definition: "What \"good enough\" means for this project's deliverables, and the checks that prove it -- agreed before the work starts, not argued about at the end.",
+    example: "\"Every report is peer-reviewed against the checklist before it goes to the client.\"",
+    whereInApp: "Tracked natively in each project's Quality section (under Issues & risks in the sidebar), where each item is a standard, a review, or a defect, with an owner and a status of open, in progress, passed, or failed.",
+  },
+  {
+    term: "Compliance",
+    definition: "Rules the project has to follow that you don't get to negotiate -- laws, regulations, contract terms, or internal policy -- and the evidence that you followed them.",
+    example: "\"Customer data must stay in the EU, so we need written sign-off from the hosting vendor.\"",
+    whereInApp: "Tracked natively in each project's Compliance section (under Issues & risks in the sidebar), where each item is regulatory, policy, standard, or contractual, with an owner, a due date, and a status from not started to compliant or non-compliant.",
+  },
 ];
 
 type MeetingTemplate = { name: string; cadence: string; purpose: string; agenda: string[] };
@@ -185,6 +189,82 @@ const MEETING_TEMPLATES: MeetingTemplate[] = [
       "What didn't go well and why",
       "Risks/issues that materialized -- were they caught early enough?",
       "One or two concrete changes for the next project",
+    ],
+  },
+  {
+    name: "Sprint planning",
+    cadence: "Start of each sprint or iteration",
+    purpose: "Agree what the team will take on in the next sprint, and make sure everyone knows what done looks like.",
+    agenda: [
+      "Sprint goal in one sentence",
+      "Review the top of the backlog and confirm priorities",
+      "Check capacity: who is away, what else is competing for time",
+      "Pick the work and break big items into tasks",
+      "Confirm what done looks like for each item",
+      "Name known risks and dependencies before the sprint starts",
+    ],
+  },
+  {
+    name: "Risk review",
+    cadence: "Monthly, or at each phase start",
+    purpose: "Keep the risk log honest: re-score what has changed, retire what has passed, and add what is new.",
+    agenda: [
+      "Walk the highest-exposure risks first: has probability or impact moved?",
+      "Check each mitigation: is it done, on track, or stalled?",
+      "Close risks that can no longer happen",
+      "Add new risks anyone in the room has noticed",
+      "Which risks have become issues?",
+      "Agree owners and dates for the next actions",
+    ],
+  },
+  {
+    name: "Stage-gate / phase review",
+    cadence: "At the end of each phase",
+    purpose: "Decide whether the project is ready to move into the next phase, based on evidence rather than momentum.",
+    agenda: [
+      "What the phase promised versus what was delivered",
+      "Budget and schedule against the baseline",
+      "Open risks and issues that carry into the next phase",
+      "Anything the next phase depends on that is not ready",
+      "Decision: go, go with conditions, hold, or stop",
+      "Record the decision, the conditions, and who agreed",
+    ],
+  },
+  {
+    name: "Sponsor update",
+    cadence: "Monthly, or whenever the sponsor needs to decide something",
+    purpose: "A short, decision-focused conversation with the person who funds or champions the project.",
+    agenda: [
+      "Overall health in one line: on track, at risk, or off track",
+      "What changed since the last update",
+      "The one or two things you need from the sponsor",
+      "Biggest risk to the outcome and what you are doing about it",
+      "Anything coming that could surprise them",
+    ],
+  },
+  {
+    name: "Change control review",
+    cadence: "As change requests come in, or on a fixed weekly slot",
+    purpose: "Decide, as a group, which proposed changes to scope, schedule or budget are worth their cost.",
+    agenda: [
+      "Read each change request: what, why, and who asked",
+      "Impact on schedule, budget, scope, and quality",
+      "Impact on risks and dependencies",
+      "Decision: approve, reject, or defer, with the reason",
+      "Update the plan and tell the people affected",
+    ],
+  },
+  {
+    name: "Project closeout",
+    cadence: "Once, as the project wraps up",
+    purpose: "Confirm the work is truly finished, hand it over cleanly, and release the team and vendors.",
+    agenda: [
+      "Walk the original success criteria: met, partly met, or not met",
+      "Outstanding items and who takes each one after closeout",
+      "Handover to the people who will run or support the result",
+      "Final budget position and any open invoices or contracts",
+      "Sign-off from the sponsor or client",
+      "Schedule the lessons-learned session",
     ],
   },
 ];
@@ -429,8 +509,9 @@ export default function Resources() {
           <>
             <h2 id="raid" style={{ marginTop: 36 }}>RAID log guide</h2>
             <p className="muted" style={{ maxWidth: 640, marginBottom: 16 }}>
-              Risks, Issues, Assumptions, and Dependencies -- the four things worth tracking
-              separately so nothing quietly falls through the cracks.
+              Risks, Issues, Assumptions, and Dependencies are the four classic things worth tracking
+              separately so nothing quietly falls through the cracks. Quality and Compliance sit
+              alongside them in Tasketra because they fail in the same way: quietly, until it is expensive.
             </p>
             <div className="resource-grid">
               {raidItems.map((r) => (

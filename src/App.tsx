@@ -17,6 +17,7 @@ const DecisionPublic = lazy(() => import("./pages/DecisionPublic"));
 const RoadmapPublic = lazy(() => import("./pages/RoadmapPublic"));
 const SharePublic = lazy(() => import("./pages/SharePublic"));
 const RaciPrint = lazy(() => import("./pages/RaciPrint"));
+const StakeholderPrint = lazy(() => import("./pages/StakeholderPrint"));
 const RiskPrint = lazy(() => import("./pages/RiskPrint"));
 const Resources = lazy(() => import("./pages/Resources"));
 const WhatsNew = lazy(() => import("./pages/WhatsNew"));
@@ -82,6 +83,7 @@ export default function App() {
             <Route path="/app/projects/:id" element={<Protected><ProjectHome /></Protected>} />
             <Route path="/app/projects/:id/print/risks" element={<Protected><RiskPrint /></Protected>} />
             <Route path="/app/projects/:id/print/raci" element={<Protected><RaciPrint /></Protected>} />
+            <Route path="/app/projects/:id/print/stakeholders" element={<Protected><StakeholderPrint /></Protected>} />
             <Route path="/s/:token" element={<SharePublic />} />
             <Route path="/d/:token" element={<DecisionPublic />} />
             <Route path="/r/:token" element={<RoadmapPublic />} />

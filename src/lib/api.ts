@@ -192,6 +192,8 @@ export type Stakeholder = {
   email: string | null;
   role: string | null;
   phone: string | null;
+  // How much influence they have over the project; interest_level is how much they care.
+  power_level: StakeholderInterest | null;
   interest_level: StakeholderInterest | null;
   preferred_contact: StakeholderContactMethod | null;
   notes: string | null;
@@ -668,7 +670,7 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ projectId, name, email, role, phone }),
     }),
-  updateStakeholder: (id: string, patch: Partial<Pick<Stakeholder, "name" | "role" | "email" | "phone" | "interest_level" | "preferred_contact" | "notes">>) =>
+  updateStakeholder: (id: string, patch: Partial<Pick<Stakeholder, "name" | "role" | "email" | "phone" | "power_level" | "interest_level" | "preferred_contact" | "notes">>) =>
     request<{ stakeholder: Stakeholder }>("/stakeholders", {
       method: "PATCH",
       body: JSON.stringify({
@@ -676,6 +678,7 @@ export const api = {
         // The newer contact fields are only sent when the caller set them; an
         // empty string or null clears the value on the server.
         ...("phone" in patch ? { phone: patch.phone ?? "" } : {}),
+        ...("power_level" in patch ? { powerLevel: patch.power_level ?? "" } : {}),
         ...("interest_level" in patch ? { interestLevel: patch.interest_level ?? "" } : {}),
         ...("preferred_contact" in patch ? { preferredContact: patch.preferred_contact ?? "" } : {}),
         ...("notes" in patch ? { notes: patch.notes ?? "" } : {}),

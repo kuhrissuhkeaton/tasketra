@@ -6,6 +6,7 @@ import { phaseProgress } from "../lib/phaseProgress";
 import { mailtoHref, telHref } from "../lib/contactLinks";
 import { LEVEL_LABEL, riskExposure as riskExposureLevel } from "../lib/riskExposure";
 import { ApplyTemplateDrawer } from "../components/ApplyTemplateDrawer";
+import { StakeholderGrid } from "../components/StakeholderGrid";
 import { RaciTab } from "../components/RaciTab";
 import { RiskMatrix } from "../components/RiskMatrix";
 import { Drawer } from "../components/ItemDrawer";
@@ -5013,7 +5014,9 @@ function StakeholdersTab({ projectId }: { projectId: string }) {
   const [editRole, setEditRole] = useState("");
   const [editEmail, setEditEmail] = useState("");
   const [editPhone, setEditPhone] = useState("");
+  const [editPower, setEditPower] = useState<StakeholderInterest | "">("");
   const [editInterest, setEditInterest] = useState<StakeholderInterest | "">("");
+  const [shView, setShView] = useState<"list" | "grid">("list");
   const [editContact, setEditContact] = useState<StakeholderContactMethod | "">("");
   const [editNotes, setEditNotes] = useState("");
   const [drawerError, setDrawerError] = useState("");
@@ -5053,6 +5056,7 @@ function StakeholdersTab({ projectId }: { projectId: string }) {
     setEditRole(s.role || "");
     setEditEmail(s.email || "");
     setEditPhone(s.phone || "");
+    setEditPower(s.power_level || "");
     setEditInterest(s.interest_level || "");
     setEditContact(s.preferred_contact || "");
     setEditNotes(s.notes || "");
@@ -5070,6 +5074,7 @@ function StakeholdersTab({ projectId }: { projectId: string }) {
       await api.updateStakeholder(drawerId, {
         name: editName.trim(), role: editRole || undefined, email: editEmail || undefined,
         phone: editPhone.trim() || null,
+        power_level: editPower || null,
         interest_level: editInterest || null,
         preferred_contact: editContact || null,
         notes: editNotes || null,
@@ -5102,9 +5107,18 @@ function StakeholdersTab({ projectId }: { projectId: string }) {
       </form>
       {error && <p className="form-error">{error}</p>}
 
+      <div className="view-toggle">
+        <button type="button" className={shView === "list" ? "btn btn-primary" : "btn btn-ghost"} onClick={() => setShView("list")}>List</button>
+        <button type="button" className={shView === "grid" ? "btn btn-primary" : "btn btn-ghost"} onClick={() => setShView("grid")}>Power / interest grid</button>
+        {shView === "grid" && <Link className="btn-link" to={`/app/projects/${projectId}/print/stakeholders`}>Print or save as PDF</Link>}
+      </div>
+
+      {shView === "grid" && <StakeholderGrid stakeholders={stakeholders} />}
+
+      {shView === "list" && (
       <ResizableTable id="stakeholders">
         <thead>
-          <tr><th>Name</th><th>Role</th><th>Interest</th><th>Prefers</th><th>Contact</th><th>Decisions</th><th></th></tr>
+          <tr><th>Name</th><th>Role</th><th>Power</th><th>Interest</th><th>Prefers</th><th>Contact</th><th>Decisions</th><th></th></tr>
         </thead>
         <tbody>
           {stakeholders.map((s) => {
@@ -5114,6 +5128,9 @@ function StakeholdersTab({ projectId }: { projectId: string }) {
               <tr key={s.id}>
                 <td>{s.name}</td>
                 <td>{s.role || "--"}</td>
+                <td>
+                  {s.power_level ? <span className="pill pill-navy">{INTEREST_LABEL[s.power_level]}</span> : "--"}
+                </td>
                 <td>
                   {s.interest_level ? <span className="pill pill-navy">{INTEREST_LABEL[s.interest_level]}</span> : "--"}
                 </td>
@@ -5132,10 +5149,11 @@ function StakeholdersTab({ projectId }: { projectId: string }) {
             );
           })}
           {stakeholders.length === 0 && (
-            <tr><td colSpan={7} className="muted">No stakeholders yet. Add one above to start your register.</td></tr>
+            <tr><td colSpan={8} className="muted">No stakeholders yet. Add one above to start your register.</td></tr>
           )}
         </tbody>
       </ResizableTable>
+      )}
 
       <Drawer
         open={!!drawerStakeholder}
@@ -5175,6 +5193,13 @@ function StakeholdersTab({ projectId }: { projectId: string }) {
               </div>
             )}
             <div className="drawer-field-row">
+              <div className="drawer-field">
+                <label>Power (influence)</label>
+                <select value={editPower} onChange={(e) => setEditPower(e.target.value as StakeholderInterest | "")}>
+                  <option value="">Not set</option>
+                  {Object.entries(INTEREST_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </select>
+              </div>
               <div className="drawer-field">
                 <label>Interest level</label>
                 <select value={editInterest} onChange={(e) => setEditInterest(e.target.value as StakeholderInterest | "")}>
@@ -6519,6 +6544,11 @@ function TemplatesTab({ projectId, projectName }: { projectId: string; projectNa
           <h4>RACI chart (print or share)</h4>
           <p className="muted">Your RACI as a printable page, with a read-only link for people outside Tasketra.</p>
           <Link className="btn btn-primary" to={`/app/projects/${projectId}/print/raci`}>Open printable page</Link>
+        </div>
+        <div className="template-card">
+          <h4>Stakeholder grid (print)</h4>
+          <p className="muted">Your stakeholders on a power and interest grid, as a printable page you can save as a PDF.</p>
+          <Link className="btn btn-primary" to={`/app/projects/${projectId}/print/stakeholders`}>Open printable page</Link>
         </div>
       </div>
     </div>

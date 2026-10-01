@@ -74,6 +74,11 @@ export function FormsAndDownloads() {
               <Link className="btn btn-primary" to={`/app/projects/${projectId}/print/raci`}>Open printable page</Link>
             </div>
             <div className="template-card">
+              <h4>Stakeholder grid</h4>
+              <p className="muted">Printable power / interest grid showing who to manage closely, keep satisfied, keep informed or monitor. Save as PDF.</p>
+              <Link className="btn btn-primary" to={`/app/projects/${projectId}/print/stakeholders`}>Open printable page</Link>
+            </div>
+            <div className="template-card">
               <h4>Weekly report</h4>
               <p className="muted">The week's progress, risks and next steps, ready to print or save as PDF.</p>
               <Link className="btn btn-primary" to={`/app/projects/${projectId}?tab=report`}>Open report</Link>

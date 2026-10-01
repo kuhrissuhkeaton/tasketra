@@ -21,7 +21,7 @@ export type TemplatePhase = { title: string; days: number };
 export type TemplateTask = { title: string; phase: number; day: number };
 export type TemplateMilestone = { title: string; day: number; type?: "milestone" | "release" };
 export type TemplateRisk = { title: string; description: string; probability: Level; impact: Level; mitigation: string };
-export type TemplateStakeholder = { name: string; role: string; interest: Level; notes: string };
+export type TemplateStakeholder = { name: string; role: string; power: Level; interest: Level; notes: string };
 
 export type ProjectTemplate = {
   id: TemplateId;
@@ -83,11 +83,11 @@ const processImprovement: ProjectTemplate = {
     { title: "Rollout collides with a busy period", description: "Training and change land when people have the least time for them.", probability: "low", impact: "medium", mitigation: "Check the business calendar before fixing rollout dates." },
   ],
   stakeholders: [
-    { name: "Executive sponsor", role: "Sponsor", interest: "high", notes: PLACEHOLDER },
-    { name: "Process owner", role: "Owns the process after the project ends", interest: "high", notes: PLACEHOLDER },
-    { name: "Front-line representative", role: "Does the work today", interest: "high", notes: PLACEHOLDER },
-    { name: "Finance partner", role: "Validates cost and savings", interest: "medium", notes: PLACEHOLDER },
-    { name: "Systems / IT contact", role: "Tools and data", interest: "medium", notes: PLACEHOLDER },
+    { name: "Executive sponsor", role: "Sponsor", power: "high", interest: "high", notes: PLACEHOLDER },
+    { name: "Process owner", role: "Owns the process after the project ends", power: "high", interest: "high", notes: PLACEHOLDER },
+    { name: "Front-line representative", role: "Does the work today", power: "low", interest: "high", notes: PLACEHOLDER },
+    { name: "Finance partner", role: "Validates cost and savings", power: "medium", interest: "medium", notes: PLACEHOLDER },
+    { name: "Systems / IT contact", role: "Tools and data", power: "medium", interest: "medium", notes: PLACEHOLDER },
   ],
   assumptions: [
     "Front-line staff can be released for interviews and training",
@@ -138,11 +138,11 @@ const eventCampaign: ProjectTemplate = {
     { title: "Technical or logistics failure on the day", description: "Audio, streaming, access or timing breaks live.", probability: "low", impact: "medium", mitigation: "Run a full test beforehand and keep a one-page problem plan for the day." },
   ],
   stakeholders: [
-    { name: "Executive sponsor", role: "Holds the budget", interest: "high", notes: PLACEHOLDER },
-    { name: "Event or campaign lead", role: "Day-to-day owner", interest: "high", notes: PLACEHOLDER },
-    { name: "Key vendor or venue contact", role: "Delivers the main supplier work", interest: "medium", notes: PLACEHOLDER },
-    { name: "Brand or communications approver", role: "Signs off messages and creative", interest: "medium", notes: PLACEHOLDER },
-    { name: "Sales or customer-facing team", role: "Follows up with attendees and leads", interest: "medium", notes: PLACEHOLDER },
+    { name: "Executive sponsor", role: "Holds the budget", power: "high", interest: "high", notes: PLACEHOLDER },
+    { name: "Event or campaign lead", role: "Day-to-day owner", power: "medium", interest: "high", notes: PLACEHOLDER },
+    { name: "Key vendor or venue contact", role: "Delivers the main supplier work", power: "medium", interest: "medium", notes: PLACEHOLDER },
+    { name: "Brand or communications approver", role: "Signs off messages and creative", power: "high", interest: "medium", notes: PLACEHOLDER },
+    { name: "Sales or customer-facing team", role: "Follows up with attendees and leads", power: "low", interest: "medium", notes: PLACEHOLDER },
   ],
   assumptions: [
     "The budget is approved before any vendor is contracted",
@@ -196,11 +196,11 @@ const softwareLaunch: ProjectTemplate = {
     { title: "A key person becomes unavailable", description: "One person holds knowledge nobody else has.", probability: "low", impact: "high", mitigation: "Pair on critical areas and keep decisions written down." },
   ],
   stakeholders: [
-    { name: "Executive sponsor", role: "Funds and backs the launch", interest: "high", notes: PLACEHOLDER },
-    { name: "Product owner", role: "Decides what is built and in what order", interest: "high", notes: PLACEHOLDER },
-    { name: "Tech lead", role: "Owns how it is built", interest: "high", notes: PLACEHOLDER },
-    { name: "User representative", role: "Speaks for the people who will use it", interest: "medium", notes: PLACEHOLDER },
-    { name: "Support or operations lead", role: "Runs it after launch", interest: "medium", notes: PLACEHOLDER },
+    { name: "Executive sponsor", role: "Funds and backs the launch", power: "high", interest: "high", notes: PLACEHOLDER },
+    { name: "Product owner", role: "Decides what is built and in what order", power: "high", interest: "high", notes: PLACEHOLDER },
+    { name: "Tech lead", role: "Owns how it is built", power: "medium", interest: "high", notes: PLACEHOLDER },
+    { name: "User representative", role: "Speaks for the people who will use it", power: "low", interest: "medium", notes: PLACEHOLDER },
+    { name: "Support or operations lead", role: "Runs it after launch", power: "medium", interest: "medium", notes: PLACEHOLDER },
   ],
   assumptions: [
     "The team keeps its planned capacity through the build",
@@ -257,11 +257,11 @@ const construction: ProjectTemplate = {
     { title: "A safety incident on site", description: "An injury stops work and may trigger an investigation.", probability: "low", impact: "high", mitigation: "Site safety plan, daily briefings and a contractor with a good record." },
   ],
   stakeholders: [
-    { name: "Owner / executive sponsor", role: "Funds the project and signs off", interest: "high", notes: PLACEHOLDER },
-    { name: "Architect or designer", role: "Design and drawings", interest: "high", notes: PLACEHOLDER },
-    { name: "General contractor", role: "Builds it", interest: "high", notes: PLACEHOLDER },
-    { name: "Permit authority / inspector", role: "Approves and inspects", interest: "medium", notes: PLACEHOLDER },
-    { name: "Facilities or end-user representative", role: "Uses the space afterwards", interest: "medium", notes: PLACEHOLDER },
+    { name: "Owner / executive sponsor", role: "Funds the project and signs off", power: "high", interest: "high", notes: PLACEHOLDER },
+    { name: "Architect or designer", role: "Design and drawings", power: "medium", interest: "high", notes: PLACEHOLDER },
+    { name: "General contractor", role: "Builds it", power: "medium", interest: "high", notes: PLACEHOLDER },
+    { name: "Permit authority / inspector", role: "Approves and inspects", power: "high", interest: "medium", notes: PLACEHOLDER },
+    { name: "Facilities or end-user representative", role: "Uses the space afterwards", power: "low", interest: "medium", notes: PLACEHOLDER },
   ],
   assumptions: [
     "The site is accessible and has no unknown conditions",
