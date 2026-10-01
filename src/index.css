@@ -1509,3 +1509,10 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
 }
 a.btn { text-decoration: none; }
 .raci-legend + .risk-doc-note { margin-top: 10px; }
+
+/* --- Add a template to an existing project (v88) --- */
+.apply-tpl-table { width: 100%; border-collapse: collapse; font-size: 14px; margin: 12px 0; }
+.apply-tpl-table th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--slate); border-bottom: 2px solid var(--border); padding: 6px 8px; }
+.apply-tpl-table td { padding: 8px; border-bottom: 1px solid var(--border); }
+.apply-tpl-actions { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+.apply-tpl .forms-pick { margin: 10px 0; }

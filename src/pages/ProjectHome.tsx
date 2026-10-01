@@ -5,6 +5,7 @@ import { RoadmapTimeline, ROADMAP_TYPE_LABEL, ROADMAP_STATUS_LABEL, ROADMAP_TYPE
 import { phaseProgress } from "../lib/phaseProgress";
 import { mailtoHref, telHref } from "../lib/contactLinks";
 import { LEVEL_LABEL, riskExposure as riskExposureLevel } from "../lib/riskExposure";
+import { ApplyTemplateDrawer } from "../components/ApplyTemplateDrawer";
 import { RaciTab } from "../components/RaciTab";
 import { RiskMatrix } from "../components/RiskMatrix";
 import { Drawer } from "../components/ItemDrawer";
@@ -4218,6 +4219,7 @@ function RoadmapTab({ projectId, isOwner, showBudget }: { projectId: string; isO
   const [editDescription, setEditDescription] = useState("");
 
   const [showForm, setShowForm] = useState(false);
+  const [showTemplate, setShowTemplate] = useState(false);
   const [project, setProject] = useState<Project | null>(null);
   const [shareBusy, setShareBusy] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -4390,6 +4392,13 @@ function RoadmapTab({ projectId, isOwner, showBudget }: { projectId: string; isO
       <button className="btn btn-primary" onClick={() => setShowForm((v) => !v)} type="button">
         {showForm ? "Cancel" : "New roadmap item"}
       </button>
+      {isOwner && (
+        <>
+          {" "}
+          <button className="btn btn-ghost" onClick={() => setShowTemplate(true)} type="button">Add from a template</button>
+          <ApplyTemplateDrawer open={showTemplate} onClose={() => setShowTemplate(false)} projectId={projectId} onApplied={load} />
+        </>
+      )}
 
       {showForm && (
         <form className="stacked-form" onSubmit={addItem} style={{ marginTop: 16 }}>

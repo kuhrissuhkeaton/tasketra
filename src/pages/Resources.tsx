@@ -6,6 +6,7 @@ import { api } from "../lib/api";
 import { PROJECT_TEMPLATES, planPhases, templateSummary } from "../lib/projectTemplates";
 import { APPROACH_LABEL } from "../lib/projectView";
 import { GUIDE_STAGES } from "../lib/hubGuide";
+import { ApplyTemplateDrawer } from "../components/ApplyTemplateDrawer";
 import { FormsAndDownloads } from "../components/FormsAndDownloads";
 import { ProjectFlowGuide } from "../components/ProjectFlowGuide";
 
@@ -199,6 +200,7 @@ const STATUS_REPORT_TIPS: string[] = [
 export default function Resources() {
   const [query, setQuery] = useState("");
   const [replaying, setReplaying] = useState(false);
+  const [applyTemplateId, setApplyTemplateId] = useState<string | null>(null);
   const [replayNotice, setReplayNotice] = useState<string | null>(null);
   const navigate = useNavigate();
   const { hash } = useLocation();
@@ -349,12 +351,17 @@ export default function Resources() {
                     <button type="button" className="btn btn-primary" onClick={() => navigate(`/app?template=${t.id}`)}>
                       Start a project from this
                     </button>
+                    <button type="button" className="btn btn-ghost" onClick={() => setApplyTemplateId(t.id)}>
+                      Add to an existing project
+                    </button>
                   </div>
                 );
               })}
             </div>
           </>
         )}
+
+        <ApplyTemplateDrawer open={applyTemplateId !== null} onClose={() => setApplyTemplateId(null)} templateId={applyTemplateId ?? undefined} />
 
         {forms.length > 0 && (
           <>

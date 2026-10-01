@@ -258,6 +258,17 @@ export type Risk = {
   resolved_at: string | null;
 };
 
+export type TemplateCategorySummary = { add: string[]; skip: string[] };
+export type TemplatePlanSummary = {
+  phases: TemplateCategorySummary;
+  milestones: TemplateCategorySummary;
+  tasks: TemplateCategorySummary;
+  risks: TemplateCategorySummary;
+  assumptions: TemplateCategorySummary;
+  stakeholders: TemplateCategorySummary;
+  totalToAdd: number;
+};
+
 export type ShareKind = "risk-matrix" | "raci";
 
 export type RaciRow = { id: string; type: string; title: string; start_date: string | null; end_date: string | null };
@@ -1056,6 +1067,14 @@ export const api = {
     request<{ link: null }>(`/share-links?projectId=${projectId}&kind=${kind}`, { method: "DELETE" }),
   getSharedDocument: (token: string) =>
     request<SharedDocument>(`/share-public?token=${encodeURIComponent(token)}`),
+
+  // Add a template's skeleton to a project that already has work (owner only).
+  // preview: true writes nothing and returns what would be added or skipped.
+  applyTemplateToProject: (projectId: string, templateId: string, preview: boolean) =>
+    request<{ summary: TemplatePlanSummary; applied: boolean }>("/template-apply", {
+      method: "POST",
+      body: JSON.stringify({ projectId, templateId, preview }),
+    }),
 
   getRaci: (projectId: string) => request<RaciData>(`/raci?projectId=${projectId}`),
   setRaciCell: (projectId: string, itemId: string, personKey: string, role: RaciRole | null) =>

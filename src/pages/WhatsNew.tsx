@@ -9,6 +9,12 @@ type ChangeEntry = { version: string; date: string; title: string; body: string 
 // they can do.
 const CHANGES: ChangeEntry[] = [
   {
+    version: "v88",
+    date: "October 2026",
+    title: "Add a template to a project you already have",
+    body: "Templates are no longer only for new projects. On a project's Roadmap tab (if you own it) choose Add from a template, or on a template card in the Resource hub choose Add to an existing project. Tasketra shows a preview first, split into what it will add and what is already there, and nothing is saved until you confirm. It only adds: anything you already have is left exactly as it is, and items with the same name as one you already have are skipped, so running it twice never doubles things up. New tasks attach to your existing phase when the names match. Thanks to a founding member for the idea.",
+  },
+  {
     version: "v87",
     date: "October 2026",
     title: "A real RACI chart",

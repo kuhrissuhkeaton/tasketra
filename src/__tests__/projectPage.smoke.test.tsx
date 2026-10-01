@@ -57,6 +57,10 @@ beforeAll(() => {
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
   // jsdom lacks these; the app uses them for layout and scrolling.
   (globalThis as any).ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
+  // jsdom has no layout, so Range measuring (used by ResizableTable) needs a stub
+  const zero = { width: 0, height: 0, top: 0, left: 0, right: 0, bottom: 0, x: 0, y: 0, toJSON() {} };
+  (Range.prototype as any).getBoundingClientRect = () => zero;
+  (Range.prototype as any).getClientRects = () => [];
   window.matchMedia = window.matchMedia || ((q: string) => ({ matches: false, media: q, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, onchange: null, dispatchEvent: () => false }) as any);
   Element.prototype.scrollIntoView = () => {};
   window.scrollTo = (() => {}) as any;
