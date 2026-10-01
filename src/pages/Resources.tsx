@@ -6,6 +6,7 @@ import { api } from "../lib/api";
 import { PROJECT_TEMPLATES, planPhases, templateSummary } from "../lib/projectTemplates";
 import { APPROACH_LABEL } from "../lib/projectView";
 import { GUIDE_STAGES } from "../lib/hubGuide";
+import { FormsAndDownloads } from "../components/FormsAndDownloads";
 import { ProjectFlowGuide } from "../components/ProjectFlowGuide";
 
 type Methodology = { name: string; points: string[]; bestWhen: string };
@@ -240,10 +241,12 @@ export default function Resources() {
     matches(t.name, t.blurb, t.bestFor, "template", "templates", "skeleton", ...t.phases.map((p) => p.title), ...t.tasks.map((x) => x.title), ...t.risks.map((x) => x.title)));
   const guideStages = GUIDE_STAGES.filter((st) =>
     matches(st.name, st.goal, st.checklist, "tasketra", "how it works", "stage", "guide", ...st.steps.flatMap((x) => [x.title, x.tab, x.why])));
+  const forms = matches("forms", "downloads", "printable", "charter", "risk register", "risk matrix", "raci", "weekly report", "pdf", "share") ? [1] : [];
   const statusTips = STATUS_REPORT_TIPS.filter((t) => matches(t, "status report", "status update"));
 
   const sections = [
     { id: "templates", label: "Templates", show: templates.length > 0 },
+    { id: "forms", label: "Forms & downloads", show: forms.length > 0 },
     { id: "how-it-works", label: "How it works", show: guideStages.length > 0 },
     { id: "methodologies", label: "Methodologies", show: methodologies.length > 0 },
     { id: "formulas", label: "EVM formulas", show: formulas.length > 0 },
@@ -259,7 +262,7 @@ export default function Resources() {
   }
 
   const nothingMatches =
-    templates.length === 0 && guideStages.length === 0 && methodologies.length === 0 && formulas.length === 0 && raidItems.length === 0 &&
+    templates.length === 0 && forms.length === 0 && guideStages.length === 0 && methodologies.length === 0 && formulas.length === 0 && raidItems.length === 0 &&
     quadrants.length === 0 && meetings.length === 0 && statusTips.length === 0;
 
   return (
@@ -272,7 +275,7 @@ export default function Resources() {
         </div>
         <p className="muted" style={{ marginBottom: 20, maxWidth: 640 }}>
           Starting points and plain-English reference for running a project: templates to start from,
-          a map of how a project runs in Tasketra, then methodologies, EVM formulas, RAID log practice,
+          forms and downloads to hand to others, a map of how a project runs in Tasketra, then methodologies, EVM formulas, RAID log practice,
           stakeholder mapping, meeting templates, and status reporting. The reference sections are
           read-only; your project's own tabs hold the live data. Templates are the one exception:
           starting from one creates a new project for you.
@@ -353,9 +356,21 @@ export default function Resources() {
           </>
         )}
 
+        {forms.length > 0 && (
+          <>
+            <h2 id="forms" style={{ marginTop: templates.length > 0 ? 36 : undefined }}>Forms &amp; downloads</h2>
+            <p className="muted" style={{ maxWidth: 640, marginTop: 4 }}>
+              Documents to hand to a sponsor, client or team, built from a project's live data. Word
+              files download straight away; the risk page and weekly report print or save as PDF from
+              your browser. Pick the project below.
+            </p>
+            <FormsAndDownloads />
+          </>
+        )}
+
         {guideStages.length > 0 && (
           <>
-            <h2 id="how-it-works" style={{ marginTop: templates.length > 0 ? 36 : undefined }}>How a project runs in Tasketra</h2>
+            <h2 id="how-it-works" style={{ marginTop: templates.length > 0 || forms.length > 0 ? 36 : undefined }}>How a project runs in Tasketra</h2>
             <p className="muted" style={{ maxWidth: 640, marginTop: 4 }}>
               Every project moves through four stages. Pick one to see what to do in it and which tab to do
               it in. Your project's Home tab shows a short checklist for the stage you are in, built from
@@ -367,7 +382,7 @@ export default function Resources() {
 
         {methodologies.length > 0 && (
           <>
-            <h2 id="methodologies" style={{ marginTop: templates.length > 0 || guideStages.length > 0 ? 36 : undefined }}>Methodologies</h2>
+            <h2 id="methodologies" style={{ marginTop: templates.length > 0 || forms.length > 0 || guideStages.length > 0 ? 36 : undefined }}>Methodologies</h2>
             <div className="resource-grid">
               {methodologies.map((m) => (
                 <div className="resource-card" key={m.name}>

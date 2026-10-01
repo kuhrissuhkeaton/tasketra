@@ -27,7 +27,7 @@ const HIDDEN: Record<ProjectSize, string[]> = {
   light: [
     "budget", "meetings",
     "okrs", "assumptions", "dependencies", "quality", "compliance",
-    "procurement", "comms", "templates", "export", "connections",
+    "procurement", "comms", "export", "connections",
   ],
   standard: ["quality", "compliance", "comms"],
   full: [],

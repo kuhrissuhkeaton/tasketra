@@ -168,7 +168,7 @@ describe("size-aware checklist", () => {
   });
 
   it("no suggestion in any stage points at a tab Light hides", () => {
-    const hidden = ["budget", "meetings", "okrs", "assumptions", "dependencies", "quality", "compliance", "procurement", "comms", "templates", "export", "connections"];
+    const hidden = ["budget", "meetings", "okrs", "assumptions", "dependencies", "quality", "compliance", "procurement", "comms", "export", "connections"];
     const busy = { ...EMPTY, tasks: 5, datedTasks: 2, openRisks: 3, staleRisks: 3, openChangeRequests: 1, hasBudgetBaseline: true, cpi: 0.7, openIssues: 1 };
     for (const stage of ["initiate", "plan", "execute", "close"] as const) {
       for (const it of stageChecklist(stage, busy, "light").items) expect(hidden).not.toContain(it.tab);

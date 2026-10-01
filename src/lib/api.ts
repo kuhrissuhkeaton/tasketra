@@ -257,6 +257,15 @@ export type Risk = {
   resolved_at: string | null;
 };
 
+export type SharedRisk = {
+  title: string;
+  probability: Risk["probability"];
+  impact: Risk["impact"];
+  mitigation: string | null;
+  owner_name: string | null;
+  status: Risk["status"];
+};
+
 export type WaitlistSignup = {
   id: string;
   email: string;
@@ -1023,6 +1032,19 @@ export const api = {
     request<{ project: Project }>("/project", { method: "PATCH", body: JSON.stringify({ id: projectId, regenerateRoadmapToken: true }) }),
   getPublicRoadmap: (token: string) =>
     request<{ project: { name: string }; items: RoadmapItem[] }>(`/roadmap-public?token=${token}`),
+
+  // Read-only share links for printable documents (owner-only to manage).
+  getShareLink: (projectId: string, kind: "risk-matrix") =>
+    request<{ link: { token: string; created_at: string } | null }>(`/share-links?projectId=${projectId}&kind=${kind}`),
+  createShareLink: (projectId: string, kind: "risk-matrix", regenerate = false) =>
+    request<{ link: { token: string; created_at: string } | null }>("/share-links", {
+      method: "POST",
+      body: JSON.stringify({ projectId, kind, regenerate }),
+    }),
+  stopShareLink: (projectId: string, kind: "risk-matrix") =>
+    request<{ link: null }>(`/share-links?projectId=${projectId}&kind=${kind}`, { method: "DELETE" }),
+  getSharedDocument: (token: string) =>
+    request<{ kind: "risk-matrix"; project: { name: string }; risks: SharedRisk[] }>(`/share-public?token=${encodeURIComponent(token)}`),
 
   getWebhookSettings: () => request<{ webhook_url: string | null }>("/webhook-settings"),
   setWebhookSettings: (webhookUrl: string) =>

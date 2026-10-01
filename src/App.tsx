@@ -15,6 +15,8 @@ const Dashboard = lazy(() => import("./pages/Dashboard"));
 const ProjectHome = lazy(() => import("./pages/ProjectHome"));
 const DecisionPublic = lazy(() => import("./pages/DecisionPublic"));
 const RoadmapPublic = lazy(() => import("./pages/RoadmapPublic"));
+const SharePublic = lazy(() => import("./pages/SharePublic"));
+const RiskPrint = lazy(() => import("./pages/RiskPrint"));
 const Resources = lazy(() => import("./pages/Resources"));
 const WhatsNew = lazy(() => import("./pages/WhatsNew"));
 const Billing = lazy(() => import("./pages/Billing"));
@@ -77,6 +79,8 @@ export default function App() {
             <Route path="/admin/feedback" element={<AdminProtected><AdminFeedback /></AdminProtected>} />
             <Route path="/admin/founding-members" element={<AdminProtected><AdminFoundingMembers /></AdminProtected>} />
             <Route path="/app/projects/:id" element={<Protected><ProjectHome /></Protected>} />
+            <Route path="/app/projects/:id/print/risks" element={<Protected><RiskPrint /></Protected>} />
+            <Route path="/s/:token" element={<SharePublic />} />
             <Route path="/d/:token" element={<DecisionPublic />} />
             <Route path="/r/:token" element={<RoadmapPublic />} />
             <Route path="/legal" element={<LegalHub />} />

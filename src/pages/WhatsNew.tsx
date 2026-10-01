@@ -9,6 +9,12 @@ type ChangeEntry = { version: string; date: string; title: string; body: string 
 // they can do.
 const CHANGES: ChangeEntry[] = [
   {
+    version: "v86",
+    date: "October 2026",
+    title: "Printable risk matrix, share links, and a Forms & downloads section",
+    body: "The Resource hub has a new Forms & downloads section: pick a project and download its Charter, Risk Register or RACI starter as Word files, or open a printable risk matrix and register that you can save as a PDF from your browser's print dialog. If you own the project you can also create a read-only link to that page for a sponsor or client who does not have a Tasketra account. They see open and monitoring risks with title, probability, impact, mitigation and owner, and never descriptions or resolved items; you can make a new link or stop sharing at any time. The Templates tab, which holds these documents, is no longer hidden on Light projects. Thanks to a founding member for the idea.",
+  },
+  {
     version: "v85",
     date: "October 2026",
     title: "Find the how-it-works guide from your Dashboard",

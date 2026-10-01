@@ -4,6 +4,8 @@ import { api, ApiError, type Project, type Task, type Stakeholder, type Decision
 import { RoadmapTimeline, ROADMAP_TYPE_LABEL, ROADMAP_STATUS_LABEL, ROADMAP_TYPE_COLOR, fmtRoadmapDate } from "../components/RoadmapTimeline";
 import { phaseProgress } from "../lib/phaseProgress";
 import { mailtoHref, telHref } from "../lib/contactLinks";
+import { LEVEL_LABEL, riskExposure as riskExposureLevel } from "../lib/riskExposure";
+import { RiskMatrix } from "../components/RiskMatrix";
 import { Drawer } from "../components/ItemDrawer";
 import { tasksToICS, downloadICS } from "../lib/ics";
 import { fmtDate, fmtDateTime, fmtLocalDate } from "../lib/format";
@@ -140,18 +142,7 @@ const RISK_STATUS_LABEL: Record<Risk["status"], string> = {
   resolved: "Resolved",
 };
 
-const LEVEL_LABEL: Record<Risk["probability"], string> = {
-  low: "Low",
-  medium: "Medium",
-  high: "High",
-};
-
-function riskExposure(probability: Risk["probability"], impact: Risk["impact"]): "low" | "medium" | "high" {
-  if (probability === "high" && impact === "high") return "high";
-  if (probability === "high" || impact === "high") return "medium";
-  if (probability === "low" && impact === "low") return "low";
-  return "medium";
-}
+const riskExposure = riskExposureLevel;
 
 const EXPOSURE_PILL: Record<"low" | "medium" | "high", string> = {
   low: "pill-green",
@@ -2011,34 +2002,10 @@ function RisksTab({ projectId, highlightId }: { projectId: string; highlightId?:
             Open and monitoring risks only, placed by probability and impact. Exposure (low/medium/high)
             is the same read used everywhere else in RAID.
           </p>
-          <div className="risk-matrix-wrap">
-            <div className="risk-matrix-axis-y">Impact</div>
-            <div className="risk-matrix">
-              <div className="risk-matrix-corner" />
-              {(["low", "medium", "high"] as Risk["probability"][]).map((p) => (
-                <div key={p} className="risk-matrix-col-label">{LEVEL_LABEL[p]}</div>
-              ))}
-              {(["high", "medium", "low"] as Risk["impact"][]).map((impact) => (
-                <Fragment key={impact}>
-                  <div className="risk-matrix-row-label">{LEVEL_LABEL[impact]}</div>
-                  {(["low", "medium", "high"] as Risk["probability"][]).map((probability) => {
-                    const cellRisks = risks.filter((r) => r.status !== "resolved" && r.probability === probability && r.impact === impact);
-                    const exposure = riskExposure(probability, impact);
-                    return (
-                      <div key={probability} className={`risk-matrix-cell risk-matrix-cell-${exposure}`}>
-                        <div className="risk-matrix-cell-count">{cellRisks.length}</div>
-                        {cellRisks.slice(0, 4).map((r) => (
-                          <div key={r.id} className="risk-matrix-chip" title={r.title}>{r.title}</div>
-                        ))}
-                        {cellRisks.length > 4 && <div className="risk-matrix-chip muted">+{cellRisks.length - 4} more</div>}
-                      </div>
-                    );
-                  })}
-                </Fragment>
-              ))}
-            </div>
-          </div>
-          <div className="risk-matrix-axis-x">Probability</div>
+          <RiskMatrix risks={risks.filter((r) => r.status !== "resolved")} />
+          <p style={{ marginTop: 12 }}>
+            <Link to={`/app/projects/${projectId}/print/risks`}>Print or share the matrix and register →</Link>
+          </p>
         </div>
       ) : view === "board" ? (
         <div className="kanban-board">
@@ -6531,6 +6498,11 @@ function TemplatesTab({ projectId, projectName }: { projectId: string; projectNa
             </button>
           </div>
         ))}
+        <div className="template-card">
+          <h4>Risk matrix (print or share)</h4>
+          <p className="muted">A printable probability and impact grid plus the full register. Save it as a PDF from the print dialog, or create a read-only link for someone outside Tasketra.</p>
+          <Link className="btn btn-primary" to={`/app/projects/${projectId}/print/risks`}>Open printable page</Link>
+        </div>
       </div>
     </div>
   );
