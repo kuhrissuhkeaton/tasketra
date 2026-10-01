@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { AppSidebar } from "../components/AppSidebar";
 import { ResizableTable } from "../components/ResizableTable";
 import { api } from "../lib/api";
@@ -200,7 +200,20 @@ export default function Resources() {
   const [replaying, setReplaying] = useState(false);
   const [replayNotice, setReplayNotice] = useState<string | null>(null);
   const navigate = useNavigate();
+  const { hash } = useLocation();
   const q = query.trim().toLowerCase();
+
+  // Arriving with #section in the link (for example from the Dashboard tip)
+  // scrolls to that section; the jump links only handled clicks before.
+  useEffect(() => {
+    if (!hash) return;
+    const id = decodeURIComponent(hash.slice(1));
+    const timer = window.setTimeout(() => {
+      const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+      document.getElementById(id)?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [hash]);
 
   async function replayTour() {
     setReplaying(true);

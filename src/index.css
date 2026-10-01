@@ -1417,3 +1417,24 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
   .flow-steps li { grid-template-columns: 1fr; gap: 6px; }
   .flow-setup-grid { grid-template-columns: 1fr; gap: 14px; }
 }
+
+/* Dashboard: pointer to the Resource hub */
+.projects-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.projects-head h3 { margin: 0; }
+.projects-head-link { font-size: 13px; }
+.hub-tip {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+  background: var(--tint); border: 1px solid var(--gold); border-radius: var(--radius-sm);
+  padding: 10px 14px; margin: 0 0 16px; font-size: 14px;
+}
+.hub-tip p { margin: 0; }
+.hub-tip a { font-weight: 600; color: var(--navy); text-decoration: underline; text-underline-offset: 2px; }
+.hub-tip a:hover { background: var(--tint-strong); }
+.hub-tip-close {
+  background: none; border: none; font-size: 20px; line-height: 1; color: var(--slate); cursor: pointer;
+  padding: 0 4px; border-radius: 6px;
+}
+.hub-tip-close:hover { color: var(--navy); background: var(--tint-strong); }
+.hub-tip-close:focus-visible { outline: 2px solid var(--navy); outline-offset: 1px; }
+.projects-head-link { text-decoration: none; }
+.projects-head-link:hover { text-decoration: underline; }

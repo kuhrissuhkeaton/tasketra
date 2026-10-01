@@ -10,6 +10,7 @@ import { useConfirm } from "../components/ConfirmDialog";
 import { ResizableTable } from "../components/ResizableTable";
 import { useAuth } from "../lib/auth-context";
 import { fmtDateTime, fmtLocalDate } from "../lib/format";
+import { shouldShowHubTip, HUB_TIP_STORAGE_KEY } from "../lib/hubTip";
 
 const TASK_STATUS_ORDER: Task["status"][] = ["not_started", "in_progress", "blocked", "done"];
 
@@ -265,6 +266,23 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [newName, setNewName] = useState("");
   const [searchParams] = useSearchParams();
+  // Per-browser convenience only: if storage is unavailable the tip simply
+  // shows again, which is harmless.
+  const [hubTipDismissed, setHubTipDismissed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(HUB_TIP_STORAGE_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  function dismissHubTip() {
+    setHubTipDismissed(true);
+    try {
+      localStorage.setItem(HUB_TIP_STORAGE_KEY, "1");
+    } catch {
+      // ignore
+    }
+  }
   const [seedExample, setSeedExample] = useState(false);
   // Pre-selected when arriving from the Resource Hub ("Start a project from this").
   const [templateId, setTemplateId] = useState<string>(() => {
@@ -464,7 +482,21 @@ export default function Dashboard() {
           </div>
         ) : null}
 
-        <h3 style={{ marginBottom: 12 }}>Your projects</h3>
+        <div className="projects-head">
+          <h3>Your projects</h3>
+          <Link to="/app/resources#how-it-works" className="btn-link projects-head-link">How a project runs in Tasketra</Link>
+        </div>
+
+        {shouldShowHubTip({ loading, projectCount: projects.length, dismissed: hubTipDismissed }) && (
+          <div className="hub-tip" role="note">
+            <p>
+              <strong>New here?</strong> See{" "}
+              <Link to="/app/resources#how-it-works">how a project runs from Initiate to Close</Link>, or{" "}
+              <Link to="/app/resources#templates">start from a template</Link> for a ready-made skeleton.
+            </p>
+            <button type="button" className="hub-tip-close" aria-label="Dismiss this tip" onClick={dismissHubTip}>×</button>
+          </div>
+        )}
 
         <form className="inline-form" onSubmit={createProject}>
           <input

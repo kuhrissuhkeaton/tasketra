@@ -9,6 +9,12 @@ type ChangeEntry = { version: string; date: string; title: string; body: string 
 // they can do.
 const CHANGES: ChangeEntry[] = [
   {
+    version: "v85",
+    date: "October 2026",
+    title: "Find the how-it-works guide from your Dashboard",
+    body: "The Dashboard now points to the Resource hub's guide to how a project runs. There is a small link beside Your projects, and if you have two projects or fewer a short tip that you can dismiss, with a second link to the project templates. Both links take you straight to the right section of the Resource hub, which now scrolls there when you arrive.",
+  },
+  {
     version: "v84",
     date: "October 2026",
     title: "A map of how a project runs, and an easier Resource hub",
