@@ -21,6 +21,8 @@ export type GuideStep = {
 export type GuideStage = {
   id: "initiate" | "plan" | "execute" | "close";
   name: string;
+  /** A few words for the stage picker. */
+  short: string;
   goal: string;
   steps: GuideStep[];
   /** What the Next up checklist on the project's Home tab asks for in this stage. */
@@ -31,6 +33,7 @@ export const GUIDE_STAGES: GuideStage[] = [
   {
     id: "initiate",
     name: "Initiate",
+    short: "Why it exists",
     goal: "Agree why the project exists and who it is for, before anyone builds anything.",
     steps: [
       { title: "Write the charter", tab: "Charter", why: "Purpose, scope, success measures and sponsor in one place. The sponsor can approve it from a link, no login needed." },
@@ -43,6 +46,7 @@ export const GUIDE_STAGES: GuideStage[] = [
   {
     id: "plan",
     name: "Plan",
+    short: "Schedule and budget",
     goal: "Turn the idea into a schedule, a budget and a baseline you can measure against.",
     steps: [
       { title: "Lay out phases and milestones", tab: "Roadmap", why: "Phases, milestones and releases on a timeline, grouped by swimlane. Share a read-only link with people outside the project." },
@@ -56,6 +60,7 @@ export const GUIDE_STAGES: GuideStage[] = [
   {
     id: "execute",
     name: "Execute",
+    short: "Do it, check weekly",
     goal: "Do the work and keep a weekly pulse on whether it is on track.",
     steps: [
       { title: "Work the plan and keep tasks current", tab: "Tasks", why: "List, board and Gantt views of the same tasks. Blocked and overdue tasks surface on Home." },
@@ -69,6 +74,7 @@ export const GUIDE_STAGES: GuideStage[] = [
   {
     id: "close",
     name: "Close",
+    short: "Finish cleanly",
     goal: "Finish cleanly, so the next project starts smarter.",
     steps: [
       { title: "Work through the closure checklist", tab: "Closure", why: "Five items: final lessons, open items resolved, budget reconciled, stakeholder sign-off, documents archived. Nothing here blocks you from closing." },

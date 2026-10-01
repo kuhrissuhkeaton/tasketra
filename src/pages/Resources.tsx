@@ -4,8 +4,9 @@ import { AppSidebar } from "../components/AppSidebar";
 import { ResizableTable } from "../components/ResizableTable";
 import { api } from "../lib/api";
 import { PROJECT_TEMPLATES, planPhases, templateSummary } from "../lib/projectTemplates";
-import { APPROACH_LABEL, SIZE_LABEL, SIZE_BLURB, APPROACH_BLURB, type ProjectSize, type ProjectApproach } from "../lib/projectView";
-import { GUIDE_STAGES, GUIDE_PRINCIPLE } from "../lib/hubGuide";
+import { APPROACH_LABEL } from "../lib/projectView";
+import { GUIDE_STAGES } from "../lib/hubGuide";
+import { ProjectFlowGuide } from "../components/ProjectFlowGuide";
 
 type Methodology = { name: string; points: string[]; bestWhen: string };
 
@@ -343,49 +344,11 @@ export default function Resources() {
           <>
             <h2 id="how-it-works" style={{ marginTop: templates.length > 0 ? 36 : undefined }}>How a project runs in Tasketra</h2>
             <p className="muted" style={{ maxWidth: 640, marginTop: 4 }}>
-              Every project moves through four stages: Initiate, Plan, Execute and Close. Your project's
-              Home tab shows a short checklist for the stage you are in, built from what is already in
-              the project, so there are no boxes to tick by hand. Here is what to do in each stage and
-              which tab to do it in.
+              Every project moves through four stages. Pick one to see what to do in it and which tab to do
+              it in. Your project's Home tab shows a short checklist for the stage you are in, built from
+              what is already in the project, so there are no boxes to tick by hand.
             </p>
-            <div className="resource-grid template-grid">
-              {guideStages.map((st, i) => (
-                <div className="resource-card" key={st.id}>
-                  <h4>{i + 1}. {st.name}</h4>
-                  <p>{st.goal}</p>
-                  <ol className="guide-steps">
-                    {st.steps.map((step) => (
-                      <li key={step.title}>
-                        <strong>{step.title}</strong> <span className="guide-tab">{step.tab}</span>
-                        <div className="guide-why">
-                          {step.why}{step.lightHides ? " Hidden on Light projects unless you show all tabs." : ""}
-                        </div>
-                      </li>
-                    ))}
-                  </ol>
-                  <div className="callout"><strong>Home checklist:</strong> {st.checklist}</div>
-                </div>
-              ))}
-            </div>
-            <div className="resource-grid template-grid">
-              <div className="resource-card">
-                <h4>Size: how much structure</h4>
-                <ul>
-                  {(Object.keys(SIZE_LABEL) as ProjectSize[]).map((k) => (
-                    <li key={k}><strong>{SIZE_LABEL[k]}.</strong> {SIZE_BLURB[k]}</li>
-                  ))}
-                </ul>
-              </div>
-              <div className="resource-card">
-                <h4>Approach: how the work runs</h4>
-                <ul>
-                  {(Object.keys(APPROACH_LABEL) as ProjectApproach[]).map((k) => (
-                    <li key={k}><strong>{APPROACH_LABEL[k]}.</strong> {APPROACH_BLURB[k]}</li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-            <div className="callout" style={{ marginTop: 16, maxWidth: 640 }}>{GUIDE_PRINCIPLE}</div>
+            <ProjectFlowGuide stages={guideStages} />
           </>
         )}
 
