@@ -27,7 +27,7 @@ export type PlannedMilestone = { title: string; day: number; type: "milestone" |
 export type PlannedTask = { title: string; phase: number; day: number; exists: boolean };
 export type PlannedRisk = { title: string; description: string; probability: string; impact: string; mitigation: string; exists: boolean };
 export type PlannedAssumption = { statement: string; exists: boolean };
-export type PlannedStakeholder = { name: string; role: string; interest: string; notes: string; exists: boolean };
+export type PlannedStakeholder = { name: string; role: string; power: string; interest: string; notes: string; exists: boolean };
 
 export type TemplatePlan = {
   phases: PlannedPhase[];
@@ -56,7 +56,7 @@ export function planTemplate(t: ProjectTemplate, existing: ExistingWork): Templa
     tasks: t.tasks.map((x) => ({ title: x.title, phase: x.phase, day: x.day, exists: taskExists(x.title) })),
     risks: t.risks.map((r) => ({ ...r, exists: riskExists(r.title) })),
     assumptions: t.assumptions.map((statement) => ({ statement, exists: assumptionExists(statement) })),
-    stakeholders: t.stakeholders.map((s) => ({ name: s.name, role: s.role, interest: s.interest, notes: s.notes, exists: stakeholderExists(s.name) })),
+    stakeholders: t.stakeholders.map((s) => ({ name: s.name, role: s.role, power: s.power, interest: s.interest, notes: s.notes, exists: stakeholderExists(s.name) })),
   };
 }
 

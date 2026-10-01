@@ -104,3 +104,42 @@ describe("stakeholder contact details", () => {
     expect((await patch(stranger, stakeholder.id, { notes: "hi" })).status).toBe(404);
   });
 });
+
+describe("stakeholder power level (v90)", () => {
+  beforeAll(async () => { await setupTestDb(); }, 30000);
+  afterAll(async () => { await teardownTestDb(); });
+  beforeEach(async () => { await resetTestDb(); });
+
+  it("creates with a power level, defaults to null, and rejects bad values", async () => {
+    const owner = await createTestUser("sp-create@example.com");
+    const project = await createTestProject(owner.id);
+    const withPower = await jsonBody<{ stakeholder: any }>(await create(owner, project.id, { powerLevel: "high" }));
+    expect(withPower.stakeholder.power_level).toBe("high");
+    const without = await jsonBody<{ stakeholder: any }>(await create(owner, project.id));
+    expect(without.stakeholder.power_level).toBeNull();
+    const bad = await create(owner, project.id, { powerLevel: "huge" });
+    expect(bad.status).toBe(400);
+  });
+
+  it("is set-or-clear on PATCH and leaves other fields alone", async () => {
+    const owner = await createTestUser("sp-patch@example.com");
+    const project = await createTestProject(owner.id);
+    const { stakeholder } = await jsonBody<{ stakeholder: any }>(await create(owner, project.id, { powerLevel: "low", interestLevel: "high" }));
+    const set = await jsonBody<{ stakeholder: any }>(await patch(owner, stakeholder.id, { powerLevel: "medium" }));
+    expect(set.stakeholder.power_level).toBe("medium");
+    expect(set.stakeholder.interest_level).toBe("high");
+    const untouched = await jsonBody<{ stakeholder: any }>(await patch(owner, stakeholder.id, { name: "Renamed" }));
+    expect(untouched.stakeholder.power_level).toBe("medium");
+    const cleared = await jsonBody<{ stakeholder: any }>(await patch(owner, stakeholder.id, { powerLevel: "" }));
+    expect(cleared.stakeholder.power_level).toBeNull();
+  });
+
+  it("lists power_level on GET", async () => {
+    const owner = await createTestUser("sp-list@example.com");
+    const project = await createTestProject(owner.id);
+    await create(owner, project.id, { powerLevel: "high" });
+    const res = await stakeholdersHandler(asUser(owner, { method: "GET", url: `${URL}?projectId=${project.id}` }));
+    const { stakeholders } = await jsonBody<{ stakeholders: any[] }>(res);
+    expect(stakeholders[0].power_level).toBe("high");
+  });
+});

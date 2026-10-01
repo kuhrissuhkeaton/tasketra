@@ -530,8 +530,9 @@ export default function Resources() {
           <>
             <h2 id="stakeholder-matrix" style={{ marginTop: 36 }}>Stakeholder engagement matrix</h2>
             <p className="muted" style={{ maxWidth: 640, marginBottom: 16 }}>
-              Plot each stakeholder on power vs. interest, then match your effort to the quadrant --
-              use this alongside your project's Stakeholders tab.
+              Plot each stakeholder on power vs. interest, then match your effort to the quadrant. Set
+              Power and Interest for each person on your project's Stakeholders tab and Tasketra draws this
+              grid for you, ready to print.
             </p>
             <div className="resource-grid">
               {quadrants.map((s) => (

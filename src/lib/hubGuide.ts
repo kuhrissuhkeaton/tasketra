@@ -38,7 +38,7 @@ export const GUIDE_STAGES: GuideStage[] = [
     steps: [
       { title: "Write the charter", tab: "Charter", why: "Purpose, scope, success measures and sponsor in one place. The sponsor can approve it from a link, no login needed." },
       { title: "List the first tasks", tab: "Tasks", why: "A rough list is enough at this point. You will shape it in Plan." },
-      { title: "Add your stakeholders", tab: "Stakeholders", why: "Record each person's role, interest level, how they like to be contacted and notes, with one-click email and call links." },
+      { title: "Add your stakeholders", tab: "Stakeholders", why: "Record each person's role, power and interest, how they like to be contacted and notes, with one-click email and call links. The Power / interest grid shows who to manage closely." },
       { title: "Note the early risks", tab: "Risks", why: "Probability and impact give each risk a score, and the Matrix view shows where the worst ones sit." },
     ],
     checklist: "Charter written, first tasks, stakeholders, early risks.",

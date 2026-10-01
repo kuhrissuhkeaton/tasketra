@@ -80,9 +80,9 @@ describe("creating a project from a template", () => {
   it("fills in the stakeholder contact fields as placeholders", async () => {
     const owner = await createTestUser("tpl-stake@example.com");
     const { project } = await jsonBody<{ project: any }>(await create(owner, { name: "Stakes", template: "software-launch" }));
-    const rows = await db().sql`SELECT name, interest_level, notes, email FROM stakeholders WHERE project_id = ${project.id}`;
+    const rows = await db().sql`SELECT name, power_level, interest_level, notes, email FROM stakeholders WHERE project_id = ${project.id}`;
     expect(rows.length).toBeGreaterThan(0);
-    expect(rows.every((r: any) => ["low", "medium", "high"].includes(r.interest_level) && r.notes && !r.email)).toBe(true);
+    expect(rows.every((r: any) => ["low", "medium", "high"].includes(r.interest_level) && ["low", "medium", "high"].includes(r.power_level) && r.notes && !r.email)).toBe(true);
   });
 
   it("rejects an unknown template and creates nothing", async () => {

@@ -82,12 +82,16 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 
-async function mountProject(size: string, tab: string) {
+async function mountProject(size: string, tab: string, extra?: (url: string) => unknown) {
   const project = projectFor(size);
   vi.stubGlobal("fetch", vi.fn((input: unknown) => {
     const url = String(input);
     if (/\/api\/project\?id=/.test(url)) {
       return Promise.resolve(new Response(JSON.stringify({ project }), { status: 200, headers: { "content-type": "application/json" } }));
+    }
+    const body = extra?.(url);
+    if (body !== undefined) {
+      return Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } }));
     }
     return new Promise(() => {}); // everything else stays loading
   }));
@@ -131,6 +135,23 @@ describe("project page smoke test", () => {
       }
     });
   }
+
+  it("Stakeholders tab with data: list shows Power, grid view places people", async () => {
+    await mountProject("standard", "stakeholders", (url) =>
+      /\/api\/stakeholders\?projectId=/.test(url)
+        ? { stakeholders: [
+            { id: "s1", name: "Sponsor Sam", email: null, role: "Sponsor", phone: null, power_level: "high", interest_level: "high", preferred_contact: null, notes: null },
+            { id: "s2", name: "Unset Una", email: null, role: null, phone: null, power_level: null, interest_level: null, preferred_contact: null, notes: null },
+          ] }
+        : undefined);
+    expect(host.textContent).toContain("Sponsor Sam");
+    expect([...host.querySelectorAll("th")].map((t) => t.textContent)).toContain("Power");
+    const gridBtn = [...host.querySelectorAll("button")].find((b) => b.textContent === "Power / interest grid")!;
+    await act(async () => { gridBtn.click(); });
+    expect(host.querySelector(".sh-quad-manage_closely")!.textContent).toContain("Sponsor Sam");
+    expect(host.querySelector(".sh-unplaced")!.textContent).toContain("Unset Una");
+    expect(errors, errors.join("\n---\n")).toEqual([]);
+  });
 
   it("shows every sidebar tab with its icon when all tabs are shown", async () => {
     await mountProject("full", "home");

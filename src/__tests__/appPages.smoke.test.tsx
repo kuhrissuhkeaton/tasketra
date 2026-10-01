@@ -180,3 +180,25 @@ describe("ApplyTemplateDrawer", () => {
     expect(errors).toEqual([]);
   });
 });
+
+describe("StakeholderGrid", () => {
+  it("shows people in the right boxes and lists the unplaced", async () => {
+    const { StakeholderGrid } = await import("../components/StakeholderGrid");
+    const root = createRoot(host);
+    await act(async () => {
+      root.render(
+        <StakeholderGrid
+          stakeholders={[
+            { id: "1", name: "Sponsor Sam", role: "Sponsor", power_level: "high", interest_level: "high" },
+            { id: "2", name: "Casey", role: null, power_level: "low", interest_level: "low" },
+            { id: "3", name: "Unset Una", role: null, power_level: null, interest_level: "high" },
+          ]}
+        />,
+      );
+    });
+    expect(host.querySelector(".sh-quad-manage_closely")!.textContent).toContain("Sponsor Sam");
+    expect(host.querySelector(".sh-quad-monitor")!.textContent).toContain("Casey");
+    expect(host.querySelector(".sh-unplaced")!.textContent).toContain("Unset Una");
+    await act(async () => root.unmount());
+  });
+});

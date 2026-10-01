@@ -61,8 +61,8 @@ async function insertPlan(database: any, projectId: string, userId: string, plan
   }
   for (const s of plan.stakeholders.filter((x) => !x.exists)) {
     await database.sql`
-      INSERT INTO stakeholders (project_id, name, role, interest_level, notes)
-      VALUES (${projectId}, ${s.name}, ${s.role}, ${s.interest}, ${s.notes})
+      INSERT INTO stakeholders (project_id, name, role, power_level, interest_level, notes)
+      VALUES (${projectId}, ${s.name}, ${s.role}, ${s.power}, ${s.interest}, ${s.notes})
     `;
   }
 }

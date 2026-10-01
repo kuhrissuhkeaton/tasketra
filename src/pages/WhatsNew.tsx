@@ -9,6 +9,12 @@ type ChangeEntry = { version: string; date: string; title: string; body: string 
 // they can do.
 const CHANGES: ChangeEntry[] = [
   {
+    version: "v90",
+    date: "October 2026",
+    title: "Stakeholder power, and a live power / interest grid",
+    body: "Each stakeholder now has a Power (influence) setting of Low, Medium or High next to Interest. On the Stakeholders tab, choose Power / interest grid to see everyone placed in one of four boxes: Manage closely, Keep satisfied, Keep informed or Monitor, each with a plain-language note on how to treat them. Medium counts as the higher side, so anyone you are unsure about is engaged rather than ignored. People with no Power or Interest yet are listed as not placed, never guessed. Print the grid or save it as a PDF from the Stakeholders tab or Forms & downloads. There is no public share link for it on purpose, since it lists people by name. The project templates' placeholder roles come with a suggested Power too.",
+  },
+  {
     version: "v89",
     date: "October 2026",
     title: "More meeting agendas, and Quality and Compliance in the RAID guide",
