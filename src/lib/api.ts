@@ -273,7 +273,7 @@ export type TemplatePlanSummary = {
 
 export type ShareKind = "risk-matrix" | "raci";
 
-export type RaciRow = { id: string; type: string; title: string; start_date: string | null; end_date: string | null };
+export type RaciRow = { id: string; type: string; title: string; start_date: string | null; end_date: string | null; phaseId?: string | null };
 export type RaciPerson = { key: string; kind?: "team" | "stakeholder"; name: string; role: string | null };
 export type RaciData = { rows: RaciRow[]; people: RaciPerson[]; assignments: RaciAssignment[] };
 
@@ -1080,6 +1080,10 @@ export const api = {
     }),
 
   getRaci: (projectId: string) => request<RaciData>(`/raci?projectId=${projectId}`),
+  addRaciTask: (projectId: string, taskId: string) =>
+    request<{ ok: true }>("/raci", { method: "POST", body: JSON.stringify({ projectId, taskId }) }),
+  removeRaciTask: (projectId: string, taskId: string) =>
+    request<{ ok: true }>(`/raci?projectId=${projectId}&taskId=${taskId}`, { method: "DELETE" }),
   setRaciCell: (projectId: string, itemId: string, personKey: string, role: RaciRole | null) =>
     request<{ ok: true }>("/raci", { method: "PUT", body: JSON.stringify({ projectId, itemId, personKey, role }) }),
 

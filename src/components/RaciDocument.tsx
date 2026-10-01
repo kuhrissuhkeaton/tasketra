@@ -1,7 +1,7 @@
 import type { RaciPerson, RaciRow } from "../lib/api";
-import { RACI_LEGEND, cellMap, type RaciAssignment } from "../lib/raci";
+import { RACI_LEGEND, cellMap, rowHeadLabel, startsOtherTasks, type RaciAssignment } from "../lib/raci";
 
-const TYPE_LABEL: Record<string, string> = { phase: "Phase", milestone: "Milestone" };
+const TYPE_LABEL: Record<string, string> = { phase: "Phase", milestone: "Milestone", task: "Task" };
 
 /** The printable RACI chart. Used by the signed-in print page and the public share page. */
 export function RaciDocument({
@@ -24,7 +24,7 @@ export function RaciDocument({
             <table className="raci-table">
               <thead>
                 <tr>
-                  <th className="raci-row-head">Phase / milestone</th>
+                  <th className="raci-row-head">{rowHeadLabel(rows)}</th>
                   {people.map((p) => (
                     <th key={p.key} className="raci-col-head">
                       <span className="raci-person">{p.name}</span>
@@ -34,9 +34,12 @@ export function RaciDocument({
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => (
+                {rows.flatMap((r, i) => [
+                  startsOtherTasks(rows, i) ? (
+                    <tr key={`${r.id}-group`} className="raci-group"><th colSpan={people.length + 1}>Other tasks</th></tr>
+                  ) : null,
                   <tr key={r.id}>
-                    <th scope="row" className="raci-row-head">
+                    <th scope="row" className={r.type === "task" ? "raci-row-head raci-row-task" : "raci-row-head"}>
                       {r.title}
                       <span className="raci-row-type">{TYPE_LABEL[r.type] ?? r.type}</span>
                     </th>
@@ -44,8 +47,8 @@ export function RaciDocument({
                       const role = cells.get(`${r.id}|${p.key}`);
                       return <td key={p.key} className={role ? `raci-cell raci-${role}` : "raci-cell"}>{role ?? ""}</td>;
                     })}
-                  </tr>
-                ))}
+                  </tr>,
+                ])}
               </tbody>
             </table>
           </div>

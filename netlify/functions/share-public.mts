@@ -45,7 +45,7 @@ export default withSentry(async (req: Request) => {
     return json({ kind: link.kind, project: { name: link.name }, risks }, { headers: HEADERS });
   }
   if (link.kind === "raci") {
-    // Phases and milestones, people (display name or the part of the email
+    // Phases, milestones and any tasks added as rows, people (display name or the part of the email
     // before the @, plus job role) and the letters. Ids are replaced with
     // positions so no internal ids, emails or stakeholder notes leave the app.
     const { rows, people, assignments } = await loadRaci(database, link.project_id);
@@ -55,7 +55,7 @@ export default withSentry(async (req: Request) => {
       {
         kind: link.kind,
         project: { name: link.name },
-        rows: rows.map((r) => ({ id: rowIdx.get(r.id)!, type: r.type, title: r.title, start_date: r.start_date, end_date: r.end_date })),
+        rows: rows.map((r) => ({ id: rowIdx.get(r.id)!, type: r.type, title: r.title, start_date: r.start_date, end_date: r.end_date, phaseId: r.phaseId ? rowIdx.get(r.phaseId) ?? null : null })),
         people: people.map((p) => ({ key: personIdx.get(p.key)!, name: p.name, role: p.role })),
         assignments: assignments.map((a) => ({ itemId: rowIdx.get(a.itemId)!, personKey: personIdx.get(a.personKey)!, role: a.role })),
       },

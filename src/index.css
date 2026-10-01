@@ -1539,3 +1539,11 @@ a.btn { text-decoration: none; }
 .sh-unplaced h4 { margin: 0 0 2px; }
 @media (max-width: 560px) { .sh-grid { grid-template-columns: 1fr; padding-left: 0; } .sh-axis-y { display: none; } }
 @media print { .sh-quad { break-inside: avoid; } .sh-grid { grid-template-columns: 1fr 1fr; } }
+
+/* Task rows in the RACI: indented under their phase, with a small group heading for tasks with no phase */
+.raci-table .raci-row-task { padding-left: 24px !important; font-weight: 500; }
+.raci-table .raci-group th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--slate); background: var(--surface-muted); padding: 6px 10px; }
+.raci-remove { display: block; font-size: 12px; margin-top: 2px; }
+.raci-add-task { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 14px; }
+.raci-add-task label { font-weight: 600; font-size: 13px; }
+.raci-add-task select { max-width: 320px; }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { nextRole, rowWarnings, cellMap, rowsNeedingAttention, MAX_RESPONSIBLE } from "../raci";
+import { nextRole, rowWarnings, cellMap, rowsNeedingAttention, MAX_RESPONSIBLE, startsOtherTasks, rowHeadLabel } from "../raci";
 
 describe("raci rules", () => {
   it("cycles empty, R, A, AR, C, I and back to empty", () => {
@@ -46,5 +46,20 @@ describe("raci rules", () => {
     ];
     expect(cellMap(a).get("r1|u:2")).toBe("R");
     expect(rowsNeedingAttention(["r1", "r2", "r3"], a)).toBe(1);
+  });
+});
+
+describe("task rows in the chart", () => {
+  const rows = [
+    { type: "phase" }, { type: "task", phaseId: "p" }, { type: "milestone" },
+    { type: "task", phaseId: null }, { type: "task", phaseId: null },
+  ];
+  it("puts the Other tasks heading before the first task with no phase only", () => {
+    expect(rows.map((_, i) => startsOtherTasks(rows, i))).toEqual([false, false, false, true, false]);
+    expect(startsOtherTasks(rows, 99)).toBe(false);
+  });
+  it("mentions tasks in the column heading only when there are some", () => {
+    expect(rowHeadLabel([{ type: "phase" }, { type: "milestone" }])).toBe("Phase / milestone");
+    expect(rowHeadLabel(rows)).toBe("Phase / milestone / task");
   });
 });

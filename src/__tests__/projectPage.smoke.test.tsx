@@ -162,6 +162,35 @@ describe("project page smoke test", () => {
     expect(host.querySelector("main.project-main")!.classList.contains("project-main-tables")).toBe(false);
   });
 
+  it("RACI tab with data: task rows sit under their phase, with a picker for more", async () => {
+    await mountProject("standard", "raci", (url) => {
+      if (/\/api\/raci\?projectId=/.test(url)) {
+        return {
+          rows: [
+            { id: "ph1", type: "phase", title: "Plan", start_date: null, end_date: null },
+            { id: "t1", type: "task", title: "Write the plan", start_date: null, end_date: null, phaseId: "ph1" },
+            { id: "t2", type: "task", title: "Loose task", start_date: null, end_date: null, phaseId: null },
+          ],
+          people: [{ key: "s:a", kind: "stakeholder", name: "Sponsor Sam", role: "Sponsor" }],
+          assignments: [{ itemId: "t1", personKey: "s:a", role: "A" }],
+        };
+      }
+      if (/\/api\/tasks\?projectId=/.test(url)) {
+        return { tasks: [{ id: "t1", title: "Write the plan" }, { id: "t3", title: "Spare task", status: "done" }] };
+      }
+      return undefined;
+    });
+    const text = host.textContent!;
+    expect(text).toContain("Write the plan");
+    expect(text).toContain("Other tasks");
+    expect(text).toContain("Phase / milestone / task");
+    expect(host.querySelectorAll(".raci-row-task")).toHaveLength(2);
+    const options = [...host.querySelectorAll("#raci-add-task option")].map((o) => o.textContent);
+    expect(options).toContain("Spare task (done)");
+    expect(options).not.toContain("Write the plan");
+    expect(errors, errors.join("\n---\n")).toEqual([]);
+  });
+
   it("shows every sidebar tab with its icon when all tabs are shown", async () => {
     await mountProject("full", "home");
     const buttons = [...host.querySelectorAll(".side-tab[data-tour]")];

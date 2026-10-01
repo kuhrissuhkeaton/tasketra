@@ -192,8 +192,8 @@ async function buildRaci(database: any, project: any, projectId: string) {
     const per = Math.floor((CONTENT_WIDTH - firstCol) / cols.length);
     children.push(
       table(
-        ["Phase / milestone", ...cols.map((c) => c.name)],
-        rows.map((r) => [r.title, ...cols.map((c) => cell.get(`${r.id}|${c.key}`) ?? "")]),
+        [rows.some((r) => r.type === "task") ? "Phase / milestone / task" : "Phase / milestone", ...cols.map((c) => c.name)],
+        rows.map((r) => [r.type === "task" ? `    ${r.title}` : r.title, ...cols.map((c) => cell.get(`${r.id}|${c.key}`) ?? "")]),
         [firstCol, ...cols.map(() => per)]
       )
     );

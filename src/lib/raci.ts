@@ -71,3 +71,18 @@ export function rolesForRow(assignments: RaciAssignment[], itemId: string): Raci
 export function rowsNeedingAttention(rowIds: string[], assignments: RaciAssignment[]): number {
   return rowIds.filter((id) => rowWarnings(rolesForRow(assignments, id)).some((w) => w !== "empty")).length;
 }
+
+type RowLike = { type: string; phaseId?: string | null };
+
+/** True for the first task row that has no phase, where the "Other tasks" heading goes. */
+export function startsOtherTasks(rows: RowLike[], index: number): boolean {
+  const r = rows[index];
+  if (!r || r.type !== "task" || r.phaseId) return false;
+  const prev = rows[index - 1];
+  return !(prev && prev.type === "task" && !prev.phaseId);
+}
+
+/** The label for the first column: mention tasks only when there are some. */
+export function rowHeadLabel(rows: RowLike[]): string {
+  return rows.some((r) => r.type === "task") ? "Phase / milestone / task" : "Phase / milestone";
+}

@@ -9,6 +9,12 @@ type ChangeEntry = { version: string; date: string; title: string; body: string 
 // they can do.
 const CHANGES: ChangeEntry[] = [
   {
+    version: "v91",
+    date: "October 2026",
+    title: "Individual tasks in your RACI",
+    body: "On the RACI tab you can now add single tasks as rows, for the deliverables that need their own owner. Pick a task from the Add a task as a row list and it appears indented under its phase; tasks with no phase are grouped under Other tasks at the bottom. You choose each one, so the chart stays about deliverables rather than every to-do. Removing a row clears its letters and never touches the task. Task rows show up in the printable page, the shared link and the Word download too. Nothing changes for a RACI that only uses phases and milestones.",
+  },
+  {
     version: "v90",
     date: "October 2026",
     title: "Stakeholder power, and a live power / interest grid",
