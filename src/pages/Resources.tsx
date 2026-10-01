@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { AppSidebar } from "../components/AppSidebar";
 import { ResizableTable } from "../components/ResizableTable";
 import { api } from "../lib/api";
+import { PROJECT_TEMPLATES, planPhases, templateSummary } from "../lib/projectTemplates";
+import { APPROACH_LABEL } from "../lib/projectView";
 
 type Methodology = { name: string; points: string[]; bestWhen: string };
 
@@ -219,10 +221,12 @@ export default function Resources() {
   const raidItems = RAID_GUIDE.filter((r) => matches(r.term, r.definition, r.example, r.whereInApp, "RAID", "RAID log"));
   const quadrants = STAKEHOLDER_QUADRANTS.filter((s) => matches(s.name, s.axis, s.strategy, "stakeholder", "stakeholder matrix"));
   const meetings = MEETING_TEMPLATES.filter((m) => matches(m.name, m.purpose, m.cadence, ...m.agenda, "meeting"));
+  const templates = PROJECT_TEMPLATES.filter((t) =>
+    matches(t.name, t.blurb, t.bestFor, "template", "templates", "skeleton", ...t.phases.map((p) => p.title), ...t.tasks.map((x) => x.title), ...t.risks.map((x) => x.title)));
   const statusTips = STATUS_REPORT_TIPS.filter((t) => matches(t, "status report", "status update"));
 
   const nothingMatches =
-    methodologies.length === 0 && formulas.length === 0 && raidItems.length === 0 &&
+    templates.length === 0 && methodologies.length === 0 && formulas.length === 0 && raidItems.length === 0 &&
     quadrants.length === 0 && meetings.length === 0 && statusTips.length === 0;
 
   return (
@@ -234,7 +238,7 @@ export default function Resources() {
           <h1>Resource hub</h1>
         </div>
         <p className="muted" style={{ marginBottom: 20, maxWidth: 640 }}>
-          A plain-English reference for running a project: methodologies, EVM formulas, RAID log
+          A plain-English reference for running a project: project templates you can start from, methodologies, EVM formulas, RAID log
           practice, stakeholder mapping, meeting templates, and status reporting. Everything here
           is reference only -- your project's own Budget, Issues &amp; risks, Stakeholders, and
           Weekly report tabs are where the live data lives.
@@ -256,9 +260,60 @@ export default function Resources() {
 
         {nothingMatches && <p className="muted">Nothing matches "{query}".</p>}
 
+        {templates.length > 0 && (
+          <>
+            <h2>Project templates</h2>
+            <p className="muted" style={{ maxWidth: 640, marginTop: 4 }}>
+              Start a new project with the skeleton already in place: phases on the roadmap, starter
+              tasks tied to those phases, the risks that usually hit this kind of project, and
+              stakeholder roles to fill in. Dates are counted from the day you create it, and
+              everything can be edited or deleted.
+            </p>
+            <div className="resource-grid template-grid">
+              {templates.map((t) => {
+                const planned = planPhases(t);
+                return (
+                  <div className="resource-card" key={t.id}>
+                    <h4>{t.name}</h4>
+                    <p>{t.blurb}</p>
+                    <p className="muted" style={{ fontSize: 13 }}>
+                      <strong>Good for:</strong> {t.bestFor}
+                    </p>
+                    <p className="template-phases" aria-label="Phases">
+                      {t.phases.map((p) => p.title).join(" \u203a ")}
+                    </p>
+                    <p className="muted" style={{ fontSize: 13 }}>
+                      {Math.round(planned[planned.length - 1].endDay / 7)} weeks. Adds {templateSummary(t)}. Works best with the{" "}
+                      {APPROACH_LABEL[t.suggestedApproach]} approach.
+                    </p>
+                    <details className="template-details">
+                      <summary>See what's inside</summary>
+                      {t.phases.map((p, i) => (
+                        <div key={p.title}>
+                          <h5>{p.title} <span className="muted">({planned[i].startDay === 0 ? "start" : `week ${Math.floor(planned[i].startDay / 7) + 1}`}, {Math.round(p.days / 7)} wk)</span></h5>
+                          <ul>
+                            {t.tasks.filter((x) => x.phase === i).map((x) => <li key={x.title}>{x.title}</li>)}
+                          </ul>
+                        </div>
+                      ))}
+                      <h5>Risks to watch</h5>
+                      <ul>{t.risks.map((x) => <li key={x.title}>{x.title}</li>)}</ul>
+                      <h5>Stakeholder roles</h5>
+                      <ul>{t.stakeholders.map((x) => <li key={x.name}>{x.name}</li>)}</ul>
+                    </details>
+                    <button type="button" className="btn btn-primary" onClick={() => navigate(`/app?template=${t.id}`)}>
+                      Start a project from this
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
+
         {methodologies.length > 0 && (
           <>
-            <h2>Methodologies</h2>
+            <h2 style={{ marginTop: templates.length > 0 ? 36 : undefined }}>Methodologies</h2>
             <div className="resource-grid">
               {methodologies.map((m) => (
                 <div className="resource-card" key={m.name}>

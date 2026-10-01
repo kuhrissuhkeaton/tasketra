@@ -6,6 +6,8 @@ import { canCreateProject, FREE_PROJECT_LIMIT } from "../lib/billing.ts";
 import { seedExampleData } from "../lib/exampleData.ts";
 import { withSentry } from "../lib/sentry.ts";
 import { isProjectSize, isProjectApproach } from "../lib/projectSetup.ts";
+import { applyProjectTemplate } from "../lib/applyTemplate.ts";
+import { isTemplateId } from "../../src/lib/projectTemplates.ts";
 
 export default withSentry(async (req: Request) => {
   const userId = getUserIdFromRequest(req);
@@ -55,13 +57,26 @@ export default withSentry(async (req: Request) => {
     if (body?.approach !== undefined && !isProjectApproach(body.approach)) {
       return json({ error: "approach must be one of predictive, hybrid, agile." }, { status: 400 });
     }
+    if (body?.template !== undefined && body?.template !== null && !isTemplateId(body.template)) {
+      return json({ error: "template is not a known project template." }, { status: 400 });
+    }
     const [project] = await database.sql`
       INSERT INTO projects (owner_id, name, description, size, approach)
       VALUES (${userId}, ${name}, ${body?.description || null}, COALESCE(${body?.size ?? null}, 'standard'), COALESCE(${body?.approach ?? null}, 'hybrid'))
       RETURNING id, name, description, created_at, size, approach
     `;
 
-    if (body?.seedExample === true) {
+    let templateApplied: boolean | undefined;
+    if (isTemplateId(body?.template)) {
+      // Best-effort, like the example data below: the project exists and is
+      // usable either way, so a seeding failure is reported, not fatal. A
+      // template wins over example data -- the two would double up.
+      try {
+        templateApplied = await applyProjectTemplate(database, project.id, userId, body.template);
+      } catch {
+        templateApplied = false;
+      }
+    } else if (body?.seedExample === true) {
       // Best-effort: a brand-new project is still fully usable even if
       // seeding partially fails, so don't fail project creation over it.
       try {
@@ -71,7 +86,7 @@ export default withSentry(async (req: Request) => {
       }
     }
 
-    return json({ project }, { status: 201 });
+    return json({ project, ...(templateApplied === undefined ? {} : { templateApplied }) }, { status: 201 });
   }
 
   return json({ error: "Method not allowed" }, { status: 405 });

@@ -1348,3 +1348,12 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
 .contact-link:hover { text-decoration-thickness: 2px; }
 .contact-actions { display: flex; gap: 8px; flex-wrap: wrap; margin: -4px 0 14px; }
 .contact-actions a { text-decoration: none; }
+
+/* Resource Hub: project templates */
+.template-phases { font-weight: 600; color: var(--navy, #1b2a4a); }
+.template-details { margin: 6px 0 14px; font-size: 14px; }
+.template-details summary { cursor: pointer; font-weight: 600; color: var(--slate); }
+.template-details h5 { margin: 12px 0 2px; font-size: 13px; }
+.template-details ul { margin: 2px 0 6px; }
+.resource-card .btn { margin-top: 4px; }
+.template-grid { align-items: start; }

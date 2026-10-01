@@ -9,6 +9,12 @@ type ChangeEntry = { version: string; date: string; title: string; body: string 
 // they can do.
 const CHANGES: ChangeEntry[] = [
   {
+    version: "v83",
+    date: "October 2026",
+    title: "Start a project from a template",
+    body: "The new project form now has a Start from list. Pick Process improvement / rollout, Event / marketing campaign, Software / product launch or Construction / facilities and your project opens with a ready skeleton: phases laid out on the roadmap, starter tasks tied to those phases, the risks that usually hit that kind of project, a few milestones, assumptions, and stakeholder roles to fill in with real people. Dates are counted from the day you create it. You can browse what is inside each one in the Resource hub before you commit, and everything it adds can be edited or deleted. Blank projects work exactly as before. Thanks to a founding member for the idea.",
+  },
+  {
     version: "v82",
     date: "October 2026",
     title: "Richer stakeholder contacts, and a roomier Dashboard",

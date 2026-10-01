@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api, ApiError, type Project, type ProjectStage, type PortfolioData, type PortfolioProjectSummary, type Task, type Issue } from "../lib/api";
 import { AppSidebar } from "../components/AppSidebar";
 import { StageChip, STAGES } from "../components/StageRail";
 import { ProjectSetupPicker } from "../components/ProjectSetup";
 import type { ProjectSize, ProjectApproach } from "../lib/projectView";
+import { PROJECT_TEMPLATES, getTemplate, isTemplateId, templateSummary } from "../lib/projectTemplates";
 import { useConfirm } from "../components/ConfirmDialog";
 import { ResizableTable } from "../components/ResizableTable";
 import { useAuth } from "../lib/auth-context";
@@ -263,7 +264,13 @@ export default function Dashboard() {
   const [portfolioLoading, setPortfolioLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [newName, setNewName] = useState("");
+  const [searchParams] = useSearchParams();
   const [seedExample, setSeedExample] = useState(false);
+  // Pre-selected when arriving from the Resource Hub ("Start a project from this").
+  const [templateId, setTemplateId] = useState<string>(() => {
+    const fromLink = searchParams.get("template");
+    return isTemplateId(fromLink) ? fromLink : "";
+  });
   const [showSetup, setShowSetup] = useState(false);
   const [setupSize, setSetupSize] = useState<ProjectSize>("standard");
   const [setupApproach, setSetupApproach] = useState<ProjectApproach>("hybrid");
@@ -348,8 +355,23 @@ export default function Dashboard() {
     setCreating(true);
     setUpgradeNotice(null);
     try {
-      const { project } = await api.createProject(newName.trim(), undefined, seedExample, { size: setupSize, approach: setupApproach });
+      const created = await api.createProject(newName.trim(), undefined, seedExample && !templateId, {
+        size: setupSize,
+        approach: setupApproach,
+        ...(templateId ? { template: templateId } : {}),
+      });
+      if (templateId && created.templateApplied === false) {
+        // The project exists, but its skeleton did not fully load. Say so
+        // rather than dropping the user into a half-empty project unannounced.
+        setUpgradeNotice("Your project was created, but we couldn't add the template. Open it from the list below and add items by hand.");
+        setNewName("");
+        setTemplateId("");
+        await load();
+        return;
+      }
+      const { project } = created;
       setNewName("");
+      setTemplateId("");
       setSeedExample(false);
       setShowSetup(false);
       setSetupSize("standard");
@@ -450,10 +472,22 @@ export default function Dashboard() {
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
           />
-          <label className="checkbox-row" style={{ alignSelf: "center" }}>
+          <select
+            aria-label="Start from"
+            value={templateId}
+            onChange={(e) => setTemplateId(e.target.value)}
+            style={{ maxWidth: 240 }}
+          >
+            <option value="">Blank project</option>
+            {PROJECT_TEMPLATES.map((t) => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </select>
+          <label className="checkbox-row" style={{ alignSelf: "center", opacity: templateId ? 0.5 : 1 }}>
             <input
               type="checkbox"
-              checked={seedExample}
+              checked={seedExample && !templateId}
+              disabled={!!templateId}
               onChange={(e) => setSeedExample(e.target.checked)}
             />
             Start with example data
@@ -477,7 +511,14 @@ export default function Dashboard() {
             />
           </div>
         )}
-        {seedExample && (
+        {templateId && getTemplate(templateId) && (
+          <p className="muted" style={{ marginTop: -12, marginBottom: 20 }}>
+            {getTemplate(templateId)!.blurb} We'll add {templateSummary(getTemplate(templateId)!)}, with dates counted
+            from today. It works best with the {getTemplate(templateId)!.suggestedApproach} approach (change it under Set up).
+            Stakeholders are placeholder roles; replace them with real people. Delete anything you don't need.
+          </p>
+        )}
+        {seedExample && !templateId && (
           <p className="muted" style={{ marginTop: -12, marginBottom: 20 }}>
             We'll pre-fill this project with sample tasks, a roadmap, and one issue, risk,
             assumption, and dependency, so you have something to explore right away. Delete
