@@ -34,6 +34,7 @@ export type NavIconName =
   | "okrs"
   | "charter"
   | "stakeholders"
+  | "raci"
   | "decisions"
   | "team"
   | "procurement"
@@ -126,6 +127,12 @@ const SHAPES: Record<NavIconName, Shape[]> = {
     { tag: "path", attrs: { d: "M2.5 17c0-2.7 2-4.4 4.5-4.4s4.5 1.7 4.5 4.4" } },
     { tag: "path", attrs: { d: "M11.7 17c.2-1.9 1.6-3.2 3.5-3.2 1.6 0 3 .8 3.4 2.3" } },
   ],
+  raci: [
+    { tag: "rect", attrs: { x: 3, y: 3.5, width: 14, height: 13, rx: 1.5 } },
+    { tag: "path", attrs: { d: "M3 8h14" } },
+    { tag: "path", attrs: { d: "M8 3.5v13" } },
+    { tag: "path", attrs: { d: "M13 8v8.5" } },
+  ],
   decisions: [
     { tag: "circle", attrs: { cx: 10, cy: 4.5, r: 1.3 } },
     { tag: "path", attrs: { d: "M10 6.2v2.8" } },
@@ -188,7 +195,7 @@ export function NavIcon({ name, active }: { name: NavIconName; active: boolean }
   return (
     <span className={active ? "nav-icon-wrap active" : "nav-icon-wrap"} aria-hidden="true">
       <svg viewBox="0 0 20 20" className="nav-icon-glyph">
-        {SHAPES[name].map((shape, i) => createElement(shape.tag, { key: i, ...shape.attrs }))}
+        {(SHAPES[name] ?? []).map((shape, i) => createElement(shape.tag, { key: i, ...shape.attrs }))}
       </svg>
     </span>
   );
