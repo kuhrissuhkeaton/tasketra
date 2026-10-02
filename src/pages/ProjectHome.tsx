@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, Fragment } from "react";
 import { useParams, useSearchParams, useNavigate, useLocation, Link } from "react-router-dom";
 import { api, ApiError, type Project, type Task, type Stakeholder, type Decision, type Issue, type Risk, type Assumption, type Dependency, type ChangeRequest, type Lesson, type TodayData, type WeeklyReport, type BudgetData, type FeedItem, type TrashItem, type ProjectMember, type Meeting, type MeetingActionItem, type ProjectDocument, type StorageUsage, type RoadmapItem, type RoadmapItemType, type StakeholderInterest, type StakeholderContactMethod, type QualityItem, type ProcurementItem, type CommPlanItem, type ComplianceItem, type Objective, type KeyResult, type RiskTaskLink, type IssueTaskLink, type ProjectStage, type BaselineData, type CharterApproval } from "../lib/api";
-import { RoadmapTimeline, ROADMAP_TYPE_LABEL, ROADMAP_STATUS_LABEL, ROADMAP_TYPE_COLOR } from "../components/RoadmapTimeline";
+import { RoadmapTimeline, ROADMAP_TYPE_LABEL, ROADMAP_STATUS_LABEL } from "../components/RoadmapTimeline";
 import { fmtRoadmapRange } from "../lib/roadmapDates";
 import { phaseProgress } from "../lib/phaseProgress";
 import { mailtoHref, telHref } from "../lib/contactLinks";
@@ -4465,13 +4465,11 @@ function RoadmapTab({ projectId, isOwner, showBudget }: { projectId: string; isO
           <span className="roadmap-filter-label">Type</span>
           {ALL_TYPES.map((t) => {
             const active = typeFilter.has(t);
-            const color = ROADMAP_TYPE_COLOR[t];
             return (
               <button
                 key={t}
                 type="button"
                 className={`filter-chip${active ? " filter-chip-active" : ""}`}
-                style={active ? { color, background: `color-mix(in srgb, ${color} 24%, transparent)` } : undefined}
                 onClick={() => toggleType(t)}
               >
                 {ROADMAP_TYPE_LABEL[t]}

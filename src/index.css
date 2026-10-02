@@ -833,9 +833,13 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
 }
 .roadmap-row { position: relative; border-bottom: 1px solid var(--border); }
 .roadmap-bar {
-  position: absolute; height: 22px; border-radius: 4px; min-width: 10px; border-left: 4px solid transparent;
+  position: absolute; height: 22px; border-radius: 4px; min-width: 10px; box-sizing: border-box;
   display: flex; align-items: center; overflow: hidden; cursor: default;
 }
+.roadmap-bar.gantt-bar-not_started { background: #fff; border: 1.5px solid var(--slate-2); }
+.roadmap-bar.gantt-bar-not_started .roadmap-bar-label { color: var(--navy); }
+.roadmap-bar.gantt-bar-not_started .roadmap-bar-progress-track { background: rgba(0, 0, 0, 0.08); }
+.roadmap-bar.gantt-bar-not_started .roadmap-bar-progress { background: var(--navy); }
 .roadmap-bar-label { font-size: 12px; font-weight: 600; color: white; padding: 0 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; position: relative; }
 /* Phase progress: a light strip along the bottom of a phase bar, as wide as
    the share of its linked tasks that are done (a fainter strip marks the full
@@ -862,10 +866,10 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
    hover tooltip, which made milestones the least legible thing on the
    chart despite usually being the thing people care about most. */
 .roadmap-marker-wrap { position: absolute; display: flex; align-items: center; gap: 6px; }
-.roadmap-marker { width: 12px; height: 12px; border: 2px solid transparent; transform: rotate(45deg); border-radius: 2px; cursor: default; flex-shrink: 0; }
+.roadmap-marker { width: 12px; height: 12px; border: 2px solid transparent; transform: rotate(45deg); border-radius: 2px; cursor: default; flex-shrink: 0; box-sizing: border-box; }
+.roadmap-marker.gantt-bar-not_started { background: #fff; border-color: var(--slate-2); }
 .roadmap-marker-label {
   font-size: 12px; font-weight: 600; color: var(--navy); white-space: nowrap; cursor: default;
-  background: var(--cream); border: 1px solid var(--border); border-radius: 4px; padding: 0 6px;
   height: 22px; box-sizing: border-box; display: inline-flex; align-items: center;
 }
 /* Timeline header: month names on the top line, "Today" on a second line, and a
@@ -883,7 +887,7 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
   position: absolute; top: 40px; bottom: 0; width: 0; border-left: 2px solid var(--gold);
   opacity: 0.8; pointer-events: none; /* no z-index: bars and labels paint over it */
 }
-.roadmap-undated-chip { font-size: 12px; }
+.roadmap-undated-chip { font-size: 12px; background: #fff; color: var(--navy); border: 1px solid var(--border); font-weight: 600; }
 .gantt-undated-col { width: 200px; flex-shrink: 0; border-left: 1px solid var(--border); }
 .gantt-undated-col-head {
   display: flex; align-items: center; padding: 0 10px; font-size: 10px; font-weight: 700;
@@ -899,19 +903,18 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
    on an ordinary laptop window. */
 .table-compact th, .table-compact td { padding-left: 10px; padding-right: 10px; }
 .roadmap-lane-line { font-size: 12px; margin-top: 3px; }
-/* Chart key: one panel under the chart, three labelled groups, so the colours
-   read as a key to the chart above rather than loose text. Type is shown the way
-   it appears on the chart: a coloured edge on the bar. */
+/* Chart key: a single quiet line under the chart. Colour = status; shape = kind
+   of item. Not started is hollow (planned), the rest are filled. */
 .roadmap-key {
-  display: flex; flex-wrap: wrap; gap: 14px 36px; margin-top: 12px; padding: 12px 16px;
-  background: var(--cream); border-radius: var(--radius); box-shadow: var(--shadow-sm);
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; margin-top: 10px;
+  font-size: 12.5px; color: var(--slate);
 }
-.roadmap-key-group { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-.roadmap-key-title { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--slate); }
-.roadmap-key-hint { font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--slate); margin-left: 4px; }
-.roadmap-key-items { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--navy); }
-.roadmap-key-items > span { display: inline-flex; align-items: center; gap: 6px; }
-.roadmap-key-edge { display: inline-block; width: 18px; height: 12px; border-radius: 3px; background: #fff; border: 1px solid var(--border); border-left: 6px solid transparent; box-sizing: border-box; }
+.roadmap-key > span { display: inline-flex; align-items: center; gap: 6px; }
+.roadmap-key-swatch { display: inline-block; width: 16px; height: 10px; border-radius: 3px; box-sizing: border-box; }
+.roadmap-key-swatch.gantt-bar-not_started { background: #fff; border: 1.5px solid var(--slate-2); }
+.roadmap-key-divider { width: 1px; height: 14px; background: var(--border); }
+.roadmap-key-shape-bar { display: inline-block; width: 18px; height: 8px; border-radius: 3px; background: var(--slate-2); }
+.roadmap-key-shape-diamond { display: inline-block; width: 9px; height: 9px; background: var(--slate-2); transform: rotate(45deg); border-radius: 1px; margin: 0 2px; }
 /* The rightmost month tick can land close enough to the track's scrollable
    edge that its label gets clipped mid-word -- harmless (the chart scrolls
    to reveal it) but a stray fragment used to trail off into blank page

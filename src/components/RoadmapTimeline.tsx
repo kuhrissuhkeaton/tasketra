@@ -21,19 +21,6 @@ export const ROADMAP_STATUS_LABEL: Record<RoadmapItem["status"], string> = {
   done: "Done",
 };
 
-// A small, distinct accent color per item type, independent of the status
-// color used for a bar/marker's fill. Status already answers "what state is
-// it in" via fill color; this answers "what kind of thing is this" via a
-// left-edge stripe (bars) or a ring (markers), so type reads at a glance
-// instead of only on hover.
-export const ROADMAP_TYPE_COLOR: Record<RoadmapItem["type"], string> = {
-  phase: "#6E56A5",
-  milestone: "#B4790C",
-  release: "#2E7D89",
-  event: "#B04C6A",
-  note: "#5C6B73",
-};
-
 // DATE columns come back from the API as full ISO timestamps
 // ("2026-08-01T00:00:00.000Z"), not bare date strings -- slicing to the
 // first 10 chars before re-appending a time makes this safe for both that
@@ -212,7 +199,6 @@ export function RoadmapTimeline({
                 {placements.map(({ item, lane: laneIdx }) => {
                   const startOffset = dayOffset(item.start_date!);
                   const top = 4 + laneIdx * 30;
-                  const typeColor = ROADMAP_TYPE_COLOR[item.type];
                   const progress = phaseProgress(item);
                   const progressNote = progress ? ` -- ${progress.done} of ${progress.total} tasks done` : "";
                   if (!item.end_date) {
@@ -225,7 +211,6 @@ export function RoadmapTimeline({
                       >
                         <div
                           className={`roadmap-marker gantt-bar-${item.status}`}
-                          style={{ borderColor: typeColor }}
                           title={`${ROADMAP_TYPE_LABEL[item.type]}: ${item.title} -- ${fmtRoadmapDate(item.start_date)}${progressNote}`}
                         />
                         <span className="roadmap-marker-label" title={item.description || ""}>
@@ -241,7 +226,7 @@ export function RoadmapTimeline({
                     <div
                       key={item.id}
                       className={`roadmap-bar gantt-bar-${item.status}`}
-                      style={{ left, width, top, borderLeftColor: typeColor, cursor: onSelect ? "pointer" : undefined }}
+                      style={{ left, width, top, cursor: onSelect ? "pointer" : undefined }}
                       title={`${ROADMAP_TYPE_LABEL[item.type]}: ${item.title} (${fmtRoadmapDate(item.start_date)} → ${fmtRoadmapDate(item.end_date)})${progressNote}`}
                       onClick={onSelect ? () => onSelect(item) : undefined}
                     >
@@ -250,7 +235,7 @@ export function RoadmapTimeline({
                           <span className="roadmap-bar-progress" style={{ width: `${progress.pct}%` }} />
                         </span>
                       )}
-                      <span className="roadmap-bar-label">{item.title}{progress ? ` · ${progress.pct}%` : ""}</span>
+                      <span className="roadmap-bar-label">{item.title}{progress && progress.pct > 0 ? ` · ${progress.pct}%` : ""}</span>
                     </div>
                   );
                 })}
@@ -273,34 +258,17 @@ export function RoadmapTimeline({
           </div>
         )}
       </div>
+      {/* One short key. Colour means one thing (status); shape tells you the kind of
+          item (a bar runs over time, a diamond is a single date). Percentages are
+          written on the bars themselves, so they need no key. */}
       <div className="roadmap-key" aria-label="Chart key">
-        <div className="roadmap-key-group">
-          <span className="roadmap-key-title">Status <span className="roadmap-key-hint">bar colour</span></span>
-          <div className="roadmap-key-items">
-            <span><span className="gantt-swatch gantt-bar-not_started" /> Not started</span>
-            <span><span className="gantt-swatch gantt-bar-in_progress" /> In progress</span>
-            <span><span className="gantt-swatch gantt-bar-blocked" /> Blocked</span>
-            <span><span className="gantt-swatch gantt-bar-done" /> Done</span>
-          </div>
-        </div>
-        <div className="roadmap-key-group">
-          <span className="roadmap-key-title">Type <span className="roadmap-key-hint">edge stripe or ring</span></span>
-          <div className="roadmap-key-items">
-            {(Object.keys(ROADMAP_TYPE_LABEL) as RoadmapItem["type"][]).map((t) => (
-              <span key={t}>
-                <span className="roadmap-key-edge" style={{ borderLeftColor: ROADMAP_TYPE_COLOR[t] }} /> {ROADMAP_TYPE_LABEL[t]}
-              </span>
-            ))}
-          </div>
-        </div>
-        {items.some((i) => phaseProgress(i)) && (
-          <div className="roadmap-key-group">
-            <span className="roadmap-key-title">Progress <span className="roadmap-key-hint">phases</span></span>
-            <div className="roadmap-key-items">
-              <span><span className="gantt-swatch gantt-swatch-progress" /> Light strip = share of linked tasks done</span>
-            </div>
-          </div>
-        )}
+        <span><span className="roadmap-key-swatch gantt-bar-not_started" /> Not started</span>
+        <span><span className="roadmap-key-swatch gantt-bar-in_progress" /> In progress</span>
+        <span><span className="roadmap-key-swatch gantt-bar-blocked" /> Blocked</span>
+        <span><span className="roadmap-key-swatch gantt-bar-done" /> Done</span>
+        <span className="roadmap-key-divider" aria-hidden="true" />
+        <span><span className="roadmap-key-shape-bar" aria-hidden="true" /> Runs over time</span>
+        <span><span className="roadmap-key-shape-diamond" aria-hidden="true" /> Single date</span>
       </div>
     </div>
   );
