@@ -1580,3 +1580,16 @@ a.btn { text-decoration: none; }
 }
 .skip-link:focus { top: 12px; outline: 2px solid var(--gold); outline-offset: 2px; }
 main:focus { outline: none; }
+
+/* Links with no style of their own used to show the browser's default blue/purple
+   (Dashboard project names, "Forgot password?"). Class-styled links (.btn,
+   .side-tab, .project-card, ...) set their own colour and are unaffected. */
+a { color: var(--navy); text-underline-offset: 2px; }
+a:hover { color: var(--navy); }
+
+/* Dashboard tiles on a phone: two across, and an odd last tile spans the row
+   instead of sitting alone beside an empty gap. */
+@media (max-width: 560px) {
+  .evm-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .evm-grid > .evm-card:last-child:nth-child(odd) { grid-column: 1 / -1; }
+}

@@ -1595,6 +1595,10 @@ function IssuesTab({ projectId, highlightId }: { projectId: string; highlightId?
 
   return (
     <div>
+      <p className="muted" style={{ marginBottom: 16, maxWidth: 640 }}>
+        Problems that are already happening and need someone to sort them out. Log them here so they
+        get an owner and a status, not just a mention in a meeting.
+      </p>
       <form className="stacked-form" onSubmit={addIssue}>
         <label htmlFor="f-projecthome-1595">Issue</label>
         <input id="f-projecthome-1595" placeholder="What's the issue?" value={title} onChange={(e) => setTitle(e.target.value)} />
@@ -1702,7 +1706,7 @@ function IssuesTab({ projectId, highlightId }: { projectId: string; highlightId?
             </tr>
           ))}
           {issues.length === 0 && (
-            <tr><td colSpan={5} className="muted">No issues logged. Nice.</td></tr>
+            <tr><td colSpan={5} className="muted">No issues logged yet. Add one above when something goes wrong or gets in the way.</td></tr>
           )}
         </tbody>
       </ResizableTable>
@@ -1962,6 +1966,10 @@ function RisksTab({ projectId, highlightId }: { projectId: string; highlightId?:
 
   return (
     <div>
+      <p className="muted" style={{ marginBottom: 16, maxWidth: 640 }}>
+        Things that might go wrong, rated by how likely they are and how much they would hurt. Write
+        down what you will do about each one before it happens.
+      </p>
       <form className="stacked-form" onSubmit={addRisk}>
         <label htmlFor="f-projecthome-1962">Risk</label>
         <input id="f-projecthome-1962" placeholder="What could go wrong?" value={title} onChange={(e) => setTitle(e.target.value)} />
@@ -5131,6 +5139,10 @@ function StakeholdersTab({ projectId }: { projectId: string }) {
 
   return (
     <div>
+      <p className="muted" style={{ marginBottom: 16, maxWidth: 640 }}>
+        Everyone with a stake in this project: sponsors, customers, teams, and anyone who can help or
+        block it. Rate their power and interest so you know how closely to keep them in the loop.
+      </p>
       <form className="inline-form inline-form-wide" onSubmit={addStakeholder}>
         <input aria-label="Name" placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} />
         <input aria-label="Email (optional)" placeholder="Email (optional)" value={email} onChange={(e) => setEmail(e.target.value)} />
