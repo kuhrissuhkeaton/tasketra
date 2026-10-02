@@ -62,6 +62,21 @@ function labelNeededWidth(th: HTMLElement): number {
   return Math.ceil(textWidth + padding) + 8;
 }
 
+// The width a body cell needs to show everything on one line (same idea as
+// labelNeededWidth, for a data cell). Used for the Actions column, whose links
+// (Details, Delete, + Sub-task) must never be clipped.
+function cellNeededWidth(td: HTMLElement): number {
+  const prevWhiteSpace = td.style.whiteSpace;
+  td.style.whiteSpace = "nowrap";
+  const range = document.createRange();
+  range.selectNodeContents(td);
+  const contentWidth = range.getBoundingClientRect().width;
+  const style = getComputedStyle(td);
+  const padding = (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0);
+  td.style.whiteSpace = prevWhiteSpace;
+  return Math.ceil(contentWidth + padding) + 4;
+}
+
 function saveWidths(id: string, widths: number[]) {
   try {
     localStorage.setItem(STORAGE_PREFIX + id, JSON.stringify(widths));
@@ -110,13 +125,27 @@ export function ResizableTable({
     // than the label needs, and trim the roomier columns if that would push
     // the table past its container (fitColumns, unit tested).
     const mins = ths.map((th) => Math.max(MIN_COL_WIDTH, labelNeededWidth(th)));
+    // A column with no header label is an Actions column (Details / Delete /
+    // + Sub-task). Its links must never be clipped, so its width is never
+    // allowed below what its widest row needs -- not by fitting to the box, and
+    // not by a width saved in an earlier visit (saved before a link was added).
+    const actionNeed = ths.map(() => 0);
+    const bodyRows = Array.from(table.querySelectorAll("tbody > tr"));
+    ths.forEach((th, i) => {
+      if (th.textContent?.trim()) return;
+      for (const tr of bodyRows) {
+        const td = tr.children[i] as HTMLElement | undefined;
+        if (td && tr.children.length === ths.length) actionNeed[i] = Math.max(actionNeed[i], cellNeededWidth(td));
+      }
+      mins[i] = Math.max(mins[i], actionNeed[i]);
+    });
     const natural = fitColumns(
       ths.map((th) => th.getBoundingClientRect().width),
       mins,
       table.parentElement?.clientWidth ?? table.getBoundingClientRect().width
     );
     const hasSaved = !!saved && saved.length === ths.length;
-    const initial = hasSaved ? saved : natural;
+    const initial = hasSaved ? saved.map((w, i) => Math.max(w, actionNeed[i])) : natural;
     setWidths(initial);
 
     // Until the user sizes a column themselves, keep the table fitted to its
