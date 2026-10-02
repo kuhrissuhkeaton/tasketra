@@ -4770,7 +4770,7 @@ function MeetingsTab({ projectId }: { projectId: string }) {
         and action items that carry straight into Tasks so nothing gets lost between the call and the work.
       </p>
 
-      <form className="stacked-form" onSubmit={addMeeting}>
+      <form className="stacked-form" style={{ maxWidth: "none" }} onSubmit={addMeeting}>
         <label htmlFor="f-projecthome-4748">Meeting</label>
         <input id="f-projecthome-4748" placeholder="Meeting title" value={title} onChange={(e) => setTitle(e.target.value)} />
         <div className="inline-form" style={{ marginTop: 8 }}>
