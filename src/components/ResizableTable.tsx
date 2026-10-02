@@ -29,6 +29,9 @@ import { fitColumns, refitColumns } from "../lib/fitColumns";
 
 const MIN_COL_WIDTH = 64;
 const MAX_AUTOFIT_WIDTH = 560;
+// Longest unbreakable thing we let a column insist on (a very long email or URL
+// shouldn't force a column to half the screen).
+const MAX_MIN_CONTENT = 260;
 const STORAGE_PREFIX = "tasketra:col-widths:";
 
 function loadWidths(id: string): number[] | null {
@@ -75,6 +78,22 @@ function cellNeededWidth(td: HTMLElement): number {
   const padding = (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0);
   td.style.whiteSpace = prevWhiteSpace;
   return Math.ceil(contentWidth + padding) + 4;
+}
+
+// Each column's min-content width: the narrowest it can get before a word (or a
+// select, tag or button) has to break or overflow. Under table-layout:auto the
+// browser enforces this for free; once we switch to `fixed` it doesn't, which is
+// how "Primary mover" ended up as "Primar/y mover". Measured by briefly shrinking
+// the table to 1px wide in auto layout and reading what each header cell kept.
+function measureMinContent(table: HTMLTableElement, ths: HTMLElement[]): number[] {
+  const prevWidth = table.style.width;
+  const prevLayout = table.style.tableLayout;
+  table.style.tableLayout = "auto";
+  table.style.width = "1px";
+  const out = ths.map((th) => Math.min(MAX_MIN_CONTENT, Math.ceil(th.getBoundingClientRect().width)));
+  table.style.width = prevWidth;
+  table.style.tableLayout = prevLayout;
+  return out;
 }
 
 function saveWidths(id: string, widths: number[]) {
@@ -135,6 +154,9 @@ export function ResizableTable({
     // allowed below what its widest row needs -- not by fitting to the box, and
     // not by a width saved in an earlier visit (saved before a link was added).
     const actionNeed = ths.map(() => 0);
+    // Floors from the content itself (see measureMinContent). Skipped for the
+    // header-less Actions column, which has its own, stricter floor below.
+    const contentMin = measureMinContent(table, ths);
     const bodyRows = Array.from(table.querySelectorAll("tbody > tr"));
     ths.forEach((th, i) => {
       if (th.textContent?.trim()) return;
@@ -143,6 +165,10 @@ export function ResizableTable({
         if (td && tr.children.length === ths.length) actionNeed[i] = Math.max(actionNeed[i], cellNeededWidth(td));
       }
       mins[i] = Math.max(mins[i], actionNeed[i]);
+    });
+    contentMin.forEach((w, i) => {
+      mins[i] = Math.max(mins[i], w);
+      actionNeed[i] = Math.max(actionNeed[i], w);
     });
     minColWidths?.forEach((w, i) => {
       if (w && i < mins.length) {
@@ -189,7 +215,7 @@ export function ResizableTable({
       setWidths((prev) => {
         const base = prev ?? natural;
         const updated = base.slice();
-        updated[index] = Math.max(MIN_COL_WIDTH, Math.round(next));
+        updated[index] = Math.max(MIN_COL_WIDTH, actionNeed[index] ?? 0, Math.round(next));
         return updated;
       });
     }
