@@ -4526,19 +4526,34 @@ function RoadmapTab({ projectId, isOwner, showBudget }: { projectId: string; isO
             <Fragment key={item.id}>
               <tr ref={(el) => { if (el) rowRefs.current.set(item.id, el); else rowRefs.current.delete(item.id); }}>
                 <td>
-                  {item.title}
-                  {(() => {
-                    const progress = phaseProgress(item);
-                    if (item.type !== "phase") return null;
-                    return progress ? (
-                      <div className="phase-progress" title={`${progress.done} of ${progress.total} linked tasks are done`}>
-                        <div className="progress-track"><div className={`progress-fill${progress.pct === 100 ? " progress-fill-success" : ""}`} style={{ width: `${progress.pct}%` }} /></div>
-                        <span>{progress.done} of {progress.total} tasks done</span>
-                      </div>
-                    ) : (
-                      <div className="phase-progress">No tasks linked yet. Pick this phase on a task to track it.</div>
-                    );
-                  })()}
+                  <div className="roadmap-item-cell">
+                    <span>{item.title}</span>
+                    {item.type === "phase" && (() => {
+                      // Every phase shows the same bar-and-count, so rows line up;
+                      // a phase with no linked tasks shows an empty bar.
+                      const progress = phaseProgress(item);
+                      return (
+                        <span
+                          className="phase-progress"
+                          role="img"
+                          aria-label={progress ? `${progress.done} of ${progress.total} linked tasks done` : "No tasks linked yet"}
+                          title={progress
+                            ? `${progress.done} of ${progress.total} linked tasks are done`
+                            : "No tasks linked yet. Pick this phase on a task to track it."}
+                        >
+                          <span className="progress-track">
+                            <span
+                              className={`progress-fill${progress?.pct === 100 ? " progress-fill-success" : ""}`}
+                              style={{ width: `${progress?.pct ?? 0}%` }}
+                            />
+                          </span>
+                          <span className="phase-progress-count">
+                            {progress ? `${progress.done} of ${progress.total} tasks done` : "No tasks linked yet"}
+                          </span>
+                        </span>
+                      );
+                    })()}
+                  </div>
                 </td>
                 <td><span className="pill pill-navy">{ROADMAP_TYPE_LABEL[item.type]}</span></td>
                 <td className="muted">{item.swimlane}</td>
