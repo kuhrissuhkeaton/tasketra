@@ -278,6 +278,10 @@ textarea { resize: vertical; }
 @keyframes confirm-fade { from { opacity: 0; } to { opacity: 1; } }
 
 .row-actions { display: flex; gap: 10px; white-space: nowrap; }
+/* In a table, keep the cell a real table cell (a flex <td> sits at a different
+   height from its row's other cells); space the links with margins instead. */
+td.row-actions { display: table-cell; vertical-align: middle; }
+td.row-actions > * + * { margin-left: 12px; }
 .btn-link {
   background: none; border: none; padding: 0; font-size: 13px; font-weight: 600; color: var(--slate);
   min-height: 24px; /* WCAG 2.2 minimum target size */
@@ -767,12 +771,6 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
 /* --- WBS / task hierarchy --- */
 .wbs-cell { display: inline-block; }
 .wbs-connector { color: var(--slate); margin-right: 6px; }
-.wbs-add-btn {
-  border: 1px solid var(--border); background: white; color: var(--slate); border-radius: 4px;
-  width: 20px; height: 20px; line-height: 1; font-size: 13px; cursor: pointer; margin-left: 8px;
-  transition: border-color var(--ease), color var(--ease);
-}
-.wbs-add-btn:hover { border-color: var(--gold); color: var(--navy); }
 
 /* --- Timeline / Gantt --- */
 .gantt-wrap { display: flex; border-radius: var(--radius); background: var(--cream); box-shadow: var(--shadow-sm); overflow: hidden; }

@@ -138,6 +138,30 @@ describe("project page smoke test", () => {
     });
   }
 
+  it("Tasks tab: every row has the same + Sub-task action, in the actions cell", async () => {
+    const task = (id: string, title: string, parent: string | null = null) => ({
+      id, title, description: null, status: "not_started", owner_name: null, start_date: null,
+      due_date: null, stakeholder_id: null, parent_task_id: parent, roadmap_item_id: null,
+    });
+    await mountProject("standard", "tasks", (url) => {
+      if (/\/api\/tasks\?projectId=/.test(url)) {
+        return { tasks: [task("a", "A short one"), task("b", "A much longer task title that wraps onto more than one line in a narrow column"), task("c", "Child", "b")] };
+      }
+      if (/\/api\/raid-task-links/.test(url)) return { riskLinks: [], issueLinks: [] };
+      if (/\/api\/roadmap\?/.test(url)) return { items: [] };
+      return undefined;
+    });
+    expect(errors, errors.join("\n---\n")).toEqual([]);
+    const rows = [...host.querySelectorAll("tbody tr")];
+    expect(rows.length).toBe(3);
+    for (const r of rows) {
+      const actions = r.querySelector("td.row-actions");
+      expect(actions?.textContent).toContain("+ Sub-task");
+      // The old floating "+" next to the title is gone.
+      expect(r.querySelector("td:first-child .wbs-add-btn")).toBeNull();
+    }
+  });
+
   it("the skip link moves focus to the main content", async () => {
     await mountProject("standard", "charter");
     const link = host.querySelector("a.skip-link") as HTMLAnchorElement;

@@ -1167,14 +1167,6 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
                         </span>
                       )}
                     </span>
-                    <button
-                      className="wbs-add-btn"
-                      type="button"
-                      title="Add sub-task"
-                      onClick={() => setAddingSubtaskFor(addingSubtaskFor === t.id ? null : t.id)}
-                    >
-                      +
-                    </button>
                   </td>
                   <td>{t.owner_name || "--"}</td>
                   <td>{t.due_date ? fmtLocalDate(t.due_date) : "--"}</td>
@@ -1190,6 +1182,14 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
                     </select>
                   </td>
                   <td className="row-actions">
+                    <button
+                      className="btn-link"
+                      type="button"
+                      aria-expanded={addingSubtaskFor === t.id}
+                      onClick={() => setAddingSubtaskFor(addingSubtaskFor === t.id ? null : t.id)}
+                    >
+                      + Sub-task
+                    </button>
                     <button className="btn-link" type="button" onClick={() => openDrawer(t)}>Details</button>
                     <button className="btn-link btn-link-danger" type="button" onClick={() => removeTask(t.id, t.title)}>Delete</button>
                   </td>
