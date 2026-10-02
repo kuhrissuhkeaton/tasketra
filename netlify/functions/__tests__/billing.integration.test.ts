@@ -58,10 +58,12 @@ describe("billing plan limits", () => {
       expect(await getUserPlan(database, activeUser.id)).toBe("active");
     });
 
-    it("treats past_due and canceled as free, not paid", async () => {
+    it("keeps past_due on Pro during the grace period, and treats canceled (or an expired grace period) as free", async () => {
       const database = db();
       const pastDue = await createTestUser("pastdue@example.com");
       await giveActiveSubscription(pastDue.id, "past_due");
+      expect(await getUserPlan(database, pastDue.id)).toBe("past_due");
+      await database.sql`UPDATE subscriptions SET past_due_since = now() - interval '30 days' WHERE user_id = ${pastDue.id}`;
       expect(await getUserPlan(database, pastDue.id)).toBe("free");
 
       const canceled = await createTestUser("canceled@example.com");

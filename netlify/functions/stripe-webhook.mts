@@ -2,7 +2,7 @@ import type { Config } from "@netlify/functions";
 import { db } from "../lib/db.ts";
 import { json } from "../lib/http.ts";
 import { stripe } from "../lib/stripe.ts";
-import { getEnv } from "../lib/env.ts";
+import { getEnv, getSiteUrl } from "../lib/env.ts";
 import { sendEmail } from "../lib/notify.ts";
 import type Stripe from "stripe";
 import { withSentry } from "../lib/sentry.ts";
@@ -35,6 +35,13 @@ export default withSentry(async (req: Request) => {
 
   const database = db();
 
+  // Stripe retries and occasionally repeats events; handle each id once.
+  const [seen] = await database.sql`SELECT id FROM stripe_events WHERE id = ${event.id}`;
+  if (seen) return json({ received: true, duplicate: true });
+
+  // When Stripe created this event. Older events must not overwrite newer state.
+  const eventAt = new Date(((event as any).created ?? Math.floor(Date.now() / 1000)) * 1000).toISOString();
+
   async function upsertFromSubscription(sub: Stripe.Subscription) {
     const userId = sub.metadata?.userId;
     const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer.id;
@@ -43,10 +50,16 @@ export default withSentry(async (req: Request) => {
       ? new Date(sub.items.data[0].current_period_end * 1000).toISOString()
       : null;
 
+    const trialEnd = sub.trial_end ? new Date(sub.trial_end * 1000).toISOString() : null;
+    const pastDueNow = sub.status === "past_due" ? new Date().toISOString() : null;
+
     if (userId) {
+      // past_due_since keeps its original value while the status stays past_due
+      // (the grace period counts from the first failure); it clears once the
+      // status moves on, and so does the "we emailed about this failure" mark.
       await database.sql`
-        INSERT INTO subscriptions (user_id, stripe_customer_id, stripe_subscription_id, status, billing_interval, current_period_end, cancel_at_period_end)
-        VALUES (${userId}, ${customerId}, ${sub.id}, ${sub.status}, ${interval}, ${periodEnd}, ${sub.cancel_at_period_end})
+        INSERT INTO subscriptions (user_id, stripe_customer_id, stripe_subscription_id, status, billing_interval, current_period_end, cancel_at_period_end, past_due_since, trial_end, last_event_at)
+        VALUES (${userId}, ${customerId}, ${sub.id}, ${sub.status}, ${interval}, ${periodEnd}, ${sub.cancel_at_period_end}, ${pastDueNow}, ${trialEnd}, ${eventAt})
         ON CONFLICT (user_id) DO UPDATE SET
           stripe_customer_id = EXCLUDED.stripe_customer_id,
           stripe_subscription_id = EXCLUDED.stripe_subscription_id,
@@ -54,7 +67,14 @@ export default withSentry(async (req: Request) => {
           billing_interval = EXCLUDED.billing_interval,
           current_period_end = EXCLUDED.current_period_end,
           cancel_at_period_end = EXCLUDED.cancel_at_period_end,
+          past_due_since = CASE
+            WHEN EXCLUDED.status = 'past_due' THEN COALESCE(CASE WHEN subscriptions.status = 'past_due' THEN subscriptions.past_due_since END, now())
+            ELSE NULL END,
+          payment_failed_notified_at = CASE WHEN EXCLUDED.status = 'past_due' THEN subscriptions.payment_failed_notified_at ELSE NULL END,
+          trial_end = EXCLUDED.trial_end,
+          last_event_at = EXCLUDED.last_event_at,
           updated_at = now()
+        WHERE subscriptions.last_event_at IS NULL OR subscriptions.last_event_at <= EXCLUDED.last_event_at
       `;
     } else {
       // Fallback for events where metadata.userId wasn't carried through
@@ -63,8 +83,10 @@ export default withSentry(async (req: Request) => {
       await database.sql`
         UPDATE subscriptions SET
           stripe_subscription_id = ${sub.id}, status = ${sub.status}, billing_interval = ${interval},
-          current_period_end = ${periodEnd}, cancel_at_period_end = ${sub.cancel_at_period_end}, updated_at = now()
-        WHERE stripe_customer_id = ${customerId}
+          current_period_end = ${periodEnd}, cancel_at_period_end = ${sub.cancel_at_period_end},
+          past_due_since = CASE WHEN ${sub.status} = 'past_due' THEN COALESCE(past_due_since, now()) ELSE NULL END,
+          trial_end = ${trialEnd}, last_event_at = ${eventAt}, updated_at = now()
+        WHERE stripe_customer_id = ${customerId} AND (last_event_at IS NULL OR last_event_at <= ${eventAt})
       `;
     }
   }
@@ -131,11 +153,13 @@ export default withSentry(async (req: Request) => {
     if (!amountCents) return;
 
     const refereeCustomerId = typeof sub.customer === "string" ? sub.customer : sub.customer.id;
+    // Idempotency keys: if this handler fails part-way and Stripe retries the
+    // event, a credit that already went through is not given a second time.
     await client.customers.createBalanceTransaction(refereeCustomerId, {
       amount: -amountCents,
       currency: price.currency,
       description: "Referral reward -- one month free for joining through a referral link",
-    });
+    }, { idempotencyKey: `referral-referee-${userId}` });
 
     const [referrerSub] = await database.sql`SELECT stripe_customer_id FROM subscriptions WHERE user_id = ${user.referred_by}`;
     if (referrerSub?.stripe_customer_id) {
@@ -143,7 +167,7 @@ export default withSentry(async (req: Request) => {
         amount: -amountCents,
         currency: price.currency,
         description: "Referral reward -- one month free for a referral that converted to paid",
-      });
+      }, { idempotencyKey: `referral-referrer-${userId}` });
     }
 
     await database.sql`UPDATE users SET referral_reward_granted_at = now() WHERE id = ${userId}`;
@@ -169,13 +193,80 @@ export default withSentry(async (req: Request) => {
     }
     case "customer.subscription.deleted": {
       const sub = event.data.object as Stripe.Subscription;
-      await database.sql`UPDATE subscriptions SET status = 'canceled', updated_at = now() WHERE stripe_subscription_id = ${sub.id}`;
+      await database.sql`
+        UPDATE subscriptions SET status = 'canceled', past_due_since = NULL, last_event_at = ${eventAt}, updated_at = now()
+        WHERE stripe_subscription_id = ${sub.id} AND (last_event_at IS NULL OR last_event_at <= ${eventAt})
+      `;
+      break;
+    }
+    case "invoice.payment_failed": {
+      // A renewal charge failed. The subscription.updated event moves the plan to
+      // past_due; this tells the person, once per failure, what to do about it.
+      const invoice = event.data.object as Stripe.Invoice;
+      const customerId = typeof invoice.customer === "string" ? invoice.customer : invoice.customer?.id;
+      if (!customerId) break;
+      const [row] = await database.sql`
+        SELECT s.user_id, s.payment_failed_notified_at, u.email
+        FROM subscriptions s JOIN users u ON u.id = s.user_id
+        WHERE s.stripe_customer_id = ${customerId}
+      `;
+      if (!row || row.payment_failed_notified_at) break;
+      await database.sql`UPDATE subscriptions SET payment_failed_notified_at = now() WHERE user_id = ${row.user_id}`;
+      const adminEmail = getEnv("ADMIN_EMAIL");
+      await sendEmail(
+        row.email,
+        "Your Tasketra payment didn't go through",
+        `Hi,\n\nWe couldn't charge your card for Tasketra Pro. Nothing is lost: you keep Pro for now while we retry,` +
+          ` and all your projects stay exactly as they are.\n\nTo fix it, update your card here:\n${getSiteUrl()}/app/billing\n\n` +
+          `If it isn't fixed in about two weeks your account moves to the Free plan (your projects are kept).\n\n-- Karissa`,
+        adminEmail || undefined
+      );
+      if (adminEmail) await sendEmail(adminEmail, "A Tasketra payment failed", `A renewal payment failed for ${row.email}.`);
+      break;
+    }
+    case "customer.subscription.trial_will_end": {
+      // Stripe sends this about 3 days before a trial ends. A clear reminder
+      // before the first charge is expected (and required in some states).
+      const sub = event.data.object as Stripe.Subscription;
+      const userId = sub.metadata?.userId;
+      if (!userId) break;
+      const [user] = await database.sql`SELECT email FROM users WHERE id = ${userId}`;
+      if (!user?.email) break;
+      const interval = sub.items?.data?.[0]?.price?.recurring?.interval;
+      const amount = interval === "year" ? "$290 per year" : "$29 per month";
+      const endsOn = sub.trial_end ? new Date(sub.trial_end * 1000).toUTCString().slice(0, 16) : "soon";
+      await sendEmail(
+        user.email,
+        "Your Tasketra trial ends soon",
+        `Hi,\n\nYour free Pro trial ends on ${endsOn}. After that your card is charged ${amount} until you cancel.\n\n` +
+          `To keep Pro, you don't need to do anything. To cancel or change your plan, use Manage billing:\n${getSiteUrl()}/app/billing\n\n-- Karissa`,
+        getEnv("ADMIN_EMAIL") || undefined
+      );
+      break;
+    }
+    case "charge.dispute.created":
+    case "charge.refunded": {
+      // Money-moving events nobody should find out about later. Alert the admin.
+      const adminEmail = getEnv("ADMIN_EMAIL");
+      if (!adminEmail) break;
+      const obj = event.data.object as any;
+      const customerId = typeof obj.customer === "string" ? obj.customer : obj.customer?.id;
+      let who = customerId || "an unknown customer";
+      if (customerId) {
+        const [row] = await database.sql`
+          SELECT u.email FROM subscriptions s JOIN users u ON u.id = s.user_id WHERE s.stripe_customer_id = ${customerId}
+        `;
+        if (row?.email) who = row.email;
+      }
+      const label = event.type === "charge.dispute.created" ? "A payment was disputed" : "A payment was refunded";
+      await sendEmail(adminEmail, `Tasketra: ${label.toLowerCase()}`, `${label} for ${who}. Review it in the Stripe Dashboard.`);
       break;
     }
     default:
       break;
   }
 
+  await database.sql`INSERT INTO stripe_events (id, type) VALUES (${event.id}, ${event.type}) ON CONFLICT (id) DO NOTHING`;
   return json({ received: true });
 });
 

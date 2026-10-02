@@ -1,6 +1,6 @@
 // Central plan/limit logic. A user is on the paid plan if they're a founding
 // member (free forever, first 100 signups) OR have a subscription row in
-// 'trialing' or 'active' status. Everyone else is on the free tier.
+// 'trialing' or 'active' status (or a recent failed payment, see below). Everyone else is on the free tier.
 //
 // Limits:
 //  - Project count: free tier capped at FREE_PROJECT_LIMIT; paid/founding
@@ -14,18 +14,35 @@
 export const FREE_PROJECT_LIMIT = 3;
 export const MEMBER_LIMIT_PER_PROJECT = 25;
 
-export type PlanStatus = "founding" | "trialing" | "active" | "free";
+// "past_due" = a renewal payment failed. Pro access continues for a grace
+// period while Stripe retries the card and the customer is asked to fix it;
+// after that the account drops to Free (nothing is deleted).
+export type PlanStatus = "founding" | "trialing" | "active" | "past_due" | "free";
+
+export const PAST_DUE_GRACE_DAYS = 14;
+
+/** Stripe statuses where a subscription still exists and could bill. A new
+ *  checkout must never be started while one of these exists. */
+export const LIVE_SUBSCRIPTION_STATUSES = ["trialing", "active", "past_due", "unpaid", "paused", "incomplete"];
+
+/** The one place a stored Stripe status becomes a Tasketra plan. */
+export function planForSubscription(status: string | null | undefined, pastDueSince: Date | string | null | undefined, now: Date = new Date()): PlanStatus {
+  if (status === "trialing") return "trialing";
+  if (status === "active") return "active";
+  if (status === "past_due") {
+    if (!pastDueSince) return "past_due";
+    const since = new Date(pastDueSince).getTime();
+    return now.getTime() - since < PAST_DUE_GRACE_DAYS * 86_400_000 ? "past_due" : "free";
+  }
+  return "free";
+}
 
 export async function getUserPlan(database: any, userId: string): Promise<PlanStatus> {
   const [user] = await database.sql`SELECT founding_member FROM users WHERE id = ${userId}`;
   if (user?.founding_member) return "founding";
 
-  const [sub] = await database.sql`
-    SELECT status FROM subscriptions WHERE user_id = ${userId} AND status IN ('trialing', 'active')
-  `;
-  if (sub?.status === "trialing") return "trialing";
-  if (sub?.status === "active") return "active";
-  return "free";
+  const [sub] = await database.sql`SELECT status, past_due_since FROM subscriptions WHERE user_id = ${userId}`;
+  return planForSubscription(sub?.status, sub?.past_due_since);
 }
 
 export function isPaidPlan(plan: PlanStatus): boolean {
@@ -36,7 +53,7 @@ export async function canCreateProject(database: any, userId: string): Promise<b
   const plan = await getUserPlan(database, userId);
   if (isPaidPlan(plan)) return true;
   const [{ count }] = await database.sql`
-    SELECT count(*)::int AS count FROM projects WHERE owner_id = ${userId} AND deleted_at IS NULL
+    SELECT count(*)::int AS count FROM projects WHERE owner_id = ${userId} AND deleted_at IS NULL AND closed_at IS NULL
   `;
   return count < FREE_PROJECT_LIMIT;
 }

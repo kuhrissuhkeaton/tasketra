@@ -56,7 +56,7 @@ export type User = {
   isAdmin?: boolean;
   /** False until they click the link we email at sign-up. Missing on older responses. */
   emailVerified?: boolean;
-  plan?: "founding" | "trialing" | "active" | "free";
+  plan?: "founding" | "trialing" | "active" | "past_due" | "free";
   display_name?: string | null;
   job_title?: string | null;
   timezone?: string | null;
@@ -332,6 +332,18 @@ export type AdminAccount = {
   is_you: boolean;
   possible_duplicates: string[];
   email_verified: boolean;
+};
+
+export type BillingStatus = {
+  plan: "founding" | "trialing" | "active" | "past_due" | "free";
+  status: string | null;
+  interval: "month" | "year" | null;
+  currentPeriodEnd: string | null;
+  cancelAtPeriodEnd: boolean;
+  trialEnd: string | null;
+  graceEndsAt: string | null;
+  canStartTrial: boolean;
+  hasBillingAccount: boolean;
 };
 
 export type AdminAccountsSummary = { foundingClaimed: number; cap: number; totalAccounts: number };
@@ -865,6 +877,8 @@ export const api = {
 
   createCheckoutSession: (interval: "month" | "year") =>
     request<{ url: string }>("/create-checkout-session", { method: "POST", body: JSON.stringify({ interval }) }),
+  billingStatus: () =>
+    request<BillingStatus>("/billing-status"),
   createPortalSession: () => request<{ url: string }>("/create-portal-session", { method: "POST" }),
 
   listMeetings: (projectId: string) => request<{ meetings: Meeting[] }>(`/meetings?projectId=${projectId}`),
