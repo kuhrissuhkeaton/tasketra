@@ -69,10 +69,10 @@ export default function Login() {
         </div>
 
         <form onSubmit={onSubmit}>
-          <label>Email</label>
-          <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
-          <label>Password</label>
-          <input type="password" required minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} />
+          <label htmlFor="f-login-73">Email</label>
+          <input id="f-login-73" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+          <label htmlFor="f-login-75">Password</label>
+          <input id="f-login-75" type="password" required minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} />
           {error && <div className="form-error">{error}</div>}
           <button type="submit" className="btn btn-primary btn-block" disabled={busy}>
             {busy ? "Please wait..." : mode === "login" ? "Sign in" : "Create account"}

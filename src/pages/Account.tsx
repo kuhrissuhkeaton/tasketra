@@ -157,7 +157,7 @@ export default function Account() {
                   Remove
                 </button>
               )}
-              <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={onAvatarSelected} />
+              <input aria-label="Choose a profile photo" ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={onAvatarSelected} />
             </div>
           </div>
           {avatarError && <div className="form-error">{avatarError}</div>}
@@ -166,12 +166,12 @@ export default function Account() {
         <div className="settings-card" style={{ maxWidth: 640 }}>
           <p className="settings-card-label">Profile</p>
           <form onSubmit={saveProfile}>
-            <label>Display name</label>
-            <input type="text" value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder={user.email} />
-            <label>Job title</label>
-            <input type="text" value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} placeholder="e.g. Senior PM" />
-            <label>Timezone</label>
-            <select value={timezone} onChange={(e) => setTimezone(e.target.value)}>
+            <label htmlFor="f-account-170">Display name</label>
+            <input id="f-account-170" type="text" value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder={user.email} />
+            <label htmlFor="f-account-172">Job title</label>
+            <input id="f-account-172" type="text" value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} placeholder="e.g. Senior PM" />
+            <label htmlFor="f-account-174">Timezone</label>
+            <select id="f-account-174" value={timezone} onChange={(e) => setTimezone(e.target.value)}>
               <option value="">Not set</option>
               {TIMEZONES.map((tz) => (
                 <option key={tz} value={tz}>{tz}</option>
@@ -188,10 +188,10 @@ export default function Account() {
         <div className="settings-card" style={{ maxWidth: 640 }}>
           <p className="settings-card-label">Change password</p>
           <form onSubmit={changePassword}>
-            <label>Current password</label>
-            <input type="password" required value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} />
-            <label>New password</label>
-            <input type="password" required minLength={8} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+            <label htmlFor="f-account-192">Current password</label>
+            <input id="f-account-192" type="password" required value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} />
+            <label htmlFor="f-account-194">New password</label>
+            <input id="f-account-194" type="password" required minLength={8} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
             {passwordError && <div className="form-error">{passwordError}</div>}
             {passwordSaved && <p className="form-success">Password updated.</p>}
             <button type="submit" className="btn btn-primary" disabled={passwordBusy} style={{ marginTop: 8 }}>
@@ -208,7 +208,7 @@ export default function Account() {
           {referrals && (
             <>
               <div className="inline-form">
-                <input type="text" readOnly value={referrals.link} onFocus={(e) => e.target.select()} style={{ flex: 1, minWidth: 260 }} />
+                <input aria-label="Your referral link" type="text" readOnly value={referrals.link} onFocus={(e) => e.target.select()} style={{ flex: 1, minWidth: 260 }} />
                 <button type="button" className="btn btn-primary" onClick={copyLink}>
                   {copied ? "Copied!" : "Copy link"}
                 </button>

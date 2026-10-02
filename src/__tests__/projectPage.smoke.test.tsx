@@ -131,10 +131,19 @@ describe("project page smoke test", () => {
           expect(host.textContent).toContain("Smoke Test Project");
           // The sidebar rendered with at least the Reference group.
           expect(host.querySelectorAll(".side-tab").length).toBeGreaterThan(3);
+          // Keyboard users get a way past the navigation.
+          expect(host.querySelector("a.skip-link")?.textContent).toBe("Skip to main content");
         });
       }
     });
   }
+
+  it("the skip link moves focus to the main content", async () => {
+    await mountProject("standard", "charter");
+    const link = host.querySelector("a.skip-link") as HTMLAnchorElement;
+    await act(async () => link.click());
+    expect(document.activeElement?.tagName).toBe("MAIN");
+  });
 
   it("Stakeholders tab with data: list shows Power, grid view places people", async () => {
     await mountProject("standard", "stakeholders", (url) =>

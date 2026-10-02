@@ -54,10 +54,10 @@ export default function ResetPassword() {
         <p className="auth-tagline">Choose a new password</p>
 
         <form onSubmit={onSubmit}>
-          <label>New password</label>
-          <input type="password" required minLength={8} autoFocus value={password} onChange={(e) => setPassword(e.target.value)} />
-          <label>Confirm password</label>
-          <input type="password" required minLength={8} value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+          <label htmlFor="f-resetpassword-58">New password</label>
+          <input id="f-resetpassword-58" type="password" required minLength={8} autoFocus value={password} onChange={(e) => setPassword(e.target.value)} />
+          <label htmlFor="f-resetpassword-60">Confirm password</label>
+          <input id="f-resetpassword-60" type="password" required minLength={8} value={confirm} onChange={(e) => setConfirm(e.target.value)} />
           {error && <div className="form-error">{error}</div>}
           <button type="submit" className="btn btn-primary btn-block" disabled={busy}>
             {busy ? "Saving..." : "Reset password"}

@@ -61,6 +61,21 @@ export function AppSidebar({ children }: { children?: ReactNode }) {
 
   return (
     <aside className="sidebar">
+      {/* Keyboard shortcut past the navigation: visible only when focused. */}
+      <a
+        href="#main-content"
+        className="skip-link"
+        onClick={(e) => {
+          const main = document.querySelector("main");
+          if (!main) return;
+          e.preventDefault();
+          main.setAttribute("tabindex", "-1");
+          main.focus();
+          main.scrollIntoView?.({ block: "start" });
+        }}
+      >
+        Skip to main content
+      </a>
       <Link to="/app" className="sidebar-wordmark">
         <Wordmark size="sm" beta />
       </Link>

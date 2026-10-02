@@ -64,7 +64,7 @@ export function FeedbackModal({ onClose }: { onClose: () => void }) {
             <p className="confirm-message" style={{ marginBottom: 12 }}>
               What's broken, missing, or could be better?
             </p>
-            <textarea
+            <textarea aria-label="Your feedback"
               autoFocus
               required
               rows={5}

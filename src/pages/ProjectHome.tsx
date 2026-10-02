@@ -466,7 +466,7 @@ function FeedTab({ projectId }: { projectId: string }) {
   return (
     <div>
       <form className="inline-form" onSubmit={postNote}>
-        <input placeholder="Post a status update to the feed..." value={note} onChange={(e) => setNote(e.target.value)} />
+        <input aria-label="Status update" placeholder="Post a status update to the feed..." value={note} onChange={(e) => setNote(e.target.value)} />
         <button className="btn btn-primary">Post</button>
       </form>
 
@@ -615,7 +615,7 @@ function TodayTab({ projectId }: { projectId: string }) {
                 </div>
                 {reassignId === t.id ? (
                   <div className="row-actions">
-                    <input
+                    <input aria-label="Owner"
                       value={reassignValue}
                       onChange={(e) => setReassignValue(e.target.value)}
                       placeholder="Owner"
@@ -628,6 +628,7 @@ function TodayTab({ projectId }: { projectId: string }) {
                 ) : (
                   <div className="row-actions">
                     <select
+                      aria-label="Status"
                       className="status-select status-select-blocked"
                       value="blocked"
                       disabled={busyId === t.id}
@@ -665,7 +666,7 @@ function TodayTab({ projectId }: { projectId: string }) {
                 </div>
                 {reassignId === t.id ? (
                   <div className="row-actions">
-                    <input
+                    <input aria-label="Owner"
                       value={reassignValue}
                       onChange={(e) => setReassignValue(e.target.value)}
                       placeholder="Owner"
@@ -677,7 +678,7 @@ function TodayTab({ projectId }: { projectId: string }) {
                   </div>
                 ) : (
                   <div className="row-actions">
-                    <select
+                    <select aria-label="Status"
                       className={`status-select status-select-${t.status}`}
                       value={t.status}
                       disabled={busyId === t.id}
@@ -737,7 +738,7 @@ function TodayTab({ projectId }: { projectId: string }) {
                 </div>
                 {reassignId === i.id ? (
                   <div className="row-actions">
-                    <input
+                    <input aria-label="Owner"
                       value={reassignValue}
                       onChange={(e) => setReassignValue(e.target.value)}
                       placeholder="Owner"
@@ -749,7 +750,7 @@ function TodayTab({ projectId }: { projectId: string }) {
                   </div>
                 ) : (
                   <div className="row-actions">
-                    <select
+                    <select aria-label="Status"
                       className={`status-select status-select-${i.status}`}
                       value={i.status}
                       disabled={busyId === i.id}
@@ -787,7 +788,7 @@ function TodayTab({ projectId }: { projectId: string }) {
                 </div>
                 {reassignId === r.id ? (
                   <div className="row-actions">
-                    <input
+                    <input aria-label="Owner"
                       value={reassignValue}
                       onChange={(e) => setReassignValue(e.target.value)}
                       placeholder="Owner"
@@ -799,7 +800,7 @@ function TodayTab({ projectId }: { projectId: string }) {
                   </div>
                 ) : (
                   <div className="row-actions">
-                    <select
+                    <select aria-label="Status"
                       className={`status-select status-select-${r.status}`}
                       value={r.status}
                       disabled={busyId === r.id}
@@ -1092,8 +1093,8 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
   return (
     <div>
       <form className="inline-form inline-form-wide" onSubmit={addTask}>
-        <input placeholder="Task title" value={title} onChange={(e) => setTitle(e.target.value)} />
-        <input placeholder="Owner (optional)" value={owner} onChange={(e) => setOwner(e.target.value)} />
+        <input aria-label="Task title" placeholder="Task title" value={title} onChange={(e) => setTitle(e.target.value)} />
+        <input aria-label="Owner (optional)" placeholder="Owner (optional)" value={owner} onChange={(e) => setOwner(e.target.value)} />
         <input type="date" title="Start date (optional)" value={start} onChange={(e) => setStart(e.target.value)} />
         <input type="date" title="Due date" value={due} onChange={(e) => setDue(e.target.value)} />
         <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as Task["status"])} title="Status">
@@ -1178,7 +1179,7 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
                   <td>{t.owner_name || "--"}</td>
                   <td>{t.due_date ? fmtLocalDate(t.due_date) : "--"}</td>
                   <td>
-                    <select
+                    <select aria-label="Status"
                       className={`status-select status-select-${t.status}`}
                       value={t.status}
                       onChange={(e) => setStatus(t.id, e.target.value as Task["status"])}
@@ -1201,8 +1202,8 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
                         style={{ marginLeft: (depth + 1) * 20, marginBottom: 0 }}
                         onSubmit={(e) => addSubtask(e, t.id)}
                       >
-                        <input placeholder="Sub-task title" value={subTitle} onChange={(e) => setSubTitle(e.target.value)} autoFocus />
-                        <input placeholder="Owner (optional)" value={subOwner} onChange={(e) => setSubOwner(e.target.value)} />
+                        <input aria-label="Sub-task title" placeholder="Sub-task title" value={subTitle} onChange={(e) => setSubTitle(e.target.value)} autoFocus />
+                        <input aria-label="Owner (optional)" placeholder="Owner (optional)" value={subOwner} onChange={(e) => setSubOwner(e.target.value)} />
                         <input type="date" title="Start date (optional)" value={subStart} onChange={(e) => setSubStart(e.target.value)} />
                         <input type="date" title="Due date" value={subDue} onChange={(e) => setSubDue(e.target.value)} />
                         <button className="btn btn-primary">Add</button>
@@ -1272,17 +1273,17 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
         {drawerTask && (
           <>
             <div className="drawer-field">
-              <label>Title</label>
-              <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
+              <label htmlFor="f-projecthome-1276">Title</label>
+              <input id="f-projecthome-1276" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
             </div>
             <div className="drawer-field-row">
               <div className="drawer-field">
-                <label>Owner</label>
-                <input value={editOwner} onChange={(e) => setEditOwner(e.target.value)} placeholder="Unassigned" />
+                <label htmlFor="f-projecthome-1281">Owner</label>
+                <input id="f-projecthome-1281" value={editOwner} onChange={(e) => setEditOwner(e.target.value)} placeholder="Unassigned" />
               </div>
               <div className="drawer-field">
-                <label>Status</label>
-                <select
+                <label htmlFor="f-projecthome-1285">Status</label>
+                <select id="f-projecthome-1285"
                   className={`status-select status-select-${drawerTask.status}`}
                   value={drawerTask.status}
                   onChange={(e) => setStatus(drawerTask.id, e.target.value as Task["status"])}
@@ -1295,18 +1296,18 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
             </div>
             <div className="drawer-field-row">
               <div className="drawer-field">
-                <label>Start date</label>
-                <input type="date" value={editStart} onChange={(e) => setEditStart(e.target.value)} />
+                <label htmlFor="f-projecthome-1299">Start date</label>
+                <input id="f-projecthome-1299" type="date" value={editStart} onChange={(e) => setEditStart(e.target.value)} />
               </div>
               <div className="drawer-field">
-                <label>Due date</label>
-                <input type="date" value={editDue} onChange={(e) => setEditDue(e.target.value)} />
+                <label htmlFor="f-projecthome-1303">Due date</label>
+                <input id="f-projecthome-1303" type="date" value={editDue} onChange={(e) => setEditDue(e.target.value)} />
               </div>
             </div>
             {(phases.length > 0 || !!drawerTask.roadmap_item_id) && (
               <div className="drawer-field">
-                <label>Phase</label>
-                <select
+                <label htmlFor="f-projecthome-1309">Phase</label>
+                <select id="f-projecthome-1309"
                   value={phaseById.has(editPhase) ? editPhase : ""}
                   onChange={(e) => setEditPhase(e.target.value)}
                 >
@@ -1318,8 +1319,8 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
               </div>
             )}
             <div className="drawer-field">
-              <label>Notes</label>
-              <textarea
+              <label htmlFor="f-projecthome-1322">Notes</label>
+              <textarea id="f-projecthome-1322"
                 rows={5}
                 value={editDescription}
                 onChange={(e) => setEditDescription(e.target.value)}
@@ -1591,17 +1592,17 @@ function IssuesTab({ projectId, highlightId }: { projectId: string; highlightId?
   return (
     <div>
       <form className="stacked-form" onSubmit={addIssue}>
-        <label>Issue</label>
-        <input placeholder="What's the issue?" value={title} onChange={(e) => setTitle(e.target.value)} />
-        <label>Description (optional)</label>
-        <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
+        <label htmlFor="f-projecthome-1595">Issue</label>
+        <input id="f-projecthome-1595" placeholder="What's the issue?" value={title} onChange={(e) => setTitle(e.target.value)} />
+        <label htmlFor="f-projecthome-1597">Description (optional)</label>
+        <textarea id="f-projecthome-1597" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
         <div className="inline-form" style={{ marginTop: 8, marginBottom: 0 }}>
-          <select value={severity} onChange={(e) => setSeverity(e.target.value as Issue["severity"])}>
+          <select aria-label="Severity" value={severity} onChange={(e) => setSeverity(e.target.value as Issue["severity"])}>
             {Object.entries(SEVERITY_LABEL).map(([value, label]) => (
               <option key={value} value={value}>{label} severity</option>
             ))}
           </select>
-          <input placeholder="Owner (optional)" value={owner} onChange={(e) => setOwner(e.target.value)} />
+          <input aria-label="Owner (optional)" placeholder="Owner (optional)" value={owner} onChange={(e) => setOwner(e.target.value)} />
           <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as Issue["status"])} title="Status">
             {Object.entries(ISSUE_STATUS_LABEL).map(([value, label]) => (
               <option key={value} value={value}>{label}</option>
@@ -1680,7 +1681,7 @@ function IssuesTab({ projectId, highlightId }: { projectId: string; highlightId?
               <td><span className={`pill ${SEVERITY_PILL[i.severity]}`}>{SEVERITY_LABEL[i.severity]}</span></td>
               <td>{i.owner_name || "--"}</td>
               <td>
-                <select
+                <select aria-label="Status"
                   className={`status-select status-select-${i.status}`}
                   value={i.status}
                   onChange={(e) => setStatus(i.id, e.target.value as Issue["status"])}
@@ -1718,30 +1719,30 @@ function IssuesTab({ projectId, highlightId }: { projectId: string; highlightId?
         {drawerIssue && (
           <>
             <div className="drawer-field">
-              <label>Title</label>
-              <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
+              <label htmlFor="f-projecthome-1722">Title</label>
+              <input id="f-projecthome-1722" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
             </div>
             <div className="drawer-field">
-              <label>Description</label>
-              <textarea rows={4} value={editDescription} onChange={(e) => setEditDescription(e.target.value)} />
+              <label htmlFor="f-projecthome-1726">Description</label>
+              <textarea id="f-projecthome-1726" rows={4} value={editDescription} onChange={(e) => setEditDescription(e.target.value)} />
             </div>
             <div className="drawer-field-row">
               <div className="drawer-field">
-                <label>Severity</label>
-                <select value={editSeverity} onChange={(e) => setEditSeverity(e.target.value as Issue["severity"])}>
+                <label htmlFor="f-projecthome-1731">Severity</label>
+                <select id="f-projecthome-1731" value={editSeverity} onChange={(e) => setEditSeverity(e.target.value as Issue["severity"])}>
                   {Object.entries(SEVERITY_LABEL).map(([value, label]) => (
                     <option key={value} value={value}>{label}</option>
                   ))}
                 </select>
               </div>
               <div className="drawer-field">
-                <label>Owner</label>
-                <input value={editOwner} onChange={(e) => setEditOwner(e.target.value)} placeholder="Unassigned" />
+                <label htmlFor="f-projecthome-1739">Owner</label>
+                <input id="f-projecthome-1739" value={editOwner} onChange={(e) => setEditOwner(e.target.value)} placeholder="Unassigned" />
               </div>
             </div>
             <div className="drawer-field">
-              <label>Status</label>
-              <select
+              <label htmlFor="f-projecthome-1744">Status</label>
+              <select id="f-projecthome-1744"
                 className={`status-select status-select-${drawerIssue.status}`}
                 value={drawerIssue.status}
                 onChange={(e) => setStatus(drawerIssue.id, e.target.value as Issue["status"])}
@@ -1752,8 +1753,8 @@ function IssuesTab({ projectId, highlightId }: { projectId: string; highlightId?
               </select>
             </div>
             <div className="drawer-field">
-              <label>Resolution</label>
-              <textarea rows={2} value={editResolution} onChange={(e) => setEditResolution(e.target.value)} placeholder="How was this resolved?" />
+              <label htmlFor="f-projecthome-1756">Resolution</label>
+              <textarea id="f-projecthome-1756" rows={2} value={editResolution} onChange={(e) => setEditResolution(e.target.value)} placeholder="How was this resolved?" />
             </div>
 
             <div className="drawer-section">
@@ -1774,7 +1775,7 @@ function IssuesTab({ projectId, highlightId }: { projectId: string; highlightId?
               )}
               {unlinkedTasksForDrawer.length > 0 && (
                 <div className="link-add-row">
-                  <select value={linkTaskId} onChange={(e) => setLinkTaskId(e.target.value)}>
+                  <select aria-label="Linked task" value={linkTaskId} onChange={(e) => setLinkTaskId(e.target.value)}>
                     <option value="">Link a task...</option>
                     {unlinkedTasksForDrawer.map((t) => (
                       <option key={t.id} value={t.id}>{t.title}</option>
@@ -1958,24 +1959,24 @@ function RisksTab({ projectId, highlightId }: { projectId: string; highlightId?:
   return (
     <div>
       <form className="stacked-form" onSubmit={addRisk}>
-        <label>Risk</label>
-        <input placeholder="What could go wrong?" value={title} onChange={(e) => setTitle(e.target.value)} />
-        <label>Description (optional)</label>
-        <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
-        <label>Mitigation plan (optional)</label>
-        <textarea value={mitigation} onChange={(e) => setMitigation(e.target.value)} rows={2} />
+        <label htmlFor="f-projecthome-1962">Risk</label>
+        <input id="f-projecthome-1962" placeholder="What could go wrong?" value={title} onChange={(e) => setTitle(e.target.value)} />
+        <label htmlFor="f-projecthome-1964">Description (optional)</label>
+        <textarea id="f-projecthome-1964" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
+        <label htmlFor="f-projecthome-1966">Mitigation plan (optional)</label>
+        <textarea id="f-projecthome-1966" value={mitigation} onChange={(e) => setMitigation(e.target.value)} rows={2} />
         <div className="inline-form" style={{ marginTop: 8, marginBottom: 0 }}>
-          <select value={probability} onChange={(e) => setProbability(e.target.value as Risk["probability"])}>
+          <select aria-label="Probability" value={probability} onChange={(e) => setProbability(e.target.value as Risk["probability"])}>
             {Object.entries(LEVEL_LABEL).map(([value, label]) => (
               <option key={value} value={value}>{label} probability</option>
             ))}
           </select>
-          <select value={impact} onChange={(e) => setImpact(e.target.value as Risk["impact"])}>
+          <select aria-label="Impact" value={impact} onChange={(e) => setImpact(e.target.value as Risk["impact"])}>
             {Object.entries(LEVEL_LABEL).map(([value, label]) => (
               <option key={value} value={value}>{label} impact</option>
             ))}
           </select>
-          <input placeholder="Owner (optional)" value={owner} onChange={(e) => setOwner(e.target.value)} />
+          <input aria-label="Owner (optional)" placeholder="Owner (optional)" value={owner} onChange={(e) => setOwner(e.target.value)} />
           <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as Risk["status"])} title="Status">
             {Object.entries(RISK_STATUS_LABEL).map(([value, label]) => (
               <option key={value} value={value}>{label}</option>
@@ -2082,7 +2083,7 @@ function RisksTab({ projectId, highlightId }: { projectId: string; highlightId?:
               </td>
               <td>{r.owner_name || "--"}</td>
               <td>
-                <select
+                <select aria-label="Status"
                   className={`status-select status-select-${r.status}`}
                   value={r.status}
                   onChange={(e) => setStatus(r.id, e.target.value as Risk["status"])}
@@ -2123,25 +2124,25 @@ function RisksTab({ projectId, highlightId }: { projectId: string; highlightId?:
         {drawerRisk && (
           <>
             <div className="drawer-field">
-              <label>Title</label>
-              <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
+              <label htmlFor="f-projecthome-2127">Title</label>
+              <input id="f-projecthome-2127" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
             </div>
             <div className="drawer-field">
-              <label>Description</label>
-              <textarea rows={4} value={editDescription} onChange={(e) => setEditDescription(e.target.value)} />
+              <label htmlFor="f-projecthome-2131">Description</label>
+              <textarea id="f-projecthome-2131" rows={4} value={editDescription} onChange={(e) => setEditDescription(e.target.value)} />
             </div>
             <div className="drawer-field-row">
               <div className="drawer-field">
-                <label>Probability</label>
-                <select value={editProbability} onChange={(e) => setEditProbability(e.target.value as Risk["probability"])}>
+                <label htmlFor="f-projecthome-2136">Probability</label>
+                <select id="f-projecthome-2136" value={editProbability} onChange={(e) => setEditProbability(e.target.value as Risk["probability"])}>
                   {Object.entries(LEVEL_LABEL).map(([value, label]) => (
                     <option key={value} value={value}>{label}</option>
                   ))}
                 </select>
               </div>
               <div className="drawer-field">
-                <label>Impact</label>
-                <select value={editImpact} onChange={(e) => setEditImpact(e.target.value as Risk["impact"])}>
+                <label htmlFor="f-projecthome-2144">Impact</label>
+                <select id="f-projecthome-2144" value={editImpact} onChange={(e) => setEditImpact(e.target.value as Risk["impact"])}>
                   {Object.entries(LEVEL_LABEL).map(([value, label]) => (
                     <option key={value} value={value}>{label}</option>
                   ))}
@@ -2149,17 +2150,17 @@ function RisksTab({ projectId, highlightId }: { projectId: string; highlightId?:
               </div>
             </div>
             <div className="drawer-field">
-              <label>Mitigation plan</label>
-              <textarea rows={3} value={editMitigation} onChange={(e) => setEditMitigation(e.target.value)} />
+              <label htmlFor="f-projecthome-2153">Mitigation plan</label>
+              <textarea id="f-projecthome-2153" rows={3} value={editMitigation} onChange={(e) => setEditMitigation(e.target.value)} />
             </div>
             <div className="drawer-field-row">
               <div className="drawer-field">
-                <label>Owner</label>
-                <input value={editOwner} onChange={(e) => setEditOwner(e.target.value)} placeholder="Unassigned" />
+                <label htmlFor="f-projecthome-2158">Owner</label>
+                <input id="f-projecthome-2158" value={editOwner} onChange={(e) => setEditOwner(e.target.value)} placeholder="Unassigned" />
               </div>
               <div className="drawer-field">
-                <label>Status</label>
-                <select
+                <label htmlFor="f-projecthome-2162">Status</label>
+                <select id="f-projecthome-2162"
                   className={`status-select status-select-${drawerRisk.status}`}
                   value={drawerRisk.status}
                   onChange={(e) => setStatus(drawerRisk.id, e.target.value as Risk["status"])}
@@ -2189,7 +2190,7 @@ function RisksTab({ projectId, highlightId }: { projectId: string; highlightId?:
               )}
               {unlinkedTasksForDrawer.length > 0 && (
                 <div className="link-add-row">
-                  <select value={linkTaskId} onChange={(e) => setLinkTaskId(e.target.value)}>
+                  <select aria-label="Linked task" value={linkTaskId} onChange={(e) => setLinkTaskId(e.target.value)}>
                     <option value="">Link a task...</option>
                     {unlinkedTasksForDrawer.map((t) => (
                       <option key={t.id} value={t.id}>{t.title}</option>
@@ -2298,12 +2299,12 @@ function AssumptionsTab({ projectId }: { projectId: string }) {
         revisited if one turns out wrong.
       </p>
       <form className="stacked-form" onSubmit={addAssumption}>
-        <label>Assumption</label>
-        <input placeholder="What are you assuming is true?" value={statement} onChange={(e) => setStatement(e.target.value)} />
-        <label>Notes (optional)</label>
-        <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
+        <label htmlFor="f-projecthome-2302">Assumption</label>
+        <input id="f-projecthome-2302" placeholder="What are you assuming is true?" value={statement} onChange={(e) => setStatement(e.target.value)} />
+        <label htmlFor="f-projecthome-2304">Notes (optional)</label>
+        <textarea id="f-projecthome-2304" value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
         <div className="inline-form" style={{ marginTop: 8, marginBottom: 0 }}>
-          <input placeholder="Owner (optional)" value={owner} onChange={(e) => setOwner(e.target.value)} />
+          <input aria-label="Owner (optional)" placeholder="Owner (optional)" value={owner} onChange={(e) => setOwner(e.target.value)} />
           <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as Assumption["status"])} title="Status">
             {Object.entries(ASSUMPTION_STATUS_LABEL).map(([value, label]) => (
               <option key={value} value={value}>{label}</option>
@@ -2372,10 +2373,10 @@ function AssumptionsTab({ projectId }: { projectId: string }) {
             editingId === a.id ? (
               <tr key={a.id}>
                 <td>
-                  <input value={editStatement} onChange={(e) => setEditStatement(e.target.value)} style={{ marginBottom: 4 }} />
-                  <textarea value={editNotes} onChange={(e) => setEditNotes(e.target.value)} rows={2} placeholder="Notes" />
+                  <input aria-label="Statement" value={editStatement} onChange={(e) => setEditStatement(e.target.value)} style={{ marginBottom: 4 }} />
+                  <textarea aria-label="Notes" value={editNotes} onChange={(e) => setEditNotes(e.target.value)} rows={2} placeholder="Notes" />
                 </td>
-                <td><input value={editOwner} onChange={(e) => setEditOwner(e.target.value)} /></td>
+                <td><input aria-label="Owner" value={editOwner} onChange={(e) => setEditOwner(e.target.value)} /></td>
                 <td className="muted">{ASSUMPTION_STATUS_LABEL[a.status]}</td>
                 <td className="row-actions">
                   <button className="btn btn-primary" type="button" onClick={() => saveEdit(a.id)}>Save</button>
@@ -2390,7 +2391,7 @@ function AssumptionsTab({ projectId }: { projectId: string }) {
                 </td>
                 <td>{a.owner_name || "--"}</td>
                 <td>
-                  <select
+                  <select aria-label="Status"
                     className={`status-select status-select-${a.status}`}
                     value={a.status}
                     onChange={(e) => setStatus(a.id, e.target.value as Assumption["status"])}
@@ -2522,18 +2523,18 @@ function DependenciesTab({ projectId }: { projectId: string }) {
         external (a vendor, client, or regulatory step).
       </p>
       <form className="stacked-form" onSubmit={addDependency}>
-        <label>Dependency</label>
-        <input placeholder="What's this waiting on?" value={title} onChange={(e) => setTitle(e.target.value)} />
-        <label>Description (optional)</label>
-        <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
+        <label htmlFor="f-projecthome-2526">Dependency</label>
+        <input id="f-projecthome-2526" placeholder="What's this waiting on?" value={title} onChange={(e) => setTitle(e.target.value)} />
+        <label htmlFor="f-projecthome-2528">Description (optional)</label>
+        <textarea id="f-projecthome-2528" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
         <div className="inline-form" style={{ marginTop: 8, marginBottom: 0 }}>
-          <select value={direction} onChange={(e) => setDirection(e.target.value as Dependency["direction"])}>
+          <select aria-label="Direction" value={direction} onChange={(e) => setDirection(e.target.value as Dependency["direction"])}>
             {Object.entries(DEPENDENCY_DIRECTION_LABEL).map(([value, label]) => (
               <option key={value} value={value}>{label}</option>
             ))}
           </select>
-          <input placeholder="Owner (optional)" value={owner} onChange={(e) => setOwner(e.target.value)} />
-          <input type="date" value={neededBy} onChange={(e) => setNeededBy(e.target.value)} />
+          <input aria-label="Owner (optional)" placeholder="Owner (optional)" value={owner} onChange={(e) => setOwner(e.target.value)} />
+          <input aria-label="Needed by" type="date" value={neededBy} onChange={(e) => setNeededBy(e.target.value)} />
           <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as Dependency["status"])} title="Status">
             {Object.entries(DEPENDENCY_STATUS_LABEL).map(([value, label]) => (
               <option key={value} value={value}>{label}</option>
@@ -2607,18 +2608,18 @@ function DependenciesTab({ projectId }: { projectId: string }) {
             editingId === d.id ? (
               <tr key={d.id}>
                 <td>
-                  <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} style={{ marginBottom: 4 }} />
-                  <textarea value={editDescription} onChange={(e) => setEditDescription(e.target.value)} rows={2} placeholder="Description" />
+                  <input aria-label="Title" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} style={{ marginBottom: 4 }} />
+                  <textarea aria-label="Description" value={editDescription} onChange={(e) => setEditDescription(e.target.value)} rows={2} placeholder="Description" />
                 </td>
                 <td>
-                  <select value={editDirection} onChange={(e) => setEditDirection(e.target.value as Dependency["direction"])}>
+                  <select aria-label="Direction" value={editDirection} onChange={(e) => setEditDirection(e.target.value as Dependency["direction"])}>
                     {Object.entries(DEPENDENCY_DIRECTION_LABEL).map(([value, label]) => (
                       <option key={value} value={value}>{label}</option>
                     ))}
                   </select>
                 </td>
-                <td><input value={editOwner} onChange={(e) => setEditOwner(e.target.value)} /></td>
-                <td><input type="date" value={editNeededBy} onChange={(e) => setEditNeededBy(e.target.value)} /></td>
+                <td><input aria-label="Owner" value={editOwner} onChange={(e) => setEditOwner(e.target.value)} /></td>
+                <td><input aria-label="Needed by" type="date" value={editNeededBy} onChange={(e) => setEditNeededBy(e.target.value)} /></td>
                 <td className="muted">{DEPENDENCY_STATUS_LABEL[d.status]}</td>
                 <td className="row-actions">
                   <button className="btn btn-primary" type="button" onClick={() => saveEdit(d.id)}>Save</button>
@@ -2635,7 +2636,7 @@ function DependenciesTab({ projectId }: { projectId: string }) {
                 <td>{d.owner_name || "--"}</td>
                 <td>{fmtLocalDate(d.needed_by)}</td>
                 <td>
-                  <select
+                  <select aria-label="Status"
                     className={`status-select status-select-${d.status}`}
                     value={d.status}
                     onChange={(e) => setStatus(d.id, e.target.value as Dependency["status"])}
@@ -2765,17 +2766,17 @@ function QualityTab({ projectId }: { projectId: string }) {
         broken."
       </p>
       <form className="stacked-form" onSubmit={addItem}>
-        <label>Quality item</label>
-        <input placeholder="What needs to meet a bar, or get reviewed?" value={title} onChange={(e) => setTitle(e.target.value)} />
-        <label>Description (optional)</label>
-        <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
+        <label htmlFor="f-projecthome-2769">Quality item</label>
+        <input id="f-projecthome-2769" placeholder="What needs to meet a bar, or get reviewed?" value={title} onChange={(e) => setTitle(e.target.value)} />
+        <label htmlFor="f-projecthome-2771">Description (optional)</label>
+        <textarea id="f-projecthome-2771" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
         <div className="inline-form" style={{ marginTop: 8, marginBottom: 0 }}>
-          <select value={category} onChange={(e) => setCategory(e.target.value as QualityItem["category"])}>
+          <select aria-label="Category" value={category} onChange={(e) => setCategory(e.target.value as QualityItem["category"])}>
             {Object.entries(QUALITY_CATEGORY_LABEL).map(([value, label]) => (
               <option key={value} value={value}>{label}</option>
             ))}
           </select>
-          <input placeholder="Owner (optional)" value={owner} onChange={(e) => setOwner(e.target.value)} />
+          <input aria-label="Owner (optional)" placeholder="Owner (optional)" value={owner} onChange={(e) => setOwner(e.target.value)} />
           <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as QualityItem["status"])} title="Status">
             {Object.entries(QUALITY_STATUS_LABEL).map(([value, label]) => (
               <option key={value} value={value}>{label}</option>
@@ -2847,17 +2848,17 @@ function QualityTab({ projectId }: { projectId: string }) {
             editingId === q.id ? (
               <tr key={q.id}>
                 <td>
-                  <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} style={{ marginBottom: 4 }} />
-                  <textarea value={editDescription} onChange={(e) => setEditDescription(e.target.value)} rows={2} placeholder="Description" />
+                  <input aria-label="Title" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} style={{ marginBottom: 4 }} />
+                  <textarea aria-label="Description" value={editDescription} onChange={(e) => setEditDescription(e.target.value)} rows={2} placeholder="Description" />
                 </td>
                 <td>
-                  <select value={editCategory} onChange={(e) => setEditCategory(e.target.value as QualityItem["category"])}>
+                  <select aria-label="Category" value={editCategory} onChange={(e) => setEditCategory(e.target.value as QualityItem["category"])}>
                     {Object.entries(QUALITY_CATEGORY_LABEL).map(([value, label]) => (
                       <option key={value} value={value}>{label}</option>
                     ))}
                   </select>
                 </td>
-                <td><input value={editOwner} onChange={(e) => setEditOwner(e.target.value)} /></td>
+                <td><input aria-label="Owner" value={editOwner} onChange={(e) => setEditOwner(e.target.value)} /></td>
                 <td className="muted">{QUALITY_STATUS_LABEL[q.status]}</td>
                 <td className="row-actions">
                   <button className="btn btn-primary" type="button" onClick={() => saveEdit(q.id)}>Save</button>
@@ -2873,7 +2874,7 @@ function QualityTab({ projectId }: { projectId: string }) {
                 <td><span className="pill pill-navy">{QUALITY_CATEGORY_LABEL[q.category]}</span></td>
                 <td>{q.owner_name || "--"}</td>
                 <td>
-                  <select
+                  <select aria-label="Status"
                     className={`status-select status-select-${q.status}`}
                     value={q.status}
                     onChange={(e) => setStatus(q.id, e.target.value as QualityItem["status"])}
@@ -3009,17 +3010,17 @@ function ComplianceTab({ projectId }: { projectId: string }) {
         question from "is this good enough" (Quality) or "is something broken" (Issues).
       </p>
       <form className="stacked-form" onSubmit={addItem}>
-        <label>Compliance item</label>
-        <input placeholder="What regulation, policy, or standard applies here?" value={title} onChange={(e) => setTitle(e.target.value)} />
-        <label>Description (optional)</label>
-        <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
+        <label htmlFor="f-projecthome-3013">Compliance item</label>
+        <input id="f-projecthome-3013" placeholder="What regulation, policy, or standard applies here?" value={title} onChange={(e) => setTitle(e.target.value)} />
+        <label htmlFor="f-projecthome-3015">Description (optional)</label>
+        <textarea id="f-projecthome-3015" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
         <div className="inline-form" style={{ marginTop: 8, marginBottom: 0 }}>
-          <select value={category} onChange={(e) => setCategory(e.target.value as ComplianceItem["category"])}>
+          <select aria-label="Category" value={category} onChange={(e) => setCategory(e.target.value as ComplianceItem["category"])}>
             {Object.entries(COMPLIANCE_CATEGORY_LABEL).map(([value, label]) => (
               <option key={value} value={value}>{label}</option>
             ))}
           </select>
-          <input placeholder="Owner (optional)" value={owner} onChange={(e) => setOwner(e.target.value)} />
+          <input aria-label="Owner (optional)" placeholder="Owner (optional)" value={owner} onChange={(e) => setOwner(e.target.value)} />
           <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as ComplianceItem["status"])} title="Status">
             {Object.entries(COMPLIANCE_STATUS_LABEL).map(([value, label]) => (
               <option key={value} value={value}>{label}</option>
@@ -3092,18 +3093,18 @@ function ComplianceTab({ projectId }: { projectId: string }) {
             editingId === c.id ? (
               <tr key={c.id}>
                 <td>
-                  <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} style={{ marginBottom: 4 }} />
-                  <textarea value={editDescription} onChange={(e) => setEditDescription(e.target.value)} rows={2} placeholder="Description" />
+                  <input aria-label="Title" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} style={{ marginBottom: 4 }} />
+                  <textarea aria-label="Description" value={editDescription} onChange={(e) => setEditDescription(e.target.value)} rows={2} placeholder="Description" />
                 </td>
                 <td>
-                  <select value={editCategory} onChange={(e) => setEditCategory(e.target.value as ComplianceItem["category"])}>
+                  <select aria-label="Category" value={editCategory} onChange={(e) => setEditCategory(e.target.value as ComplianceItem["category"])}>
                     {Object.entries(COMPLIANCE_CATEGORY_LABEL).map(([value, label]) => (
                       <option key={value} value={value}>{label}</option>
                     ))}
                   </select>
                 </td>
-                <td><input value={editOwner} onChange={(e) => setEditOwner(e.target.value)} /></td>
-                <td><input type="date" value={editDueDate} onChange={(e) => setEditDueDate(e.target.value)} /></td>
+                <td><input aria-label="Owner" value={editOwner} onChange={(e) => setEditOwner(e.target.value)} /></td>
+                <td><input aria-label="Due date" type="date" value={editDueDate} onChange={(e) => setEditDueDate(e.target.value)} /></td>
                 <td className="muted">{COMPLIANCE_STATUS_LABEL[c.status]}</td>
                 <td className="row-actions">
                   <button className="btn btn-primary" type="button" onClick={() => saveEdit(c.id)}>Save</button>
@@ -3120,7 +3121,7 @@ function ComplianceTab({ projectId }: { projectId: string }) {
                 <td>{c.owner_name || "--"}</td>
                 <td>{c.due_date ? fmtLocalDate(c.due_date) : "--"}</td>
                 <td>
-                  <select
+                  <select aria-label="Status"
                     className={`status-select status-select-${c.status}`}
                     value={c.status}
                     onChange={(e) => setStatus(c.id, e.target.value as ComplianceItem["status"])}
@@ -3349,12 +3350,12 @@ function OkrsTab({ projectId }: { projectId: string }) {
       </p>
 
       <form className="stacked-form" onSubmit={addObjective}>
-        <label>Objective</label>
-        <input placeholder="What outcome are you driving toward?" value={title} onChange={(e) => setTitle(e.target.value)} />
-        <label>Description (optional)</label>
-        <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
+        <label htmlFor="f-projecthome-3353">Objective</label>
+        <input id="f-projecthome-3353" placeholder="What outcome are you driving toward?" value={title} onChange={(e) => setTitle(e.target.value)} />
+        <label htmlFor="f-projecthome-3355">Description (optional)</label>
+        <textarea id="f-projecthome-3355" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
         <div className="inline-form" style={{ marginTop: 8, marginBottom: 0 }}>
-          <input placeholder="Owner (optional)" value={ownerName} onChange={(e) => setOwnerName(e.target.value)} />
+          <input aria-label="Owner (optional)" placeholder="Owner (optional)" value={ownerName} onChange={(e) => setOwnerName(e.target.value)} />
           <input type="date" title="Target date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} />
           <select value={status} onChange={(e) => setStatus(e.target.value as Objective["status"])} title="Status">
             {Object.entries(OBJECTIVE_STATUS_LABEL).map(([value, label]) => (
@@ -3372,11 +3373,11 @@ function OkrsTab({ projectId }: { projectId: string }) {
             {editingId === o.id ? (
               <div>
                 <label>Objective</label>
-                <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
+                <input aria-label="Objective" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
                 <label>Description</label>
-                <textarea value={editDescription} onChange={(e) => setEditDescription(e.target.value)} rows={2} />
+                <textarea aria-label="Description" value={editDescription} onChange={(e) => setEditDescription(e.target.value)} rows={2} />
                 <div className="inline-form" style={{ marginTop: 8, marginBottom: 0 }}>
-                  <input placeholder="Owner (optional)" value={editOwnerName} onChange={(e) => setEditOwnerName(e.target.value)} />
+                  <input aria-label="Owner (optional)" placeholder="Owner (optional)" value={editOwnerName} onChange={(e) => setEditOwnerName(e.target.value)} />
                   <input type="date" title="Target date" value={editTargetDate} onChange={(e) => setEditTargetDate(e.target.value)} />
                   <button className="btn btn-primary" type="button" onClick={() => saveEdit(o.id)}>Save</button>
                   <button className="btn btn-ghost" type="button" onClick={() => setEditingId(null)}>Cancel</button>
@@ -3394,7 +3395,7 @@ function OkrsTab({ projectId }: { projectId: string }) {
                     </div>
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                    <select
+                    <select aria-label="Status"
                       className={`status-select status-select-${o.status}`}
                       value={o.status}
                       onChange={(e) => setObjectiveStatus(o.id, e.target.value as Objective["status"])}
@@ -3431,14 +3432,14 @@ function OkrsTab({ projectId }: { projectId: string }) {
                       <div key={kr.id} style={{ marginBottom: 12 }}>
                         {editingKrId === kr.id ? (
                           <div className="inline-form" style={{ marginBottom: 0 }}>
-                            <input value={editKrTitle} onChange={(e) => setEditKrTitle(e.target.value)} style={{ flex: 1 }} />
+                            <input aria-label="Key result" value={editKrTitle} onChange={(e) => setEditKrTitle(e.target.value)} style={{ flex: 1 }} />
                             {kr.metric_type === "boolean" ? (
-                              <select value={editKrCurrent} onChange={(e) => setEditKrCurrent(e.target.value)}>
+                              <select aria-label="Key result current value" value={editKrCurrent} onChange={(e) => setEditKrCurrent(e.target.value)}>
                                 <option value="0">Not yet</option>
                                 <option value="1">Achieved</option>
                               </select>
                             ) : (
-                              <input type="number" value={editKrCurrent} onChange={(e) => setEditKrCurrent(e.target.value)} style={{ width: 100 }} />
+                              <input aria-label="Key result current value" type="number" value={editKrCurrent} onChange={(e) => setEditKrCurrent(e.target.value)} style={{ width: 100 }} />
                             )}
                             <button className="btn btn-primary" type="button" onClick={() => saveEditKr(kr)}>Save</button>
                             <button className="btn btn-ghost" type="button" onClick={() => setEditingKrId(null)}>Cancel</button>
@@ -3465,8 +3466,8 @@ function OkrsTab({ projectId }: { projectId: string }) {
                     {o.key_results.length === 0 && <p className="muted" style={{ margin: "0 0 12px" }}>No key results yet.</p>}
 
                     <div className="inline-form" style={{ marginTop: 4, marginBottom: 0, flexWrap: "wrap" }}>
-                      <input placeholder="New key result" value={krTitle} onChange={(e) => setKrTitle(e.target.value)} style={{ flex: 1, minWidth: 160 }} />
-                      <select value={krMetricType} onChange={(e) => setKrMetricType(e.target.value as KeyResult["metric_type"])}>
+                      <input aria-label="New key result" placeholder="New key result" value={krTitle} onChange={(e) => setKrTitle(e.target.value)} style={{ flex: 1, minWidth: 160 }} />
+                      <select aria-label="Key result type" value={krMetricType} onChange={(e) => setKrMetricType(e.target.value as KeyResult["metric_type"])}>
                         {Object.entries(METRIC_TYPE_LABEL).map(([value, label]) => (
                           <option key={value} value={value}>{label}</option>
                         ))}
@@ -3478,11 +3479,11 @@ function OkrsTab({ projectId }: { projectId: string }) {
                         </label>
                       ) : (
                         <>
-                          <input type="number" placeholder="Start" value={krStart} onChange={(e) => setKrStart(e.target.value)} style={{ width: 80 }} />
-                          <input type="number" placeholder="Current" value={krCurrent} onChange={(e) => setKrCurrent(e.target.value)} style={{ width: 80 }} />
-                          <input type="number" placeholder="Target" value={krTarget} onChange={(e) => setKrTarget(e.target.value)} style={{ width: 80 }} />
+                          <input aria-label="Start" type="number" placeholder="Start" value={krStart} onChange={(e) => setKrStart(e.target.value)} style={{ width: 80 }} />
+                          <input aria-label="Current" type="number" placeholder="Current" value={krCurrent} onChange={(e) => setKrCurrent(e.target.value)} style={{ width: 80 }} />
+                          <input aria-label="Target" type="number" placeholder="Target" value={krTarget} onChange={(e) => setKrTarget(e.target.value)} style={{ width: 80 }} />
                           {krMetricType === "number" && (
-                            <input placeholder="Unit" value={krUnit} onChange={(e) => setKrUnit(e.target.value)} style={{ width: 90 }} />
+                            <input aria-label="Unit" placeholder="Unit" value={krUnit} onChange={(e) => setKrUnit(e.target.value)} style={{ width: 90 }} />
                           )}
                         </>
                       )}
@@ -3604,24 +3605,24 @@ function CommsPlanTab({ projectId }: { projectId: string }) {
         changes.
       </p>
       <form className="stacked-form" onSubmit={addItem}>
-        <label>Audience</label>
-        <input placeholder="Who needs this information? (a stakeholder, a group, the sponsor...)" value={audience} onChange={(e) => setAudience(e.target.value)} />
-        <label>What they need</label>
-        <input placeholder="Status update, budget summary, milestone report..." value={topic} onChange={(e) => setTopic(e.target.value)} />
-        <label>Notes (optional)</label>
-        <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
+        <label htmlFor="f-projecthome-3608">Audience</label>
+        <input id="f-projecthome-3608" placeholder="Who needs this information? (a stakeholder, a group, the sponsor...)" value={audience} onChange={(e) => setAudience(e.target.value)} />
+        <label htmlFor="f-projecthome-3610">What they need</label>
+        <input id="f-projecthome-3610" placeholder="Status update, budget summary, milestone report..." value={topic} onChange={(e) => setTopic(e.target.value)} />
+        <label htmlFor="f-projecthome-3612">Notes (optional)</label>
+        <textarea id="f-projecthome-3612" value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
         <div className="inline-form" style={{ marginTop: 8, marginBottom: 0 }}>
-          <select value={frequency} onChange={(e) => setFrequency(e.target.value as CommPlanItem["frequency"])}>
+          <select aria-label="Frequency" value={frequency} onChange={(e) => setFrequency(e.target.value as CommPlanItem["frequency"])}>
             {Object.entries(FREQUENCY_LABEL).map(([value, label]) => (
               <option key={value} value={value}>{label}</option>
             ))}
           </select>
-          <select value={channel} onChange={(e) => setChannel(e.target.value as CommPlanItem["channel"])}>
+          <select aria-label="Channel" value={channel} onChange={(e) => setChannel(e.target.value as CommPlanItem["channel"])}>
             {Object.entries(CHANNEL_LABEL).map(([value, label]) => (
               <option key={value} value={value}>{label}</option>
             ))}
           </select>
-          <input placeholder="Owner (optional)" value={owner} onChange={(e) => setOwner(e.target.value)} />
+          <input aria-label="Owner (optional)" placeholder="Owner (optional)" value={owner} onChange={(e) => setOwner(e.target.value)} />
           <button className="btn btn-primary">Add to plan</button>
         </div>
       </form>
@@ -3635,26 +3636,26 @@ function CommsPlanTab({ projectId }: { projectId: string }) {
           {items.map((item) => (
             editingId === item.id ? (
               <tr key={item.id}>
-                <td><input value={editAudience} onChange={(e) => setEditAudience(e.target.value)} /></td>
+                <td><input aria-label="Audience" value={editAudience} onChange={(e) => setEditAudience(e.target.value)} /></td>
                 <td>
-                  <input value={editTopic} onChange={(e) => setEditTopic(e.target.value)} style={{ marginBottom: 4 }} />
-                  <textarea value={editNotes} onChange={(e) => setEditNotes(e.target.value)} rows={2} placeholder="Notes" />
+                  <input aria-label="Topic" value={editTopic} onChange={(e) => setEditTopic(e.target.value)} style={{ marginBottom: 4 }} />
+                  <textarea aria-label="Notes" value={editNotes} onChange={(e) => setEditNotes(e.target.value)} rows={2} placeholder="Notes" />
                 </td>
                 <td>
-                  <select value={editFrequency} onChange={(e) => setEditFrequency(e.target.value as CommPlanItem["frequency"])}>
+                  <select aria-label="Frequency" value={editFrequency} onChange={(e) => setEditFrequency(e.target.value as CommPlanItem["frequency"])}>
                     {Object.entries(FREQUENCY_LABEL).map(([value, label]) => (
                       <option key={value} value={value}>{label}</option>
                     ))}
                   </select>
                 </td>
                 <td>
-                  <select value={editChannel} onChange={(e) => setEditChannel(e.target.value as CommPlanItem["channel"])}>
+                  <select aria-label="Channel" value={editChannel} onChange={(e) => setEditChannel(e.target.value as CommPlanItem["channel"])}>
                     {Object.entries(CHANNEL_LABEL).map(([value, label]) => (
                       <option key={value} value={value}>{label}</option>
                     ))}
                   </select>
                 </td>
-                <td><input value={editOwner} onChange={(e) => setEditOwner(e.target.value)} /></td>
+                <td><input aria-label="Owner" value={editOwner} onChange={(e) => setEditOwner(e.target.value)} /></td>
                 <td className="row-actions">
                   <button className="btn btn-primary" type="button" onClick={() => saveEdit(item.id)}>Save</button>
                   <button className="btn btn-ghost" type="button" onClick={() => setEditingId(null)}>Cancel</button>
@@ -3828,17 +3829,17 @@ function ProcurementTab({ projectId }: { projectId: string }) {
         different question from "is this task done."
       </p>
       <form className="stacked-form" onSubmit={addItem}>
-        <label>Vendor or contract</label>
-        <input placeholder="Who are you buying from, or what's the agreement?" value={vendorName} onChange={(e) => setVendorName(e.target.value)} />
-        <label>Description (optional)</label>
-        <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
+        <label htmlFor="f-projecthome-3832">Vendor or contract</label>
+        <input id="f-projecthome-3832" placeholder="Who are you buying from, or what's the agreement?" value={vendorName} onChange={(e) => setVendorName(e.target.value)} />
+        <label htmlFor="f-projecthome-3834">Description (optional)</label>
+        <textarea id="f-projecthome-3834" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
         <div className="inline-form" style={{ marginTop: 8, marginBottom: 0 }}>
-          <select value={category} onChange={(e) => setCategory(e.target.value as ProcurementItem["category"])}>
+          <select aria-label="Category" value={category} onChange={(e) => setCategory(e.target.value as ProcurementItem["category"])}>
             {Object.entries(PROCUREMENT_CATEGORY_LABEL).map(([value, label]) => (
               <option key={value} value={value}>{label}</option>
             ))}
           </select>
-          <input placeholder="Owner (optional)" value={owner} onChange={(e) => setOwner(e.target.value)} />
+          <input aria-label="Owner (optional)" placeholder="Owner (optional)" value={owner} onChange={(e) => setOwner(e.target.value)} />
           <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as ProcurementItem["status"])} title="Status">
             {Object.entries(PROCUREMENT_STATUS_LABEL).map(([value, label]) => (
               <option key={value} value={value}>{label}</option>
@@ -3846,12 +3847,12 @@ function ProcurementTab({ projectId }: { projectId: string }) {
           </select>
         </div>
         <div className="inline-form" style={{ marginTop: 8, marginBottom: 0 }}>
-          <input placeholder="Role (optional), e.g. Vendor for, Subcontractor to" value={role} onChange={(e) => setRole(e.target.value)} />
-          <input placeholder="Category (optional), e.g. Software, Catering" value={vendorCategory} onChange={(e) => setVendorCategory(e.target.value)} />
-          <input placeholder="Sub-category (optional)" value={vendorSubcategory} onChange={(e) => setVendorSubcategory(e.target.value)} />
+          <input aria-label="Role (optional), e.g. Vendor for, Subcontractor to" placeholder="Role (optional), e.g. Vendor for, Subcontractor to" value={role} onChange={(e) => setRole(e.target.value)} />
+          <input aria-label="Category (optional), e.g. Software, Catering" placeholder="Category (optional), e.g. Software, Catering" value={vendorCategory} onChange={(e) => setVendorCategory(e.target.value)} />
+          <input aria-label="Sub-category (optional)" placeholder="Sub-category (optional)" value={vendorSubcategory} onChange={(e) => setVendorSubcategory(e.target.value)} />
         </div>
         <div className="inline-form" style={{ marginTop: 8, marginBottom: 0 }}>
-          <input type="number" step="0.01" placeholder="Cost (optional)" value={cost} onChange={(e) => setCost(e.target.value)} style={{ maxWidth: 140 }} />
+          <input aria-label="Cost (optional)" type="number" step="0.01" placeholder="Cost (optional)" value={cost} onChange={(e) => setCost(e.target.value)} style={{ maxWidth: 140 }} />
           <input type="date" title="Start date (optional)" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
           <input type="date" title="End date (optional)" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
           <button className="btn btn-primary">Log vendor</button>
@@ -3921,21 +3922,21 @@ function ProcurementTab({ projectId }: { projectId: string }) {
             editingId === p.id ? (
               <tr key={p.id}>
                 <td>
-                  <input value={editVendorName} onChange={(e) => setEditVendorName(e.target.value)} style={{ marginBottom: 4 }} />
-                  <textarea value={editDescription} onChange={(e) => setEditDescription(e.target.value)} rows={2} placeholder="Description" />
+                  <input aria-label="Vendor name" value={editVendorName} onChange={(e) => setEditVendorName(e.target.value)} style={{ marginBottom: 4 }} />
+                  <textarea aria-label="Description" value={editDescription} onChange={(e) => setEditDescription(e.target.value)} rows={2} placeholder="Description" />
                 </td>
                 <td>
-                  <select value={editCategory} onChange={(e) => setEditCategory(e.target.value as ProcurementItem["category"])}>
+                  <select aria-label="Category" value={editCategory} onChange={(e) => setEditCategory(e.target.value as ProcurementItem["category"])}>
                     {Object.entries(PROCUREMENT_CATEGORY_LABEL).map(([value, label]) => (
                       <option key={value} value={value}>{label}</option>
                     ))}
                   </select>
                 </td>
-                <td><input value={editRole} onChange={(e) => setEditRole(e.target.value)} placeholder="Role" /></td>
-                <td><input value={editVendorCategory} onChange={(e) => setEditVendorCategory(e.target.value)} placeholder="Category" /></td>
-                <td><input value={editVendorSubcategory} onChange={(e) => setEditVendorSubcategory(e.target.value)} placeholder="Sub-category" /></td>
-                <td><input value={editOwner} onChange={(e) => setEditOwner(e.target.value)} /></td>
-                <td><input type="number" step="0.01" value={editCost} onChange={(e) => setEditCost(e.target.value)} style={{ maxWidth: 100 }} /></td>
+                <td><input aria-label="Role" value={editRole} onChange={(e) => setEditRole(e.target.value)} placeholder="Role" /></td>
+                <td><input aria-label="Category" value={editVendorCategory} onChange={(e) => setEditVendorCategory(e.target.value)} placeholder="Category" /></td>
+                <td><input aria-label="Sub-category" value={editVendorSubcategory} onChange={(e) => setEditVendorSubcategory(e.target.value)} placeholder="Sub-category" /></td>
+                <td><input aria-label="Owner" value={editOwner} onChange={(e) => setEditOwner(e.target.value)} /></td>
+                <td><input aria-label="Cost" type="number" step="0.01" value={editCost} onChange={(e) => setEditCost(e.target.value)} style={{ maxWidth: 100 }} /></td>
                 <td>
                   <input type="date" title="Start date" value={editStartDate} onChange={(e) => setEditStartDate(e.target.value)} style={{ marginBottom: 4 }} />
                   <input type="date" title="End date" value={editEndDate} onChange={(e) => setEditEndDate(e.target.value)} />
@@ -3964,7 +3965,7 @@ function ProcurementTab({ projectId }: { projectId: string }) {
                     : "--"}
                 </td>
                 <td>
-                  <select
+                  <select aria-label="Status"
                     className={`status-select status-select-${p.status}`}
                     value={p.status}
                     onChange={(e) => setStatus(p.id, e.target.value as ProcurementItem["status"])}
@@ -4055,7 +4056,7 @@ function BudgetTab({ projectId, onOpenTab }: { projectId: string; onOpenTab: (ta
       <div className="evm-baseline">
         {editingBac || budgetAtCompletion === null ? (
           <form className="inline-form" onSubmit={saveBac}>
-            <input
+            <input aria-label="Total approved budget (BAC), e.g. 50000"
               placeholder="Total approved budget (BAC), e.g. 50000"
               value={bacInput}
               onChange={(e) => setBacInput(e.target.value)}
@@ -4151,9 +4152,9 @@ function BudgetTab({ projectId, onOpenTab }: { projectId: string; onOpenTab: (ta
 
       <h4 style={{ marginTop: 28 }}>Log actual cost</h4>
       <form className="inline-form inline-form-wide" onSubmit={addCost}>
-        <input placeholder="Description" value={desc} onChange={(e) => setDesc(e.target.value)} />
-        <input placeholder="Amount" type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} />
-        <input type="date" value={incurredDate} onChange={(e) => setIncurredDate(e.target.value)} />
+        <input aria-label="Description" placeholder="Description" value={desc} onChange={(e) => setDesc(e.target.value)} />
+        <input aria-label="Amount" placeholder="Amount" type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} />
+        <input aria-label="Incurred date" type="date" value={incurredDate} onChange={(e) => setIncurredDate(e.target.value)} />
         <button className="btn btn-primary">Add cost</button>
       </form>
 
@@ -4416,13 +4417,13 @@ function RoadmapTab({ projectId, isOwner, showBudget }: { projectId: string; isO
 
       {showForm && (
         <form className="stacked-form" onSubmit={addItem} style={{ marginTop: 16 }}>
-          <label>Title</label>
-          <input placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
+          <label htmlFor="f-projecthome-4420">Title</label>
+          <input id="f-projecthome-4420" placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
           <div className="inline-form" style={{ marginTop: 8 }}>
-            <select value={type} onChange={(e) => setType(e.target.value as RoadmapItemType)}>
+            <select aria-label="Type" value={type} onChange={(e) => setType(e.target.value as RoadmapItemType)}>
               {Object.entries(ROADMAP_TYPE_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
-            <input
+            <input aria-label="Swimlane (e.g. Platform)"
               list="roadmap-swimlane-options"
               placeholder="Swimlane (e.g. Platform)"
               value={swimlane}
@@ -4437,8 +4438,8 @@ function RoadmapTab({ projectId, isOwner, showBudget }: { projectId: string; isO
               {Object.entries(ROADMAP_STATUS_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
           </div>
-          <label>Notes (optional)</label>
-          <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
+          <label htmlFor="f-projecthome-4441">Notes (optional)</label>
+          <textarea id="f-projecthome-4441" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
           <div style={{ marginTop: 8 }}>
             <button className="btn btn-primary">Add to roadmap</button>
           </div>
@@ -4547,7 +4548,7 @@ function RoadmapTab({ projectId, isOwner, showBudget }: { projectId: string; isO
                     : "Undated"}
                 </td>
                 <td>
-                  <select
+                  <select aria-label="Status"
                     className={`status-select status-select-${item.status}`}
                     value={item.status}
                     onChange={(e) => setItemStatus(item.id, e.target.value as RoadmapItem["status"])}
@@ -4569,13 +4570,13 @@ function RoadmapTab({ projectId, isOwner, showBudget }: { projectId: string; isO
                   <td colSpan={6}>
                     <div className="settings-card" style={{ margin: "6px 0 14px" }}>
                       <label>Title</label>
-                      <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
+                      <input aria-label="Title" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
                       <div className="inline-form" style={{ marginTop: 8 }}>
-                        <select value={editType} onChange={(e) => setEditType(e.target.value as RoadmapItemType)}>
+                        <select aria-label="Type" value={editType} onChange={(e) => setEditType(e.target.value as RoadmapItemType)}>
                           {Object.entries(ROADMAP_TYPE_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                         </select>
-                        <input value={editSwimlane} onChange={(e) => setEditSwimlane(e.target.value)} placeholder="Swimlane" />
-                        <select value={editStatus} onChange={(e) => setEditStatus(e.target.value as RoadmapItem["status"])}>
+                        <input aria-label="Swimlane" value={editSwimlane} onChange={(e) => setEditSwimlane(e.target.value)} placeholder="Swimlane" />
+                        <select aria-label="Status" value={editStatus} onChange={(e) => setEditStatus(e.target.value as RoadmapItem["status"])}>
                           {Object.entries(ROADMAP_STATUS_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                         </select>
                       </div>
@@ -4584,7 +4585,7 @@ function RoadmapTab({ projectId, isOwner, showBudget }: { projectId: string; isO
                         <input type="date" title="End date" value={editEnd} onChange={(e) => setEditEnd(e.target.value)} />
                       </div>
                       <label style={{ marginTop: 8 }}>Notes</label>
-                      <textarea value={editDescription} onChange={(e) => setEditDescription(e.target.value)} rows={3} />
+                      <textarea aria-label="Notes" value={editDescription} onChange={(e) => setEditDescription(e.target.value)} rows={3} />
                       <div style={{ marginTop: 8 }}>
                         <button className="btn btn-primary" type="button" onClick={() => saveEdit(item.id)}>Save</button>
                       </div>
@@ -4621,7 +4622,7 @@ function RoadmapTab({ projectId, isOwner, showBudget }: { projectId: string; isO
           </label>
           {project?.roadmap_share_enabled && project?.roadmap_share_token && (
             <div className="inline-form" style={{ marginTop: 10, marginBottom: 0 }}>
-              <input
+              <input aria-label="Public roadmap link"
                 type="text"
                 readOnly
                 value={`${window.location.origin}/r/${project.roadmap_share_token}`}
@@ -4744,16 +4745,16 @@ function MeetingsTab({ projectId }: { projectId: string }) {
       </p>
 
       <form className="stacked-form" onSubmit={addMeeting}>
-        <label>Meeting</label>
-        <input placeholder="Meeting title" value={title} onChange={(e) => setTitle(e.target.value)} />
+        <label htmlFor="f-projecthome-4748">Meeting</label>
+        <input id="f-projecthome-4748" placeholder="Meeting title" value={title} onChange={(e) => setTitle(e.target.value)} />
         <div className="inline-form" style={{ marginTop: 8 }}>
-          <select value={meetingType} onChange={(e) => setMeetingType(e.target.value as Meeting["meeting_type"])}>
+          <select aria-label="Meeting type" value={meetingType} onChange={(e) => setMeetingType(e.target.value as Meeting["meeting_type"])}>
             {Object.entries(MEETING_TYPE_LABEL).map(([value, label]) => (
               <option key={value} value={value}>{label}</option>
             ))}
           </select>
           <input type="date" title="Meeting date" value={meetingDate} onChange={(e) => setMeetingDate(e.target.value)} />
-          <input placeholder="Attendees (optional)" value={attendees} onChange={(e) => setAttendees(e.target.value)} />
+          <input aria-label="Attendees (optional)" placeholder="Attendees (optional)" value={attendees} onChange={(e) => setAttendees(e.target.value)} />
           <button
             type="button"
             className="btn-link"
@@ -4762,8 +4763,8 @@ function MeetingsTab({ projectId }: { projectId: string }) {
             Use {MEETING_TYPE_LABEL[meetingType]} template
           </button>
         </div>
-        <label>Notes (optional)</label>
-        <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={4} />
+        <label htmlFor="f-projecthome-4766">Notes (optional)</label>
+        <textarea id="f-projecthome-4766" value={notes} onChange={(e) => setNotes(e.target.value)} rows={4} />
         <div style={{ marginTop: 8 }}>
           <button className="btn btn-primary">Log meeting</button>
         </div>
@@ -4798,9 +4799,9 @@ function MeetingsTab({ projectId }: { projectId: string }) {
                   <td colSpan={5}>
                     <div className="settings-card" style={{ margin: "6px 0 14px" }}>
                       <label>Attendees</label>
-                      <input value={editAttendees} onChange={(e) => setEditAttendees(e.target.value)} placeholder="Who was there" />
+                      <input aria-label="Attendees" value={editAttendees} onChange={(e) => setEditAttendees(e.target.value)} placeholder="Who was there" />
                       <label>Notes</label>
-                      <textarea value={editNotes} onChange={(e) => setEditNotes(e.target.value)} rows={6} />
+                      <textarea aria-label="Notes" value={editNotes} onChange={(e) => setEditNotes(e.target.value)} rows={6} />
                       <div style={{ marginTop: 8 }}>
                         <button className="btn btn-primary" type="button" onClick={() => saveDetail(m)}>Save</button>
                       </div>
@@ -4809,7 +4810,7 @@ function MeetingsTab({ projectId }: { projectId: string }) {
                       <div className="checkbox-list">
                         {(m.action_items || []).map((item) => (
                           <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                            <input type="checkbox" checked={item.done} onChange={() => toggleActionItem(m, item.id)} />
+                            <input aria-label={`Mark done: ${item.text}`} type="checkbox" checked={item.done} onChange={() => toggleActionItem(m, item.id)} />
                             <span style={{ flex: 1, textDecoration: item.done ? "line-through" : "none", color: item.done ? "var(--slate)" : "inherit" }}>
                               {item.text}
                             </span>
@@ -4832,7 +4833,7 @@ function MeetingsTab({ projectId }: { projectId: string }) {
                         )}
                       </div>
                       <div className="inline-form" style={{ marginTop: 8, marginBottom: 0 }}>
-                        <input
+                        <input aria-label="Add an action item"
                           placeholder="Add an action item"
                           value={newItemText}
                           onChange={(e) => setNewItemText(e.target.value)}
@@ -5112,10 +5113,10 @@ function StakeholdersTab({ projectId }: { projectId: string }) {
   return (
     <div>
       <form className="inline-form inline-form-wide" onSubmit={addStakeholder}>
-        <input placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} />
-        <input placeholder="Email (optional)" value={email} onChange={(e) => setEmail(e.target.value)} />
-        <input placeholder="Phone (optional)" value={phone} onChange={(e) => setPhone(e.target.value)} />
-        <input placeholder="Role (optional)" value={role} onChange={(e) => setRole(e.target.value)} />
+        <input aria-label="Name" placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} />
+        <input aria-label="Email (optional)" placeholder="Email (optional)" value={email} onChange={(e) => setEmail(e.target.value)} />
+        <input aria-label="Phone (optional)" placeholder="Phone (optional)" value={phone} onChange={(e) => setPhone(e.target.value)} />
+        <input aria-label="Role (optional)" placeholder="Role (optional)" value={role} onChange={(e) => setRole(e.target.value)} />
         <button className="btn btn-primary">Add stakeholder</button>
       </form>
       {error && <p className="form-error">{error}</p>}
@@ -5184,20 +5185,20 @@ function StakeholdersTab({ projectId }: { projectId: string }) {
           <>
             {drawerError && <p className="form-error">{drawerError}</p>}
             <div className="drawer-field">
-              <label>Name</label>
-              <input value={editName} onChange={(e) => setEditName(e.target.value)} />
+              <label htmlFor="f-projecthome-5188">Name</label>
+              <input id="f-projecthome-5188" value={editName} onChange={(e) => setEditName(e.target.value)} />
             </div>
             <div className="drawer-field">
-              <label>Role</label>
-              <input value={editRole} onChange={(e) => setEditRole(e.target.value)} placeholder="Sponsor, SME, vendor lead..." />
+              <label htmlFor="f-projecthome-5192">Role</label>
+              <input id="f-projecthome-5192" value={editRole} onChange={(e) => setEditRole(e.target.value)} placeholder="Sponsor, SME, vendor lead..." />
             </div>
             <div className="drawer-field">
-              <label>Email</label>
-              <input value={editEmail} onChange={(e) => setEditEmail(e.target.value)} />
+              <label htmlFor="f-projecthome-5196">Email</label>
+              <input id="f-projecthome-5196" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} />
             </div>
             <div className="drawer-field">
-              <label>Phone</label>
-              <input value={editPhone} onChange={(e) => setEditPhone(e.target.value)} />
+              <label htmlFor="f-projecthome-5200">Phone</label>
+              <input id="f-projecthome-5200" value={editPhone} onChange={(e) => setEditPhone(e.target.value)} />
             </div>
             {(mailtoHref(editEmail) || telHref(editPhone)) && (
               <div className="contact-actions">
@@ -5207,30 +5208,30 @@ function StakeholdersTab({ projectId }: { projectId: string }) {
             )}
             <div className="drawer-field-row">
               <div className="drawer-field">
-                <label>Power (influence)</label>
-                <select value={editPower} onChange={(e) => setEditPower(e.target.value as StakeholderInterest | "")}>
+                <label htmlFor="f-projecthome-5211">Power (influence)</label>
+                <select id="f-projecthome-5211" value={editPower} onChange={(e) => setEditPower(e.target.value as StakeholderInterest | "")}>
                   <option value="">Not set</option>
                   {Object.entries(INTEREST_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                 </select>
               </div>
               <div className="drawer-field">
-                <label>Interest level</label>
-                <select value={editInterest} onChange={(e) => setEditInterest(e.target.value as StakeholderInterest | "")}>
+                <label htmlFor="f-projecthome-5218">Interest level</label>
+                <select id="f-projecthome-5218" value={editInterest} onChange={(e) => setEditInterest(e.target.value as StakeholderInterest | "")}>
                   <option value="">Not set</option>
                   {Object.entries(INTEREST_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                 </select>
               </div>
               <div className="drawer-field">
-                <label>Prefers to be contacted by</label>
-                <select value={editContact} onChange={(e) => setEditContact(e.target.value as StakeholderContactMethod | "")}>
+                <label htmlFor="f-projecthome-5225">Prefers to be contacted by</label>
+                <select id="f-projecthome-5225" value={editContact} onChange={(e) => setEditContact(e.target.value as StakeholderContactMethod | "")}>
                   <option value="">Not set</option>
                   {Object.entries(CONTACT_METHOD_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                 </select>
               </div>
             </div>
             <div className="drawer-field">
-              <label>Notes</label>
-              <textarea
+              <label htmlFor="f-projecthome-5233">Notes</label>
+              <textarea id="f-projecthome-5233"
                 rows={6}
                 value={editNotes}
                 onChange={(e) => setEditNotes(e.target.value)}
@@ -5345,14 +5346,14 @@ function StakeholderDecisionsTab({ projectId }: { projectId: string }) {
 
       {showForm && (
         <form className="stacked-form" onSubmit={createDecision}>
-          <label>Title</label>
-          <input value={title} onChange={(e) => setTitle(e.target.value)} required />
-          <label>Context</label>
-          <textarea value={context} onChange={(e) => setContext(e.target.value)} rows={3} />
-          <label>Options (comma separated)</label>
-          <input value={options} onChange={(e) => setOptions(e.target.value)} required />
-          <label>Deadline (optional)</label>
-          <input type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
+          <label htmlFor="f-projecthome-5349">Title</label>
+          <input id="f-projecthome-5349" value={title} onChange={(e) => setTitle(e.target.value)} required />
+          <label htmlFor="f-projecthome-5351">Context</label>
+          <textarea id="f-projecthome-5351" value={context} onChange={(e) => setContext(e.target.value)} rows={3} />
+          <label htmlFor="f-projecthome-5353">Options (comma separated)</label>
+          <input id="f-projecthome-5353" value={options} onChange={(e) => setOptions(e.target.value)} required />
+          <label htmlFor="f-projecthome-5355">Deadline (optional)</label>
+          <input id="f-projecthome-5355" type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
           <label>Send to</label>
           <div className="checkbox-list">
             {stakeholders.map((s) => (
@@ -5545,22 +5546,22 @@ function ChangeRequestsTab({ projectId }: { projectId: string }) {
         does to schedule and budget.
       </p>
       <form className="stacked-form" onSubmit={addChangeRequest}>
-        <label>Change request</label>
-        <input placeholder="What's changing?" value={title} onChange={(e) => setTitle(e.target.value)} />
-        <label>Description (optional)</label>
-        <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
-        <label>Reason (optional)</label>
-        <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={2} />
+        <label htmlFor="f-projecthome-5549">Change request</label>
+        <input id="f-projecthome-5549" placeholder="What's changing?" value={title} onChange={(e) => setTitle(e.target.value)} />
+        <label htmlFor="f-projecthome-5551">Description (optional)</label>
+        <textarea id="f-projecthome-5551" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
+        <label htmlFor="f-projecthome-5553">Reason (optional)</label>
+        <textarea id="f-projecthome-5553" value={reason} onChange={(e) => setReason(e.target.value)} rows={2} />
         <div className="inline-form" style={{ marginTop: 8, marginBottom: 0 }}>
-          <input
+          <input aria-label="Schedule impact (days)"
             type="number" placeholder="Schedule impact (days)"
             value={scheduleImpactDays} onChange={(e) => setScheduleImpactDays(e.target.value)}
           />
-          <input
+          <input aria-label="Budget impact ($)"
             type="number" placeholder="Budget impact ($)"
             value={budgetImpact} onChange={(e) => setBudgetImpact(e.target.value)}
           />
-          <input placeholder="Requested by (optional)" value={requestedBy} onChange={(e) => setRequestedBy(e.target.value)} />
+          <input aria-label="Requested by (optional)" placeholder="Requested by (optional)" value={requestedBy} onChange={(e) => setRequestedBy(e.target.value)} />
           <button className="btn btn-primary">Log change request</button>
         </div>
       </form>
@@ -5576,15 +5577,15 @@ function ChangeRequestsTab({ projectId }: { projectId: string }) {
             editingId === c.id ? (
               <tr key={c.id}>
                 <td>
-                  <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} style={{ marginBottom: 4 }} />
-                  <textarea value={editDescription} onChange={(e) => setEditDescription(e.target.value)} rows={2} placeholder="Description" style={{ marginBottom: 4 }} />
-                  <textarea value={editReason} onChange={(e) => setEditReason(e.target.value)} rows={2} placeholder="Reason" />
+                  <input aria-label="Title" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} style={{ marginBottom: 4 }} />
+                  <textarea aria-label="Description" value={editDescription} onChange={(e) => setEditDescription(e.target.value)} rows={2} placeholder="Description" style={{ marginBottom: 4 }} />
+                  <textarea aria-label="Reason" value={editReason} onChange={(e) => setEditReason(e.target.value)} rows={2} placeholder="Reason" />
                 </td>
                 <td className="muted">{fmtSignedDays(c.schedule_impact_days)}</td>
                 <td className="muted">{fmtSignedMoney(c.budget_impact)}</td>
                 <td className="muted">
                   {c.requested_by || "--"}
-                  <input
+                  <input aria-label="Decided by"
                     value={editDecidedBy} onChange={(e) => setEditDecidedBy(e.target.value)}
                     placeholder="Decided by" style={{ marginTop: 4 }}
                   />
@@ -5624,7 +5625,7 @@ function ChangeRequestsTab({ projectId }: { projectId: string }) {
                 <td>{fmtSignedMoney(c.budget_impact)}</td>
                 <td>{c.requested_by || "--"}</td>
                 <td>
-                  <select
+                  <select aria-label="Status"
                     className={`status-select status-select-${c.status}`}
                     value={c.status}
                     onChange={(e) => setStatus(c.id, e.target.value as ChangeRequest["status"])}
@@ -5828,7 +5829,7 @@ function TeamTab({ projectId, isOwner, onSetupChange }: { projectId: string; isO
           <p className="settings-card-label">Project</p>
           <label>Project name</label>
           <div className="inline-form" style={{ marginBottom: 0 }}>
-            <input value={nameDraft} onChange={(e) => setNameDraft(e.target.value)} style={{ flex: 1, minWidth: 200 }} />
+            <input aria-label="Project name" value={nameDraft} onChange={(e) => setNameDraft(e.target.value)} style={{ flex: 1, minWidth: 200 }} />
             <button className="btn btn-primary" type="button" onClick={saveName} disabled={savingName}>
               {savingName ? "Saving..." : "Save"}
             </button>
@@ -5930,7 +5931,7 @@ function TeamTab({ projectId, isOwner, onSetupChange }: { projectId: string; isO
 
         {isOwner && (
           <form className="inline-form" onSubmit={invite} style={{ marginTop: 16, marginBottom: 0 }}>
-            <input
+            <input aria-label="Teammate email"
               type="email"
               placeholder="teammate@company.com"
               value={email}
@@ -6165,7 +6166,7 @@ function ClosureTab({ projectId }: { projectId: string }) {
 
           <div className="settings-card">
             <p className="settings-card-label">Closure notes</p>
-            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} onBlur={saveNotes} rows={4} placeholder="Anything worth recording about how this project wrapped up..." />
+            <textarea aria-label="Closure notes" value={notes} onChange={(e) => setNotes(e.target.value)} onBlur={saveNotes} rows={4} placeholder="Anything worth recording about how this project wrapped up..." />
             {saving && <p className="muted" style={{ fontSize: 12, marginTop: 6 }}>Saving...</p>}
             {!saving && savedAt && <p className="muted" style={{ fontSize: 12, marginTop: 6 }}>Saved.</p>}
             {error && <p className="form-error">{error}</p>}
@@ -6426,17 +6427,17 @@ function LessonsLearnedTab({ projectId }: { projectId: string }) {
         the Resource hub. Log entries any time, not just at project close.
       </p>
       <form className="stacked-form" onSubmit={addLesson}>
-        <label>Lesson</label>
-        <input placeholder="What happened?" value={summary} onChange={(e) => setSummary(e.target.value)} />
-        <label>Details (optional)</label>
-        <textarea value={details} onChange={(e) => setDetails(e.target.value)} rows={2} />
+        <label htmlFor="f-projecthome-6430">Lesson</label>
+        <input id="f-projecthome-6430" placeholder="What happened?" value={summary} onChange={(e) => setSummary(e.target.value)} />
+        <label htmlFor="f-projecthome-6432">Details (optional)</label>
+        <textarea id="f-projecthome-6432" value={details} onChange={(e) => setDetails(e.target.value)} rows={2} />
         <div className="inline-form" style={{ marginTop: 8, marginBottom: 0 }}>
-          <select value={category} onChange={(e) => setCategory(e.target.value as Lesson["category"])}>
+          <select aria-label="Category" value={category} onChange={(e) => setCategory(e.target.value as Lesson["category"])}>
             {Object.entries(LESSON_CATEGORY_LABEL).map(([value, label]) => (
               <option key={value} value={value}>{label}</option>
             ))}
           </select>
-          <input placeholder="Owner (optional)" value={owner} onChange={(e) => setOwner(e.target.value)} />
+          <input aria-label="Owner (optional)" placeholder="Owner (optional)" value={owner} onChange={(e) => setOwner(e.target.value)} />
           <button className="btn btn-primary">Log lesson</button>
         </div>
       </form>
@@ -6451,11 +6452,11 @@ function LessonsLearnedTab({ projectId }: { projectId: string }) {
             editingId === l.id ? (
               <tr key={l.id}>
                 <td>
-                  <input value={editSummary} onChange={(e) => setEditSummary(e.target.value)} style={{ marginBottom: 4 }} />
-                  <textarea value={editDetails} onChange={(e) => setEditDetails(e.target.value)} rows={2} placeholder="Details" />
+                  <input aria-label="Summary" value={editSummary} onChange={(e) => setEditSummary(e.target.value)} style={{ marginBottom: 4 }} />
+                  <textarea aria-label="Details" value={editDetails} onChange={(e) => setEditDetails(e.target.value)} rows={2} placeholder="Details" />
                 </td>
                 <td className="muted">{LESSON_CATEGORY_LABEL[l.category]}</td>
-                <td><input value={editOwner} onChange={(e) => setEditOwner(e.target.value)} /></td>
+                <td><input aria-label="Owner" value={editOwner} onChange={(e) => setEditOwner(e.target.value)} /></td>
                 <td></td>
                 <td className="row-actions">
                   <button className="btn btn-primary" type="button" onClick={() => saveEdit(l.id)}>Save</button>
@@ -6635,7 +6636,7 @@ function ConnectionsTab({ projectId }: { projectId: string }) {
         {isOwner ? (
           <>
             <div className="inline-form" style={{ marginBottom: 0 }}>
-              <input
+              <input aria-label="Webhook URL"
                 type="url"
                 placeholder="https://hooks.example.com/..."
                 value={webhookUrl}

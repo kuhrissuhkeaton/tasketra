@@ -504,7 +504,7 @@ export default function Dashboard() {
         )}
 
         <form className="inline-form" onSubmit={createProject}>
-          <input
+          <input aria-label="New project name"
             placeholder="New project name"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}

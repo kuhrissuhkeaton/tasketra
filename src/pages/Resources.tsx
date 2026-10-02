@@ -370,7 +370,7 @@ export default function Resources() {
           {replayNotice && <span className="muted" style={{ fontSize: 13 }}>{replayNotice}</span>}
         </div>
 
-        <input
+        <input aria-label="Search this page"
           placeholder="Search everything on this page..."
           value={query}
           onChange={(e) => setQuery(e.target.value)}

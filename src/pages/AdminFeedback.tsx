@@ -93,13 +93,13 @@ export default function AdminFeedback() {
                 </p>
 
                 <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 12, flexWrap: "wrap" }}>
-                  <select value={f.status} onChange={(e) => setStatus(f.id, e.target.value as Feedback["status"])} style={{ width: "auto" }}>
+                  <select aria-label="Status" value={f.status} onChange={(e) => setStatus(f.id, e.target.value as Feedback["status"])} style={{ width: "auto" }}>
                     <option value="new">New</option>
                     <option value="planned">Planned</option>
                     <option value="shipped">Shipped</option>
                     <option value="dismissed">Dismissed</option>
                   </select>
-                  <input
+                  <input aria-label="Internal note (optional)"
                     type="text"
                     placeholder="Internal note (optional)"
                     defaultValue={f.admin_note ?? ""}

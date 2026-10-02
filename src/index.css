@@ -1559,3 +1559,12 @@ a.btn { text-decoration: none; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
 }
+
+/* "Skip to main content": off-screen until it gets keyboard focus. */
+.skip-link {
+  position: absolute; left: 12px; top: -48px; z-index: 1000;
+  background: var(--navy); color: white; padding: 10px 14px; border-radius: 6px;
+  font-size: 14px; font-weight: 600; text-decoration: none;
+}
+.skip-link:focus { top: 12px; outline: 2px solid var(--gold); outline-offset: 2px; }
+main:focus { outline: none; }

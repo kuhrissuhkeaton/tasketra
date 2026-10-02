@@ -81,8 +81,8 @@ export default function DecisionPublic() {
               </label>
             ))}
           </div>
-          <label>Your name</label>
-          <input value={name} onChange={(e) => setName(e.target.value)} required />
+          <label htmlFor="f-decisionpublic-85">Your name</label>
+          <input id="f-decisionpublic-85" value={name} onChange={(e) => setName(e.target.value)} required />
           {error && <div className="form-error">{error}</div>}
           <button className="btn btn-primary" type="submit" disabled={submitting || !chosen}>
             {submitting ? "Submitting..." : "Submit response"}
