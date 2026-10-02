@@ -456,6 +456,13 @@ td.row-actions > *:last-child { margin-right: 0; }
    horizontally once dragged columns push the table past its container,
    same as a spreadsheet, rather than squeezing everything back down. */
 .resizable-table-wrap { overflow-x: auto; }
+/* Always-visible scrollbar: Mac hides overlay scrollbars until you scroll, so a
+   table wider than the screen looked cut off with no way to see more. */
+.resizable-table-wrap::-webkit-scrollbar { height: 12px; }
+.resizable-table-wrap::-webkit-scrollbar-track { background: var(--surface-muted); border-radius: 6px; }
+.resizable-table-wrap::-webkit-scrollbar-thumb { background: var(--slate-2); border-radius: 6px; border: 2px solid var(--surface-muted); }
+.task-phase-line { margin-top: 4px; }
+.task-phase-pill { display: inline-block; max-width: 100%; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: top; }
 .table th.col-resizable { position: relative; }
 .table th.col-resizable::after {
   content: "";

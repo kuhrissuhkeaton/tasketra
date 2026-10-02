@@ -1149,7 +1149,7 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
       </div>
 
       {view === "list" ? (
-        <ResizableTable id="tasks">
+        <ResizableTable id="tasks" minColWidths={[220, 110, 110, 150, 0]}>
           <thead>
             <tr><th>Task</th><th>Owner</th><th>Due</th><th>Status</th><th></th></tr>
           </thead>
@@ -1161,12 +1161,16 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
                     <span className="wbs-cell" style={{ paddingLeft: depth * 20 }}>
                       {depth > 0 && <span className="wbs-connector">&#8627;</span>}
                       {t.title}
-                      {t.roadmap_item_id && phaseById.get(t.roadmap_item_id) && (
-                        <span className="pill pill-navy" style={{ marginLeft: 8, fontSize: 11 }} title="Roadmap phase">
+                    </span>
+                    {t.roadmap_item_id && phaseById.get(t.roadmap_item_id) && (
+                      // The phase always sits on its own line under the title,
+                      // lined up with the title text, so it never wanders.
+                      <div className="task-phase-line" style={{ paddingLeft: depth * 20 + (depth > 0 ? 18 : 0) }}>
+                        <span className="pill pill-navy task-phase-pill" title={`Roadmap phase: ${phaseById.get(t.roadmap_item_id)!.title}`}>
                           {phaseById.get(t.roadmap_item_id)!.title}
                         </span>
-                      )}
-                    </span>
+                      </div>
+                    )}
                   </td>
                   <td>{t.owner_name || "--"}</td>
                   <td>{t.due_date ? fmtLocalDate(t.due_date) : "--"}</td>
@@ -4517,7 +4521,7 @@ function RoadmapTab({ projectId, isOwner, showBudget }: { projectId: string; isO
       </div>
 
       <div style={{ marginTop: 28 }}>
-        <ResizableTable id="roadmap-list">
+        <ResizableTable id="roadmap-list" minColWidths={[240, 100, 110, 150, 150, 120]}>
         <thead>
           <tr><th>Item</th><th>Type</th><th>Swimlane</th><th>Dates</th><th>Status</th><th></th></tr>
         </thead>

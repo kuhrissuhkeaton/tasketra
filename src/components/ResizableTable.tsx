@@ -90,11 +90,16 @@ export function ResizableTable({
   id,
   className = "table",
   style,
+  minColWidths,
   children,
 }: {
   id: string;
   className?: string;
   style?: CSSProperties;
+  /** Per-column floors in px (0 or missing = no floor). For columns holding
+   *  controls or pills that must not be squeezed into overlapping their
+   *  neighbours; the table scrolls sideways instead. */
+  minColWidths?: number[];
   children: ReactNode;
 }) {
   const tableRef = useRef<HTMLTableElement>(null);
@@ -138,6 +143,12 @@ export function ResizableTable({
         if (td && tr.children.length === ths.length) actionNeed[i] = Math.max(actionNeed[i], cellNeededWidth(td));
       }
       mins[i] = Math.max(mins[i], actionNeed[i]);
+    });
+    minColWidths?.forEach((w, i) => {
+      if (w && i < mins.length) {
+        mins[i] = Math.max(mins[i], w);
+        actionNeed[i] = Math.max(actionNeed[i], w);
+      }
     });
     const natural = fitColumns(
       ths.map((th) => th.getBoundingClientRect().width),
