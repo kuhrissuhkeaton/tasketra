@@ -9,6 +9,12 @@ type ChangeEntry = { version: string; date: string; title: string; body: string 
 // they can do.
 const CHANGES: ChangeEntry[] = [
   {
+    version: "v92.3",
+    date: "October 2026",
+    title: "Easier to use with a keyboard or screen reader",
+    body: "Tasketra is now easier to use without a mouse. Press Tab once on any page and a Skip to main content link appears, so you can jump past the menu. The outline that shows where you are as you tab is now dark and easy to see, and Escape closes dialogs and side panels and puts you back where you were. Every field on every form now has a name that a screen reader can read out, and clicking a label puts the cursor in its field. Lighter grey captions and green text are darker so they are easier to read, and the delete confirmation now starts on Cancel so pressing Enter by accident will not delete anything.",
+  },
+  {
     version: "v92",
     date: "October 2026",
     title: "Save your own projects as templates",
