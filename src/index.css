@@ -894,6 +894,24 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
   border-bottom: 1px solid var(--border);
 }
 .gantt-legend-types { margin-top: 6px; }
+/* Roadmap list: swimlane sits under the type tag (one column fewer), and the
+   table uses tighter side padding, so the list fits without scrolling sideways
+   on an ordinary laptop window. */
+.table-compact th, .table-compact td { padding-left: 10px; padding-right: 10px; }
+.roadmap-lane-line { font-size: 12px; margin-top: 3px; }
+/* Chart key: one panel under the chart, three labelled groups, so the colours
+   read as a key to the chart above rather than loose text. Type is shown the way
+   it appears on the chart: a coloured edge on the bar. */
+.roadmap-key {
+  display: flex; flex-wrap: wrap; gap: 14px 36px; margin-top: 12px; padding: 12px 16px;
+  background: var(--cream); border-radius: var(--radius); box-shadow: var(--shadow-sm);
+}
+.roadmap-key-group { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.roadmap-key-title { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--slate); }
+.roadmap-key-hint { font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--slate); margin-left: 4px; }
+.roadmap-key-items { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--navy); }
+.roadmap-key-items > span { display: inline-flex; align-items: center; gap: 6px; }
+.roadmap-key-edge { display: inline-block; width: 18px; height: 12px; border-radius: 3px; background: #fff; border: 1px solid var(--border); border-left: 6px solid transparent; box-sizing: border-box; }
 /* The rightmost month tick can land close enough to the track's scrollable
    edge that its label gets clipped mid-word -- harmless (the chart scrolls
    to reveal it) but a stray fragment used to trail off into blank page

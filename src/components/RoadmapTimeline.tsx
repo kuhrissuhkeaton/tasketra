@@ -273,21 +273,34 @@ export function RoadmapTimeline({
           </div>
         )}
       </div>
-      <div className="gantt-legend">
-        <span><span className="gantt-swatch gantt-bar-not_started" /> Not started</span>
-        <span><span className="gantt-swatch gantt-bar-in_progress" /> In progress</span>
-        <span><span className="gantt-swatch gantt-bar-blocked" /> Blocked</span>
-        <span><span className="gantt-swatch gantt-bar-done" /> Done</span>
+      <div className="roadmap-key" aria-label="Chart key">
+        <div className="roadmap-key-group">
+          <span className="roadmap-key-title">Status <span className="roadmap-key-hint">bar colour</span></span>
+          <div className="roadmap-key-items">
+            <span><span className="gantt-swatch gantt-bar-not_started" /> Not started</span>
+            <span><span className="gantt-swatch gantt-bar-in_progress" /> In progress</span>
+            <span><span className="gantt-swatch gantt-bar-blocked" /> Blocked</span>
+            <span><span className="gantt-swatch gantt-bar-done" /> Done</span>
+          </div>
+        </div>
+        <div className="roadmap-key-group">
+          <span className="roadmap-key-title">Type <span className="roadmap-key-hint">edge stripe or ring</span></span>
+          <div className="roadmap-key-items">
+            {(Object.keys(ROADMAP_TYPE_LABEL) as RoadmapItem["type"][]).map((t) => (
+              <span key={t}>
+                <span className="roadmap-key-edge" style={{ borderLeftColor: ROADMAP_TYPE_COLOR[t] }} /> {ROADMAP_TYPE_LABEL[t]}
+              </span>
+            ))}
+          </div>
+        </div>
         {items.some((i) => phaseProgress(i)) && (
-          <span><span className="gantt-swatch gantt-swatch-progress" /> Light strip along the bottom of a phase = share of its linked tasks done</span>
+          <div className="roadmap-key-group">
+            <span className="roadmap-key-title">Progress <span className="roadmap-key-hint">phases</span></span>
+            <div className="roadmap-key-items">
+              <span><span className="gantt-swatch gantt-swatch-progress" /> Light strip = share of linked tasks done</span>
+            </div>
+          </div>
         )}
-      </div>
-      <div className="gantt-legend gantt-legend-types">
-        {(Object.keys(ROADMAP_TYPE_LABEL) as RoadmapItem["type"][]).map((t) => (
-          <span key={t}>
-            <span className="gantt-swatch" style={{ background: ROADMAP_TYPE_COLOR[t] }} /> {ROADMAP_TYPE_LABEL[t]}
-          </span>
-        ))}
       </div>
     </div>
   );

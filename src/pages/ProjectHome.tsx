@@ -1,7 +1,8 @@
 import { useEffect, useState, useRef, Fragment } from "react";
 import { useParams, useSearchParams, useNavigate, useLocation, Link } from "react-router-dom";
 import { api, ApiError, type Project, type Task, type Stakeholder, type Decision, type Issue, type Risk, type Assumption, type Dependency, type ChangeRequest, type Lesson, type TodayData, type WeeklyReport, type BudgetData, type FeedItem, type TrashItem, type ProjectMember, type Meeting, type MeetingActionItem, type ProjectDocument, type StorageUsage, type RoadmapItem, type RoadmapItemType, type StakeholderInterest, type StakeholderContactMethod, type QualityItem, type ProcurementItem, type CommPlanItem, type ComplianceItem, type Objective, type KeyResult, type RiskTaskLink, type IssueTaskLink, type ProjectStage, type BaselineData, type CharterApproval } from "../lib/api";
-import { RoadmapTimeline, ROADMAP_TYPE_LABEL, ROADMAP_STATUS_LABEL, ROADMAP_TYPE_COLOR, fmtRoadmapDate } from "../components/RoadmapTimeline";
+import { RoadmapTimeline, ROADMAP_TYPE_LABEL, ROADMAP_STATUS_LABEL, ROADMAP_TYPE_COLOR } from "../components/RoadmapTimeline";
+import { fmtRoadmapRange } from "../lib/roadmapDates";
 import { phaseProgress } from "../lib/phaseProgress";
 import { mailtoHref, telHref } from "../lib/contactLinks";
 import { LEVEL_LABEL, riskExposure as riskExposureLevel } from "../lib/riskExposure";
@@ -4529,9 +4530,9 @@ function RoadmapTab({ projectId, isOwner, showBudget }: { projectId: string; isO
       </div>
 
       <div style={{ marginTop: 28 }}>
-        <ResizableTable id="roadmap-list" minColWidths={[240, 100, 110, 150, 150, 120]}>
+        <ResizableTable id="roadmap-list" className="table table-compact" minColWidths={[190, 0, 120, 0, 0]}>
         <thead>
-          <tr><th>Item</th><th>Type</th><th>Swimlane</th><th>Dates</th><th>Status</th><th></th></tr>
+          <tr><th>Item</th><th>Type / swimlane</th><th>Dates</th><th>Status</th><th></th></tr>
         </thead>
         <tbody>
           {visibleItems.map((item) => (
@@ -4567,12 +4568,12 @@ function RoadmapTab({ projectId, isOwner, showBudget }: { projectId: string; isO
                     })()}
                   </div>
                 </td>
-                <td><span className="pill pill-navy">{ROADMAP_TYPE_LABEL[item.type]}</span></td>
-                <td className="muted">{item.swimlane}</td>
+                <td>
+                  <span className="pill pill-navy">{ROADMAP_TYPE_LABEL[item.type]}</span>
+                  <div className="muted roadmap-lane-line">{item.swimlane}</div>
+                </td>
                 <td className="muted">
-                  {item.start_date
-                    ? `${fmtRoadmapDate(item.start_date)}${item.end_date ? ` -- ${fmtRoadmapDate(item.end_date)}` : ""}`
-                    : "Undated"}
+                  {fmtRoadmapRange(item.start_date, item.end_date)}
                 </td>
                 <td>
                   <select aria-label="Status"
@@ -4594,7 +4595,7 @@ function RoadmapTab({ projectId, isOwner, showBudget }: { projectId: string; isO
               </tr>
               {editingId === item.id && (
                 <tr>
-                  <td colSpan={6}>
+                  <td colSpan={5}>
                     <div className="settings-card" style={{ margin: "6px 0 14px" }}>
                       <label>Title</label>
                       <input aria-label="Title" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
@@ -4623,11 +4624,11 @@ function RoadmapTab({ projectId, isOwner, showBudget }: { projectId: string; isO
             </Fragment>
           ))}
           {items.length === 0 && (
-            <tr><td colSpan={6} className="muted">No roadmap items yet. Add phases, milestones, releases, events, or notes above to sketch out the plan.</td></tr>
+            <tr><td colSpan={5} className="muted">No roadmap items yet. Add phases, milestones, releases, events, or notes above to sketch out the plan.</td></tr>
           )}
           {items.length > 0 && visibleItems.length === 0 && (
             <tr>
-              <td colSpan={6} className="muted">
+              <td colSpan={5} className="muted">
                 No items match the current filters.{" "}
                 <button type="button" className="btn-link" onClick={resetFilters}>Reset filters</button>
               </td>
