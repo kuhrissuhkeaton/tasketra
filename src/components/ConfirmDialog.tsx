@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 
 type ConfirmFn = (message: string) => Promise<boolean>;
 
@@ -15,7 +15,11 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
   const [message, setMessage] = useState<string | null>(null);
   const resolver = useRef<((value: boolean) => void) | null>(null);
 
+  const opener = useRef<HTMLElement | null>(null);
+
   const confirm = useCallback<ConfirmFn>((msg: string) => {
+    // Remember what had focus *before* the dialog's own autoFocus moves it.
+    opener.current = document.activeElement as HTMLElement | null;
     setMessage(msg);
     return new Promise<boolean>((resolve) => {
       resolver.current = resolve;
@@ -28,18 +32,32 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
     resolver.current = null;
   }
 
+  // Escape cancels, and focus returns to whatever opened the dialog.
+  const open = message !== null;
+  useEffect(() => {
+    if (!open) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") handle(false);
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      opener.current?.focus?.();
+    };
+  }, [open]);
+
   return (
     <ConfirmContext.Provider value={confirm}>
       {children}
       {message !== null && (
         <div className="confirm-overlay" onClick={() => handle(false)}>
-          <div className="confirm-card" onClick={(e) => e.stopPropagation()}>
-            <p className="confirm-message">{message}</p>
+          <div className="confirm-card" role="alertdialog" aria-modal="true" aria-labelledby="confirm-message" onClick={(e) => e.stopPropagation()}>
+            <p className="confirm-message" id="confirm-message">{message}</p>
             <div className="confirm-actions">
-              <button type="button" className="btn btn-ghost" onClick={() => handle(false)}>
+              <button type="button" className="btn btn-ghost" onClick={() => handle(false)} autoFocus>
                 Cancel
               </button>
-              <button type="button" className="btn btn-danger" onClick={() => handle(true)} autoFocus>
+              <button type="button" className="btn btn-danger" onClick={() => handle(true)}>
                 Confirm
               </button>
             </div>

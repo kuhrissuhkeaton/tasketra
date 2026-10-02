@@ -21,15 +21,22 @@ export function Drawer({
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
 
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   useEffect(() => {
     if (!open) return;
+    const opener = document.activeElement as HTMLElement | null;
     panelRef.current?.focus();
     function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") onCloseRef.current();
     }
     document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [open, onClose]);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      opener?.focus?.(); // hand focus back to whatever opened the drawer
+    };
+  }, [open]);
 
   if (!open) return null;
 

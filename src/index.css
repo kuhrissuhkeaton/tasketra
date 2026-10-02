@@ -99,7 +99,8 @@ h1 { font-size: 36px; }
 ::selection { background: var(--tint-strong); color: var(--navy); }
 
 :focus-visible {
-  outline: 2px solid var(--gold);
+  /* Navy, not lime: lime on cream is 1.14:1, an invisible focus ring. */
+  outline: 2px solid var(--navy);
   outline-offset: 2px;
   border-radius: 3px;
 }
@@ -209,8 +210,8 @@ input[type="checkbox"], input[type="radio"] {
 input:hover, textarea:hover, select:hover { border-color: #DAD2B8; }
 input:focus, textarea:focus, select:focus {
   outline: none;
-  border-color: var(--gold);
-  box-shadow: 0 0 0 3px rgba(207, 234, 70, 0.4);
+  border-color: var(--navy);
+  box-shadow: 0 0 0 3px rgba(207, 234, 70, 0.55);
 }
 textarea { resize: vertical; }
 .form-error { color: var(--red); font-size: 13px; margin-top: 8px; }
@@ -279,6 +280,7 @@ textarea { resize: vertical; }
 .row-actions { display: flex; gap: 10px; white-space: nowrap; }
 .btn-link {
   background: none; border: none; padding: 0; font-size: 13px; font-weight: 600; color: var(--slate);
+  min-height: 24px; /* WCAG 2.2 minimum target size */
   cursor: pointer; font-family: inherit; transition: color var(--ease);
 }
 .btn-link:hover { color: var(--navy); text-decoration: underline; }
@@ -1552,3 +1554,8 @@ a.btn { text-decoration: none; }
 .my-templates { list-style: none; margin: 8px 0 0; padding: 0; }
 .my-templates li { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 0; border-top: 1px solid var(--border); }
 .apply-tpl textarea, .apply-tpl input { width: 100%; }
+
+/* Respect the OS "reduce motion" setting everywhere, not just the drawer. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+}

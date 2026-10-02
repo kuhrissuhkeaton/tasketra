@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { api } from "../lib/api";
 
@@ -30,9 +30,26 @@ export function FeedbackModal({ onClose }: { onClose: () => void }) {
     }
   }
 
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  // Captured during the first render, before any autoFocus inside the modal.
+  const openerRef = useRef<HTMLElement | null>(document.activeElement as HTMLElement | null);
+
+  useEffect(() => {
+    const opener = openerRef.current;
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") onCloseRef.current();
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      opener?.focus?.();
+    };
+  }, []);
+
   return (
     <div className="confirm-overlay" onClick={onClose}>
-      <div className="confirm-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 460 }}>
+      <div className="confirm-card" role="dialog" aria-modal="true" aria-label="Send feedback" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 460 }}>
         {sent ? (
           <>
             <p className="confirm-message">Thanks -- this goes straight to the person building Tasketra, and gets read.</p>
