@@ -13,10 +13,10 @@
   --gold: #CFEA46;   /* primary accent (Tasketra lime) -- backgrounds/borders, NOT small text */
   --cream: #F2EBD9;  /* warm paper background */
   --slate: #6B6A5A;
-  --slate-2: #9A9683; /* secondary muted -- captions, placeholders, uppercase labels */
+  --slate-2: #9A9683; /* NON-TEXT only (borders, dots, marks): 2.5:1 on cream fails text contrast. Use --slate for muted text. */
   --red: #8A3B2C;
   --red-border: #E3C9C0;
-  --success: #4F7A2E;
+  --success: #46702A; /* 4.9:1 on cream, 5.8:1 on white (was #4F7A2E, 4.25:1 on cream) */
   --border: #E7DFC8;
 
   /* Status colors for chart FILLS specifically (donut/pie arcs), distinct
@@ -368,7 +368,7 @@ textarea { resize: vertical; }
   padding: 20px 24px; border-bottom: 1px solid var(--border); flex-shrink: 0;
 }
 .drawer-header h3 { margin: 0; font-size: 19px; }
-.drawer-eyebrow { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--slate-2); margin-bottom: 4px; }
+.drawer-eyebrow { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--slate); margin-bottom: 4px; }
 .drawer-close {
   background: none; border: none; font-size: 22px; line-height: 1; color: var(--slate);
   cursor: pointer; padding: 2px 9px; border-radius: var(--radius-sm);
@@ -639,7 +639,7 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
   padding: 24px; margin-bottom: 20px;
 }
 .settings-card-label {
-  font-size: 12px; font-weight: 700; letter-spacing: 0.06em; color: var(--slate-2);
+  font-size: 12px; font-weight: 700; letter-spacing: 0.06em; color: var(--slate);
   text-transform: uppercase; margin: 0 0 14px;
 }
 .settings-card.danger-zone { border-left: 3px solid var(--red); }
@@ -657,7 +657,7 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
 .member-avatar-sm { width: 22px; height: 22px; font-size: 11px; }
 .member-info { flex: 1; min-width: 0; }
 .member-name { font-size: 14px; font-weight: 600; color: var(--navy); }
-.member-email { font-size: 12.5px; color: var(--slate-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.member-email { font-size: 12.5px; color: var(--slate); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .role-pill {
   border: 1px solid var(--border); border-radius: 999px; padding: 4px 12px; font-size: 12px;
   font-weight: 600; color: var(--slate); white-space: nowrap;
@@ -713,7 +713,7 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
 }
 .kanban-column-count {
   background: var(--surface-muted); border-radius: 999px; padding: 2px 9px; font-size: 11px;
-  font-weight: 700; color: var(--slate-2); text-transform: none; letter-spacing: 0;
+  font-weight: 700; color: var(--slate); text-transform: none; letter-spacing: 0;
 }
 .kanban-card {
   background: var(--cream); border-radius: 14px; padding: 14px 16px; margin-bottom: 8px;
@@ -722,8 +722,8 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
 }
 .kanban-card:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
 .kanban-card:active { cursor: grabbing; }
-.kanban-card .muted { font-size: 12px; color: var(--slate-2); font-weight: 500; margin-top: 6px; }
-.kanban-empty { font-size: 13px; padding: 4px 0; color: var(--slate-2); }
+.kanban-card .muted { font-size: 12px; color: var(--slate); font-weight: 500; margin-top: 6px; }
+.kanban-empty { font-size: 13px; padding: 4px 0; color: var(--slate); }
 .kanban-parent { font-size: 11px; margin-bottom: 2px; }
 
 /* --- Risk probability x impact matrix --- */
@@ -1061,12 +1061,12 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
 .landing-footer-cta .btn { margin-top: 12px; }
 
 .landing-legal-footer {
-  text-align: center; padding: 0 24px 40px; color: var(--slate-2); font-size: 13px;
+  text-align: center; padding: 0 24px 40px; color: var(--slate); font-size: 13px;
 }
 .landing-legal-footer a { color: var(--slate); text-decoration: underline; }
 .landing-legal-footer .dot { margin: 0 8px; color: var(--border); }
 
-.auth-consent { font-size: 12.5px; color: var(--slate-2); text-align: center; margin-top: 14px; line-height: 1.5; }
+.auth-consent { font-size: 12.5px; color: var(--slate); text-align: center; margin-top: 14px; line-height: 1.5; }
 .auth-consent a { color: var(--slate); text-decoration: underline; }
 
 /* --- Legal pages (/legal, /legal/*) --- */
@@ -1298,7 +1298,7 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
 .charter-field label { margin: 0 0 6px; font-size: 13px; font-weight: 700; }
 .charter-field textarea, .charter-field input { width: 100%; box-sizing: border-box; }
 .charter-row { display: flex; gap: 16px; }
-.charter-hint { margin: 6px 0 0; font-size: 12px; color: var(--slate-2); }
+.charter-hint { margin: 6px 0 0; font-size: 12px; color: var(--slate); }
 .charter-goals { display: flex; align-items: center; gap: 12px; margin-top: 10px; flex-wrap: wrap; }
 .charter-save { display: flex; align-items: center; gap: 12px; padding-top: 4px; }
 .charter-where p:not(.settings-card-label) { margin: 4px 0; font-size: 14px; }
@@ -1342,7 +1342,7 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
 .tolerance-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 18px; margin-bottom: 14px; }
 .tolerance-field label { margin: 0 0 6px; font-size: 13px; font-weight: 700; }
 .tolerance-field input { width: 100%; box-sizing: border-box; }
-.tolerance-hint { display: block; margin-top: 4px; font-size: 12px; color: var(--slate-2); }
+.tolerance-hint { display: block; margin-top: 4px; font-size: 12px; color: var(--slate); }
 @media (max-width: 560px) { .tolerance-grid { grid-template-columns: 1fr; } }
 .escalate-pill { margin-left: 6px; }
 
@@ -1402,7 +1402,7 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
 }
 .flow-steps strong { font-size: 15px; }
 .flow-steps p { margin: 3px 0 0; font-size: 14px; color: var(--slate); line-height: 1.5; }
-.flow-note { color: var(--slate-2); }
+.flow-note { color: var(--slate); }
 .flow-foot { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-top: 6px; padding-top: 14px; border-top: 1px solid var(--border); }
 .flow-checklist { margin: 0; font-size: 13px; color: var(--slate); }
 .flow-checklist strong { color: var(--navy); }

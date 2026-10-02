@@ -4810,7 +4810,7 @@ function MeetingsTab({ projectId }: { projectId: string }) {
                         {(m.action_items || []).map((item) => (
                           <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
                             <input type="checkbox" checked={item.done} onChange={() => toggleActionItem(m, item.id)} />
-                            <span style={{ flex: 1, textDecoration: item.done ? "line-through" : "none", color: item.done ? "var(--slate-2)" : "inherit" }}>
+                            <span style={{ flex: 1, textDecoration: item.done ? "line-through" : "none", color: item.done ? "var(--slate)" : "inherit" }}>
                               {item.text}
                             </span>
                             {item.taskId ? (
