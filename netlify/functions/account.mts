@@ -4,6 +4,7 @@ import { getUserIdFromRequest } from "../lib/auth.ts";
 import { hashPassword, verifyPassword } from "../lib/auth.ts";
 import { json } from "../lib/http.ts";
 import { withSentry } from "../lib/sentry.ts";
+import { validatePassword } from "../lib/accountRules.ts";
 
 export default withSentry(async (req: Request) => {
   const userId = getUserIdFromRequest(req);
@@ -18,10 +19,9 @@ export default withSentry(async (req: Request) => {
     if (body?.action === "change-password") {
       const currentPassword = body?.currentPassword || "";
       const newPassword = body?.newPassword || "";
-      if (!newPassword || newPassword.length < 8) {
-        return json({ error: "New password must be at least 8 characters." }, { status: 400 });
-      }
-      const [user] = await database.sql`SELECT password_hash FROM users WHERE id = ${userId}`;
+      const [user] = await database.sql`SELECT email, password_hash FROM users WHERE id = ${userId}`;
+      const passwordError = typeof newPassword === "string" ? validatePassword(newPassword, user?.email) : "New password is required.";
+      if (passwordError) return json({ error: passwordError }, { status: 400 });
       if (!user || !(await verifyPassword(currentPassword, user.password_hash))) {
         return json({ error: "Current password is incorrect." }, { status: 400 });
       }

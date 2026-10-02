@@ -69,3 +69,10 @@ export async function createTestDocument(
 export async function jsonBody<T = any>(res: Response): Promise<T> {
   return (await res.json()) as T;
 }
+
+/** Runs raw SQL (including several statements at once) on the test database.
+ *  The driver's pool type is a union that TypeScript can't call directly, so
+ *  this narrows it in one place. */
+export async function rawQuery(text: string): Promise<{ rows: any[] }> {
+  return (db().pool as any).query(text);
+}

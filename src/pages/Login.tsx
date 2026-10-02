@@ -55,7 +55,7 @@ export default function Login() {
 
         {mode === "register" && planParam === "pro" && (
           <p className="form-success" style={{ marginBottom: 4 }}>
-            Create your account first -- you'll land on Billing to start your 14-day Pro trial next. No card required yet.
+            Create your account first -- you'll land on Billing to start your 14-day Pro trial next. A card is needed to start the trial, and you won't be charged until it ends.
           </p>
         )}
 
@@ -72,7 +72,8 @@ export default function Login() {
           <label htmlFor="f-login-73">Email</label>
           <input id="f-login-73" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
           <label htmlFor="f-login-75">Password</label>
-          <input id="f-login-75" type="password" required minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} />
+          <input id="f-login-75" type="password" required minLength={mode === "register" ? 8 : undefined} maxLength={72} autoComplete={mode === "register" ? "new-password" : "current-password"} value={password} onChange={(e) => setPassword(e.target.value)} />
+          {mode === "register" && <p className="muted" style={{ fontSize: 12, margin: "4px 0 0" }}>At least 8 characters. One email, one account.</p>}
           {error && <div className="form-error">{error}</div>}
           <button type="submit" className="btn btn-primary btn-block" disabled={busy}>
             {busy ? "Please wait..." : mode === "login" ? "Sign in" : "Create account"}

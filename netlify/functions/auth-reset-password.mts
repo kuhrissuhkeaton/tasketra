@@ -4,17 +4,20 @@ import { hashPassword, hashResetToken, createSessionCookie } from "../lib/auth.t
 import { json } from "../lib/http.ts";
 import { checkRateLimit, getClientIp } from "../lib/rate-limit.ts";
 import { withSentry } from "../lib/sentry.ts";
+import { validatePassword } from "../lib/accountRules.ts";
 
 export default withSentry(async (req: Request) => {
   if (req.method !== "POST") return json({ error: "Method not allowed" }, { status: 405 });
 
   const body = await req.json().catch(() => null) as any;
   const token = body?.token || "";
-  const password = body?.password || "";
+  const password = typeof body?.password === "string" ? body.password : "";
 
-  if (!token || !password || password.length < 8) {
-    return json({ error: "A reset token and a password of at least 8 characters are required." }, { status: 400 });
+  if (!token || !password) {
+    return json({ error: "A reset token and a new password are required." }, { status: 400 });
   }
+  const passwordError = validatePassword(password);
+  if (passwordError) return json({ error: passwordError }, { status: 400 });
 
   const database = db();
 

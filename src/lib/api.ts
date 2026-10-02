@@ -315,6 +315,30 @@ export type FoundingMember = {
   created_at: string;
 };
 
+export type AdminAccount = {
+  id: string;
+  email: string;
+  display_name: string | null;
+  job_title: string | null;
+  created_at: string;
+  founding_member: boolean;
+  project_count: number;
+  subscription_status: string | null;
+  is_you: boolean;
+  possible_duplicates: string[];
+};
+
+export type AdminAccountsSummary = { foundingClaimed: number; cap: number; totalAccounts: number };
+
+export type AccountRemovalPreview = {
+  user: { id: string; email: string; display_name: string | null; founding_member: boolean };
+  projects: number;
+  documents: number;
+  subscriptionStatus: string | null;
+  sharedProjects: { id: string; name: string; otherMembers: number }[];
+  blockers: { code: string; message: string }[];
+};
+
 export type Feedback = {
   id: string;
   message: string;
@@ -625,7 +649,7 @@ export type PortfolioData = {
 
 export const api = {
   register: (email: string, password: string, ref?: string) =>
-    request<{ user: User }>("/auth/register", { method: "POST", body: JSON.stringify({ email, password, ...(ref ? { ref } : {}) }) }),
+    request<{ user: User }>("/auth/register", { method: "POST", body: JSON.stringify({ email, password, acceptedTerms: true, ...(ref ? { ref } : {}) }) }),
   login: (email: string, password: string) =>
     request<{ user: User }>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
   logout: () => request<{ ok: true }>("/auth/logout", { method: "POST" }),
@@ -642,6 +666,14 @@ export const api = {
     request<{ signup: WaitlistSignup }>("/waitlist", { method: "PATCH", body: JSON.stringify({ id }) }),
   deleteWaitlistSignup: (id: string) => request<{ ok: true }>(`/waitlist?id=${id}`, { method: "DELETE" }),
   listFoundingMembers: () => request<{ members: FoundingMember[] }>("/founding-members"),
+  adminListAccounts: (scope: "founding" | "all") =>
+    request<{ accounts: AdminAccount[]; summary: AdminAccountsSummary }>(`/admin-accounts?scope=${scope}`),
+  adminPreviewRemoval: (userId: string) =>
+    request<{ preview: AccountRemovalPreview }>(`/admin-accounts?preview=${encodeURIComponent(userId)}`),
+  adminRemoveFounding: (userId: string) =>
+    request<{ ok: true }>("/admin-accounts", { method: "POST", body: JSON.stringify({ userId, action: "remove-founding" }) }),
+  adminDeleteAccount: (userId: string, confirmEmail: string) =>
+    request<{ ok: true }>("/admin-accounts", { method: "POST", body: JSON.stringify({ userId, action: "delete", confirmEmail }) }),
 
   listProjects: () => request<{ projects: Project[] }>("/projects"),
   listDeletedProjects: () => request<{ projects: Project[] }>("/projects?deleted=true"),

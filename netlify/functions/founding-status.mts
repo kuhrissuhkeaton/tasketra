@@ -1,6 +1,7 @@
 import type { Config } from "@netlify/functions";
 import { db } from "../lib/db.ts";
 import { withSentry } from "../lib/sentry.ts";
+import { foundingCap } from "../lib/accountRules.ts";
 
 // Public, unauthenticated: reports how many of the 100 founding-member
 // spots have been claimed so far. Fetched cross-origin from tasketra.com's
@@ -8,7 +9,6 @@ import { withSentry } from "../lib/sentry.ts";
 // codebase serves the marketing site directly. Aggregate count only, no
 // PII, safe to expose without auth.
 
-const FOUNDING_CAP = 100;
 const CORS_ORIGIN = "https://tasketra.com";
 
 function withCors(body: unknown, status = 200) {
@@ -37,6 +37,7 @@ export default withSentry(async (req: Request) => {
   const database = db();
   const [{ count }] = await database.sql`SELECT count(*) FROM users WHERE founding_member = true`;
   const claimed = Number(count);
+  const FOUNDING_CAP = foundingCap();
 
   return withCors({
     cap: FOUNDING_CAP,
