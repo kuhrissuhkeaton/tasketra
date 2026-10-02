@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../lib/auth-context";
 import { Wordmark } from "./Wordmark";
@@ -56,11 +56,28 @@ export function NavGroup({
  */
 export function AppSidebar({ children }: { children?: ReactNode }) {
   const { user, logout } = useAuth();
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
   const [feedbackOpen, setFeedbackOpen] = useState(false);
+  // Phone-width menu. On desktop the sidebar is always open and this does nothing;
+  // below 860px the navigation sits behind a Menu button instead of a strip you
+  // had to know to scroll sideways.
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+
+  // Going somewhere closes the menu.
+  useEffect(() => { setMenuOpen(false); }, [pathname, search]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") { setMenuOpen(false); menuButtonRef.current?.focus(); }
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [menuOpen]);
 
   return (
-    <aside className="sidebar">
+    <aside className={menuOpen ? "sidebar sidebar-open" : "sidebar"}>
       {/* Keyboard shortcut past the navigation: visible only when focused. */}
       <a
         href="#main-content"
@@ -76,11 +93,23 @@ export function AppSidebar({ children }: { children?: ReactNode }) {
       >
         Skip to main content
       </a>
-      <Link to="/app" className="sidebar-wordmark">
-        <Wordmark size="sm" beta />
-      </Link>
+      <div className="sidebar-bar">
+        <Link to="/app" className="sidebar-wordmark">
+          <Wordmark size="sm" beta />
+        </Link>
+        <button
+          type="button"
+          ref={menuButtonRef}
+          className="sidebar-menu-btn"
+          aria-expanded={menuOpen}
+          aria-controls="sidebar-nav"
+          onClick={() => setMenuOpen((o) => !o)}
+        >
+          {menuOpen ? "Close" : "Menu"}
+        </button>
+      </div>
 
-      <nav className="side-nav">
+      <nav className="side-nav" id="sidebar-nav" aria-label="Main">
         <NavGroup label="Workspace" defaultCollapsed={!!children}>
           <Link to="/app" className={pathname === "/app" ? "side-tab active" : "side-tab"}>
             <NavIcon name="dashboard" active={pathname === "/app"} />

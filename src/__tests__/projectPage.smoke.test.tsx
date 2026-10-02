@@ -169,6 +169,19 @@ describe("project page smoke test", () => {
     expect(document.activeElement?.tagName).toBe("MAIN");
   });
 
+  it("the phone Menu button opens and closes the navigation, and Escape closes it", async () => {
+    await mountProject("standard", "charter");
+    const btn = host.querySelector("button.sidebar-menu-btn") as HTMLButtonElement;
+    expect(btn.getAttribute("aria-expanded")).toBe("false");
+    expect(host.querySelector(".sidebar-open")).toBeNull();
+    await act(async () => btn.click());
+    expect(btn.getAttribute("aria-expanded")).toBe("true");
+    expect(host.querySelector(".sidebar-open")).not.toBeNull();
+    await act(async () => { document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })); });
+    expect(btn.getAttribute("aria-expanded")).toBe("false");
+    expect(host.querySelector(".sidebar-open")).toBeNull();
+  });
+
   it("Stakeholders tab with data: list shows Power, grid view places people", async () => {
     await mountProject("standard", "stakeholders", (url) =>
       /\/api\/stakeholders\?projectId=/.test(url)

@@ -197,11 +197,16 @@ export function RoadmapTimeline({
                 </div>
               ))}
               {todayOffset >= 0 && todayOffset <= totalDays && (
-                <div className="gantt-header-tick gantt-header-tick-today" style={{ left: todayOffset * pxPerDay }}>
+                // "Today" sits on its own line under the month labels, so it can
+                // never print over one; the line below carries it down the chart.
+                <div className="roadmap-today-label" style={{ left: todayOffset * pxPerDay }}>
                   Today
                 </div>
               )}
             </div>
+            {todayOffset >= 0 && todayOffset <= totalDays && (
+              <div className="roadmap-today-line" style={{ left: todayOffset * pxPerDay }} aria-hidden="true" />
+            )}
             {swimlaneData.map(({ lane, placements, rowHeight }) => (
               <div key={lane} className="roadmap-row" style={{ width: trackWidth, height: rowHeight }}>
                 {placements.map(({ item, lane: laneIdx }) => {
@@ -274,7 +279,7 @@ export function RoadmapTimeline({
         <span><span className="gantt-swatch gantt-bar-blocked" /> Blocked</span>
         <span><span className="gantt-swatch gantt-bar-done" /> Done</span>
         {items.some((i) => phaseProgress(i)) && (
-          <span><span className="gantt-swatch gantt-swatch-progress" /> Light strip on a phase = linked tasks done</span>
+          <span><span className="gantt-swatch gantt-swatch-progress" /> Light strip along the bottom of a phase = share of its linked tasks done</span>
         )}
       </div>
       <div className="gantt-legend gantt-legend-types">

@@ -618,27 +618,28 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
 
 @media (max-width: 860px) {
   .project-shell { flex-direction: column; }
+  /* On a phone the sidebar is a slim top bar (wordmark + Menu button). Tapping
+     Menu opens the same navigation the desktop sidebar shows, stacked. */
   .sidebar {
-    width: 100%; height: auto; position: static; padding: 14px 16px;
-    flex-direction: row; align-items: center; gap: 16px; overflow-x: auto; white-space: nowrap;
+    width: 100%; height: auto; position: static; padding: 12px 16px;
+    flex-direction: column; align-items: stretch; gap: 0; overflow: visible;
     border-right: none; border-bottom: 1px solid var(--border);
   }
+  .sidebar-bar { display: flex; align-items: center; justify-content: space-between; }
+  .sidebar-wordmark { margin-bottom: 0; }
+  .sidebar-menu-btn {
+    display: inline-flex; align-items: center; min-height: 40px; padding: 0 16px;
+    border-radius: var(--radius-pill); border: 1.5px solid rgba(242, 235, 217, 0.4);
+    background: none; color: var(--cream); font-family: inherit; font-size: 14px; font-weight: 700; cursor: pointer;
+  }
+  .sidebar-menu-btn:hover { background: rgba(255, 255, 255, 0.08); }
+  .sidebar .side-nav, .sidebar .sidebar-footer { display: none; }
+  .sidebar.sidebar-open .side-nav { display: block; margin-top: 14px; }
+  .sidebar.sidebar-open .sidebar-footer { display: block; }
   .sidebar-project { display: none; }
-  .side-nav { display: flex; gap: 4px; flex: none; }
-  .side-nav-group { display: flex; align-items: center; gap: 2px; margin-bottom: 0; }
-  .side-nav-label { display: none; }
-  .side-tab { border-left: none; border-bottom: 2px solid transparent; border-radius: 0; white-space: nowrap; }
-  .side-tab.active { background: none; border-bottom-color: var(--gold); }
-  /* Collapsing is a desktop-only affordance -- the chevron/label toggle is hidden
-     on mobile (side-nav-label is display:none above), so groups must always
-     render their items here or those pages would become unreachable. */
-  .side-nav-items, .side-nav-group.collapsed .side-nav-items { display: contents; }
-  .side-nav-chevron { display: none; }
-  .sidebar-footer { border-top: none; margin-top: 0; padding-top: 0; display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
-  .sidebar-user { display: none; }
-  .sidebar-footer .btn { padding: 7px 10px; }
   .project-main, .project-main.project-main-tables { padding: 20px 16px; max-width: none; }
 }
+@media (min-width: 861px) { .sidebar-menu-btn { display: none; } }
 
 @media print {
   .sidebar { display: none !important; }
@@ -819,7 +820,7 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
   position: absolute; height: 22px; border-radius: 4px; min-width: 10px; border-left: 4px solid transparent;
   display: flex; align-items: center; overflow: hidden; cursor: default;
 }
-.roadmap-bar-label { font-size: 11px; color: white; padding: 0 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; position: relative; }
+.roadmap-bar-label { font-size: 11px; font-weight: 600; color: white; padding: 0 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; position: relative; }
 /* Phase progress: a light strip along the bottom of a phase bar, as wide as
    the share of its linked tasks that are done (a fainter strip marks the full
    length). A light strip reads on every status color, including the dark
@@ -828,7 +829,9 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
    signal. */
 .roadmap-bar-progress-track { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: rgba(255, 255, 255, 0.28); pointer-events: none; }
 .roadmap-bar-progress { display: block; height: 100%; background: rgba(255, 255, 255, 0.95); }
-.gantt-swatch-progress { background: linear-gradient(to bottom, var(--slate) 0 65%, #fff 65% 100%); border: 1px solid var(--border); }
+.gantt-swatch-progress {
+  width: 22px; border: none; background: linear-gradient(#fff, #fff) left bottom / 62% 34% no-repeat, var(--slate);
+}
 /* Progress line under a phase's title in the roadmap list. */
 .phase-progress { display: flex; align-items: center; gap: 8px; margin-top: 4px; font-size: 12px; color: var(--slate); }
 .phase-progress .progress-track { display: block; width: 90px; flex-shrink: 0; }
@@ -845,8 +848,24 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
 .roadmap-marker-wrap { position: absolute; display: flex; align-items: center; gap: 6px; }
 .roadmap-marker { width: 12px; height: 12px; border: 2px solid transparent; transform: rotate(45deg); border-radius: 2px; cursor: default; flex-shrink: 0; }
 .roadmap-marker-label {
-  font-size: 11px; color: var(--navy); white-space: nowrap; cursor: default;
-  background: var(--cream); border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px;
+  font-size: 11px; font-weight: 600; color: var(--navy); white-space: nowrap; cursor: default;
+  background: var(--cream); border: 1px solid var(--border); border-radius: 4px; padding: 0 6px;
+  height: 22px; box-sizing: border-box; display: inline-flex; align-items: center;
+}
+/* Timeline header: month names on the top line, "Today" on a second line, and a
+   gold line down the chart. The header spacers over the label and Undated
+   columns match its height so every row boundary still lines up. */
+.roadmap-track-wrap .gantt-header { height: 40px; }
+.roadmap-track-wrap .gantt-header-tick { height: 40px; line-height: 22px; }
+.roadmap-labels .gantt-header-spacer, .gantt-undated-col-head { height: 40px; box-sizing: border-box; }
+.roadmap-today-label {
+  position: absolute; top: 21px; height: 16px; line-height: 16px; transform: translateX(-50%);
+  padding: 0 7px; border-radius: var(--radius-pill); background: var(--gold); color: var(--navy);
+  font-size: 10px; font-weight: 700; white-space: nowrap; z-index: 2;
+}
+.roadmap-today-line {
+  position: absolute; top: 40px; bottom: 0; width: 0; border-left: 2px solid var(--gold);
+  opacity: 0.8; pointer-events: none; /* no z-index: bars and labels paint over it */
 }
 .roadmap-undated-chip { font-size: 12px; }
 .gantt-undated-col { width: 200px; flex-shrink: 0; border-left: 1px solid var(--border); }
@@ -872,6 +891,14 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
 }
 @media (max-width: 800px) {
   .kanban-board { grid-template-columns: 1fr; }
+}
+/* Roadmap timeline on a phone: narrower lane-name and Undated columns, so the
+   chart itself gets room (and scrolls sideways for the rest). */
+@media (max-width: 600px) {
+  .roadmap-labels { min-width: 84px; max-width: 110px; }
+  .roadmap-label-row { padding: 0 8px; font-size: 12px; }
+  .gantt-undated-col { width: 120px; }
+  .roadmap-undated-chip { font-size: 11px; }
 }
 
 /* --- Feed --- */
