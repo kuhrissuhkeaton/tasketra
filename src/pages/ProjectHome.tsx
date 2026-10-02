@@ -4637,7 +4637,7 @@ function RoadmapTab({ projectId, isOwner, showBudget }: { projectId: string; isO
       </div>
 
       {isOwner && (
-        <div className="template-card" style={{ maxWidth: 640, marginTop: 28 }}>
+        <div className="template-card" style={{ marginTop: 28 }}>
           <h4>Share roadmap</h4>
           <p className="muted">
             Turn this on to get a read-only link for exec sponsors or stakeholders -- no Tasketra account needed.

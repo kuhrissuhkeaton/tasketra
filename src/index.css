@@ -1403,7 +1403,7 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
 .filter-group-label { font-size: 12px; font-weight: 700; color: var(--slate); margin-right: 2px; align-self: center; }
 
 /* --- Baseline card and note --- */
-.baseline-card { max-width: 760px; display: flex; flex-direction: column; gap: 10px; }
+.baseline-card { max-width: none; display: flex; flex-direction: column; gap: 10px; }
 .baseline-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .baseline-head .settings-card-label { margin: 0; }
 .baseline-card p { margin: 0; }
