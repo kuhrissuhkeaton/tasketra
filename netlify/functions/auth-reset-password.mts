@@ -5,6 +5,7 @@ import { json } from "../lib/http.ts";
 import { checkRateLimit, getClientIp } from "../lib/rate-limit.ts";
 import { withSentry } from "../lib/sentry.ts";
 import { validatePassword } from "../lib/accountRules.ts";
+import { markEmailVerified } from "../lib/emailVerification.ts";
 
 export default withSentry(async (req: Request) => {
   if (req.method !== "POST") return json({ error: "Method not allowed" }, { status: 405 });
@@ -50,6 +51,9 @@ export default withSentry(async (req: Request) => {
     UPDATE password_reset_tokens SET used_at = now()
     WHERE user_id = ${record.user_id} AND used_at IS NULL
   `;
+
+  // Getting the reset email proves they can read mail at this address.
+  await markEmailVerified(database, user.id);
 
   const cookie = createSessionCookie(user.id);
   return json({ user: { id: user.id, email: user.email } }, { headers: { "set-cookie": cookie } });

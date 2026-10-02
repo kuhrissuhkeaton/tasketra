@@ -8,6 +8,7 @@ import { withSentry } from "../lib/sentry.ts";
 import { isProjectSize, isProjectApproach } from "../lib/projectSetup.ts";
 import { applyProjectTemplate } from "../lib/applyTemplate.ts";
 import { resolveTemplate } from "../lib/templateResolve.ts";
+import { requireVerifiedEmail } from "../lib/emailVerification.ts";
 
 export default withSentry(async (req: Request) => {
   const userId = getUserIdFromRequest(req);
@@ -45,6 +46,8 @@ export default withSentry(async (req: Request) => {
     const body = await req.json().catch(() => null) as any;
     const name = (body?.name || "").trim();
     if (!name) return json({ error: "Project name is required." }, { status: 400 });
+    const unverified = await requireVerifiedEmail(database, userId);
+    if (unverified) return unverified;
     if (!(await canCreateProject(database, userId))) {
       return json(
         { error: `Free plan is limited to ${FREE_PROJECT_LIMIT} active projects. Upgrade to create more.`, upgradeRequired: true },

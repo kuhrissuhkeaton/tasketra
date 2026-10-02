@@ -22,12 +22,13 @@ export default withSentry(async (req: Request) => {
 
   const database = db();
   const [user] = await database.sql`
-    SELECT id, email, display_name, job_title, timezone, avatar_key IS NOT NULL AS has_avatar, tour_completed_at
+    SELECT id, email, display_name, job_title, timezone, avatar_key IS NOT NULL AS has_avatar, tour_completed_at, email_verified_at
     FROM users WHERE id = ${userId}
   `;
   if (!user) return json({ user: null });
   const plan = await getUserPlan(database, userId);
-  return json({ user: { ...user, isAdmin: isAdminEmail(user.email), plan } });
+  const { email_verified_at, ...rest } = user;
+  return json({ user: { ...rest, emailVerified: !!email_verified_at, isAdmin: isAdminEmail(user.email), plan } });
 });
 
 export const config: Config = { path: "/api/auth/me" };

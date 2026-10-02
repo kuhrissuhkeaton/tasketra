@@ -87,6 +87,7 @@ export default function AdminFoundingMembers() {
                         </span>
                       )}
                       {a.project_count === 0 && <span className="pill">No projects</span>}
+                      {!a.email_verified && <span className="pill">Email not verified</span>}
                     </div>
                   </td>
                   <td>{a.project_count}</td>

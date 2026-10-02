@@ -3,7 +3,7 @@ import { setupTestDb, teardownTestDb, resetTestDb } from "../../lib/__tests__/te
 import registerHandler from "../auth-register.mts";
 import loginHandler from "../auth-login.mts";
 import { db } from "../../lib/db.ts";
-import { jsonBody } from "./fixtures.ts";
+import { jsonBody, verifyAccount } from "./fixtures.ts";
 
 // Real HTTP-shaped requests against the actual handlers, against a real
 // (disposable) Postgres -- these exercise the exact code path a live
@@ -87,37 +87,32 @@ describe("auth-register", () => {
   });
 
   describe("founding-member cutoff", () => {
-    it("marks the very first signup as a founding member", async () => {
+    it("does not give a spot at sign-up; the spot comes when the email is confirmed", async () => {
       const res = await registerHandler(registerRequest("first@example.com", "correcthorse123", "10.0.0.1"));
-      const body = await jsonBody<{ user: { id: string; email: string } }>(res);
+      const body = await jsonBody<{ user: { id: string } }>(res);
       const database = db();
-      const [row] = await database.sql`SELECT founding_member FROM users WHERE id = ${body.user.id}`;
-      expect(row.founding_member).toBe(true);
+      const [before] = await database.sql`SELECT founding_member FROM users WHERE id = ${body.user.id}`;
+      expect(before.founding_member).toBe(false);
+      await verifyAccount(body.user.id);
+      const [after] = await database.sql`SELECT founding_member FROM users WHERE id = ${body.user.id}`;
+      expect(after.founding_member).toBe(true);
     });
 
-    it("marks exactly the 100th signup as founding, and the 101st as not", async () => {
-      // Insert 99 pre-existing users directly (bypassing the handler/rate
-      // limiter for speed) so the next registration through the real
-      // handler is genuinely the 100th.
+    it("gives the 100th confirmed account a spot and the 101st none", async () => {
       const database = db();
       for (let i = 0; i < 99; i++) {
         await database.sql`
-          INSERT INTO users (email, password_hash, founding_member)
-          VALUES (${`seed${i}@example.com`}, 'x', (SELECT count(*) FROM users) < 100)
+          INSERT INTO users (email, password_hash, founding_member, email_verified_at) VALUES (${`seed${i}@example.com`}, 'x', true, now())
         `;
       }
-      const [{ count: before }] = await database.sql<{ count: number }>`SELECT count(*)::int AS count FROM users`;
-      expect(before).toBe(99);
-
-      const hundredth = await registerHandler(registerRequest("hundredth@example.com", "correcthorse123", "10.0.0.2"));
-      const hundredthBody = await jsonBody<{ user: { id: string } }>(hundredth);
-      const [hundredthRow] = await database.sql`SELECT founding_member FROM users WHERE id = ${hundredthBody.user.id}`;
-      expect(hundredthRow.founding_member).toBe(true);
-
-      const hundredFirst = await registerHandler(registerRequest("hundredfirst@example.com", "correcthorse123", "10.0.0.3"));
-      const hundredFirstBody = await jsonBody<{ user: { id: string } }>(hundredFirst);
-      const [hundredFirstRow] = await database.sql`SELECT founding_member FROM users WHERE id = ${hundredFirstBody.user.id}`;
-      expect(hundredFirstRow.founding_member).toBe(false);
+      const hundredth = await jsonBody<{ user: { id: string } }>(await registerHandler(registerRequest("hundredth@example.com", "correcthorse123", "10.0.0.2")));
+      const hundredFirst = await jsonBody<{ user: { id: string } }>(await registerHandler(registerRequest("hundredfirst@example.com", "correcthorse123", "10.0.0.3")));
+      await verifyAccount(hundredth.user.id);
+      await verifyAccount(hundredFirst.user.id);
+      const [a] = await database.sql`SELECT founding_member FROM users WHERE id = ${hundredth.user.id}`;
+      const [b] = await database.sql`SELECT founding_member FROM users WHERE id = ${hundredFirst.user.id}`;
+      expect(a.founding_member).toBe(true);
+      expect(b.founding_member).toBe(false);
     });
   });
 

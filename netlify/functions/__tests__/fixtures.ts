@@ -6,13 +6,13 @@ import { db } from "../../lib/db.ts";
  *  returns their id plus a ready-to-use Request builder authenticated as them. */
 export async function createTestUser(
   email: string,
-  opts: { foundingMember?: boolean } = {}
+  opts: { foundingMember?: boolean; verified?: boolean } = {}
 ): Promise<{ id: string; email: string; cookie: string }> {
   const database = db();
   const passwordHash = await hashPassword("irrelevant-for-these-tests-123");
   const [user] = await database.sql<{ id: string }>`
-    INSERT INTO users (email, password_hash, founding_member)
-    VALUES (${email}, ${passwordHash}, ${opts.foundingMember ?? false})
+    INSERT INTO users (email, password_hash, founding_member, email_verified_at)
+    VALUES (${email}, ${passwordHash}, ${opts.foundingMember ?? false}, ${opts.verified === false ? null : new Date().toISOString()})
     RETURNING id
   `;
   const cookie = createSessionCookie(user.id).split(";")[0]; // "tasketra_session=..."
@@ -75,4 +75,10 @@ export async function jsonBody<T = any>(res: Response): Promise<T> {
  *  this narrows it in one place. */
 export async function rawQuery(text: string): Promise<{ rows: any[] }> {
   return (db().pool as any).query(text);
+}
+
+/** Confirms an account's email the way clicking the emailed link does. */
+export async function verifyAccount(userId: string) {
+  const { markEmailVerified } = await import("../../lib/emailVerification.ts");
+  return markEmailVerified(db(), userId);
 }

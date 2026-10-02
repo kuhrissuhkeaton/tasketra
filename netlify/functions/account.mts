@@ -4,7 +4,11 @@ import { getUserIdFromRequest } from "../lib/auth.ts";
 import { hashPassword, verifyPassword } from "../lib/auth.ts";
 import { json } from "../lib/http.ts";
 import { withSentry } from "../lib/sentry.ts";
-import { validatePassword } from "../lib/accountRules.ts";
+import { canonicalEmail, normalizeEmail, validatePassword } from "../lib/accountRules.ts";
+import { checkNewEmail } from "../lib/signupEmail.ts";
+import { checkRateLimit } from "../lib/rate-limit.ts";
+import { isEmailVerified, issueVerificationEmail } from "../lib/emailVerification.ts";
+import { pgErrorCode } from "../lib/pgError.ts";
 
 export default withSentry(async (req: Request) => {
   const userId = getUserIdFromRequest(req);
@@ -28,6 +32,32 @@ export default withSentry(async (req: Request) => {
       const newHash = await hashPassword(newPassword);
       await database.sql`UPDATE users SET password_hash = ${newHash} WHERE id = ${userId}`;
       return json({ ok: true });
+    }
+
+    // Fixes a mistyped address on an account that hasn't confirmed its email
+    // yet. Confirmed accounts can't use this (it would skip the proof).
+    if (body?.action === "change-email") {
+      if (await isEmailVerified(database, userId)) {
+        return json({ error: "This email address is already confirmed." }, { status: 400 });
+      }
+      const email = normalizeEmail(typeof body?.email === "string" ? body.email : "");
+      const problem = await checkNewEmail(email);
+      if (problem) return json(problem, { status: 400 });
+      const canonical = canonicalEmail(email);
+      const [taken] = await database.sql`
+        SELECT id FROM users WHERE id <> ${userId} AND (email = ${email} OR email_canonical = ${canonical})
+      `;
+      if (taken) return json({ error: "That email is already registered. Try signing in instead." }, { status: 409 });
+      const allowed = await checkRateLimit(database, `verify-resend:user:${userId}`, 5, 60);
+      if (!allowed) return json({ error: "That's a few too many emails. Wait a little while, then try again." }, { status: 429 });
+      try {
+        await database.sql`UPDATE users SET email = ${email}, email_canonical = ${canonical} WHERE id = ${userId}`;
+      } catch (err) {
+        if (pgErrorCode(err) === "23505") return json({ error: "That email is already registered. Try signing in instead." }, { status: 409 });
+        throw err;
+      }
+      const sent = await issueVerificationEmail(database, userId, email).catch(() => false);
+      return json({ ok: true, email, verificationEmailSent: sent });
     }
 
     // Marks the first-run product tour as done, whether the user finished

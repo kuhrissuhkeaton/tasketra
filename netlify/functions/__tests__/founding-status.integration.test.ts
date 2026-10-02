@@ -3,7 +3,7 @@ import { setupTestDb, teardownTestDb, resetTestDb } from "../../lib/__tests__/te
 import statusHandler from "../founding-status.mts";
 import registerHandler from "../auth-register.mts";
 import { db } from "../../lib/db.ts";
-import { jsonBody } from "./fixtures.ts";
+import { jsonBody, verifyAccount } from "./fixtures.ts";
 
 function statusRequest() {
   return new Request("https://app.tasketra.com/api/founding-status");
@@ -35,8 +35,11 @@ describe("founding-status", () => {
   });
 
   it("counts real founding-member signups, not total accounts", async () => {
-    await registerHandler(registerRequest("a@example.com", "10.0.1.1"));
-    await registerHandler(registerRequest("b@example.com", "10.0.1.2"));
+    const a = await jsonBody<{ user: { id: string } }>(await registerHandler(registerRequest("a@example.com", "10.0.1.1")));
+    const b = await jsonBody<{ user: { id: string } }>(await registerHandler(registerRequest("b@example.com", "10.0.1.2")));
+    await registerHandler(registerRequest("never-confirmed@example.com", "10.0.1.3"));
+    await verifyAccount(a.user.id);
+    await verifyAccount(b.user.id);
     const res = await statusHandler(statusRequest());
     const body = await jsonBody<{ claimed: number; remaining: number; full: boolean }>(res);
     expect(body.claimed).toBe(2);

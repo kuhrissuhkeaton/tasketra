@@ -11,7 +11,7 @@ import { db } from "../../lib/db.ts";
 import { canonicalEmail } from "../../lib/accountRules.ts";
 import { pgErrorCode } from "../../lib/pgError.ts";
 import { hashResetToken } from "../../lib/auth.ts";
-import { asUser, createTestUser, jsonBody, rawQuery } from "./fixtures.ts";
+import { asUser, createTestUser, jsonBody, rawQuery, verifyAccount } from "./fixtures.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -113,30 +113,40 @@ describe("account rules at sign-up", () => {
     expect(rows[1].terms_accepted_at).toBeNull();
   });
 
-  it("awards founding spots by founding count, so removing one reopens it", async () => {
+  it("awards founding spots when the email is confirmed, so removing one reopens it", async () => {
     process.env.FOUNDING_CAP = "2";
-    const a = await jsonBody<{ user: { id: string } }>(await register("a@example.com"));
-    await register("b@example.com");
-    await register("c@example.com");
-    let rows = await db().sql`SELECT email, founding_member FROM users ORDER BY email`;
+    const reg = async (e: string) => (await jsonBody<{ user: { id: string } }>(await register(e))).user.id;
+    const a = await reg("a@example.com");
+    const b = await reg("b@example.com");
+    const c = await reg("c@example.com");
+    // nobody holds a spot until they confirm
+    let rows = await db().sql`SELECT founding_member FROM users`;
+    expect(rows.every((r: any) => r.founding_member === false)).toBe(true);
+    await verifyAccount(a);
+    await verifyAccount(b);
+    await verifyAccount(c);
+    rows = await db().sql`SELECT email, founding_member FROM users ORDER BY email`;
     expect(rows.map((r: any) => r.founding_member)).toEqual([true, true, false]);
 
-    await db().sql`UPDATE users SET founding_member = false WHERE id = ${a.user.id}`;
-    await register("d@example.com");
-    rows = await db().sql`SELECT email, founding_member FROM users WHERE email = 'd@example.com'`;
+    await db().sql`UPDATE users SET founding_member = false WHERE id = ${a}`;
+    const d = await reg("d@example.com");
+    await verifyAccount(d);
+    rows = await db().sql`SELECT founding_member FROM users WHERE email = 'd@example.com'`;
     expect(rows[0].founding_member).toBe(true);
   });
 
-  it("FOUNDING_CAP=0 makes every sign-up a normal account", async () => {
+  it("FOUNDING_CAP=0 makes every confirmed account a normal account", async () => {
     process.env.FOUNDING_CAP = "0";
-    await register("first@example.com");
+    const { user } = await jsonBody<{ user: { id: string } }>(await register("first@example.com"));
+    await verifyAccount(user.id);
     const [row] = await db().sql`SELECT founding_member FROM users`;
     expect(row.founding_member).toBe(false);
   });
 
   it("the public founding status uses the same cap", async () => {
     process.env.FOUNDING_CAP = "5";
-    await register("one@example.com");
+    const { user } = await jsonBody<{ user: { id: string } }>(await register("one@example.com"));
+    await verifyAccount(user.id);
     const res = await foundingStatus(new Request("https://app.tasketra.com/api/founding-status"));
     const body = await jsonBody<{ cap: number; claimed: number; remaining: number }>(res);
     expect(body).toMatchObject({ cap: 5, claimed: 1, remaining: 4 });

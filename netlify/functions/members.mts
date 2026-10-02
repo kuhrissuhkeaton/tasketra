@@ -8,6 +8,7 @@ import { sendEmail } from "../lib/notify.ts";
 import { getSiteUrl } from "../lib/env.ts";
 import { MEMBER_LIMIT_PER_PROJECT } from "../lib/billing.ts";
 import { withSentry } from "../lib/sentry.ts";
+import { requireVerifiedEmail } from "../lib/emailVerification.ts";
 
 export default withSentry(async (req: Request) => {
   const userId = getUserIdFromRequest(req);
@@ -59,6 +60,8 @@ export default withSentry(async (req: Request) => {
     const projectId = body?.projectId;
     const email = (body?.email || "").trim().toLowerCase();
     if (!projectId || !email) return json({ error: "projectId and email are required." }, { status: 400 });
+    const unverified = await requireVerifiedEmail(database, userId);
+    if (unverified) return unverified;
     if (!(await isProjectOwner(userId, projectId))) return json({ error: "Not found" }, { status: 404 });
 
     const [project] = await database.sql`SELECT name, owner_id FROM projects WHERE id = ${projectId}`;

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
-import { api } from "../lib/api";
+import { api, ApiError } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
 import { Wordmark } from "../components/Wordmark";
 
@@ -13,12 +13,14 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [suggestion, setSuggestion] = useState<string | null>(null);
   const { refresh } = useAuth();
   const navigate = useNavigate();
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    setSuggestion(null);
     setBusy(true);
     try {
       if (mode === "login") {
@@ -30,6 +32,7 @@ export default function Login() {
       navigate(mode === "register" && planParam ? "/app/billing" : "/app");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
+      if (err instanceof ApiError && err.suggestion) setSuggestion(err.suggestion);
     } finally {
       setBusy(false);
     }
@@ -49,7 +52,7 @@ export default function Login() {
 
         {mode === "register" && planParam === "founding" && (
           <p className="form-success" style={{ marginBottom: 4 }}>
-            Going for a founding member spot -- free Pro, forever, if one's still open. We'll confirm right after you sign up.
+            Going for a founding member spot -- free Pro, forever, if one's still open. We'll confirm it once you've confirmed your email address.
           </p>
         )}
 
@@ -75,6 +78,11 @@ export default function Login() {
           <input id="f-login-75" type="password" required minLength={mode === "register" ? 8 : undefined} maxLength={72} autoComplete={mode === "register" ? "new-password" : "current-password"} value={password} onChange={(e) => setPassword(e.target.value)} />
           {mode === "register" && <p className="muted" style={{ fontSize: 12, margin: "4px 0 0" }}>At least 8 characters. One email, one account.</p>}
           {error && <div className="form-error">{error}</div>}
+          {suggestion && (
+            <button type="button" className="btn btn-ghost" onClick={() => { setEmail(suggestion); setError(null); setSuggestion(null); }}>
+              Use {suggestion}
+            </button>
+          )}
           <button type="submit" className="btn btn-primary btn-block" disabled={busy}>
             {busy ? "Please wait..." : mode === "login" ? "Sign in" : "Create account"}
           </button>

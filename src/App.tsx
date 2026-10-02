@@ -2,6 +2,7 @@ import { lazy, Suspense } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./lib/auth-context";
 import { ConfirmProvider } from "./components/ConfirmDialog";
+import { VerifyEmailGate } from "./components/VerifyEmailGate";
 
 // Every route is loaded on demand rather than bundled into the initial
 // chunk -- ProjectHome in particular carries every tab's logic (Tasks,
@@ -11,6 +12,7 @@ import { ConfirmProvider } from "./components/ConfirmDialog";
 const Login = lazy(() => import("./pages/Login"));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
+const VerifyEmail = lazy(() => import("./pages/VerifyEmail"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const ProjectHome = lazy(() => import("./pages/ProjectHome"));
 const DecisionPublic = lazy(() => import("./pages/DecisionPublic"));
@@ -40,6 +42,7 @@ function Protected({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   if (loading) return <div className="shell"><p className="muted" style={{ padding: 24 }}>Loading...</p></div>;
   if (!user) return <Navigate to="/login" replace />;
+  if (user.emailVerified === false) return <VerifyEmailGate />;
   return <>{children}</>;
 }
 
@@ -72,6 +75,7 @@ export default function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/verify-email" element={<VerifyEmail />} />
             <Route path="/app" element={<Protected><Dashboard /></Protected>} />
             <Route path="/app/resources" element={<Protected><Resources /></Protected>} />
             <Route path="/app/whats-new" element={<Protected><WhatsNew /></Protected>} />

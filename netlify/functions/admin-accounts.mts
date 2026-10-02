@@ -51,7 +51,7 @@ export default withSentry(async (req: Request) => {
     }
 
     const rows = await database.sql`
-      SELECT u.id, u.email, u.display_name, u.job_title, u.created_at, u.founding_member,
+      SELECT u.id, u.email, u.display_name, u.job_title, u.created_at, u.founding_member, (u.email_verified_at IS NOT NULL) AS email_verified,
              (SELECT count(*)::int FROM projects p WHERE p.owner_id = u.id) AS project_count,
              s.status AS subscription_status
       FROM users u

@@ -4,8 +4,10 @@ import { hashPassword, createSessionCookie } from "../lib/auth.ts";
 import { json } from "../lib/http.ts";
 import { checkRateLimit, getClientIp } from "../lib/rate-limit.ts";
 import { withSentry } from "../lib/sentry.ts";
+import { checkNewEmail } from "../lib/signupEmail.ts";
+import { issueVerificationEmail } from "../lib/emailVerification.ts";
 import { pgErrorCode } from "../lib/pgError.ts";
-import { canonicalEmail, foundingCap, normalizeEmail, validateEmail, validatePassword } from "../lib/accountRules.ts";
+import { canonicalEmail, normalizeEmail, validatePassword } from "../lib/accountRules.ts";
 
 export default withSentry(async (req: Request) => {
   if (req.method !== "POST") return json({ error: "Method not allowed" }, { status: 405 });
@@ -18,8 +20,11 @@ export default withSentry(async (req: Request) => {
   // and sends this flag; we record when, so there's a dated record of consent.
   const acceptedTerms = body?.acceptedTerms === true;
 
-  const emailError = validateEmail(email);
-  if (emailError) return json({ error: emailError }, { status: 400 });
+  // Shape, disposable domains, likely typos (gmail.co) and a domain that can
+  // actually receive mail. A typo comes back with the corrected address so the
+  // form can offer it in one click.
+  const emailProblem = await checkNewEmail(email);
+  if (emailProblem) return json(emailProblem, { status: 400 });
   const passwordError = validatePassword(password, email);
   if (passwordError) return json({ error: passwordError }, { status: 400 });
 
@@ -53,24 +58,15 @@ export default withSentry(async (req: Request) => {
   }
 
   const passwordHash = await hashPassword(password);
-  // Founding-member status is computed in the same INSERT (via subquery)
-  // rather than a separate SELECT-then-INSERT, to keep the race window as
-  // small as possible for "first N ever" -- an off-by-one or two under
-  // heavy concurrent signups is an acceptable outcome. It counts accounts
-  // that actually hold a founding spot (not every account ever made), so
-  // removing a test or duplicate account reopens its spot. The cap comes from
-  // the FOUNDING_CAP setting (default 100; 0 turns the program off).
-  const cap = foundingCap();
-  let user: { id: string; email: string; founding_member: boolean };
+  // A founding spot is NOT given here. It is awarded when the person confirms
+  // their email (see markEmailVerified), so an address nobody can read, or a
+  // typo, can never hold one.
+  let user: { id: string; email: string };
   try {
     [user] = await database.sql`
-      INSERT INTO users (email, email_canonical, password_hash, founding_member, referred_by, terms_accepted_at)
-      VALUES (
-        ${email}, ${canonical}, ${passwordHash},
-        (SELECT count(*) FROM users WHERE founding_member = true) < ${cap},
-        ${referredBy}, ${acceptedTerms ? new Date().toISOString() : null}
-      )
-      RETURNING id, email, founding_member
+      INSERT INTO users (email, email_canonical, password_hash, referred_by, terms_accepted_at)
+      VALUES (${email}, ${canonical}, ${passwordHash}, ${referredBy}, ${acceptedTerms ? new Date().toISOString() : null})
+      RETURNING id, email
     `;
   } catch (err: any) {
     // Two sign-ups for the same mailbox at the same instant: the unique index
@@ -79,14 +75,12 @@ export default withSentry(async (req: Request) => {
     throw err;
   }
 
-  // Attach this new account to any project it was invited to before it existed.
-  await database.sql`
-    UPDATE project_members SET user_id = ${user.id}, status = 'active', joined_at = now()
-    WHERE invited_email = ${email} AND status = 'invited'
-  `;
+  // Project invitations sent to this address are attached once the address is
+  // confirmed, not now: until then we don't know the person owns the mailbox.
+  const verificationEmailSent = await issueVerificationEmail(database, user.id, user.email).catch(() => false);
 
   const cookie = createSessionCookie(user.id);
-  return json({ user: { id: user.id, email: user.email } }, { status: 201, headers: { "set-cookie": cookie } });
+  return json({ user: { id: user.id, email: user.email }, verificationRequired: true, verificationEmailSent }, { status: 201, headers: { "set-cookie": cookie } });
 });
 
 export const config: Config = { path: "/api/auth/register" };

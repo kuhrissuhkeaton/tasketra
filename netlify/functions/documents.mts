@@ -7,6 +7,7 @@ import { logActivity } from "../lib/activity.ts";
 import { documentsStore } from "../lib/blobs.ts";
 import { withSentry } from "../lib/sentry.ts";
 import { canUploadBytes, getUserPlan, isPaidPlan, storageCapBytes, storageUsedBytes } from "../lib/billing.ts";
+import { requireVerifiedEmail } from "../lib/emailVerification.ts";
 
 // Project documentation uploads (specs, contracts, reference PDFs/images).
 // Scoped to a fixed allow-list of common office/document/image types, capped
@@ -112,6 +113,8 @@ export default withSentry(async (req: Request) => {
   }
 
   if (req.method === "POST") {
+    const unverified = await requireVerifiedEmail(database, userId);
+    if (unverified) return unverified;
     const contentType = req.headers.get("content-type") || "";
     if (!contentType.includes("multipart/form-data")) {
       return json({ error: "Expected multipart/form-data upload." }, { status: 400 });

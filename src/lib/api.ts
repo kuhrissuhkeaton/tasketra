@@ -11,8 +11,11 @@ const BASE = "/api";
 export class ApiError extends Error {
   status: number;
   upgradeRequired: boolean;
-  constructor(message: string, status: number, upgradeRequired = false) {
+  /** For a mistyped email: the address we think they meant. */
+  suggestion?: string;
+  constructor(message: string, status: number, upgradeRequired = false, suggestion?: string) {
     super(message);
+    this.suggestion = suggestion;
     this.name = "ApiError";
     this.status = status;
     this.upgradeRequired = upgradeRequired;
@@ -27,7 +30,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new ApiError(data.error || `Request failed (${res.status})`, res.status, !!data.upgradeRequired);
+    throw new ApiError(data.error || `Request failed (${res.status})`, res.status, !!data.upgradeRequired, typeof data.suggestion === "string" ? data.suggestion : undefined);
   }
   return data as T;
 }
@@ -42,7 +45,7 @@ async function uploadRequest<T>(path: string, formData: FormData): Promise<T> {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new ApiError(data.error || `Request failed (${res.status})`, res.status, !!data.upgradeRequired);
+    throw new ApiError(data.error || `Request failed (${res.status})`, res.status, !!data.upgradeRequired, typeof data.suggestion === "string" ? data.suggestion : undefined);
   }
   return data as T;
 }
@@ -51,6 +54,8 @@ export type User = {
   id: string;
   email: string;
   isAdmin?: boolean;
+  /** False until they click the link we email at sign-up. Missing on older responses. */
+  emailVerified?: boolean;
   plan?: "founding" | "trialing" | "active" | "free";
   display_name?: string | null;
   job_title?: string | null;
@@ -326,6 +331,7 @@ export type AdminAccount = {
   subscription_status: string | null;
   is_you: boolean;
   possible_duplicates: string[];
+  email_verified: boolean;
 };
 
 export type AdminAccountsSummary = { foundingClaimed: number; cap: number; totalAccounts: number };
@@ -650,6 +656,12 @@ export type PortfolioData = {
 export const api = {
   register: (email: string, password: string, ref?: string) =>
     request<{ user: User }>("/auth/register", { method: "POST", body: JSON.stringify({ email, password, acceptedTerms: true, ...(ref ? { ref } : {}) }) }),
+  verifyEmail: (token: string) =>
+    request<{ ok: true; email: string; founding: boolean }>("/auth/verify-email", { method: "POST", body: JSON.stringify({ token }) }),
+  resendVerification: () =>
+    request<{ ok: true; email?: string; alreadyVerified?: boolean }>("/auth/resend-verification", { method: "POST" }),
+  changeUnverifiedEmail: (email: string) =>
+    request<{ ok: true; email: string; verificationEmailSent: boolean }>("/account", { method: "PATCH", body: JSON.stringify({ action: "change-email", email }) }),
   login: (email: string, password: string) =>
     request<{ user: User }>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
   logout: () => request<{ ok: true }>("/auth/logout", { method: "POST" }),
