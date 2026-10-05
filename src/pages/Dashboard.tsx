@@ -11,6 +11,9 @@ import { ResizableTable } from "../components/ResizableTable";
 import { useAuth } from "../lib/auth-context";
 import { fmtDateTime, fmtLocalDate } from "../lib/format";
 import { shouldShowHubTip, HUB_TIP_STORAGE_KEY } from "../lib/hubTip";
+import { FirstRunScreen, type FirstRunChoice } from "../components/FirstRun";
+import { isFirstRun, startChecklist } from "../lib/firstRun";
+import { track } from "../lib/analytics";
 
 const TASK_STATUS_ORDER: Task["status"][] = ["not_started", "in_progress", "blocked", "done"];
 
@@ -303,6 +306,8 @@ export default function Dashboard() {
   const [upgradeNotice, setUpgradeNotice] = useState<string | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [firstRunBusy, setFirstRunBusy] = useState<FirstRunChoice | null>(null);
+  const [firstRunError, setFirstRunError] = useState<{ message: string; upgrade: boolean } | null>(null);
   const confirmDialog = useConfirm();
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -412,8 +417,100 @@ export default function Dashboard() {
     }
   }
 
+  // From the first-run screen: one click makes the project and opens it.
+  async function startFirstProject(choice: FirstRunChoice) {
+    const template = choice !== "example" && choice !== "blank" ? getTemplate(choice) : undefined;
+    const name = choice === "example" ? "Example project" : template ? template.name : "My first project";
+    const isFirstProjectEver = projects.length === 0;
+    setFirstRunBusy(choice);
+    setFirstRunError(null);
+    try {
+      const created = await api.createProject(name, undefined, choice === "example", {
+        size: "standard",
+        // No Set up step on this screen, so take the approach the template is built for.
+        approach: template ? template.suggestedApproach : "hybrid",
+        ...(template ? { template: template.id } : {}),
+      });
+      track("template_chosen", { template: choice });
+      if (template && created.templateApplied === false) {
+        setFirstRunError({ message: "Your project was created, but we couldn't add the template. Open it below and add items by hand.", upgrade: false });
+        await load();
+        return;
+      }
+      const { project } = created;
+      if (user && choice !== "blank") startChecklist(user.id, project.id);
+      const shouldStartTour = isFirstProjectEver && !user?.tour_completed_at;
+      navigate(`/app/projects/${project.id}`, shouldStartTour ? { state: { startTour: true } } : undefined);
+    } catch (err) {
+      setFirstRunError({
+        message: err instanceof Error ? err.message : "Couldn't create project.",
+        upgrade: err instanceof ApiError && err.upgradeRequired,
+      });
+    } finally {
+      setFirstRunBusy(null);
+    }
+  }
+
+  const taskCounts = Object.fromEntries((portfolio?.projects ?? []).map((p) => [p.id, p.totalTasks]));
+  const firstRun = !loading && isFirstRun(projects, taskCounts);
+
   const totalOpenDecisions = projects.reduce((sum, p) => sum + (p.open_decisions || 0), 0);
   const totalOverdue = projects.reduce((sum, p) => sum + (p.overdue_tasks || 0), 0);
+
+  const deletedSection = deletedProjects.length > 0 && (
+    <div style={{ marginTop: 32 }}>
+      <button className="btn-link" type="button" onClick={() => setShowDeleted((v) => !v)}>
+        {showDeleted ? "Hide" : "Show"} recently deleted ({deletedProjects.length})
+      </button>
+      {showDeleted && (
+        <ResizableTable id="dashboard-deleted" style={{ marginTop: 12, maxWidth: 640 }}>
+          <thead>
+            <tr><th>Project</th><th>Deleted</th><th></th></tr>
+          </thead>
+          <tbody>
+            {deletedProjects.map((p) => (
+              <tr key={p.id}>
+                <td>{p.name}</td>
+                <td className="muted">{fmtDateTime(p.deleted_at)}</td>
+                <td className="row-actions">
+                  <button
+                    className="btn-link"
+                    type="button"
+                    disabled={restoringId === p.id}
+                    onClick={() => restoreProject(p.id)}
+                  >
+                    {restoringId === p.id ? "Restoring..." : "Restore"}
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </ResizableTable>
+      )}
+    </div>
+  );
+
+  if (firstRun) {
+    return (
+      <div className="project-shell">
+        <AppSidebar />
+        <main className="project-main">
+          <FirstRunScreen
+            onChoose={startFirstProject}
+            busy={firstRunBusy}
+            existingProject={projects[0]}
+            error={firstRunError && (
+              <>
+                {firstRunError.message}
+                {firstRunError.upgrade && <>{" "}<Link to="/app/billing">Upgrade to Pro</Link></>}
+              </>
+            )}
+          />
+          {deletedSection}
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="project-shell">
@@ -649,38 +746,7 @@ export default function Dashboard() {
           </div>
         )}
 
-        {deletedProjects.length > 0 && (
-          <div style={{ marginTop: 32 }}>
-            <button className="btn-link" type="button" onClick={() => setShowDeleted((v) => !v)}>
-              {showDeleted ? "Hide" : "Show"} recently deleted ({deletedProjects.length})
-            </button>
-            {showDeleted && (
-              <ResizableTable id="dashboard-deleted" style={{ marginTop: 12, maxWidth: 640 }}>
-                <thead>
-                  <tr><th>Project</th><th>Deleted</th><th></th></tr>
-                </thead>
-                <tbody>
-                  {deletedProjects.map((p) => (
-                    <tr key={p.id}>
-                      <td>{p.name}</td>
-                      <td className="muted">{fmtDateTime(p.deleted_at)}</td>
-                      <td className="row-actions">
-                        <button
-                          className="btn-link"
-                          type="button"
-                          disabled={restoringId === p.id}
-                          onClick={() => restoreProject(p.id)}
-                        >
-                          {restoringId === p.id ? "Restoring..." : "Restore"}
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </ResizableTable>
-            )}
-          </div>
-        )}
+        {deletedSection}
       </main>
     </div>
   );

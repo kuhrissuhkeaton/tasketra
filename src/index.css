@@ -1673,3 +1673,67 @@ a:hover { color: var(--navy); }
   .evm-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .evm-grid > .evm-card:last-child:nth-child(odd) { grid-column: 1 / -1; }
 }
+
+/* --- First-run screen (/app with nothing in it yet) and its project checklist --- */
+.first-run { max-width: 720px; margin: 0 auto; padding: 8px 0 24px; }
+.first-run-eyebrow { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; color: var(--slate); margin: 0 0 8px; }
+.first-run-title { font-size: 34px; line-height: 1.15; margin: 0 0 10px; }
+.first-run-sub { color: var(--slate); font-size: 15px; line-height: 1.55; margin: 0 0 24px; }
+.first-run-grid {
+  list-style: none; margin: 0; padding: 0;
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px;
+}
+.first-run-card {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
+  background: white; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 18px;
+}
+.first-run-card-featured { grid-column: 1 / -1; background: var(--tint); border: 1.5px solid var(--navy); }
+.first-run-badge {
+  font-size: 11.5px; font-weight: 700; color: var(--navy); background: var(--gold);
+  border-radius: var(--radius-pill); padding: 3px 10px;
+}
+.first-run-card-title { font-size: 18px; margin: 0; }
+.first-run-card-blurb { color: var(--slate); font-size: 13.5px; line-height: 1.5; margin: 0 0 4px; flex: 1; }
+.first-run-card .btn { margin-top: auto; white-space: normal; }
+.first-run-blank { margin: 18px 0 0; font-size: 14px; color: var(--slate); }
+.first-run-blank a { color: var(--navy); }
+.first-run-link {
+  background: none; border: none; padding: 0; font: inherit; font-weight: 600; color: var(--navy);
+  text-decoration: underline; text-underline-offset: 2px; cursor: pointer; min-height: 24px;
+}
+.first-run-link:disabled { opacity: 0.55; cursor: default; }
+.first-run-note {
+  margin: 28px 0 0; padding: 16px 18px; border-left: 3px solid var(--gold); background: var(--cream);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0; font-size: 14px; line-height: 1.55;
+}
+.first-run-note p { margin: 0; }
+.first-run-note-sign { font-weight: 600; margin-top: 4px !important; }
+.first-run-footer { margin: 20px 0 0; font-size: 14px; }
+.first-run-footer a { color: var(--navy); font-weight: 600; }
+@media (max-width: 640px) {
+  .first-run-grid { grid-template-columns: 1fr; }
+  .first-run-title { font-size: 28px; }
+}
+
+.first-run-checklist {
+  margin-left: auto; align-self: flex-start; width: 290px; max-width: 100%;
+  background: var(--tint); border: 1px solid var(--gold); border-radius: var(--radius-sm); padding: 12px 14px;
+}
+.first-run-checklist-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.first-run-checklist-head h2 { font-size: 15px; margin: 0; }
+.first-run-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.first-run-steps li { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.first-run-step-mark {
+  width: 18px; height: 18px; flex: none; border-radius: 50%; border: 1.5px solid var(--navy);
+  display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700;
+}
+.first-run-steps li.done .first-run-step-mark { background: var(--navy); color: var(--gold); }
+.first-run-step {
+  background: none; border: none; padding: 2px 0; font: inherit; color: var(--navy); text-align: left;
+  cursor: pointer; min-height: 24px; text-decoration: underline; text-underline-offset: 2px; text-decoration-color: var(--slate-2);
+}
+.first-run-steps li.done .first-run-step { color: var(--slate); text-decoration: line-through; }
+.first-run-step-detail { margin-left: auto; font-size: 12.5px; color: var(--slate); white-space: nowrap; }
+@media (max-width: 860px) {
+  .first-run-checklist { width: 100%; margin-left: 0; }
+}

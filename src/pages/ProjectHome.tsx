@@ -22,6 +22,8 @@ import { useConfirm } from "../components/ConfirmDialog";
 import { ResizableTable } from "../components/ResizableTable";
 import { avatarColor, initials } from "../lib/avatar";
 import { TourOverlay, useProductTour } from "../components/ProductTour";
+import { FirstRunChecklist } from "../components/FirstRunChecklist";
+import { noteProjectActivity } from "../lib/firstRun";
 import { StageRail, StageChip, STAGE_LABEL } from "../components/StageRail";
 import { ProjectSetupPicker } from "../components/ProjectSetup";
 import { CharterTab } from "../components/CharterTab";
@@ -307,6 +309,15 @@ export default function ProjectHome() {
         <div className="page-head">
           <h1>{project?.name || "Project"}</h1>
           <StageChip stage={project?.stage} />
+          {user && (
+            <FirstRunChecklist
+              userId={user.id}
+              projectId={id}
+              tab={tab}
+              hidden={tour.active}
+              onOpenTab={(t) => setParams({ tab: t })}
+            />
+          )}
         </div>
 
         <div className="inline-form primary-tabs">
@@ -513,6 +524,7 @@ function TodayTab({ projectId }: { projectId: string }) {
     setBusyId(id);
     try {
       await api.updateTask(id, { status });
+      noteProjectActivity(projectId, "task");
       load();
     } finally {
       setBusyId(null);
@@ -548,7 +560,10 @@ function TodayTab({ projectId }: { projectId: string }) {
     setBusyId(id);
     try {
       const owner_name = reassignValue.trim() || null;
-      if (kind === "task") await api.updateTask(id, { owner_name });
+      if (kind === "task") {
+        await api.updateTask(id, { owner_name });
+        noteProjectActivity(projectId, "task");
+      }
       else if (kind === "issue") await api.updateIssue(id, { owner_name });
       else await api.updateRisk(id, { owner_name });
       setReassignId(null);
@@ -996,6 +1011,7 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
     setError("");
     try {
       await api.createTask(projectId, title.trim(), owner || undefined, due || undefined, undefined, start || undefined, newStatus, undefined, newPhase || undefined);
+      noteProjectActivity(projectId, "task");
       setTitle("");
       setOwner("");
       setStart("");
@@ -1012,6 +1028,7 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
     e.preventDefault();
     if (!subTitle.trim()) return;
     await api.createTask(projectId, subTitle.trim(), subOwner || undefined, subDue || undefined, parentId, subStart || undefined);
+    noteProjectActivity(projectId, "task");
     setSubTitle("");
     setSubOwner("");
     setSubStart("");
@@ -1022,6 +1039,7 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
 
   async function setStatus(taskId: string, status: Task["status"]) {
     await api.updateTask(taskId, { status });
+    noteProjectActivity(projectId, "task");
     load();
   }
 
@@ -1057,6 +1075,7 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
       description: editDescription || undefined,
       ...(phaseChanged ? { roadmap_item_id: editPhase || null } : {}),
     } as any);
+    noteProjectActivity(projectId, "task");
     closeDrawer();
     load();
   }
@@ -4746,6 +4765,7 @@ function MeetingsTab({ projectId }: { projectId: string }) {
     setConvertingItemId(item.id);
     try {
       const { task } = await api.createTask(projectId, item.text);
+      noteProjectActivity(projectId, "task");
       const nextItems = (m.action_items || []).map((it) => (it.id === item.id ? { ...it, taskId: task.id } : it));
       await api.updateMeeting(m.id, { action_items: nextItems });
       load();
@@ -5837,6 +5857,7 @@ function TeamTab({ projectId, isOwner, onSetupChange }: { projectId: string; isO
     setError(null);
     try {
       await api.inviteMember(projectId, email.trim());
+      noteProjectActivity(projectId, "invite");
       setEmail("");
       load();
     } catch (err: any) {
