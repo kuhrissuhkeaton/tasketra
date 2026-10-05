@@ -346,6 +346,8 @@ export type BillingStatus = {
   hasBillingAccount: boolean;
 };
 
+export type BroadcastProgress = { id: string; subject: string; created_at: string; total: number; sent: number; failed: number; pending: number };
+
 export type AdminAccountsSummary = { foundingClaimed: number; cap: number; totalAccounts: number };
 
 export type AccountRemovalPreview = {
@@ -690,6 +692,14 @@ export const api = {
     request<{ signup: WaitlistSignup }>("/waitlist", { method: "PATCH", body: JSON.stringify({ id }) }),
   deleteWaitlistSignup: (id: string) => request<{ ok: true }>(`/waitlist?id=${id}`, { method: "DELETE" }),
   listFoundingMembers: () => request<{ members: FoundingMember[] }>("/founding-members"),
+  adminBroadcastOverview: () =>
+    request<{ audience: number; recent: BroadcastProgress[] }>("/admin-broadcast"),
+  adminBroadcastTest: (subject: string, body: string) =>
+    request<{ ok: true; sentTo: string }>("/admin-broadcast", { method: "POST", body: JSON.stringify({ action: "test", subject, body }) }),
+  adminBroadcastSend: (subject: string, body: string, holdCheckin: boolean, force = false) =>
+    request<{ progress: BroadcastProgress; rateLimited: boolean }>("/admin-broadcast", { method: "POST", body: JSON.stringify({ action: "send", subject, body, holdCheckin, force }) }),
+  adminBroadcastContinue: (broadcastId: string, retry = false) =>
+    request<{ progress: BroadcastProgress; rateLimited: boolean }>("/admin-broadcast", { method: "POST", body: JSON.stringify({ action: retry ? "retry" : "continue", broadcastId }) }),
   adminListAccounts: (scope: "founding" | "all") =>
     request<{ accounts: AdminAccount[]; summary: AdminAccountsSummary }>(`/admin-accounts?scope=${scope}`),
   adminPreviewRemoval: (userId: string) =>

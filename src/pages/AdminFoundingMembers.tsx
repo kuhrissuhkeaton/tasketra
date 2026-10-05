@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { api, type AccountRemovalPreview, type AdminAccount, type AdminAccountsSummary } from "../lib/api";
 import { AppSidebar } from "../components/AppSidebar";
 import { ResizableTable } from "../components/ResizableTable";
@@ -55,6 +56,8 @@ export default function AdminFoundingMembers() {
           Remove a test or duplicate account here. "Remove founding status" keeps the account but gives the spot back;
           "Delete account" removes the account and everything it owns.
         </p>
+
+        <p><Link className="btn btn-ghost" to="/admin/email-founding-members">Email all founding members</Link></p>
 
         <label style={{ display: "flex", alignItems: "center", gap: 8, margin: "12px 0", cursor: "pointer" }}>
           <input type="checkbox" checked={showAll} onChange={(e) => setShowAll(e.target.checked)} />

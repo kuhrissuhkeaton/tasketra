@@ -28,6 +28,7 @@ const Account = lazy(() => import("./pages/Account"));
 const AdminWaitlist = lazy(() => import("./pages/AdminWaitlist"));
 const AdminFeedback = lazy(() => import("./pages/AdminFeedback"));
 const AdminFoundingMembers = lazy(() => import("./pages/AdminFoundingMembers"));
+const AdminBroadcast = lazy(() => import("./pages/AdminBroadcast"));
 const LegalHub = lazy(() => import("./pages/legal/LegalHub"));
 const Terms = lazy(() => import("./pages/legal/Terms"));
 const Privacy = lazy(() => import("./pages/legal/Privacy"));
@@ -84,6 +85,7 @@ export default function App() {
             <Route path="/admin/waitlist" element={<AdminProtected><AdminWaitlist /></AdminProtected>} />
             <Route path="/admin/feedback" element={<AdminProtected><AdminFeedback /></AdminProtected>} />
             <Route path="/admin/founding-members" element={<AdminProtected><AdminFoundingMembers /></AdminProtected>} />
+            <Route path="/admin/email-founding-members" element={<AdminProtected><AdminBroadcast /></AdminProtected>} />
             <Route path="/app/projects/:id" element={<Protected><ProjectHome /></Protected>} />
             <Route path="/app/projects/:id/print/risks" element={<Protected><RiskPrint /></Protected>} />
             <Route path="/app/projects/:id/print/raci" element={<Protected><RaciPrint /></Protected>} />
