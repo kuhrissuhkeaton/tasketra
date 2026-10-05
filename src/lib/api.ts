@@ -685,6 +685,10 @@ export const api = {
   resetPassword: (token: string, password: string) =>
     request<{ user: User }>("/auth/reset-password", { method: "POST", body: JSON.stringify({ token, password }) }),
 
+  /** Public. How many founding-member spots are left (served by founding-status.mts). */
+  foundingStatus: () =>
+    request<{ cap: number; claimed: number; remaining: number; full: boolean }>("/founding-status"),
+
   joinWaitlist: (email: string) =>
     request<{ ok: true; message: string }>("/waitlist", { method: "POST", body: JSON.stringify({ email }) }),
   listWaitlist: () => request<{ signups: WaitlistSignup[] }>("/waitlist"),

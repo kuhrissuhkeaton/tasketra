@@ -136,13 +136,16 @@ export function AppSidebar({ children }: { children?: ReactNode }) {
             <NavIcon name="account" active={pathname === "/app/account"} />
             Account
           </Link>
-          <Link
-            to="/app/billing"
-            className={pathname === "/app/billing" ? "side-tab active" : "side-tab"}
-          >
-            <NavIcon name="billing" active={pathname === "/app/billing"} />
-            Billing
-          </Link>
+          {/* Founding members have Pro for free: nothing to bill, so no Billing entry. */}
+          {user?.plan !== "founding" && (
+            <Link
+              to="/app/billing"
+              className={pathname === "/app/billing" ? "side-tab active" : "side-tab"}
+            >
+              <NavIcon name="billing" active={pathname === "/app/billing"} />
+              Billing
+            </Link>
+          )}
           {user?.isAdmin && (
             <Link
               to="/admin/waitlist"

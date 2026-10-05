@@ -126,6 +126,22 @@ h1 { font-size: 36px; }
   max-width: 380px;
 }
 .auth-tagline { color: var(--slate); margin: 8px 0 24px; }
+/* Register mode: the offer the person came in on, in place of the tagline. */
+.auth-offer { margin: 16px 0 20px; }
+.auth-headline { font-size: 26px; line-height: 1.2; margin: 0 0 8px; }
+.auth-subhead { color: var(--slate); font-size: 14px; line-height: 1.5; margin: 0; }
+.auth-subhead strong { color: var(--navy); }
+.password-field { position: relative; }
+.password-field input { padding-right: 44px; }
+.password-toggle {
+  position: absolute; top: 50%; right: 4px; transform: translateY(-50%);
+  width: 36px; height: 32px; display: inline-flex; align-items: center; justify-content: center;
+  background: none; border: none; border-radius: 8px; color: var(--slate); cursor: pointer;
+}
+.password-toggle:hover, .password-toggle[aria-pressed="true"] { color: var(--navy); background: var(--tint); }
+.password-toggle:focus-visible { outline: 2px solid var(--navy); outline-offset: 0; }
+.auth-founder-note { font-size: 13px; color: var(--slate); line-height: 1.5; margin: 16px 0 0; text-align: center; }
+.auth-founder-sign { display: block; color: var(--navy); font-weight: 600; margin-top: 2px; }
 .auth-tabs { display: flex; gap: 8px; margin-bottom: 20px; }
 
 /* --- Layout shell --- */
