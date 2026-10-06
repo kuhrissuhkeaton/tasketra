@@ -143,7 +143,8 @@ export async function deleteAccount(
   database: any,
   targetId: string,
   admin: AdminIdentity,
-  deleteBlob: BlobDeleter
+  deleteBlob: BlobDeleter,
+  audit: "admin" | "self" = "admin"
 ): Promise<RemovalResult> {
   const preview = await previewRemoval(database, targetId, admin);
   if (!preview) return { ok: false, status: 404, error: "Account not found." };
@@ -199,8 +200,37 @@ export async function deleteAccount(
     }
     throw err;
   }
-  await logAction(database, admin, "delete_account", preview.user, details);
+  if (audit === "self") {
+    // Anonymous on purpose: no email or id is kept for someone who deleted their own account.
+    await database.sql`INSERT INTO admin_actions (action, details) VALUES ('self_delete_account', ${JSON.stringify(details)}::jsonb)`;
+  } else {
+    await logAction(database, admin, "delete_account", preview.user, details);
+  }
   return { ok: true, details };
+}
+
+/** Self-service deletion: the signed-in person removes their own account. Same
+ *  steps and safety checks as the admin tool, with messages written for them. */
+export async function deleteOwnAccount(
+  database: any,
+  userId: string,
+  adminEmail: string | null,
+  deleteBlob: BlobDeleter
+): Promise<RemovalResult> {
+  const nobody: AdminIdentity = { id: "", email: "" };
+  const preview = await previewRemoval(database, userId, nobody);
+  if (!preview) return { ok: false, status: 404, error: "Account not found." };
+  if (adminEmail && preview.user.email.toLowerCase() === adminEmail.toLowerCase()) {
+    return { ok: false, status: 409, error: "The admin account can't be deleted here." };
+  }
+  if (preview.blockers.some((b) => b.code === "subscription")) {
+    return { ok: false, status: 409, error: "You have an active subscription. Cancel it from the Billing page first, then delete your account." };
+  }
+  if (preview.sharedProjects.length > 0) {
+    const names = preview.sharedProjects.map((p) => p.name).join(", ");
+    return { ok: false, status: 409, error: `You own a project with other people on it (${names}). Remove the other members first, then delete your account.` };
+  }
+  return deleteAccount(database, userId, nobody, deleteBlob, "self");
 }
 
 /** Gives the "same mailbox" protection back to accounts that were left without
