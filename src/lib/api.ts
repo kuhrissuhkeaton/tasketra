@@ -1244,6 +1244,8 @@ export const api = {
 
   getReferrals: () => request<ReferralInfo>("/referrals"),
   getMyActivity: () => request<{ items: ActivityItem[] }>("/my-activity"),
+  deleteMyAccount: (password: string, confirmEmail: string) =>
+    request<{ ok: true }>("/account-delete", { method: "POST", body: JSON.stringify({ password, confirmEmail }) }),
   getFoundingMe: () => request<FoundingMe>("/founding-me"),
   setFoundingWallOptIn: (wallOptIn: boolean) =>
     request<FoundingMe>("/founding-me", { method: "PATCH", body: JSON.stringify({ wallOptIn }) }),

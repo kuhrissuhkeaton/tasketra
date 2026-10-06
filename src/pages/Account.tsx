@@ -3,6 +3,7 @@ import { AppSidebar } from "../components/AppSidebar";
 import { useAuth } from "../lib/auth-context";
 import { api, type ReferralInfo } from "../lib/api";
 import { avatarColor, initials } from "../lib/avatar";
+import { DeleteAccountCard } from "../components/DeleteAccountCard";
 
 const TIMEZONES: string[] = (() => {
   try {
@@ -220,6 +221,8 @@ export default function Account() {
             </>
           )}
         </div>
+
+        <DeleteAccountCard email={user.email} />
       </main>
     </div>
   );
