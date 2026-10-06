@@ -123,7 +123,7 @@ export default function Privacy() {
       <p>
         We keep your account and project information for as long as your account is active. When you delete an
         item, it moves to a recoverable Trash for a limited period so you can undo mistakes, then it's permanently
-        removed. When you delete your account, we deactivate it and schedule your personal data for permanent
+        removed. When you ask us to delete your account, we deactivate it and schedule your personal data for permanent
         deletion within 30 days; some information may be retained longer where we're required to by law or for
         legitimate business records (e.g., fraud prevention).
       </p>
@@ -140,7 +140,7 @@ export default function Privacy() {
       <h2>7. Your rights and choices</h2>
       <p>
         You can access, correct, export, or delete most of your data directly in the app (project export, item-level
-        Trash/restore, and account deletion from the Team tab). You can also contact us at{" "}
+        Trash/restore). You can also contact us at{" "}
         <a href="mailto:info@tasketra.com">info@tasketra.com</a> to request a copy of your data, ask us to correct
         or delete it, or ask questions about how it's used. If you're located in the EEA, UK, or another
         jurisdiction with its own data protection law (like California's CCPA/CPRA), you may have additional
