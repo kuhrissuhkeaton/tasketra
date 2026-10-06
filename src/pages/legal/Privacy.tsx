@@ -123,9 +123,10 @@ export default function Privacy() {
       <p>
         We keep your account and project information for as long as your account is active. When you delete an
         item, it moves to a recoverable Trash for a limited period so you can undo mistakes, then it's permanently
-        removed. When you delete your account, we deactivate it and schedule your personal data for permanent
-        deletion within 30 days; some information may be retained longer where we're required to by law or for
-        legitimate business records (e.g., fraud prevention).
+        removed. When you delete your account, we delete your personal data from our live systems right away
+        (and no later than 30 days). Encrypted off-site backups are kept on a rolling schedule and are overwritten
+        within about 90 days, so a copy may remain in a backup until then. Some information may be retained
+        longer where we're required to by law or for legitimate business records (e.g., fraud prevention).
       </p>
 
       <h2>6. Security</h2>
