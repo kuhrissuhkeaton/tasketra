@@ -452,6 +452,7 @@ function HomeTab({ projectId, isOwner, purpose, size, showAll, onShowAllTabs, on
 }
 
 function FeedTab({ projectId }: { projectId: string }) {
+  const { user } = useAuth();
   const [feed, setFeed] = useState<FeedItem[]>([]);
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(true);
@@ -491,7 +492,7 @@ function FeedTab({ projectId }: { projectId: string }) {
           {feed.map((item, i) => (
             <li key={i} className={`feed-item feed-${item.type}`}>
               <div className="feed-item-head">
-                <span className="feed-type">{feedLabel(item)}</span>
+                <span className="feed-type">{feedLabel(item, user?.id)}</span>
                 <span className="feed-ts">{fmtDateTime(item.ts)}</span>
               </div>
               {item.title && <div className="feed-title">{item.title}</div>}
@@ -838,7 +839,7 @@ function TodayTab({ projectId }: { projectId: string }) {
   );
 }
 
-function feedLabel(item: FeedItem) {
+function feedLabel(item: FeedItem, myId?: string) {
   switch (item.type) {
     case "status_update": return "Status update";
     case "task": return "Task";
@@ -850,7 +851,8 @@ function feedLabel(item: FeedItem) {
       const entityType = String(item.meta?.entityType || "item");
       const action = String(item.meta?.action || "changed");
       const entityLabel = entityType.charAt(0).toUpperCase() + entityType.slice(1);
-      const who = item.meta?.actorName ? ` by ${String(item.meta.actorName)}` : "";
+      const mine = !!myId && item.meta?.actorId === myId;
+      const who = mine ? " by you" : item.meta?.actorName ? ` by ${String(item.meta.actorName)}` : "";
       return `${entityLabel} ${action}${who}`;
     }
   }

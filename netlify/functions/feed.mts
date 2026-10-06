@@ -56,7 +56,7 @@ export default withSentry(async (req: Request) => {
     UNION ALL
 
     SELECT 'activity' AS type, a.entity_title AS title, a.summary AS body, a.created_at AS ts,
-      jsonb_build_object('entityType', a.entity_type, 'action', a.action,
+      jsonb_build_object('entityType', a.entity_type, 'action', a.action, 'actorId', a.actor_id,
         'actorName', CASE WHEN a.actor_id IS NULL THEN NULL
           ELSE COALESCE(NULLIF(TRIM(u.display_name), ''), 'a teammate') END) AS meta
     FROM activity_log a LEFT JOIN users u ON u.id = a.actor_id
