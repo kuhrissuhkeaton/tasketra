@@ -255,7 +255,7 @@ export function AppSidebar({ children }: { children?: ReactNode }) {
           style={{ marginBottom: 4 }}
           onClick={() => setFeedbackOpen(true)}
         >
-          <span aria-hidden="true" className="sidebar-feedback-dot" />
+          <NavIcon name="feedback" active={false} />
           Feedback
         </button>
         <a
@@ -265,9 +265,11 @@ export function AppSidebar({ children }: { children?: ReactNode }) {
           className="side-tab"
           style={{ marginBottom: 4 }}
         >
+          <NavIcon name="community" active={false} />
           Community
         </a>
         <Link to="/legal" className="side-tab" style={{ marginBottom: 4 }}>
+          <NavIcon name="legal" active={false} />
           Legal
         </Link>
         <div className="sidebar-user muted" title={user?.email}>{user?.email}</div>

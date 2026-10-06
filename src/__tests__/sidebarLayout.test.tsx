@@ -68,4 +68,11 @@ describe("sidebar layout", () => {
     mount({ id: "u2", email: "b@example.com", plan: "free" });
     expect(hrefs("nav.side-nav")).not.toContain("/admin/waitlist");
   });
+
+  it("gives every footer row an icon so the rows line up", () => {
+    mount({ id: "u1", email: "a@example.com", plan: "free" });
+    const rows = Array.from(container.querySelectorAll(".sidebar-footer .side-tab"));
+    expect(rows.length).toBeGreaterThanOrEqual(5);
+    for (const row of rows) expect(row.querySelector("svg")).not.toBeNull();
+  });
 });

@@ -24,6 +24,8 @@ export type NavIconName =
   | "billing"
   | "waitlist"
   | "feedback"
+  | "community"
+  | "legal"
   | "founding"
   | "issues"
   | "risks"
@@ -78,6 +80,16 @@ const SHAPES: Record<NavIconName, Shape[]> = {
   ],
   feedback: [
     { tag: "path", attrs: { d: "M4 5h12a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H9l-3.5 3v-3H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z" } },
+  ],
+  community: [
+    { tag: "circle", attrs: { cx: 7.5, cy: 7.5, r: 2.5 } },
+    { tag: "path", attrs: { d: "M2.8 16c0-2.6 2-4.2 4.7-4.2s4.7 1.6 4.7 4.2" } },
+    { tag: "circle", attrs: { cx: 14, cy: 8.5, r: 2 } },
+    { tag: "path", attrs: { d: "M13.5 12.3c2.4 0 3.9 1.3 3.9 3.5" } },
+  ],
+  legal: [
+    { tag: "path", attrs: { d: "M6 3h6l3.5 3.5V16.5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" } },
+    { tag: "path", attrs: { d: "M7.5 10h5M7.5 13h5" } },
   ],
   founding: [
     { tag: "path", attrs: { d: "M10 3.5l1.9 4 4.4.6-3.2 3.1.8 4.3L10 13.4l-3.9 2.1.8-4.3-3.2-3.1 4.4-.6Z" } },
