@@ -71,6 +71,15 @@ export type ReferralInfo = {
   referred: { email: string; joinedAt: string; rewarded: boolean }[];
 };
 
+export type FoundingMe = {
+  number: number | null;
+  since: string | null;
+  cap: number;
+  wallOptIn: boolean;
+};
+
+export type FoundingWallMember = { number: number; name: string };
+
 export type Project = {
   id: string;
   name: string;
@@ -1223,6 +1232,10 @@ export const api = {
   avatarUrl: (userId: string) => `${BASE}/avatar?userId=${userId}`,
 
   getReferrals: () => request<ReferralInfo>("/referrals"),
+  getFoundingMe: () => request<FoundingMe>("/founding-me"),
+  setFoundingWallOptIn: (wallOptIn: boolean) =>
+    request<FoundingMe>("/founding-me", { method: "PATCH", body: JSON.stringify({ wallOptIn }) }),
+  getFoundingWall: () => request<{ members: FoundingWallMember[] }>("/founding-wall"),
 
   getPortfolio: (projectId?: string, stage?: ProjectStage) => {
     const qs = new URLSearchParams();

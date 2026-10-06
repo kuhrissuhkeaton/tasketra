@@ -66,13 +66,35 @@ export async function markEmailVerified(
   database: any,
   userId: string
 ): Promise<{ newlyVerified: boolean; founding: boolean }> {
-  const [updated] = await database.sql`
-    UPDATE users SET
-      email_verified_at = now(),
-      founding_member = founding_member OR ((SELECT count(*) FROM users WHERE founding_member = true) < ${foundingCap()})
-    WHERE id = ${userId} AND email_verified_at IS NULL
-    RETURNING email, founding_member
-  `;
+  // A new founder is stamped with the next number and today's date in the same
+  // statement that grants the spot. Two people verifying at the same instant can
+  // collide on the unique number, so retry a few times.
+  let updated: any;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      [updated] = await database.sql`
+        UPDATE users SET
+          email_verified_at = now(),
+          founding_member = founding_member OR ((SELECT count(*) FROM users WHERE founding_member = true) < ${foundingCap()}),
+          founding_number = CASE
+            WHEN founding_number IS NOT NULL THEN founding_number
+            WHEN founding_member OR ((SELECT count(*) FROM users WHERE founding_member = true) < ${foundingCap()})
+              THEN (SELECT COALESCE(MAX(founding_number), 0) + 1 FROM users)
+            ELSE NULL END,
+          founding_at = CASE
+            WHEN founding_at IS NOT NULL THEN founding_at
+            WHEN founding_member OR ((SELECT count(*) FROM users WHERE founding_member = true) < ${foundingCap()})
+              THEN now()
+            ELSE NULL END
+        WHERE id = ${userId} AND email_verified_at IS NULL
+        RETURNING email, founding_member
+      `;
+      break;
+    } catch (err: any) {
+      const clash = err?.code === "23505" || String(err?.message ?? "").includes("idx_users_founding_number");
+      if (!clash || attempt >= 2) throw err;
+    }
+  }
   if (!updated) {
     const [existing] = await database.sql`SELECT founding_member FROM users WHERE id = ${userId}`;
     return { newlyVerified: false, founding: !!existing?.founding_member };
