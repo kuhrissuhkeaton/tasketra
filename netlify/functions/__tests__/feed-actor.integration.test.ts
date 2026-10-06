@@ -55,4 +55,11 @@ describe("feed shows who did it", () => {
     const { meta } = await activityMeta(owner, projectId, "Old entry");
     expect(meta.actorName ?? null).toBeNull();
   });
+
+  it("includes the author's id so the screen can say 'you'", async () => {
+    const { owner, projectId } = await setup();
+    await addEntry(projectId, owner.id, "My entry");
+    const { meta } = await activityMeta(owner, projectId, "My entry");
+    expect(meta.actorId).toBe(owner.id);
+  });
 });
