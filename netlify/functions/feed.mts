@@ -55,9 +55,12 @@ export default withSentry(async (req: Request) => {
 
     UNION ALL
 
-    SELECT 'activity' AS type, entity_title AS title, summary AS body, created_at AS ts,
-      jsonb_build_object('entityType', entity_type, 'action', action) AS meta
-    FROM activity_log WHERE project_id = ${projectId}
+    SELECT 'activity' AS type, a.entity_title AS title, a.summary AS body, a.created_at AS ts,
+      jsonb_build_object('entityType', a.entity_type, 'action', a.action,
+        'actorName', CASE WHEN a.actor_id IS NULL THEN NULL
+          ELSE COALESCE(NULLIF(TRIM(u.display_name), ''), 'a teammate') END) AS meta
+    FROM activity_log a LEFT JOIN users u ON u.id = a.actor_id
+    WHERE a.project_id = ${projectId}
 
     ORDER BY ts DESC
     LIMIT 200

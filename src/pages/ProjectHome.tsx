@@ -850,7 +850,8 @@ function feedLabel(item: FeedItem) {
       const entityType = String(item.meta?.entityType || "item");
       const action = String(item.meta?.action || "changed");
       const entityLabel = entityType.charAt(0).toUpperCase() + entityType.slice(1);
-      return `${entityLabel} ${action}`;
+      const who = item.meta?.actorName ? ` by ${String(item.meta.actorName)}` : "";
+      return `${entityLabel} ${action}${who}`;
     }
   }
 }
