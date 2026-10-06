@@ -96,7 +96,7 @@ export default function Terms() {
 
       <h2>8. Termination</h2>
       <p>
-        You can stop using the Service and request deletion of your account at any time by emailing info@tasketra.com. We may suspend or
+        You can stop using the Service and delete your account at any time from the Account page or by emailing info@tasketra.com. We may suspend or
         terminate your access if you violate these Terms or the Acceptable Use Policy, or if we discontinue the
         Service. On deletion, your projects are moved to a recoverable Trash for a limited period before being
         permanently removed; see our <a href="/legal/privacy">Privacy Policy</a> for details on data retention and
