@@ -2,6 +2,7 @@ import type { RaciRole, RaciAssignment } from "./raci";
 import type { ProjectSize, ProjectApproach } from "./projectView";
 import type { Charter } from "./charter";
 import type { Tolerances } from "./tolerances";
+import { SESSION_EXPIRED_EVENT } from "./sessionEvents";
 const BASE = "/api";
 
 // Thrown by request()/uploadRequest() on non-2xx responses. Carries the HTTP
@@ -22,6 +23,16 @@ export class ApiError extends Error {
   }
 }
 
+// A 401 on anything outside the /auth/ family means a session that was valid
+// has stopped being accepted (expired, or ended in another tab). Announce it
+// so the auth provider can sign the person out and show a note. The /auth/
+// endpoints are excluded: a wrong password is also a 401 and is not an expiry.
+function noteUnauthorized(status: number, path: string) {
+  if (status === 401 && !path.startsWith("/auth/") && typeof window !== "undefined") {
+    window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
+  }
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     credentials: "include",
@@ -30,6 +41,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
+    noteUnauthorized(res.status, path);
     throw new ApiError(data.error || `Request failed (${res.status})`, res.status, !!data.upgradeRequired, typeof data.suggestion === "string" ? data.suggestion : undefined);
   }
   return data as T;
@@ -45,6 +57,7 @@ async function uploadRequest<T>(path: string, formData: FormData): Promise<T> {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
+    noteUnauthorized(res.status, path);
     throw new ApiError(data.error || `Request failed (${res.status})`, res.status, !!data.upgradeRequired, typeof data.suggestion === "string" ? data.suggestion : undefined);
   }
   return data as T;

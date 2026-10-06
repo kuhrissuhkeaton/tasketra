@@ -118,6 +118,12 @@ export default function Login() {
           </p>
         )}
 
+        {params.get("expired") === "1" && mode === "login" && (
+          <p className="auth-expired" role="status">
+            <strong>Time for a quick re-baseline.</strong> Your session expired, so you've been signed out. Sign in to pick up where you left off.
+          </p>
+        )}
+
         <div className="auth-tabs">
           <button className={mode === "login" ? "tab active" : "tab"} onClick={() => setMode("login")} type="button">
             Sign in

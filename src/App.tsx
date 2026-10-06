@@ -44,17 +44,17 @@ function RouteLoading() {
 }
 
 function Protected({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
+  const { user, loading, sessionExpired } = useAuth();
   if (loading) return <div className="shell"><p className="muted" style={{ padding: 24 }}>Loading...</p></div>;
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user) return <Navigate to={sessionExpired ? "/login?expired=1" : "/login"} replace />;
   if (user.emailVerified === false) return <VerifyEmailGate />;
   return <>{children}</>;
 }
 
 function AdminProtected({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
+  const { user, loading, sessionExpired } = useAuth();
   if (loading) return <div className="shell"><p className="muted" style={{ padding: 24 }}>Loading...</p></div>;
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user) return <Navigate to={sessionExpired ? "/login?expired=1" : "/login"} replace />;
   if (!user.isAdmin) return <Forbidden />;
   return <>{children}</>;
 }
