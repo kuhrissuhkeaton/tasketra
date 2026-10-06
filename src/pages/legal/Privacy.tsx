@@ -55,7 +55,10 @@ export default function Privacy() {
           To provide the Service: authenticate you, save and display your project data, and enable features like
           meetings, change requests, and reporting.
         </li>
-        <li>To communicate with you: password-reset emails, and replies if you contact us for feedback or support.</li>
+        <li>
+          To communicate with you: account emails (password resets and email confirmation), replies if you contact us
+          for feedback or support, and occasional announcements to founding members.
+        </li>
         <li>To keep the Service secure and working: diagnosing bugs, preventing abuse, and maintaining uptime.</li>
         <li>To process payments and manage subscriptions, for anyone on a paid plan.</li>
       </ul>
@@ -72,8 +75,9 @@ export default function Privacy() {
           stores and processes essentially all Service data on our behalf.
         </li>
         <li>
-          <strong>Resend</strong> -- sends transactional emails (currently just password-reset links) on our
-          behalf. We only send Resend the recipient address and the email content itself.
+          <strong>Resend</strong> -- sends transactional emails on our behalf, such as password-reset and
+          email-confirmation links, replies to your feedback, and occasional announcements to founding members. We
+          only send Resend the recipient address and the email content itself.
         </li>
         <li>
           <strong>Plausible Analytics</strong> -- provides aggregate website traffic analytics. Because Plausible is
