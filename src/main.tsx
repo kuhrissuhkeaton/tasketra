@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import * as Sentry from "@sentry/react";
 import App from "./App";
+import { ErrorPage } from "./components/ErrorPage";
 import "./index.css";
 
 const dsn = import.meta.env.VITE_SENTRY_DSN;
@@ -33,13 +34,18 @@ window.addEventListener("vite:preloadError", (event) => {
 
 function ErrorFallback() {
   return (
-    <div className="shell" style={{ padding: 24 }}>
-      <h2>Something went wrong</h2>
-      <p className="muted">
-        This has been reported automatically. Try reloading the page.
-      </p>
-      <button onClick={() => window.location.reload()}>Reload</button>
-    </div>
+    <ErrorPage
+      code="500"
+      title="That one's on us. Scope creep reached the server."
+      actions={
+        <>
+          <button className="error-btn error-btn-primary" onClick={() => window.location.reload()}>Try again</button>
+          <a className="error-btn error-btn-ghost" href="/">Go home</a>
+        </>
+      }
+    >
+      Something broke on our side, not yours. Give it another try, and if it keeps happening, email info@tasketra.com.
+    </ErrorPage>
   );
 }
 
