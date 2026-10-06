@@ -36,6 +36,7 @@ const Terms = lazy(() => import("./pages/legal/Terms"));
 const Privacy = lazy(() => import("./pages/legal/Privacy"));
 const AcceptableUse = lazy(() => import("./pages/legal/AcceptableUse"));
 const Cookies = lazy(() => import("./pages/legal/Cookies"));
+const NotFound = lazy(() => import("./pages/NotFound"));
 
 function RouteLoading() {
   return <div className="shell"><p className="muted" style={{ padding: 24 }}>Loading...</p></div>;
@@ -102,6 +103,7 @@ export default function App() {
             <Route path="/legal/privacy" element={<Privacy />} />
             <Route path="/legal/acceptable-use" element={<AcceptableUse />} />
             <Route path="/legal/cookies" element={<Cookies />} />
+            <Route path="*" element={<NotFound />} />
           </Routes>
         </Suspense>
       </ConfirmProvider>
