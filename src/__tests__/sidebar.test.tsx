@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// Which sidebar entries each kind of account sees.
+// Which sidebar entries (nav and footer) each kind of account sees.
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
 import { createRoot, type Root } from "react-dom/client";
 import { act } from "react";
@@ -28,7 +28,7 @@ afterEach(() => { act(() => root.unmount()); container.remove(); });
 async function navFor(user: User): Promise<string[]> {
   currentUser = user;
   await act(async () => { root.render(<MemoryRouter initialEntries={["/app"]}><AppSidebar /></MemoryRouter>); });
-  return [...container.querySelectorAll("#sidebar-nav a")].map((a) => a.textContent?.trim() ?? "");
+  return [...container.querySelectorAll("#sidebar-nav a, .sidebar-footer a")].map((a) => a.textContent?.trim() ?? "");
 }
 
 const ADMIN_ONLY = ["Waitlist", "Feedback inbox", "Founding members"];

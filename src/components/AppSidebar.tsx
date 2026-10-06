@@ -188,33 +188,12 @@ export function AppSidebar({ children }: { children?: ReactNode }) {
             <NavIcon name="report" active={pathname === "/app/activity"} />
             My activity
           </Link>
-          <Link
-            to="/app/account"
-            className={pathname === "/app/account" ? "side-tab active" : "side-tab"}
-          >
-            <NavIcon name="account" active={pathname === "/app/account"} />
-            Account
-          </Link>
-          {user?.plan === "founding" && (
-            <Link
-              to="/app/founding"
-              className={pathname === "/app/founding" ? "side-tab active" : "side-tab"}
-            >
-              <NavIcon name="founding" active={pathname === "/app/founding"} />
-              Founder hub
-            </Link>
-          )}
-          {/* Founding members have Pro for free: nothing to bill, so no Billing entry. */}
-          {user?.plan !== "founding" && (
-            <Link
-              to="/app/billing"
-              className={pathname === "/app/billing" ? "side-tab active" : "side-tab"}
-            >
-              <NavIcon name="billing" active={pathname === "/app/billing"} />
-              Billing
-            </Link>
-          )}
-          {user?.isAdmin && (
+        </NavGroup>
+
+        {children}
+
+        {user?.isAdmin && (
+          <NavGroup label="Admin" defaultCollapsed={!!children}>
             <Link
               to="/admin/waitlist"
               className={pathname === "/admin/waitlist" ? "side-tab active" : "side-tab"}
@@ -222,8 +201,6 @@ export function AppSidebar({ children }: { children?: ReactNode }) {
               <NavIcon name="waitlist" active={pathname === "/admin/waitlist"} />
               Waitlist
             </Link>
-          )}
-          {user?.isAdmin && (
             <Link
               to="/admin/feedback"
               className={pathname === "/admin/feedback" ? "side-tab active" : "side-tab"}
@@ -231,8 +208,6 @@ export function AppSidebar({ children }: { children?: ReactNode }) {
               <NavIcon name="feedback" active={pathname === "/admin/feedback"} />
               Feedback inbox
             </Link>
-          )}
-          {user?.isAdmin && (
             <Link
               to="/admin/founding-members"
               className={pathname === "/admin/founding-members" ? "side-tab active" : "side-tab"}
@@ -240,13 +215,40 @@ export function AppSidebar({ children }: { children?: ReactNode }) {
               <NavIcon name="founding" active={pathname === "/admin/founding-members"} />
               Founding members
             </Link>
-          )}
-        </NavGroup>
-
-        {children}
+          </NavGroup>
+        )}
       </nav>
 
       <div className="sidebar-footer">
+        <Link
+          to="/app/account"
+          className={pathname === "/app/account" ? "side-tab active" : "side-tab"}
+          style={{ marginBottom: 4 }}
+        >
+          <NavIcon name="account" active={pathname === "/app/account"} />
+          Account
+        </Link>
+        {user?.plan === "founding" && (
+          <Link
+            to="/app/founding"
+            className={pathname === "/app/founding" ? "side-tab active" : "side-tab"}
+            style={{ marginBottom: 4 }}
+          >
+            <NavIcon name="founding" active={pathname === "/app/founding"} />
+            Founder hub
+          </Link>
+        )}
+        {/* Founding members have Pro for free: nothing to bill, so no Billing entry. */}
+        {user?.plan !== "founding" && (
+          <Link
+            to="/app/billing"
+            className={pathname === "/app/billing" ? "side-tab active" : "side-tab"}
+            style={{ marginBottom: 4 }}
+          >
+            <NavIcon name="billing" active={pathname === "/app/billing"} />
+            Billing
+          </Link>
+        )}
         <button
           type="button"
           className="side-tab sidebar-feedback"
