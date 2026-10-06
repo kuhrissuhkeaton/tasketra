@@ -12,7 +12,7 @@ import { withSentry } from "../lib/sentry.ts";
  */
 function isAdminEmail(email: string): boolean {
   const adminEmail = getEnv("ADMIN_EMAIL");
-  if (!adminEmail) return true;
+  if (!adminEmail) return false; // fail closed: no ADMIN_EMAIL means nobody is admin
   return email.toLowerCase() === adminEmail.toLowerCase();
 }
 

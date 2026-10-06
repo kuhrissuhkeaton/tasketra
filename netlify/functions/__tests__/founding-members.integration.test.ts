@@ -29,6 +29,7 @@ describe("founding-members", () => {
     const first = await createTestUser("first-founding@example.com", { foundingMember: true });
     await createTestUser("second-founding@example.com", { foundingMember: true });
     await createTestUser("not-founding@example.com", { foundingMember: false });
+    process.env.ADMIN_EMAIL = "first-founding@example.com";
 
     const res = await handler(asUser(first, { method: "GET", url: URL }));
     expect(res.status).toBe(200);
@@ -38,6 +39,7 @@ describe("founding-members", () => {
 
   it("includes name, job title, and signup date for each member", async () => {
     const admin = await createTestUser("admin2@example.com", { foundingMember: true });
+    process.env.ADMIN_EMAIL = "admin2@example.com";
     const res = await handler(asUser(admin, { method: "GET", url: URL }));
     const body = await jsonBody<{
       members: { email: string; display_name: string | null; job_title: string | null; created_at: string }[];
@@ -58,6 +60,12 @@ describe("founding-members", () => {
 
     const allowed = await handler(asUser(owner, { method: "GET", url: URL }));
     expect(allowed.status).toBe(200);
+  });
+
+  it("fails closed: with no ADMIN_EMAIL set, nobody is admin", async () => {
+    const user = await createTestUser("anyone@example.com", { foundingMember: true });
+    const res = await handler(asUser(user, { method: "GET", url: URL }));
+    expect(res.status).toBe(403);
   });
 
   it("rejects non-GET methods", async () => {

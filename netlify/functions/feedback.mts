@@ -9,7 +9,7 @@ import { withSentry } from "../lib/sentry.ts";
 /** Mirrors the admin gate in waitlist.mts / auth-me.mts. */
 async function isAdmin(userId: string): Promise<boolean> {
   const adminEmail = getEnv("ADMIN_EMAIL");
-  if (!adminEmail) return true;
+  if (!adminEmail) return false; // fail closed: no ADMIN_EMAIL means nobody is admin
   const database = db();
   const [user] = await database.sql`SELECT email FROM users WHERE id = ${userId}`;
   return user?.email?.toLowerCase() === adminEmail.toLowerCase();
