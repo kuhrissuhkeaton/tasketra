@@ -1,5 +1,6 @@
 import * as Sentry from "@sentry/node";
 import { getEnv } from "./env.ts";
+import { runForRequest } from "./requestContext.ts";
 
 let initialized = false;
 
@@ -28,7 +29,7 @@ export function withSentry<A extends unknown[]>(
   return async (...args: A) => {
     ensureInit();
     try {
-      return await fn(...args);
+      return await runForRequest(args[0], () => fn(...args));
     } catch (err) {
       Sentry.captureException(err);
       await Sentry.flush(2000).catch(() => {});

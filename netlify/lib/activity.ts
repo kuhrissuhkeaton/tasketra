@@ -9,6 +9,7 @@
 // here means no per-entity function needs to know webhooks exist.
 
 import { isWebhookUrlSafeToDispatch } from "./ssrf-guard.ts";
+import { currentUserId } from "./requestContext.ts";
 
 export type EntityType = "task" | "issue" | "risk" | "stakeholder" | "decision" | "member" | "assumption" | "dependency" | "change_request" | "lesson" | "meeting" | "project" | "document" | "roadmap_item" | "quality_item" | "procurement_item" | "comm_plan_item" | "compliance_item" | "objective" | "key_result";
 export type ActivityAction = "created" | "updated" | "deleted" | "restored";
@@ -25,8 +26,8 @@ export async function logActivity(
   }
 ) {
   await database.sql`
-    INSERT INTO activity_log (project_id, entity_type, entity_id, entity_title, action, summary)
-    VALUES (${params.projectId}, ${params.entityType}, ${params.entityId}, ${params.entityTitle}, ${params.action}, ${params.summary ?? null})
+    INSERT INTO activity_log (project_id, entity_type, entity_id, entity_title, action, summary, actor_id)
+    VALUES (${params.projectId}, ${params.entityType}, ${params.entityId}, ${params.entityTitle}, ${params.action}, ${params.summary ?? null}, ${currentUserId()})
   `;
 
   // Best-effort outbound webhook -- never let a webhook problem break the
