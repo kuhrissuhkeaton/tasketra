@@ -5,6 +5,7 @@ import { act, type ReactElement } from "react";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import { ErrorPage } from "../components/ErrorPage";
 import NotFound from "../pages/NotFound";
+import Forbidden from "../pages/Forbidden";
 
 let container: HTMLDivElement;
 let root: Root;
@@ -48,5 +49,11 @@ describe("error pages", () => {
     const link = container.querySelector("a");
     expect(link?.textContent).toBe("Back to my projects");
     expect(link?.getAttribute("href")).toBe("/app");
+  });
+
+  it("403 page says no access and links back", () => {
+    mount(<MemoryRouter><Forbidden /></MemoryRouter>);
+    expect(container.querySelector(".error-code")?.textContent).toBe("403");
+    expect(container.querySelector("a")?.getAttribute("href")).toBe("/app");
   });
 });

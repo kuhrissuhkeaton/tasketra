@@ -230,7 +230,14 @@ export default function ProjectHome() {
   const tour = useProductTour((tourTab) => setParams({ tab: tourTab }));
 
   useEffect(() => {
-    if (id) api.getProject(id).then(({ project }) => setProject(project));
+    if (id) {
+      api.getProject(id).then(({ project }) => setProject(project)).catch((e: unknown) => {
+        // The server answers 404 for a project that is missing or not shared with this person.
+        const status = (e as { status?: number } | null)?.status;
+        if (status === 404 || status === 403) navigate("/not-found", { replace: true });
+        else throw e;
+      });
+    }
   }, [id]);
 
   // Started by Dashboard's first-project flow, or Resources' "Replay the

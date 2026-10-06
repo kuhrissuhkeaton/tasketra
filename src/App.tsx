@@ -37,6 +37,7 @@ const Privacy = lazy(() => import("./pages/legal/Privacy"));
 const AcceptableUse = lazy(() => import("./pages/legal/AcceptableUse"));
 const Cookies = lazy(() => import("./pages/legal/Cookies"));
 const NotFound = lazy(() => import("./pages/NotFound"));
+const Forbidden = lazy(() => import("./pages/Forbidden"));
 
 function RouteLoading() {
   return <div className="shell"><p className="muted" style={{ padding: 24 }}>Loading...</p></div>;
@@ -54,7 +55,7 @@ function AdminProtected({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   if (loading) return <div className="shell"><p className="muted" style={{ padding: 24 }}>Loading...</p></div>;
   if (!user) return <Navigate to="/login" replace />;
-  if (!user.isAdmin) return <Navigate to="/app" replace />;
+  if (!user.isAdmin) return <Forbidden />;
   return <>{children}</>;
 }
 
