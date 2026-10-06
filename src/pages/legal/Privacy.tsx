@@ -2,7 +2,7 @@ import { LegalLayout } from "../../components/LegalLayout";
 
 export default function Privacy() {
   return (
-    <LegalLayout title="Privacy Policy" updated="August 5, 2026">
+    <LegalLayout title="Privacy Policy" updated="October 6, 2026">
       <p>
         This Privacy Policy explains what information Tasketra ("we," "us," "our") collects, how we use it, and
         the choices you have. It applies to tasketra.com and the Tasketra application (the "Service").
@@ -41,6 +41,12 @@ export default function Privacy() {
         collected and processed directly by our payment processor, Stripe -- they never pass through or get
         stored on our own servers. We store your subscription status, billing interval, and Stripe's identifiers
         for your customer and subscription record, so the app can show your plan and let you manage billing.
+      </p>
+
+      <p>
+        <strong>Activity records:</strong> when you create, change, delete or restore something in a project, we
+        record what changed, in which project, when, and which account made the change. This lets you review your
+        own actions on the My activity page. Actions taken before we began recording this have no account attached.
       </p>
 
       <h2>2. How we use your information</h2>
@@ -99,6 +105,14 @@ export default function Privacy() {
         responder's name and chosen option are visible to anyone who has that link, without needing an account.
         This is intentional -- it's how the feature works -- but it means that information is not private once
         shared. Don't use this feature for anything you don't want visible outside your team.
+      </p>
+
+      <p>
+        <strong>Founders' wall (founding members only):</strong> if you hold a founding member spot, you can choose
+        to appear on the founders' wall inside the app. It is off unless you turn it on. When it's on, other
+        signed-in founding members can see your founding number and the display name from your profile. We never
+        show your email address there. It isn't visible to the public or to other users, and you can turn it off at
+        any time from the Founder hub page, which removes you right away.
       </p>
 
       <h2>5. Data retention</h2>
