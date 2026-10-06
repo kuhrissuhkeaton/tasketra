@@ -1776,3 +1776,6 @@ a:hover { color: var(--navy); }
 .error-btn-primary { background: var(--gold); color: var(--navy); }
 .error-btn-ghost { background: transparent; color: var(--cream); border-color: rgba(242, 235, 217, 0.45); }
 .error-btn:focus-visible { outline: 3px solid var(--cream); outline-offset: 3px; }
+
+/* Note on the sign-in page after a session expires */
+.auth-expired { margin: 14px 0 4px; padding: 12px 14px; border-radius: var(--radius-sm); background: var(--tint); border: 1px solid var(--tint-strong); color: var(--navy); font-size: 14px; line-height: 1.45; }
