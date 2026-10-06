@@ -7,6 +7,26 @@
   node_bundler = "esbuild"
 
 [[redirects]]
+  from = "/privacy"
+  to = "/legal/privacy"
+  status = 301
+
+[[redirects]]
+  from = "/terms"
+  to = "/legal/terms"
+  status = 301
+
+[[redirects]]
+  from = "/cookies"
+  to = "/legal/cookies"
+  status = 301
+
+[[redirects]]
+  from = "/acceptable-use"
+  to = "/legal/acceptable-use"
+  status = 301
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
