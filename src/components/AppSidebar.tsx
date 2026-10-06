@@ -4,6 +4,7 @@ import { useAuth } from "../lib/auth-context";
 import { Wordmark } from "./Wordmark";
 import { FeedbackModal } from "./FeedbackModal";
 import { NavIcon } from "./NavIcon";
+import { readSidebarCollapsed, writeSidebarCollapsed } from "../lib/sidebarState";
 
 /** Collapsible nav section used by both the sidebar's own global group and
  * ProjectHome's secondary (non-pill-bar) groups -- clicking the label
@@ -63,6 +64,9 @@ export function AppSidebar({ children }: { children?: ReactNode }) {
   // had to know to scroll sideways.
   const [menuOpen, setMenuOpen] = useState(false);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
+  // Desktop only: tuck the sidebar down to a strip of icons. Remembered per browser.
+  const [collapsed, setCollapsed] = useState<boolean>(() => readSidebarCollapsed());
+  const asideRef = useRef<HTMLElement>(null);
 
   // Going somewhere closes the menu.
   useEffect(() => { setMenuOpen(false); }, [pathname, search]);
@@ -76,8 +80,46 @@ export function AppSidebar({ children }: { children?: ReactNode }) {
     return () => document.removeEventListener("keydown", onKey);
   }, [menuOpen]);
 
+  function toggleCollapsed() {
+    setCollapsed((current) => {
+      const next = !current;
+      writeSidebarCollapsed(next);
+      return next;
+    });
+  }
+
+  // In the icon rail the text is hidden, so give each item a tooltip from its own
+  // label. Only titles added here are removed again on expand.
+  useEffect(() => {
+    const el = asideRef.current;
+    if (!el) return;
+    const apply = () => {
+      el.querySelectorAll<HTMLElement>(".side-nav .side-tab").forEach((tab) => {
+        if (collapsed) {
+          const label = (tab.textContent || "").trim();
+          if (label && !tab.hasAttribute("title")) {
+            tab.setAttribute("title", label);
+            tab.setAttribute("data-rail-title", "1");
+          }
+        } else if (tab.hasAttribute("data-rail-title")) {
+          tab.removeAttribute("title");
+          tab.removeAttribute("data-rail-title");
+        }
+      });
+    };
+    apply();
+    if (!collapsed) return;
+    const observer = new MutationObserver(apply);
+    observer.observe(el, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [collapsed, pathname]);
+
+  const sidebarClass = ["sidebar", menuOpen && "sidebar-open", collapsed && "sidebar-collapsed"]
+    .filter(Boolean)
+    .join(" ");
+
   return (
-    <aside className={menuOpen ? "sidebar sidebar-open" : "sidebar"}>
+    <aside ref={asideRef} className={sidebarClass}>
       {/* Keyboard shortcut past the navigation: visible only when focused. */}
       <a
         href="#main-content"
@@ -106,6 +148,16 @@ export function AppSidebar({ children }: { children?: ReactNode }) {
           onClick={() => setMenuOpen((o) => !o)}
         >
           {menuOpen ? "Close" : "Menu"}
+        </button>
+        <button
+          type="button"
+          className="sidebar-collapse-btn"
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          aria-expanded={!collapsed}
+          aria-controls="sidebar-nav"
+          onClick={toggleCollapsed}
+        >
+          <span aria-hidden="true">{collapsed ? "\u00bb" : "\u00ab"}</span>
         </button>
       </div>
 

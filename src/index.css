@@ -673,6 +673,31 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
 }
 @media (min-width: 861px) { .sidebar-menu-btn { display: none; } }
 
+/* Collapsible sidebar (desktop only): a narrow rail of icons. Text is hidden by
+   zeroing the font size (the icons are fixed-size boxes), so every nav group,
+   including the ones ProjectHome passes in, collapses without markup changes. */
+.sidebar { transition: width var(--ease); }
+.sidebar-collapse-btn { display: none; }
+@media (min-width: 861px) {
+  .sidebar-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 24px; }
+  .sidebar-bar .sidebar-wordmark { margin-bottom: 0; }
+  .sidebar-collapse-btn {
+    display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; flex-shrink: 0;
+    border-radius: var(--radius-pill); border: 1.5px solid rgba(242, 235, 217, 0.4); background: none;
+    color: var(--cream); font-family: inherit; font-size: 15px; font-weight: 700; line-height: 1; cursor: pointer;
+  }
+  .sidebar-collapse-btn:hover { background: rgba(255, 255, 255, 0.08); }
+  .sidebar.sidebar-collapsed { width: 68px; padding-left: 8px; padding-right: 8px; }
+  .sidebar-collapsed .sidebar-bar { justify-content: center; }
+  .sidebar-collapsed .sidebar-wordmark,
+  .sidebar-collapsed .sidebar-project,
+  .sidebar-collapsed .side-nav-label,
+  .sidebar-collapsed .sidebar-footer { display: none; }
+  .sidebar-collapsed .side-nav-group.collapsed .side-nav-items { display: block; }
+  .sidebar-collapsed .side-tab { font-size: 0; gap: 0; justify-content: center; padding: 8px 0; }
+}
+@media (prefers-reduced-motion: reduce) { .sidebar { transition: none; } }
+
 @media print {
   .sidebar { display: none !important; }
   .project-shell { display: block; }
