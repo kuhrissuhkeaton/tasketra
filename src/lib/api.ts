@@ -80,6 +80,17 @@ export type FoundingMe = {
 
 export type FoundingWallMember = { number: number; name: string };
 
+export type ActivityItem = {
+  id: string;
+  projectId: string;
+  projectName: string;
+  entityType: string;
+  entityTitle: string | null;
+  action: "created" | "updated" | "deleted" | "restored";
+  summary: string | null;
+  createdAt: string;
+};
+
 export type Project = {
   id: string;
   name: string;
@@ -1232,6 +1243,7 @@ export const api = {
   avatarUrl: (userId: string) => `${BASE}/avatar?userId=${userId}`,
 
   getReferrals: () => request<ReferralInfo>("/referrals"),
+  getMyActivity: () => request<{ items: ActivityItem[] }>("/my-activity"),
   getFoundingMe: () => request<FoundingMe>("/founding-me"),
   setFoundingWallOptIn: (wallOptIn: boolean) =>
     request<FoundingMe>("/founding-me", { method: "PATCH", body: JSON.stringify({ wallOptIn }) }),

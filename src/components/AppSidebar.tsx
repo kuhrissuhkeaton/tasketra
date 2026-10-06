@@ -182,6 +182,13 @@ export function AppSidebar({ children }: { children?: ReactNode }) {
             What's new
           </Link>
           <Link
+            to="/app/activity"
+            className={pathname === "/app/activity" ? "side-tab active" : "side-tab"}
+          >
+            <NavIcon name="report" active={pathname === "/app/activity"} />
+            My activity
+          </Link>
+          <Link
             to="/app/account"
             className={pathname === "/app/account" ? "side-tab active" : "side-tab"}
           >

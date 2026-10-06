@@ -26,6 +26,7 @@ const WhatsNew = lazy(() => import("./pages/WhatsNew"));
 const Billing = lazy(() => import("./pages/Billing"));
 const Account = lazy(() => import("./pages/Account"));
 const Founding = lazy(() => import("./pages/Founding"));
+const MyActivity = lazy(() => import("./pages/MyActivity"));
 const AdminWaitlist = lazy(() => import("./pages/AdminWaitlist"));
 const AdminFeedback = lazy(() => import("./pages/AdminFeedback"));
 const AdminFoundingMembers = lazy(() => import("./pages/AdminFoundingMembers"));
@@ -84,6 +85,7 @@ export default function App() {
             <Route path="/app/billing" element={<Protected><Billing /></Protected>} />
             <Route path="/app/account" element={<Protected><Account /></Protected>} />
             <Route path="/app/founding" element={<Protected><Founding /></Protected>} />
+            <Route path="/app/activity" element={<Protected><MyActivity /></Protected>} />
             <Route path="/admin/waitlist" element={<AdminProtected><AdminWaitlist /></AdminProtected>} />
             <Route path="/admin/feedback" element={<AdminProtected><AdminFeedback /></AdminProtected>} />
             <Route path="/admin/founding-members" element={<AdminProtected><AdminFoundingMembers /></AdminProtected>} />
