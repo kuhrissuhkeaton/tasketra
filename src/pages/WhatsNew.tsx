@@ -9,6 +9,12 @@ type ChangeEntry = { version: string; date: string; title: string; body: string 
 // they can do.
 const CHANGES: ChangeEntry[] = [
   {
+    version: "v97",
+    date: "October 2026",
+    title: "A check-by date on assumptions",
+    body: "Assumptions can now carry a Check by date, the same kind of date Dependencies already had as Needed by. Set it when you log an assumption or edit one later; it shows in the list, the board cards and the edit row, and is blank (\"--\") until you set it. Nothing else about assumptions changed.",
+  },
+  {
     version: "v92.3",
     date: "October 2026",
     title: "Easier to use with a keyboard or screen reader",

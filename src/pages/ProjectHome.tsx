@@ -2261,6 +2261,7 @@ function AssumptionsTab({ projectId }: { projectId: string }) {
   const [statement, setStatement] = useState("");
   const [notes, setNotes] = useState("");
   const [owner, setOwner] = useState("");
+  const [checkBy, setCheckBy] = useState("");
   const [newStatus, setNewStatus] = useState<Assumption["status"]>("unconfirmed");
   const [view, setView] = useState<"list" | "board">("list");
   const [dragOverStatus, setDragOverStatus] = useState<Assumption["status"] | null>(null);
@@ -2268,6 +2269,7 @@ function AssumptionsTab({ projectId }: { projectId: string }) {
   const [editStatement, setEditStatement] = useState("");
   const [editNotes, setEditNotes] = useState("");
   const [editOwner, setEditOwner] = useState("");
+  const [editCheckBy, setEditCheckBy] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -2287,10 +2289,11 @@ function AssumptionsTab({ projectId }: { projectId: string }) {
     if (!statement.trim()) return;
     setError("");
     try {
-      await api.createAssumption(projectId, statement.trim(), notes || undefined, owner || undefined, newStatus);
+      await api.createAssumption(projectId, statement.trim(), notes || undefined, owner || undefined, newStatus, checkBy || undefined);
       setStatement("");
       setNotes("");
       setOwner("");
+      setCheckBy("");
       setNewStatus("unconfirmed");
       load();
     } catch (err: any) {
@@ -2315,12 +2318,14 @@ function AssumptionsTab({ projectId }: { projectId: string }) {
     setEditStatement(a.statement);
     setEditNotes(a.notes || "");
     setEditOwner(a.owner_name || "");
+    setEditCheckBy(a.check_by || "");
   }
 
   async function saveEdit(id: string) {
     if (!editStatement.trim()) return;
     await api.updateAssumption(id, {
       statement: editStatement.trim(), notes: editNotes || undefined, owner_name: editOwner || undefined,
+      check_by: editCheckBy || undefined,
     } as any);
     setEditingId(null);
     load();
@@ -2347,6 +2352,7 @@ function AssumptionsTab({ projectId }: { projectId: string }) {
         <textarea id="f-projecthome-2304" value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
         <div className="inline-form" style={{ marginTop: 8, marginBottom: 0 }}>
           <input aria-label="Owner (optional)" placeholder="Owner (optional)" value={owner} onChange={(e) => setOwner(e.target.value)} />
+          <input aria-label="Check by" type="date" value={checkBy} onChange={(e) => setCheckBy(e.target.value)} />
           <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as Assumption["status"])} title="Status">
             {Object.entries(ASSUMPTION_STATUS_LABEL).map(([value, label]) => (
               <option key={value} value={value}>{label}</option>
@@ -2396,7 +2402,9 @@ function AssumptionsTab({ projectId }: { projectId: string }) {
                   onDragStart={(e) => e.dataTransfer.setData("text/plain", a.id)}
                 >
                   <div>{a.statement}</div>
-                  <div className="muted">{a.owner_name || "unassigned"}</div>
+                  <div className="muted">
+                    {a.owner_name || "unassigned"}{a.check_by ? ` -- ${fmtLocalDate(a.check_by)}` : ""}
+                  </div>
                 </div>
               ))}
               {assumptions.filter((a) => a.status === status).length === 0 && (
@@ -2408,7 +2416,7 @@ function AssumptionsTab({ projectId }: { projectId: string }) {
       ) : (
       <ResizableTable id="raid-assumptions">
         <thead>
-          <tr><th>Assumption</th><th>Owner</th><th>Status</th><th></th></tr>
+          <tr><th>Assumption</th><th>Owner</th><th>Check by</th><th>Status</th><th></th></tr>
         </thead>
         <tbody>
           {assumptions.map((a) => (
@@ -2419,6 +2427,7 @@ function AssumptionsTab({ projectId }: { projectId: string }) {
                   <textarea aria-label="Notes" value={editNotes} onChange={(e) => setEditNotes(e.target.value)} rows={2} placeholder="Notes" />
                 </td>
                 <td><input aria-label="Owner" value={editOwner} onChange={(e) => setEditOwner(e.target.value)} /></td>
+                <td><input aria-label="Check by" type="date" value={editCheckBy} onChange={(e) => setEditCheckBy(e.target.value)} /></td>
                 <td className="muted">{ASSUMPTION_STATUS_LABEL[a.status]}</td>
                 <td className="row-actions">
                   <button className="btn btn-primary" type="button" onClick={() => saveEdit(a.id)}>Save</button>
@@ -2432,6 +2441,7 @@ function AssumptionsTab({ projectId }: { projectId: string }) {
                   {a.notes && <div className="muted">{a.notes}</div>}
                 </td>
                 <td>{a.owner_name || "--"}</td>
+                <td>{fmtLocalDate(a.check_by)}</td>
                 <td>
                   <select aria-label="Status"
                     className={`status-select status-select-${a.status}`}
@@ -2451,7 +2461,7 @@ function AssumptionsTab({ projectId }: { projectId: string }) {
             )
           ))}
           {assumptions.length === 0 && (
-            <tr><td colSpan={4} className="muted">No assumptions logged yet. Add one above to track what you're taking for granted.</td></tr>
+            <tr><td colSpan={5} className="muted">No assumptions logged yet. Add one above to track what you're taking for granted.</td></tr>
           )}
         </tbody>
       </ResizableTable>

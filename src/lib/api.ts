@@ -487,6 +487,7 @@ export type Assumption = {
   notes: string | null;
   status: "unconfirmed" | "confirmed" | "invalidated";
   owner_name: string | null;
+  check_by: string | null;
   created_at: string;
   updated_at: string;
   validated_at: string | null;
@@ -993,13 +994,13 @@ export const api = {
   deleteLesson: (id: string) => request<{ ok: true }>(`/lessons?id=${id}`, { method: "DELETE" }),
 
   listAssumptions: (projectId: string) => request<{ assumptions: Assumption[] }>(`/assumptions?projectId=${projectId}`),
-  createAssumption: (projectId: string, statement: string, notes?: string, ownerName?: string, status?: Assumption["status"]) =>
+  createAssumption: (projectId: string, statement: string, notes?: string, ownerName?: string, status?: Assumption["status"], checkBy?: string) =>
     request<{ assumption: Assumption }>("/assumptions", {
-      method: "POST", body: JSON.stringify({ projectId, statement, notes, ownerName, status }),
+      method: "POST", body: JSON.stringify({ projectId, statement, notes, ownerName, status, checkBy }),
     }),
-  updateAssumption: (id: string, patch: Partial<Pick<Assumption, "status" | "statement" | "notes" | "owner_name">>) =>
+  updateAssumption: (id: string, patch: Partial<Pick<Assumption, "status" | "statement" | "notes" | "owner_name" | "check_by">>) =>
     request<{ assumption: Assumption }>("/assumptions", {
-      method: "PATCH", body: JSON.stringify({ id, ...patch, ownerName: patch.owner_name }),
+      method: "PATCH", body: JSON.stringify({ id, ...patch, ownerName: patch.owner_name, checkBy: patch.check_by }),
     }),
   deleteAssumption: (id: string) => request<{ ok: true }>(`/assumptions?id=${id}`, { method: "DELETE" }),
 

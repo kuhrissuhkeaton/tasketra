@@ -12,6 +12,7 @@ const ASSUMPTION_FIELDS = [
   { key: "notes", label: "notes" },
   { key: "status", label: "status" },
   { key: "owner_name", label: "owner" },
+  { key: "check_by", label: "check by" },
 ];
 
 export default withSentry(async (req: Request) => {
@@ -26,7 +27,7 @@ export default withSentry(async (req: Request) => {
     if (!(await hasProjectAccess(userId, projectId))) return json({ error: "Not found" }, { status: 404 });
 
     const assumptions = await database.sql`
-      SELECT id, statement, notes, status, owner_name, created_at, updated_at, validated_at
+      SELECT id, statement, notes, status, owner_name, check_by, created_at, updated_at, validated_at
       FROM assumptions WHERE project_id = ${projectId} AND deleted_at IS NULL
       ORDER BY
         CASE status WHEN 'unconfirmed' THEN 0 WHEN 'invalidated' THEN 1 ELSE 2 END,
@@ -49,9 +50,9 @@ export default withSentry(async (req: Request) => {
     const validatedAt = status === "confirmed" || status === "invalidated" ? new Date() : null;
 
     const [assumption] = await database.sql`
-      INSERT INTO assumptions (project_id, statement, notes, owner_name, status, validated_at)
-      VALUES (${projectId}, ${statement}, ${body?.notes || null}, ${body?.ownerName || null}, ${status}, ${validatedAt})
-      RETURNING id, statement, notes, status, owner_name, created_at, updated_at, validated_at
+      INSERT INTO assumptions (project_id, statement, notes, owner_name, check_by, status, validated_at)
+      VALUES (${projectId}, ${statement}, ${body?.notes || null}, ${body?.ownerName || null}, ${body?.checkBy || null}, ${status}, ${validatedAt})
+      RETURNING id, statement, notes, status, owner_name, check_by, created_at, updated_at, validated_at
     `;
     await logActivity(database, { projectId, entityType: "assumption", entityId: assumption.id, entityTitle: assumption.statement, action: "created" });
     return json({ assumption }, { status: 201 });
@@ -82,14 +83,15 @@ export default withSentry(async (req: Request) => {
         notes = COALESCE(${body.notes ?? null}, notes),
         status = COALESCE(${body.status ?? null}, status),
         owner_name = COALESCE(${body.ownerName ?? null}, owner_name),
+        check_by = COALESCE(${body.checkBy ?? null}, check_by),
         validated_at = CASE WHEN ${body.status ?? null} IN ('confirmed','invalidated') THEN now() ELSE validated_at END,
         updated_at = now()
       WHERE id = ${id}
-      RETURNING id, statement, notes, status, owner_name, created_at, updated_at, validated_at
+      RETURNING id, statement, notes, status, owner_name, check_by, created_at, updated_at, validated_at
     `;
 
     const summary = diffSummary(existing, {
-      statement: body.statement, notes: body.notes, status: body.status, owner_name: body.ownerName,
+      statement: body.statement, notes: body.notes, status: body.status, owner_name: body.ownerName, check_by: body.checkBy,
     }, ASSUMPTION_FIELDS);
     await logActivity(database, { projectId: existing.project_id, entityType: "assumption", entityId: id, entityTitle: assumption.statement, action: "updated", summary });
 
