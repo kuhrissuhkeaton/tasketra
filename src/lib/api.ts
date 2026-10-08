@@ -255,6 +255,7 @@ export type Task = {
 
 export type RiskTaskLink = { id: string; risk_id: string; task_id: string; risk_title: string; task_title: string };
 export type IssueTaskLink = { id: string; issue_id: string; task_id: string; issue_title: string; task_title: string };
+export type TaskTaskLink = { id: string; task_id: string; depends_on_task_id: string; task_title: string; depends_on_title: string };
 
 export type Decision = {
   id: string;
@@ -834,6 +835,19 @@ export const api = {
     }),
   unlinkRaidFromTask: (id: string, sourceType: "risk" | "issue") =>
     request<{ ok: true }>(`/raid-task-links?id=${id}&sourceType=${sourceType}`, { method: "DELETE" }),
+
+  // Simple task "depends on" task link (quick win, not the full Gantt
+  // dependency build). Fetched whole per project, same shape as the RAID
+  // task links above.
+  listTaskDependencies: (projectId: string) =>
+    request<{ links: TaskTaskLink[] }>(`/task-dependencies?projectId=${projectId}`),
+  addTaskDependency: (projectId: string, taskId: string, dependsOnTaskId: string) =>
+    request<{ link: TaskTaskLink }>("/task-dependencies", {
+      method: "POST",
+      body: JSON.stringify({ projectId, taskId, dependsOnTaskId }),
+    }),
+  removeTaskDependency: (id: string) =>
+    request<{ ok: true }>(`/task-dependencies?id=${id}`, { method: "DELETE" }),
 
   createStatusUpdate: (projectId: string, body: string) =>
     request<{ statusUpdate: unknown }>("/status-updates", { method: "POST", body: JSON.stringify({ projectId, body }) }),

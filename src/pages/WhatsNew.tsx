@@ -9,6 +9,12 @@ type ChangeEntry = { version: string; date: string; title: string; body: string 
 // they can do.
 const CHANGES: ChangeEntry[] = [
   {
+    version: "v98",
+    date: "October 2026",
+    title: "Tasks can depend on other tasks",
+    body: "Open a task's drawer and tell it which other task it depends on -- it shows up right there as \"Depends on\", and the task you picked shows a \"Needed by\" line pointing back. This is a simple list to keep track of what's waiting on what, not a full schedule: it doesn't block status changes, move dates around, or draw dependency lines on the Roadmap timeline.",
+  },
+  {
     version: "v97",
     date: "October 2026",
     title: "A check-by date on assumptions",

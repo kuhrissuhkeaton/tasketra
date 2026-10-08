@@ -148,6 +148,7 @@ describe("project page smoke test", () => {
         return { tasks: [task("a", "A short one"), task("b", "A much longer task title that wraps onto more than one line in a narrow column"), task("c", "Child", "b")] };
       }
       if (/\/api\/raid-task-links/.test(url)) return { riskLinks: [], issueLinks: [] };
+      if (/\/api\/task-dependencies/.test(url)) return { links: [] };
       if (/\/api\/roadmap\?/.test(url)) return { items: [] };
       return undefined;
     });

@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, Fragment } from "react";
 import { useParams, useSearchParams, useNavigate, useLocation, Link } from "react-router-dom";
-import { api, ApiError, type Project, type Task, type Stakeholder, type Decision, type Issue, type Risk, type Assumption, type Dependency, type ChangeRequest, type Lesson, type TodayData, type WeeklyReport, type BudgetData, type FeedItem, type TrashItem, type ProjectMember, type Meeting, type MeetingActionItem, type ProjectDocument, type StorageUsage, type RoadmapItem, type RoadmapItemType, type StakeholderInterest, type StakeholderContactMethod, type QualityItem, type ProcurementItem, type CommPlanItem, type ComplianceItem, type Objective, type KeyResult, type RiskTaskLink, type IssueTaskLink, type ProjectStage, type BaselineData, type CharterApproval } from "../lib/api";
+import { api, ApiError, type Project, type Task, type Stakeholder, type Decision, type Issue, type Risk, type Assumption, type Dependency, type ChangeRequest, type Lesson, type TodayData, type WeeklyReport, type BudgetData, type FeedItem, type TrashItem, type ProjectMember, type Meeting, type MeetingActionItem, type ProjectDocument, type StorageUsage, type RoadmapItem, type RoadmapItemType, type StakeholderInterest, type StakeholderContactMethod, type QualityItem, type ProcurementItem, type CommPlanItem, type ComplianceItem, type Objective, type KeyResult, type RiskTaskLink, type IssueTaskLink, type TaskTaskLink, type ProjectStage, type BaselineData, type CharterApproval } from "../lib/api";
 import { RoadmapTimeline, ROADMAP_TYPE_LABEL, ROADMAP_STATUS_LABEL } from "../components/RoadmapTimeline";
 import { fmtRoadmapRange } from "../lib/roadmapDates";
 import { phaseProgress } from "../lib/phaseProgress";
@@ -955,6 +955,8 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
   const [tasks, setTasks] = useState<Task[]>([]);
   const [riskLinks, setRiskLinks] = useState<RiskTaskLink[]>([]);
   const [issueLinks, setIssueLinks] = useState<IssueTaskLink[]>([]);
+  const [taskLinks, setTaskLinks] = useState<TaskTaskLink[]>([]);
+  const [dependsOnPick, setDependsOnPick] = useState("");
   const [title, setTitle] = useState("");
   const [owner, setOwner] = useState("");
   const [start, setStart] = useState("");
@@ -983,9 +985,10 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
 
   async function load() {
     setLoading(true);
-    const [{ tasks }, { riskLinks, issueLinks }, roadmap] = await Promise.all([
+    const [{ tasks }, { riskLinks, issueLinks }, { links: taskLinks }, roadmap] = await Promise.all([
       api.listTasks(projectId),
       api.listRaidTaskLinks(projectId),
+      api.listTaskDependencies(projectId),
       // Phases are a nice-to-have here: if the roadmap can't load, the Tasks
       // tab still works, it just doesn't offer the Phase picker.
       api.listRoadmapItems(projectId).catch(() => ({ items: [] as RoadmapItem[] })),
@@ -993,6 +996,7 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
     setTasks(tasks);
     setRiskLinks(riskLinks);
     setIssueLinks(issueLinks);
+    setTaskLinks(taskLinks);
     setPhases(roadmap.items.filter((i) => i.type === "phase"));
     setLoading(false);
   }
@@ -1068,10 +1072,12 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
     setEditDue(t.due_date || "");
     setEditDescription(t.description || "");
     setEditPhase(t.roadmap_item_id || "");
+    setDependsOnPick("");
   }
 
   function closeDrawer() {
     setDrawerTaskId(null);
+    setDependsOnPick("");
   }
 
   async function saveDrawer() {
@@ -1116,6 +1122,33 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
 
   function jumpToBlocker(kind: "risk" | "issue", sourceId: string) {
     setLocalParams({ tab: kind === "risk" ? "risks" : "issues", highlight: sourceId });
+  }
+
+  // Simple task "depends on" task link -- not the full Gantt
+  // dependency/critical-path build (still Phase 2 on the roadmap), just a
+  // visible list both ways. "Depends on" is editable from this task's own
+  // drawer; "Needed by" is the reverse, a read-only reflection of other
+  // tasks that picked this one, same pattern as "Blocked by" above.
+  const dependsOn = drawerTaskId ? taskLinks.filter((l) => l.task_id === drawerTaskId) : [];
+  const neededBy = drawerTaskId ? taskLinks.filter((l) => l.depends_on_task_id === drawerTaskId) : [];
+  const dependsOnPickOptions = drawerTaskId
+    ? tasks.filter((t) => t.id !== drawerTaskId && !dependsOn.some((l) => l.depends_on_task_id === t.id))
+    : [];
+
+  async function addDependsOn() {
+    if (!drawerTaskId || !dependsOnPick) return;
+    await api.addTaskDependency(projectId, drawerTaskId, dependsOnPick);
+    setDependsOnPick("");
+    load();
+  }
+
+  async function removeDependsOn(linkId: string) {
+    await api.removeTaskDependency(linkId);
+    load();
+  }
+
+  function jumpToTask(taskId: string) {
+    setLocalParams({ highlight: taskId });
   }
 
   if (loading) return <div className="skel-loading-block"><div className="skel skel-text" style={{ width: "45%" }} /><div className="skel skel-text" style={{ width: "80%" }} /><div className="skel skel-text" style={{ width: "60%", marginBottom: 0 }} /></div>;
@@ -1387,6 +1420,56 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
                 Link a risk or issue to this task from its own Details panel in Issues or Risks.
               </p>
             </div>
+
+            <div className="drawer-section">
+              <h4>Depends on</h4>
+              {dependsOn.length === 0 ? (
+                <p className="muted" style={{ fontSize: 13 }}>This task doesn't depend on anything else yet.</p>
+              ) : (
+                <div className="link-chip-list">
+                  {dependsOn.map((l) => (
+                    <div key={l.id} className="link-chip">
+                      <button type="button" className="link-chip-label link-chip-label-btn" onClick={() => jumpToTask(l.depends_on_task_id)}>
+                        <span>{l.depends_on_title}</span>
+                      </button>
+                      <button className="link-chip-remove" type="button" onClick={() => removeDependsOn(l.id)} title="Unlink" aria-label="Unlink">&times;</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {dependsOnPickOptions.length > 0 && (
+                <div className="link-add-row">
+                  <select aria-label="Depends on task" value={dependsOnPick} onChange={(e) => setDependsOnPick(e.target.value)}>
+                    <option value="">This task depends on...</option>
+                    {dependsOnPickOptions.map((t) => (
+                      <option key={t.id} value={t.id}>{t.title}</option>
+                    ))}
+                  </select>
+                  <button className="btn btn-ghost" type="button" onClick={addDependsOn} disabled={!dependsOnPick}>Link</button>
+                </div>
+              )}
+              <p className="muted" style={{ fontSize: 12, marginTop: 2 }}>
+                A simple list, not a schedule -- it doesn't block status changes or reorder dates.
+              </p>
+            </div>
+
+            {neededBy.length > 0 && (
+              <div className="drawer-section">
+                <h4>Needed by</h4>
+                <div className="link-chip-list">
+                  {neededBy.map((l) => (
+                    <div key={l.id} className="link-chip">
+                      <button type="button" className="link-chip-label link-chip-label-btn" onClick={() => jumpToTask(l.task_id)}>
+                        <span>{l.task_title}</span>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <p className="muted" style={{ fontSize: 12, marginTop: 2 }}>
+                  These tasks named this one as something they depend on. Remove the link from their own drawer.
+                </p>
+              </div>
+            )}
           </>
         )}
       </Drawer>
