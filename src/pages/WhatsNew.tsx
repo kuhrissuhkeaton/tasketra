@@ -9,6 +9,12 @@ type ChangeEntry = { version: string; date: string; title: string; body: string 
 // they can do.
 const CHANGES: ChangeEntry[] = [
   {
+    version: "v99",
+    date: "October 2026",
+    title: "Dark mode",
+    body: "Tasketra now follows your device's light/dark setting automatically, or you can set it yourself from Account > Appearance (Light, Dark, or Match system). The choice is remembered on this device and applies everywhere -- the dashboard, every project tab, RACI, the roadmap, all of it.",
+  },
+  {
     version: "v98",
     date: "October 2026",
     title: "Tasks can depend on other tasks",

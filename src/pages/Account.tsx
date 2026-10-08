@@ -4,6 +4,7 @@ import { useAuth } from "../lib/auth-context";
 import { api, type ReferralInfo } from "../lib/api";
 import { avatarColor, initials } from "../lib/avatar";
 import { DeleteAccountCard } from "../components/DeleteAccountCard";
+import { readStoredTheme, setTheme, type Theme } from "../lib/theme";
 
 const TIMEZONES: string[] = (() => {
   try {
@@ -36,6 +37,12 @@ export default function Account() {
 
   const [referrals, setReferrals] = useState<ReferralInfo | null>(null);
   const [copied, setCopied] = useState(false);
+
+  const [theme, setThemeState] = useState<Theme>(() => readStoredTheme());
+  function chooseTheme(t: Theme) {
+    setTheme(t);
+    setThemeState(t);
+  }
 
   useEffect(() => {
     setDisplayName(user?.display_name || "");
@@ -184,6 +191,16 @@ export default function Account() {
               {profileBusy ? "Saving..." : "Save profile"}
             </button>
           </form>
+        </div>
+
+        <div className="settings-card" style={{ maxWidth: 640 }}>
+          <p className="settings-card-label">Appearance</p>
+          <p className="muted" style={{ marginTop: 0 }}>Light, dark, or match your device's setting.</p>
+          <div className="view-toggle" role="group" aria-label="Appearance">
+            <button type="button" className={theme === "light" ? "btn btn-primary" : "btn btn-ghost"} onClick={() => chooseTheme("light")}>Light</button>
+            <button type="button" className={theme === "dark" ? "btn btn-primary" : "btn btn-ghost"} onClick={() => chooseTheme("dark")}>Dark</button>
+            <button type="button" className={theme === "system" ? "btn btn-primary" : "btn btn-ghost"} onClick={() => chooseTheme("system")}>Match system</button>
+          </div>
         </div>
 
         <div className="settings-card" style={{ maxWidth: 640 }}>

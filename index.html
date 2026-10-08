@@ -7,6 +7,19 @@
     <link rel="apple-touch-icon" href="/favicon.svg" />
     <meta name="theme-color" content="#1B1F14" />
 
+    <!-- Dark mode (v99): applied before the stylesheet paints, so an explicit
+         saved choice (src/lib/theme.ts, same read this reflects) never
+         flashes the other theme first. No saved choice = no attribute = the
+         CSS falls through to prefers-color-scheme on its own. -->
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("tasketra.theme");
+          if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+        } catch (e) {}
+      })();
+    </script>
+
     <title>Tasketra -- Project Management for Project Managers</title>
     <meta name="description" content="Tasketra is a project management tool: WBS and Gantt timelines, budget and EVM tracking, full RAID logs, and shareable stakeholder decisions -- built for people who run projects for a living." />
 
