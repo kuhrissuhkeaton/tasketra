@@ -1953,11 +1953,12 @@ a:hover { color: var(--navy); }
 .quick-add-row > .quick-add-title { flex: 1 1 200px; min-width: 0; }
 .quick-add-row > select { flex: 0 1 auto; min-width: 118px; }
 .quick-add-row > .btn { flex: none; }
+.quick-add-row > .quick-add-num { flex: 1 1 150px; min-width: 130px; max-width: 220px; }
 .quick-add-toggle { display: inline-block; margin-top: 8px; }
 .quick-add-more { margin-top: 8px; }
 .quick-add-more[hidden] { display: none; }
 @media (max-width: 560px) {
-  .quick-add-row > .quick-add-title, .quick-add-row > select, .quick-add-row > .btn { flex-basis: 100%; }
+  .quick-add-row > .quick-add-title, .quick-add-row > select, .quick-add-row > .btn, .quick-add-row > .quick-add-num { flex-basis: 100%; max-width: none; }
 }
 
 /* Row "..." actions menu and clickable row titles (Tasks, Risks, Issues). */

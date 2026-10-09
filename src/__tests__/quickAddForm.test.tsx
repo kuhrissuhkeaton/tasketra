@@ -21,13 +21,14 @@ beforeEach(() => {
 });
 afterEach(() => { act(() => root.unmount()); host.remove(); });
 
-function Demo({ hasRows, requiredMore }: { hasRows: boolean; requiredMore?: boolean }) {
+function Demo({ hasRows, requiredMore, startExpanded }: { hasRows: boolean; requiredMore?: boolean; startExpanded?: boolean }) {
   const [title, setTitle] = useState("");
   const [notes, setNotes] = useState("");
   return (
     <QuickAddForm
       storageKey="test"
       hasRows={hasRows}
+      startExpanded={startExpanded}
       onSubmit={(e) => { e.preventDefault(); submitted({ title, notes }); }}
       quick={<><input aria-label="Title" value={title} onChange={(e) => setTitle(e.target.value)} /><button>Add</button></>}
       more={<textarea aria-label="Notes" required={requiredMore} value={notes} onChange={(e) => setNotes(e.target.value)} />}
@@ -43,6 +44,18 @@ const type = (el: HTMLInputElement | HTMLTextAreaElement, v: string) => {
 };
 
 describe("QuickAddForm", () => {
+  it("startExpanded={false} keeps More details collapsed even for an empty register", () => {
+    act(() => root.render(<Demo hasRows={false} startExpanded={false} />));
+    expect(toggle().getAttribute("aria-expanded")).toBe("false");
+    expect(panel().hidden).toBe(true);
+    expect(host.querySelector('input[aria-label="Title"]')).not.toBeNull();
+  });
+
+  it("a saved session choice still wins over startExpanded", () => {
+    sessionStorage.setItem("tasketra.quickAdd.test", "1");
+    act(() => root.render(<Demo hasRows={false} startExpanded={false} />));
+    expect(toggle().getAttribute("aria-expanded")).toBe("true");
+  });
   it("starts open for an empty register and collapsed once it has rows", () => {
     act(() => root.render(<Demo hasRows={false} />));
     expect(toggle().getAttribute("aria-expanded")).toBe("true");

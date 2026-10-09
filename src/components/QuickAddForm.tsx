@@ -9,7 +9,8 @@ import { useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 //
 // The open/closed choice is remembered for the current browser session. With no
 // saved choice the section starts open for an empty register (first-time users see
-// the full form) and closed once the register has rows.
+// the full form) and closed once the register has rows. A register can opt out with
+// startExpanded={false} so that, even when empty, only the compact row shows.
 
 function readChoice(key: string): boolean | null {
   try {
@@ -35,6 +36,7 @@ export function QuickAddForm({
   quick,
   more,
   moreLabel = "More details",
+  startExpanded,
 }: {
   storageKey: string;
   hasRows: boolean;
@@ -42,9 +44,11 @@ export function QuickAddForm({
   quick: ReactNode;
   more: ReactNode;
   moreLabel?: string;
+  /** Initial state when nothing is saved for this session. Defaults to "open while the register is empty". */
+  startExpanded?: boolean;
 }) {
   const key = `tasketra.quickAdd.${storageKey}`;
-  const [open, setOpen] = useState<boolean>(() => readChoice(key) ?? !hasRows);
+  const [open, setOpen] = useState<boolean>(() => readChoice(key) ?? startExpanded ?? !hasRows);
   const panelId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
 

@@ -5771,26 +5771,38 @@ function ChangeRequestsTab({ projectId }: { projectId: string }) {
         Scope changes worth a paper trail -- what's changing, why, who asked for it, and what it
         does to schedule and budget.
       </p>
-      <form className="stacked-form" onSubmit={addChangeRequest}>
-        <label htmlFor="f-projecthome-5549">Change request</label>
-        <input id="f-projecthome-5549" placeholder="What's changing?" value={title} onChange={(e) => setTitle(e.target.value)} />
-        <label htmlFor="f-projecthome-5551">Description (optional)</label>
-        <textarea id="f-projecthome-5551" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
-        <label htmlFor="f-projecthome-5553">Reason (optional)</label>
-        <textarea id="f-projecthome-5553" value={reason} onChange={(e) => setReason(e.target.value)} rows={2} />
-        <div className="inline-form" style={{ marginTop: 8, marginBottom: 0 }}>
-          <input aria-label="Schedule impact (days)"
-            type="number" placeholder="Schedule impact (days)"
-            value={scheduleImpactDays} onChange={(e) => setScheduleImpactDays(e.target.value)}
-          />
-          <input aria-label="Budget impact ($)"
-            type="number" placeholder="Budget impact ($)"
-            value={budgetImpact} onChange={(e) => setBudgetImpact(e.target.value)}
-          />
-          <input aria-label="Requested by (optional)" placeholder="Requested by (optional)" value={requestedBy} onChange={(e) => setRequestedBy(e.target.value)} />
-          <button className="btn btn-primary">Log change request</button>
-        </div>
-      </form>
+      <QuickAddForm
+        storageKey="change-requests"
+        hasRows={items.length > 0}
+        startExpanded={false}
+        onSubmit={addChangeRequest}
+        quick={
+          <>
+            <label htmlFor="f-projecthome-5549" className="sr-only">Change request</label>
+            <input className="quick-add-title" id="f-projecthome-5549" placeholder="What's changing?" value={title} onChange={(e) => setTitle(e.target.value)} />
+            <input className="quick-add-num" aria-label="Schedule impact (days)"
+              type="number" placeholder="Schedule impact (days)"
+              value={scheduleImpactDays} onChange={(e) => setScheduleImpactDays(e.target.value)}
+            />
+            <input className="quick-add-num" aria-label="Budget impact ($)"
+              type="number" placeholder="Budget impact ($)"
+              value={budgetImpact} onChange={(e) => setBudgetImpact(e.target.value)}
+            />
+            <button className="btn btn-primary">Log change request</button>
+          </>
+        }
+        more={
+          <>
+            <label htmlFor="f-projecthome-5551">Description (optional)</label>
+            <textarea id="f-projecthome-5551" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
+            <label htmlFor="f-projecthome-5553">Reason (optional)</label>
+            <textarea id="f-projecthome-5553" value={reason} onChange={(e) => setReason(e.target.value)} rows={2} />
+            <div className="inline-form" style={{ marginTop: 8, marginBottom: 0 }}>
+              <input aria-label="Requested by (optional)" placeholder="Requested by (optional)" value={requestedBy} onChange={(e) => setRequestedBy(e.target.value)} />
+            </div>
+          </>
+        }
+      />
       {error && <p className="form-error">{error}</p>}
       {statusError && <p className="form-error">{statusError}</p>}
 
