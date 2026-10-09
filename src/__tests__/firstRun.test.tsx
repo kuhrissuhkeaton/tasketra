@@ -146,7 +146,7 @@ describe("Dashboard first run", () => {
   it("keeps the full dashboard once a project has tasks", async () => {
     await renderDashboard([project("p1")], [{ id: "p1", totalTasks: 5 }]);
     expect(container.querySelector("h1")?.textContent).toBe("Dashboard");
-    expect(container.textContent).toContain("Tasks by status");
+    expect(container.textContent).toContain("Charts and analytics");
     expect(container.textContent).toContain("Project health");
     expect(button("New project")).toBeTruthy();
     expect(container.querySelector("form.new-project-form")).toBeNull();
@@ -262,6 +262,106 @@ describe("New project dialog", () => {
     await act(async () => { button("Create project").click(); });
     await flush();
     expect(dialog()!.querySelector('[role="alert"]')?.textContent).toContain("Nope.");
+  });
+});
+
+describe("Dashboard command center", () => {
+  function setMatchMedia(wide: boolean) {
+    (window as any).matchMedia = (q: string) => ({ matches: q.includes("861") ? wide : false, media: q, addEventListener() {}, removeEventListener() {} });
+  }
+  afterEach(() => { delete (window as any).matchMedia; });
+
+  async function render(wide: boolean, extra: { overdue?: number; decisions?: number; ms?: number } = {}) {
+    setMatchMedia(wide);
+    const projs = [
+      { ...project("p1", "Alpha"), open_decisions: extra.decisions ?? 0 },
+      project("p2", "Beta"),
+    ];
+    calls.listProjects.mockResolvedValue({ projects: projs });
+    const base = portfolio([{ id: "p1", totalTasks: 5 }, { id: "p2", totalTasks: 3 }]) as any;
+    base.projects[0].name = "Alpha"; base.projects[0].overdueTasks = extra.overdue ?? 0; base.projects[0].nextUp = "Add tasks";
+    base.projects[1].name = "Beta";
+    base.upcomingMilestones = Array.from({ length: extra.ms ?? 0 }, (_, i) => ({ id: `m${i}`, title: `Milestone ${i}`, date: "2026-11-01", status: "planned", projectId: "p1", projectName: "Alpha" }));
+    calls.getPortfolio.mockResolvedValue(base);
+    await act(async () => {
+      root.render(
+        <MemoryRouter initialEntries={["/app"]}>
+          <ConfirmProvider>
+            <Routes><Route path="/app" element={<Dashboard />} /><Route path="*" element={<Where />} /></Routes>
+          </ConfirmProvider>
+        </MemoryRouter>,
+      );
+    });
+    await flush();
+  }
+  const sec = (title: string) => [...container.querySelectorAll("button.dash-sec-btn")].find((b) => b.querySelector(".dash-sec-title")?.textContent === title) as HTMLButtonElement;
+  const h2s = () => [...container.querySelectorAll("main h2")].map((h) => h.querySelector(".dash-sec-title")?.textContent ?? h.textContent);
+
+  it("desktop: Project health and milestones open, charts collapsed", async () => {
+    await render(true, { ms: 2 });
+    expect(sec("Project health").getAttribute("aria-expanded")).toBe("true");
+    expect(sec("Upcoming milestones").getAttribute("aria-expanded")).toBe("true");
+    expect(sec("Charts and analytics").getAttribute("aria-expanded")).toBe("false");
+    expect(container.querySelector("table")).toBeTruthy();
+    expect(container.textContent).toContain("Milestone 0");
+    expect(container.textContent).not.toContain("Tasks by status");
+  });
+
+  it("phone: all three reporting sections collapsed", async () => {
+    await render(false, { ms: 2 });
+    for (const t of ["Project health", "Upcoming milestones", "Charts and analytics"]) {
+      expect(sec(t).getAttribute("aria-expanded")).toBe("false");
+    }
+    expect(container.querySelector("table")).toBeNull();
+  });
+
+  it("puts Needs attention and Your projects before the reporting sections", async () => {
+    await render(true, { overdue: 2 });
+    const order = h2s();
+    expect(order.indexOf("Needs attention")).toBeGreaterThan(-1);
+    expect(order.indexOf("Needs attention")).toBeLessThan(order.indexOf("Your projects"));
+    expect(order.indexOf("Your projects")).toBeLessThan(order.indexOf("Project health"));
+    expect(order.indexOf("Project health")).toBeLessThan(order.indexOf("Upcoming milestones"));
+    expect(order.indexOf("Upcoming milestones")).toBeLessThan(order.indexOf("Charts and analytics"));
+  });
+
+  it("lists projects that need attention with reasons, and says so when none do", async () => {
+    await render(true, { overdue: 2, decisions: 1 });
+    const row = container.querySelector(".dash-attention-row")!;
+    expect(row.textContent).toContain("Alpha");
+    expect(row.textContent).toContain("2 overdue");
+    expect(row.textContent).toContain("1 awaiting decision");
+    expect(container.querySelectorAll(".dash-attention-row").length).toBe(1);
+    act(() => root.unmount());
+    root = createRoot(container);
+    await render(true);
+    expect(container.querySelector(".dash-attention-empty")?.textContent).toBe("Nothing needs attention right now.");
+  });
+
+  it("toggles with the button, keeps the choice, and wires aria-controls", async () => {
+    await render(true);
+    const btn = sec("Charts and analytics");
+    const panel = container.querySelector(`#${CSS.escape(btn.getAttribute("aria-controls")!)}`) as HTMLElement;
+    expect(panel.hasAttribute("hidden")).toBe(true);
+    await act(async () => { btn.click(); });
+    expect(btn.getAttribute("aria-expanded")).toBe("true");
+    expect(panel.hasAttribute("hidden")).toBe(false);
+    expect(container.textContent).toContain("Tasks by status");
+    expect(localStorage.getItem("tasketra.dash.charts.wide")).toBe("1");
+    act(() => root.unmount());
+    root = createRoot(container);
+    await render(true);
+    expect(sec("Charts and analytics").getAttribute("aria-expanded")).toBe("true");
+    await act(async () => { sec("Project health").click(); });
+    expect(sec("Project health").getAttribute("aria-expanded")).toBe("false");
+    expect(container.querySelector("table")).toBeNull();
+  });
+
+  it("caps milestones at five with a Show all control", async () => {
+    await render(true, { ms: 8 });
+    expect(container.querySelectorAll(".dash-ms-row").length).toBe(5);
+    await act(async () => { button("Show all 8").click(); });
+    expect(container.querySelectorAll(".dash-ms-row").length).toBe(8);
   });
 });
 

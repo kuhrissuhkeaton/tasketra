@@ -8,6 +8,9 @@ import type { ProjectSize, ProjectApproach } from "../lib/projectView";
 import { PROJECT_TEMPLATES, getTemplate, isTemplateId, templateSummary } from "../lib/projectTemplates";
 import { useConfirm } from "../components/ConfirmDialog";
 import { Modal } from "../components/Modal";
+import { CollapsibleSection } from "../components/CollapsibleSection";
+import { useIsWide } from "../lib/dashPrefs";
+import { buildNeedsAttention } from "../lib/needsAttention";
 import { ResizableTable } from "../components/ResizableTable";
 import { useAuth } from "../lib/auth-context";
 import { fmtDateTime, fmtLocalDate } from "../lib/format";
@@ -143,11 +146,14 @@ function IssueSeverityDonut({ breakdown }: { breakdown: PortfolioData["issueSeve
   );
 }
 
-function PortfolioOverview({ data }: { data: PortfolioData }) {
+function PortfolioOverview({ data, wide }: { data: PortfolioData; wide: boolean }) {
   const { kpis } = data;
+  const [showAllMs, setShowAllMs] = useState(false);
+  const MS_CAP = 5;
+  const milestones = showAllMs ? data.upcomingMilestones : data.upcomingMilestones.slice(0, MS_CAP);
   return (
-    <div style={{ marginBottom: 32 }}>
-      <div className="evm-grid">
+    <div className="dash-reporting">
+      <div className="evm-grid dash-kpis">
         <div className="evm-card" title="Projects you own or are an active member of">
           <div className="evm-label">Active projects</div>
           <div className="evm-value">{kpis.activeProjects}</div>
@@ -180,54 +186,18 @@ function PortfolioOverview({ data }: { data: PortfolioData }) {
         </div>
       </div>
 
-      <div style={{ display: "flex", gap: 24, flexWrap: "wrap", marginTop: 24 }}>
-        <div style={{ flex: "2 1 380px", minWidth: 320 }}>
-          <h3 style={{ marginBottom: 12 }}>Tasks by status</h3>
-          <TaskStatusChart breakdown={data.taskStatusBreakdown} />
-        </div>
-        <div style={{ flex: "1 1 260px", minWidth: 240 }}>
-          <h3 style={{ marginBottom: 12 }}>Open issues by severity</h3>
-          <IssueSeverityDonut breakdown={data.issueSeverityBreakdown} />
-        </div>
-        <div style={{ flex: "1 1 260px", minWidth: 240 }}>
-          <h3 style={{ marginBottom: 12 }}>Upcoming milestones</h3>
-          {data.upcomingMilestones.length === 0 ? (
-            <p className="muted">No upcoming milestones on any roadmap.</p>
-          ) : (
-            <div>
-              {data.upcomingMilestones.map((m) => (
-                <div key={m.id} style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "8px 0", borderBottom: "1px solid var(--border)" }}>
-                  <div>
-                    <div>{m.title}</div>
-                    <Link to={`/app/projects/${m.projectId}`} className="muted" style={{ fontSize: 12.5 }}>{m.projectName}</Link>
-                  </div>
-                  <div className="muted" style={{ fontSize: 12.5, whiteSpace: "nowrap" }}>{fmtLocalDate(m.date)}</div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
 
-      {kpis.totalObjectives > 0 && (
-        <div style={{ marginTop: 24 }}>
-          <h3 style={{ marginBottom: 12 }}>Objectives across your projects</h3>
-          <div className="progress-track" style={{ maxWidth: 480 }}>
-            <div className="progress-fill" style={{ width: `${kpis.avgObjectiveProgress ?? 0}%` }} />
-          </div>
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 10, alignItems: "center" }}>
-            <span className="muted" style={{ fontSize: 12.5 }}>{fmtPct100(kpis.avgObjectiveProgress)} average progress</span>
-            {kpis.objectivesOnTrack > 0 && <span className="pill pill-green">{kpis.objectivesOnTrack} on track</span>}
-            {kpis.objectivesAtRisk > 0 && <span className="pill pill-gold">{kpis.objectivesAtRisk} at risk</span>}
-            {kpis.objectivesOffTrack > 0 && <span className="pill pill-red">{kpis.objectivesOffTrack} off track</span>}
-            {kpis.objectivesAchieved > 0 && <span className="pill pill-navy">{kpis.objectivesAchieved} achieved</span>}
-          </div>
-        </div>
-      )}
-
-      {data.projects.length > 0 && (
-        <div style={{ marginTop: 24 }}>
-          <h3 style={{ marginBottom: 12 }}>Project health</h3>
+      <CollapsibleSection
+        id="health"
+        title="Project health"
+        summary={`${data.projects.length} project${data.projects.length === 1 ? "" : "s"}`}
+        wide={wide}
+        defaultOpenWide={true}
+        defaultOpenNarrow={false}
+      >
+        {data.projects.length === 0 ? (
+          <p className="muted dash-empty">No projects to report on yet.</p>
+        ) : (
           <ResizableTable id="dashboard-health">
             <thead>
               <tr><th>Project</th><th>Stage</th><th>Health</th><th>Tasks</th><th>Overdue</th><th>Risks</th><th>Issues</th><th>OKR progress</th></tr>
@@ -252,13 +222,81 @@ function PortfolioOverview({ data }: { data: PortfolioData }) {
               ))}
             </tbody>
           </ResizableTable>
+        )}
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        id="milestones"
+        title="Upcoming milestones"
+        summary={data.upcomingMilestones.length > 0 ? `${data.upcomingMilestones.length} upcoming` : "none"}
+        wide={wide}
+        defaultOpenWide={true}
+        defaultOpenNarrow={false}
+      >
+        {data.upcomingMilestones.length === 0 ? (
+          <p className="muted dash-empty">No upcoming milestones on any roadmap.</p>
+        ) : (
+          <>
+            <ul className="dash-ms-list">
+              {milestones.map((m) => (
+                <li key={m.id} className="dash-ms-row">
+                  <span className="dash-ms-date">{fmtLocalDate(m.date)}</span>
+                  <span className="dash-ms-title">{m.title}</span>
+                  <Link to={`/app/projects/${m.projectId}`} className="dash-ms-project">{m.projectName}</Link>
+                </li>
+              ))}
+            </ul>
+            {data.upcomingMilestones.length > MS_CAP && (
+              <button type="button" className="btn-link dash-ms-more" onClick={() => setShowAllMs((v) => !v)}>
+                {showAllMs ? "Show fewer" : `Show all ${data.upcomingMilestones.length}`}
+              </button>
+            )}
+          </>
+        )}
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        id="charts"
+        title="Charts and analytics"
+        summary="Tasks, issues, objectives"
+        wide={wide}
+        defaultOpenWide={false}
+        defaultOpenNarrow={false}
+      >
+        <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
+        <div style={{ flex: "2 1 380px", minWidth: 320 }}>
+          <h3 style={{ marginBottom: 12 }}>Tasks by status</h3>
+          <TaskStatusChart breakdown={data.taskStatusBreakdown} />
+        </div>
+        <div style={{ flex: "1 1 260px", minWidth: 240 }}>
+          <h3 style={{ marginBottom: 12 }}>Open issues by severity</h3>
+          <IssueSeverityDonut breakdown={data.issueSeverityBreakdown} />
+        </div>
+        </div>
+      {kpis.totalObjectives > 0 && (
+        <div style={{ marginTop: 20 }}>
+          <h3 style={{ marginBottom: 12 }}>Objectives across your projects</h3>
+          <div className="progress-track" style={{ maxWidth: 480 }}>
+            <div className="progress-fill" style={{ width: `${kpis.avgObjectiveProgress ?? 0}%` }} />
+          </div>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 10, alignItems: "center" }}>
+            <span className="muted" style={{ fontSize: 12.5 }}>{fmtPct100(kpis.avgObjectiveProgress)} average progress</span>
+            {kpis.objectivesOnTrack > 0 && <span className="pill pill-green">{kpis.objectivesOnTrack} on track</span>}
+            {kpis.objectivesAtRisk > 0 && <span className="pill pill-gold">{kpis.objectivesAtRisk} at risk</span>}
+            {kpis.objectivesOffTrack > 0 && <span className="pill pill-red">{kpis.objectivesOffTrack} off track</span>}
+            {kpis.objectivesAchieved > 0 && <span className="pill pill-navy">{kpis.objectivesAchieved} achieved</span>}
+          </div>
         </div>
       )}
+
+      </CollapsibleSection>
     </div>
   );
 }
 
 export default function Dashboard() {
+  const wide = useIsWide();
+  const [showAllAttention, setShowAllAttention] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
   const [deletedProjects, setDeletedProjects] = useState<Project[]>([]);
   const [portfolio, setPortfolio] = useState<PortfolioData | null>(null);
@@ -348,6 +386,14 @@ export default function Dashboard() {
     refreshPortfolio(stillMatches ? selectedProjectId : null, stage);
   }
 
+  const ATTENTION_CAP = 5;
+  const visibleIds = new Set((selectedStage ? projects.filter((p) => p.stage === selectedStage) : projects).map((p) => p.id));
+  const attention = portfolio
+    ? buildNeedsAttention(
+        portfolio.projects.filter((x) => visibleIds.has(x.id)),
+        Object.fromEntries(projects.map((p) => [p.id, p.open_decisions ?? 0])),
+      )
+    : [];
   const visibleProjects = selectedStage ? projects.filter((p) => p.stage === selectedStage) : projects;
   const stageCount = (stage: ProjectStage) => projects.filter((p) => p.stage === stage).length;
 
@@ -580,23 +626,42 @@ export default function Dashboard() {
           </div>
         )}
 
-        {loading ? (
-          <div className="evm-grid" style={{ marginBottom: 32 }}>
-            {[0, 1, 2, 3].map((i) => (
-              <div className="evm-card" key={i} style={{ pointerEvents: "none" }}>
-                <div className="skel skel-text" style={{ width: "60%" }} />
-                <div className="skel skel-title" style={{ width: "40%", marginBottom: 0 }} />
-              </div>
-            ))}
-          </div>
-        ) : portfolio && projects.length > 0 ? (
-          <div style={{ opacity: portfolioLoading ? 0.6 : 1, transition: "opacity 120ms ease" }}>
-            <PortfolioOverview data={portfolio} />
-          </div>
-        ) : null}
+        {!loading && portfolio && (
+          <section className="dash-sec dash-attention" aria-labelledby="dash-attention-title">
+            <h2 className="dash-sec-head dash-sec-head-static" id="dash-attention-title">
+              <span className="dash-sec-title">Needs attention</span>
+              {attention.length > 0 && <span className="dash-sec-summary">{attention.length} project{attention.length === 1 ? "" : "s"}</span>}
+            </h2>
+            {attention.length === 0 ? (
+              <p className="dash-attention-empty">Nothing needs attention right now.</p>
+            ) : (
+              <>
+                <ul className="dash-attention-list">
+                  {(showAllAttention ? attention : attention.slice(0, ATTENTION_CAP)).map((a) => (
+                    <li key={a.id} className="dash-attention-row">
+                      <Link to={`/app/projects/${a.id}`} className="dash-attention-name">{a.name}</Link>
+                      <span className="dash-attention-reasons">
+                        <span className="sr-only">Flagged because: </span>
+                        {a.reasons.map((r) => (
+                          <span key={r.key} className={`pill pill-${r.tone}`} title={r.explain}>{r.label}<span className="sr-only">. {r.explain}</span></span>
+                        ))}
+                      </span>
+                      {a.nextUp && <span className="dash-attention-next muted"><span>Next up</span> {a.nextUp}</span>}
+                    </li>
+                  ))}
+                </ul>
+                {attention.length > ATTENTION_CAP && (
+                  <button type="button" className="btn-link dash-attention-more" onClick={() => setShowAllAttention((v) => !v)}>
+                    {showAllAttention ? "Show fewer" : `Show all ${attention.length}`}
+                  </button>
+                )}
+              </>
+            )}
+          </section>
+        )}
 
         <div className="projects-head">
-          <h3>Your projects</h3>
+          <h2>Your projects</h2>
           <Link to="/app/resources#how-it-works" className="btn-link projects-head-link">How a project runs in Tasketra</Link>
         </div>
 
@@ -779,6 +844,21 @@ export default function Dashboard() {
             ))}
           </div>
         )}
+
+        {loading ? (
+          <div className="evm-grid" style={{ marginBottom: 32 }}>
+            {[0, 1, 2, 3].map((i) => (
+              <div className="evm-card" key={i} style={{ pointerEvents: "none" }}>
+                <div className="skel skel-text" style={{ width: "60%" }} />
+                <div className="skel skel-title" style={{ width: "40%", marginBottom: 0 }} />
+              </div>
+            ))}
+          </div>
+        ) : portfolio && projects.length > 0 ? (
+          <div style={{ opacity: portfolioLoading ? 0.6 : 1, transition: "opacity 120ms ease" }}>
+            <PortfolioOverview data={portfolio} wide={wide} />
+          </div>
+        ) : null}
 
         {deletedSection}
       </main>

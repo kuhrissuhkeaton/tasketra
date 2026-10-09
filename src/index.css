@@ -2033,3 +2033,48 @@ a:hover { color: var(--navy); }
 .new-project-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 4px; }
 .new-project-form .muted { margin: 0; font-size: 13px; }
 .page-head-actions { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+
+/* Dashboard command center: Needs attention, Your projects, then compact reporting sections. */
+.projects-head h2 { margin: 0; font-size: 20px; }
+.dash-sec { margin: 0 0 14px; }
+.dash-sec-head { margin: 0; font-size: 18px; }
+.dash-sec-head-static { display: flex; align-items: baseline; gap: 10px; padding: 4px 2px 8px; }
+.dash-sec-btn {
+  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+  background: none; border: none; border-bottom: 1px solid var(--border);
+  padding: 8px 2px; cursor: pointer; color: var(--navy); font: inherit; border-radius: 0;
+}
+.dash-sec-btn:hover .dash-sec-title { text-decoration: underline; text-underline-offset: 3px; }
+.dash-sec-title { font-family: 'Fraunces', serif; font-weight: 700; font-size: 18px; color: var(--navy); }
+.dash-sec-summary { font-size: 13px; color: var(--slate); font-weight: 500; }
+.dash-sec-chev { margin-left: auto; color: var(--slate); font-size: 14px; transition: transform 120ms ease; transform: rotate(-90deg); }
+.dash-sec-chev.is-open { transform: rotate(0deg); }
+.dash-sec-body { padding-top: 10px; }
+.dash-sec-body[hidden] { display: none; }
+.dash-empty { margin: 0; font-size: 14px; }
+
+.dash-attention { margin: 18px 0 22px; }
+.dash-attention-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--border); border-radius: 12px; background: var(--panel); overflow: hidden; }
+.dash-attention-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+.dash-attention-row:last-child { border-bottom: none; }
+.dash-attention-name { font-weight: 700; color: var(--navy); text-decoration: none; min-width: 140px; }
+.dash-attention-name:hover { text-decoration: underline; text-underline-offset: 3px; }
+.dash-attention-reasons { display: flex; flex-wrap: wrap; gap: 6px; }
+.dash-attention-next { margin-left: auto; font-size: 13px; }
+.dash-attention-next span { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; margin-right: 4px; }
+.dash-attention-more, .dash-ms-more { margin-top: 8px; }
+.dash-attention-empty { margin: 0; padding: 10px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--panel); color: var(--slate); font-size: 14px; }
+
+.dash-reporting { margin-top: 24px; }
+.dash-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 18px; }
+.dash-kpis .evm-card { padding: 10px 14px; }
+.dash-kpis .evm-sub { margin-top: 2px; }
+/* Seven across only where each card keeps its full-size label and number; below that the cards wrap (4, then 2 per row). */
+@media (min-width: 1400px) { .dash-kpis { grid-template-columns: repeat(7, minmax(0, 1fr)); } }
+@media (max-width: 860px) { .dash-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .dash-kpis > .evm-card:last-child:nth-child(odd) { grid-column: 1 / -1; } }
+
+.dash-ms-list { list-style: none; margin: 0; padding: 0; }
+.dash-ms-row { display: grid; grid-template-columns: 96px 1fr auto; gap: 12px; align-items: baseline; padding: 6px 2px; border-bottom: 1px solid var(--border); font-size: 14px; }
+.dash-ms-date { color: var(--slate); font-size: 13px; white-space: nowrap; }
+.dash-ms-project { color: var(--slate); font-size: 13px; }
+@media (max-width: 560px) { .dash-ms-row { grid-template-columns: 1fr; gap: 0; } }
