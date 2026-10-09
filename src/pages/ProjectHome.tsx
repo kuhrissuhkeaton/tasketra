@@ -607,7 +607,7 @@ function TodayTab({ projectId }: { projectId: string }) {
             first task, or Stakeholders to start your register.
           </p>
           <button
-            className="btn btn-primary"
+            className="btn btn-ghost"
             type="button"
             style={{ marginTop: 8 }}
             onClick={() => setParams({ tab: "tasks" })}
@@ -6694,7 +6694,7 @@ function TemplatesTab({ projectId, projectName }: { projectId: string; projectNa
             <h4>{t.title}</h4>
             <p className="muted">{t.blurb}</p>
             <button
-              className="btn btn-primary"
+              className="btn btn-ghost"
               type="button"
               disabled={downloading === t.type}
               onClick={() => handleDownload(t.type, t.title)}
@@ -6706,17 +6706,17 @@ function TemplatesTab({ projectId, projectName }: { projectId: string; projectNa
         <div className="template-card">
           <h4>Risk matrix (print or share)</h4>
           <p className="muted">A printable probability and impact grid plus the full register. Save it as a PDF from the print dialog, or create a read-only link for someone outside Tasketra.</p>
-          <Link className="btn btn-primary" to={`/app/projects/${projectId}/print/risks`}>Open printable page</Link>
+          <Link className="btn btn-ghost" to={`/app/projects/${projectId}/print/risks`}>Open printable page</Link>
         </div>
         <div className="template-card">
           <h4>RACI chart (print or share)</h4>
           <p className="muted">Your RACI as a printable page, with a read-only link for people outside Tasketra.</p>
-          <Link className="btn btn-primary" to={`/app/projects/${projectId}/print/raci`}>Open printable page</Link>
+          <Link className="btn btn-ghost" to={`/app/projects/${projectId}/print/raci`}>Open printable page</Link>
         </div>
         <div className="template-card">
           <h4>Stakeholder grid (print)</h4>
           <p className="muted">Your stakeholders on a power and interest grid, as a printable page you can save as a PDF.</p>
-          <Link className="btn btn-primary" to={`/app/projects/${projectId}/print/stakeholders`}>Open printable page</Link>
+          <Link className="btn btn-ghost" to={`/app/projects/${projectId}/print/stakeholders`}>Open printable page</Link>
         </div>
       </div>
     </div>

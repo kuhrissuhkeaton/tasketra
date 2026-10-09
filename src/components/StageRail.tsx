@@ -148,6 +148,9 @@ export function StageRail({
     commit(stage);
   }
 
+  // One-primary rule: only the first unfinished checklist item gets the lime button.
+  const firstOpenId = data.checklist.items.find((it) => it.status !== "done")?.id;
+
   return (
     <section className="stage-rail" aria-label="Project stage">
       <div className="stage-rail-top">
@@ -265,7 +268,13 @@ export function StageRail({
               </div>
               <button
                 type="button"
-                className={item.status === "done" ? "stage-item-link" : "btn btn-primary stage-item-cta"}
+                className={
+                  item.status === "done"
+                    ? "stage-item-link"
+                    : item.id === firstOpenId
+                      ? "btn btn-primary stage-item-cta"
+                      : "btn btn-ghost stage-item-cta"
+                }
                 onClick={() => onOpenTab(item.tab)}
               >
                 {item.action}
