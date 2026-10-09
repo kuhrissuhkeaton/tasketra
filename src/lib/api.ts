@@ -702,6 +702,16 @@ export type PortfolioData = {
   upcomingMilestones: { id: string; title: string; date: string; status: RoadmapItem["status"]; projectId: string; projectName: string }[];
 };
 
+export type NotificationItem = {
+  id: string;
+  type: "decision_response" | "feedback_update" | "feedback_inbox";
+  text: string;
+  at: string | null;
+  unread: boolean;
+  to: string;
+};
+export type NotificationsResponse = { items: NotificationItem[]; whatsNewSeen: string | null };
+
 export const api = {
   register: (email: string, password: string, ref?: string) =>
     request<{ user: User }>("/auth/register", { method: "POST", body: JSON.stringify({ email, password, acceptedTerms: true, ...(ref ? { ref } : {}) }) }),
@@ -1278,6 +1288,12 @@ export const api = {
   setFoundingWallOptIn: (wallOptIn: boolean) =>
     request<FoundingMe>("/founding-me", { method: "PATCH", body: JSON.stringify({ wallOptIn }) }),
   getFoundingWall: () => request<{ members: FoundingWallMember[] }>("/founding-wall"),
+
+  getNotifications: () => request<NotificationsResponse>("/notifications"),
+  markNotificationsRead: () =>
+    request<{ ok: true }>("/notifications", { method: "PATCH", body: JSON.stringify({ markAllRead: true }) }),
+  setWhatsNewSeen: (version: string) =>
+    request<{ ok: true }>("/notifications", { method: "PATCH", body: JSON.stringify({ whatsNewSeen: version }) }),
 
   getPortfolio: (projectId?: string, stage?: ProjectStage) => {
     const qs = new URLSearchParams();

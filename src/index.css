@@ -742,6 +742,35 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
    zeroing the font size (the icons are fixed-size boxes), so every nav group,
    including the ones ProjectHome passes in, collapses without markup changes. */
 .sidebar { transition: width var(--ease); }
+.sidebar-bar-actions { display: flex; align-items: center; gap: 8px; }
+/* Notification bell: same round outline as the collapse button, always visible (phone and desktop). */
+.sidebar-bell-btn {
+  position: relative; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; flex-shrink: 0;
+  border-radius: var(--radius-pill); border: 1.5px solid rgba(242, 235, 217, 0.4); background: none;
+  color: var(--ivory); cursor: pointer;
+}
+.sidebar-bell-btn:hover { background: rgba(255, 255, 255, 0.08); }
+.sidebar-bell-badge {
+  position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px; padding: 0 5px; box-sizing: border-box;
+  border-radius: 9px; background: var(--gold); color: var(--ink);
+  font-size: 11px; font-weight: 800; line-height: 18px; text-align: center;
+}
+/* The panel is rendered at the end of <body> so the sidebar can never clip it. */
+.notif-panel {
+  position: fixed; top: 64px; left: 16px; z-index: 60; width: min(360px, calc(100vw - 32px)); max-height: min(70vh, 520px); overflow-y: auto;
+  background: var(--cream); color: var(--navy); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-lift);
+}
+.notif-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--border); }
+.notif-markall { background: none; border: none; padding: 4px 6px; font-family: inherit; font-size: 13px; font-weight: 700; color: var(--navy); text-decoration: underline; cursor: pointer; }
+.notif-markall:disabled { opacity: 0.45; cursor: default; text-decoration: none; }
+.notif-empty { padding: 20px 16px; margin: 0; }
+.notif-list { list-style: none; margin: 0; padding: 6px 0; }
+.notif-item { display: grid; grid-template-columns: 10px 1fr auto; gap: 10px; align-items: start; padding: 10px 16px; color: var(--navy); text-decoration: none; font-size: 14px; line-height: 1.4; }
+.notif-item:hover, .notif-item:focus-visible { background: rgba(127, 127, 127, 0.12); }
+.notif-dot { width: 8px; height: 8px; margin-top: 6px; border-radius: 50%; background: transparent; }
+.notif-unread .notif-dot { background: var(--gold); box-shadow: 0 0 0 1px rgba(28, 36, 21, 0.35); }
+.notif-unread .notif-text { font-weight: 700; }
+.notif-when { font-size: 12px; white-space: nowrap; }
 .sidebar-collapse-btn { display: none; }
 @media (min-width: 861px) {
   .sidebar-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 24px; }
@@ -754,6 +783,7 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
   .sidebar-collapse-btn:hover { background: rgba(255, 255, 255, 0.08); }
   .sidebar.sidebar-collapsed { width: 68px; padding-left: 8px; padding-right: 8px; }
   .sidebar-collapsed .sidebar-bar { justify-content: center; }
+  .sidebar-collapsed .sidebar-bar-actions { flex-direction: column; }
   .sidebar-collapsed .sidebar-wordmark,
   .sidebar-collapsed .sidebar-project,
   .sidebar-collapsed .side-nav-label,

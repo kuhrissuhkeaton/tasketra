@@ -4,6 +4,7 @@ import { useAuth } from "../lib/auth-context";
 import { Wordmark } from "./Wordmark";
 import { FeedbackModal } from "./FeedbackModal";
 import { NavIcon } from "./NavIcon";
+import { NotificationBell } from "./NotificationBell";
 import { readSidebarCollapsed, writeSidebarCollapsed } from "../lib/sidebarState";
 
 /** Collapsible nav section used by both the sidebar's own global group and
@@ -139,26 +140,29 @@ export function AppSidebar({ children }: { children?: ReactNode }) {
         <Link to="/app" className="sidebar-wordmark">
           <Wordmark size="sm" beta />
         </Link>
-        <button
-          type="button"
-          ref={menuButtonRef}
-          className="sidebar-menu-btn"
-          aria-expanded={menuOpen}
-          aria-controls="sidebar-nav"
-          onClick={() => setMenuOpen((o) => !o)}
-        >
-          {menuOpen ? "Close" : "Menu"}
-        </button>
-        <button
-          type="button"
-          className="sidebar-collapse-btn"
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          aria-expanded={!collapsed}
-          aria-controls="sidebar-nav"
-          onClick={toggleCollapsed}
-        >
-          <span aria-hidden="true">{collapsed ? "\u00bb" : "\u00ab"}</span>
-        </button>
+        <div className="sidebar-bar-actions">
+          <NotificationBell />
+          <button
+            type="button"
+            ref={menuButtonRef}
+            className="sidebar-menu-btn"
+            aria-expanded={menuOpen}
+            aria-controls="sidebar-nav"
+            onClick={() => setMenuOpen((o) => !o)}
+          >
+            {menuOpen ? "Close" : "Menu"}
+          </button>
+          <button
+            type="button"
+            className="sidebar-collapse-btn"
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-expanded={!collapsed}
+            aria-controls="sidebar-nav"
+            onClick={toggleCollapsed}
+          >
+            <span aria-hidden="true">{collapsed ? "\u00bb" : "\u00ab"}</span>
+          </button>
+        </div>
       </div>
 
       <nav className="side-nav" id="sidebar-nav" aria-label="Main">
