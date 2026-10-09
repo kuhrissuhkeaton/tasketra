@@ -138,7 +138,7 @@ describe("project page smoke test", () => {
     });
   }
 
-  it("Tasks tab: every row has the same + Sub-task action, in the actions cell", async () => {
+  it("Tasks tab: every row has the same actions: Details plus a menu holding + Sub-task and Delete", async () => {
     const task = (id: string, title: string, parent: string | null = null) => ({
       id, title, description: null, status: "not_started", owner_name: null, start_date: null,
       due_date: null, stakeholder_id: null, parent_task_id: parent, roadmap_item_id: null,
@@ -157,7 +157,14 @@ describe("project page smoke test", () => {
     expect(rows.length).toBe(3);
     for (const r of rows) {
       const actions = r.querySelector("td.row-actions");
-      expect(actions?.textContent).toContain("+ Sub-task");
+      expect(actions?.textContent).toContain("Details");
+      // + Sub-task and Delete live in the row's "..." menu.
+      const menuBtn = actions?.querySelector<HTMLButtonElement>("button.row-menu-btn");
+      expect(menuBtn?.getAttribute("aria-label")).toMatch(/^More actions for /);
+      await act(async () => menuBtn!.click());
+      const labels = [...document.querySelectorAll('[role="menuitem"]')].map((el) => el.textContent);
+      expect(labels).toEqual(["+ Sub-task", "Delete"]);
+      await act(async () => menuBtn!.click());
       // The old floating "+" next to the title is gone.
       expect(r.querySelector("td:first-child .wbs-add-btn")).toBeNull();
     }

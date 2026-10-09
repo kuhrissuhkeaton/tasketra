@@ -1225,7 +1225,7 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
                   <td>
                     <span className="wbs-cell" style={{ paddingLeft: depth * 20 }}>
                       {depth > 0 && <span className="wbs-connector">&#8627;</span>}
-                      {t.title}
+                      <button type="button" className="row-title-btn" onClick={() => openDrawer(t)}>{t.title}</button>
                     </span>
                     {t.roadmap_item_id && phaseById.get(t.roadmap_item_id) && (
                       // The phase always sits on its own line under the title,
@@ -1251,16 +1251,14 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
                     </select>
                   </td>
                   <td className="row-actions">
-                    <button
-                      className="btn-link"
-                      type="button"
-                      aria-expanded={addingSubtaskFor === t.id}
-                      onClick={() => setAddingSubtaskFor(addingSubtaskFor === t.id ? null : t.id)}
-                    >
-                      + Sub-task
-                    </button>
                     <button className="btn-link" type="button" onClick={() => openDrawer(t)}>Details</button>
-                    <button className="btn-link btn-link-danger" type="button" onClick={() => removeTask(t.id, t.title)}>Delete</button>
+                    <RowActionsMenu
+                      label={`More actions for ${t.title}`}
+                      items={[
+                        { label: "+ Sub-task", onSelect: () => setAddingSubtaskFor(addingSubtaskFor === t.id ? null : t.id) },
+                        { label: "Delete", danger: true, onSelect: () => removeTask(t.id, t.title) },
+                      ]}
+                    />
                   </td>
                 </tr>
                 {addingSubtaskFor === t.id && (
@@ -1807,7 +1805,7 @@ function IssuesTab({ projectId, highlightId }: { projectId: string; highlightId?
           {issues.map((i) => (
             <tr key={i.id} ref={(el) => setRowRef(i.id, el)}>
               <td>
-                {i.title}
+                <button type="button" className="row-title-btn" onClick={() => openDrawer(i)}>{i.title}</button>
                 {i.status === "resolved" && i.resolution && (
                   <div className="muted">Resolved: {i.resolution}</div>
                 )}
@@ -1827,7 +1825,10 @@ function IssuesTab({ projectId, highlightId }: { projectId: string; highlightId?
               </td>
               <td className="row-actions">
                 <button className="btn-link" type="button" onClick={() => openDrawer(i)}>Details</button>
-                <button className="btn-link btn-link-danger" type="button" onClick={() => removeIssue(i.id, i.title)}>Delete</button>
+                <RowActionsMenu
+                  label={`More actions for ${i.title}`}
+                  items={[{ label: "Delete", danger: true, onSelect: () => removeIssue(i.id, i.title) }]}
+                />
               </td>
             </tr>
           ))}
