@@ -1959,3 +1959,24 @@ a:hover { color: var(--navy); }
 @media (max-width: 560px) {
   .quick-add-row > .quick-add-title, .quick-add-row > select, .quick-add-row > .btn { flex-basis: 100%; }
 }
+
+/* Row "..." actions menu and clickable row titles (Tasks, Risks, Issues). */
+.row-menu-wrap { display: inline-block; position: relative; vertical-align: middle; }
+.row-menu-btn { min-width: 28px; min-height: 28px; font-size: 18px; line-height: 1; letter-spacing: 1px; border-radius: var(--radius-sm); }
+.row-menu-btn:hover, .row-menu-btn[aria-expanded="true"] { background: var(--tint); text-decoration: none; }
+.row-menu {
+  position: fixed; z-index: 60; min-width: 200px; padding: 4px;
+  background: var(--cream); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md);
+}
+.row-menu-item {
+  display: block; width: 100%; text-align: left; padding: 8px 10px; border: none; background: none;
+  border-radius: 6px; font-family: inherit; font-size: 14px; font-weight: 600; color: var(--navy); cursor: pointer;
+}
+.row-menu-item:hover, .row-menu-item:focus-visible { background: var(--tint); }
+.row-menu-item-danger { color: var(--red); }
+.row-title-btn {
+  background: none; border: none; padding: 0; margin: 0; font: inherit; color: inherit;
+  text-align: left; cursor: pointer;
+}
+.row-title-btn:hover { text-decoration: underline; }

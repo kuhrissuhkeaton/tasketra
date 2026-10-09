@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, Fragment } from "react";
 import { useParams, useSearchParams, useNavigate, useLocation, Link } from "react-router-dom";
 import { api, ApiError, type Project, type Task, type Stakeholder, type Decision, type Issue, type Risk, type Assumption, type Dependency, type ChangeRequest, type Lesson, type TodayData, type WeeklyReport, type BudgetData, type FeedItem, type TrashItem, type ProjectMember, type Meeting, type MeetingActionItem, type ProjectDocument, type StorageUsage, type RoadmapItem, type RoadmapItemType, type StakeholderInterest, type StakeholderContactMethod, type QualityItem, type ProcurementItem, type CommPlanItem, type ComplianceItem, type Objective, type KeyResult, type RiskTaskLink, type IssueTaskLink, type TaskTaskLink, type ProjectStage, type BaselineData, type CharterApproval } from "../lib/api";
+import { RowActionsMenu } from "../components/RowActionsMenu";
 import { QuickAddForm } from "../components/QuickAddForm";
 import { RoadmapTimeline, ROADMAP_TYPE_LABEL, ROADMAP_STATUS_LABEL } from "../components/RoadmapTimeline";
 import { fmtRoadmapRange } from "../lib/roadmapDates";
@@ -2221,7 +2222,7 @@ function RisksTab({ projectId, highlightId }: { projectId: string; highlightId?:
           {risks.map((r) => (
             <tr key={r.id} ref={(el) => setRowRef(r.id, el)}>
               <td>
-                {r.title}
+                <button type="button" className="row-title-btn" onClick={() => openDrawer(r)}>{r.title}</button>
                 {r.mitigation && <div className="muted">Mitigation: {r.mitigation}</div>}
               </td>
               <td>
@@ -2243,10 +2244,13 @@ function RisksTab({ projectId, highlightId }: { projectId: string; highlightId?:
               </td>
               <td className="row-actions">
                 <button className="btn-link" type="button" onClick={() => openDrawer(r)}>Details</button>
-                {r.status !== "resolved" && (
-                  <button className="btn-link" type="button" onClick={() => promoteToIssue(r)}>This became an issue</button>
-                )}
-                <button className="btn-link btn-link-danger" type="button" onClick={() => removeRisk(r.id, r.title)}>Delete</button>
+                <RowActionsMenu
+                  label={`More actions for ${r.title}`}
+                  items={[
+                    ...(r.status !== "resolved" ? [{ label: "This became an issue", onSelect: () => promoteToIssue(r) }] : []),
+                    { label: "Delete", danger: true, onSelect: () => removeRisk(r.id, r.title) },
+                  ]}
+                />
               </td>
             </tr>
           ))}
