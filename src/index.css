@@ -1953,12 +1953,17 @@ a:hover { color: var(--navy); }
 .quick-add-row > .quick-add-title { flex: 1 1 200px; min-width: 0; }
 .quick-add-row > select { flex: 0 1 auto; min-width: 118px; }
 .quick-add-row > .btn { flex: none; }
+.quick-add-row > .quick-add-datefield { display: inline-flex; align-items: center; gap: 6px; flex: 0 1 auto; margin: 0; }
+.quick-add-datefield-label { font-size: 13px; font-weight: 600; white-space: nowrap; color: var(--navy); }
+.quick-add-datefield input { width: auto; margin: 0; min-width: 140px; }
 .quick-add-row > .quick-add-num { flex: 1 1 150px; min-width: 130px; max-width: 220px; }
 .quick-add-toggle { display: inline-block; margin-top: 8px; }
 .quick-add-more { margin-top: 8px; }
 .quick-add-more[hidden] { display: none; }
 @media (max-width: 560px) {
   .quick-add-row > .quick-add-title, .quick-add-row > select, .quick-add-row > .btn, .quick-add-row > .quick-add-num { flex-basis: 100%; max-width: none; }
+  .quick-add-row > .quick-add-datefield { flex-basis: 100%; }
+  .quick-add-datefield input { flex: 1; width: 100%; }
 }
 
 /* Row "..." actions menu and clickable row titles (Tasks, Risks, Issues). */

@@ -11,6 +11,12 @@ import { useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 // saved choice the section starts open for an empty register (first-time users see
 // the full form) and closed once the register has rows. A register can opt out with
 // startExpanded={false} so that, even when empty, only the compact row shows.
+//
+// KNOWN INCONSISTENCY (documented in v112, intentionally not changed): the older
+// registers (Risks, Issues, Assumptions, Dependencies, Quality, Compliance) do not
+// pass startExpanded, so they still open More details automatically when empty.
+// Change Requests, Lessons, Communications plan, Vendors and Objectives pass
+// startExpanded={false}. Align them in a separate, approved step.
 
 function readChoice(key: string): boolean | null {
   try {
