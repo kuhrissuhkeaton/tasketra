@@ -1945,3 +1945,17 @@ a:hover { color: var(--navy); }
 
 /* Note on the sign-in page after a session expires */
 .auth-expired { margin: 14px 0 4px; padding: 12px 14px; border-radius: var(--radius-sm); background: var(--tint); border: 1px solid var(--tint-strong); color: var(--navy); font-size: 14px; line-height: 1.45; }
+
+/* Quick-add entry form (registers): one compact row, extra fields under a toggle. */
+.project-main .stacked-form.quick-add { padding: 12px 16px; margin: 12px 0; max-width: 900px; }
+.quick-add-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.quick-add-row > input, .quick-add-row > select { margin: 0; width: auto; }
+.quick-add-row > .quick-add-title { flex: 1 1 200px; min-width: 0; }
+.quick-add-row > select { flex: 0 1 auto; min-width: 118px; }
+.quick-add-row > .btn { flex: none; }
+.quick-add-toggle { display: inline-block; margin-top: 8px; }
+.quick-add-more { margin-top: 8px; }
+.quick-add-more[hidden] { display: none; }
+@media (max-width: 560px) {
+  .quick-add-row > .quick-add-title, .quick-add-row > select, .quick-add-row > .btn { flex-basis: 100%; }
+}

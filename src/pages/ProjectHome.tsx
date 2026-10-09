@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, Fragment } from "react";
 import { useParams, useSearchParams, useNavigate, useLocation, Link } from "react-router-dom";
 import { api, ApiError, type Project, type Task, type Stakeholder, type Decision, type Issue, type Risk, type Assumption, type Dependency, type ChangeRequest, type Lesson, type TodayData, type WeeklyReport, type BudgetData, type FeedItem, type TrashItem, type ProjectMember, type Meeting, type MeetingActionItem, type ProjectDocument, type StorageUsage, type RoadmapItem, type RoadmapItemType, type StakeholderInterest, type StakeholderContactMethod, type QualityItem, type ProcurementItem, type CommPlanItem, type ComplianceItem, type Objective, type KeyResult, type RiskTaskLink, type IssueTaskLink, type TaskTaskLink, type ProjectStage, type BaselineData, type CharterApproval } from "../lib/api";
+import { QuickAddForm } from "../components/QuickAddForm";
 import { RoadmapTimeline, ROADMAP_TYPE_LABEL, ROADMAP_STATUS_LABEL } from "../components/RoadmapTimeline";
 import { fmtRoadmapRange } from "../lib/roadmapDates";
 import { phaseProgress } from "../lib/phaseProgress";
@@ -2083,33 +2084,44 @@ function RisksTab({ projectId, highlightId }: { projectId: string; highlightId?:
         Things that might go wrong, rated by how likely they are and how much they would hurt. Write
         down what you will do about each one before it happens.
       </p>
-      <form className="stacked-form" onSubmit={addRisk}>
-        <label htmlFor="f-projecthome-1962">Risk</label>
-        <input id="f-projecthome-1962" placeholder="What could go wrong?" value={title} onChange={(e) => setTitle(e.target.value)} />
-        <label htmlFor="f-projecthome-1964">Description (optional)</label>
-        <textarea id="f-projecthome-1964" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
-        <label htmlFor="f-projecthome-1966">Mitigation plan (optional)</label>
-        <textarea id="f-projecthome-1966" value={mitigation} onChange={(e) => setMitigation(e.target.value)} rows={2} />
-        <div className="inline-form" style={{ marginTop: 8, marginBottom: 0 }}>
-          <select aria-label="Probability" value={probability} onChange={(e) => setProbability(e.target.value as Risk["probability"])}>
-            {Object.entries(LEVEL_LABEL).map(([value, label]) => (
-              <option key={value} value={value}>{label} probability</option>
-            ))}
-          </select>
-          <select aria-label="Impact" value={impact} onChange={(e) => setImpact(e.target.value as Risk["impact"])}>
-            {Object.entries(LEVEL_LABEL).map(([value, label]) => (
-              <option key={value} value={value}>{label} impact</option>
-            ))}
-          </select>
-          <input aria-label="Owner (optional)" placeholder="Owner (optional)" value={owner} onChange={(e) => setOwner(e.target.value)} />
-          <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as Risk["status"])} title="Status">
-            {Object.entries(RISK_STATUS_LABEL).map(([value, label]) => (
-              <option key={value} value={value}>{label}</option>
-            ))}
-          </select>
-          <button className="btn btn-primary">Log risk</button>
-        </div>
-      </form>
+      <QuickAddForm
+        storageKey="risks"
+        hasRows={risks.length > 0}
+        onSubmit={addRisk}
+        quick={
+          <>
+            <label htmlFor="f-projecthome-1962" className="sr-only">Risk</label>
+            <input id="f-projecthome-1962" className="quick-add-title" placeholder="What could go wrong?" value={title} onChange={(e) => setTitle(e.target.value)} />
+            <select aria-label="Probability" value={probability} onChange={(e) => setProbability(e.target.value as Risk["probability"])}>
+              {Object.entries(LEVEL_LABEL).map(([value, label]) => (
+                <option key={value} value={value}>{label} probability</option>
+              ))}
+            </select>
+            <select aria-label="Impact" value={impact} onChange={(e) => setImpact(e.target.value as Risk["impact"])}>
+              {Object.entries(LEVEL_LABEL).map(([value, label]) => (
+                <option key={value} value={value}>{label} impact</option>
+              ))}
+            </select>
+            <button className="btn btn-primary">Log risk</button>
+          </>
+        }
+        more={
+          <>
+            <label htmlFor="f-projecthome-1964">Description (optional)</label>
+            <textarea id="f-projecthome-1964" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
+            <label htmlFor="f-projecthome-1966">Mitigation plan (optional)</label>
+            <textarea id="f-projecthome-1966" value={mitigation} onChange={(e) => setMitigation(e.target.value)} rows={2} />
+            <div className="inline-form" style={{ marginTop: 8, marginBottom: 0 }}>
+              <input aria-label="Owner (optional)" placeholder="Owner (optional)" value={owner} onChange={(e) => setOwner(e.target.value)} />
+              <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as Risk["status"])} title="Status">
+                {Object.entries(RISK_STATUS_LABEL).map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
+            </div>
+          </>
+        }
+      />
       {error && <p className="form-error">{error}</p>}
 
       <div className="view-toggle">
