@@ -7,6 +7,7 @@ import { ProjectSetupPicker } from "../components/ProjectSetup";
 import type { ProjectSize, ProjectApproach } from "../lib/projectView";
 import { PROJECT_TEMPLATES, getTemplate, isTemplateId, templateSummary } from "../lib/projectTemplates";
 import { useConfirm } from "../components/ConfirmDialog";
+import { Modal } from "../components/Modal";
 import { ResizableTable } from "../components/ResizableTable";
 import { useAuth } from "../lib/auth-context";
 import { fmtDateTime, fmtLocalDate } from "../lib/format";
@@ -298,6 +299,7 @@ export default function Dashboard() {
     api.listUserTemplates().then((r) => setMyTemplates(r.templates)).catch(() => {});
   }, []);
   const [showSetup, setShowSetup] = useState(false);
+  const [showNew, setShowNew] = useState(false);
   const [setupSize, setSetupSize] = useState<ProjectSize>("standard");
   const [setupApproach, setSetupApproach] = useState<ProjectApproach>("hybrid");
   const [creating, setCreating] = useState(false);
@@ -394,6 +396,7 @@ export default function Dashboard() {
         setUpgradeNotice("Your project was created, but we couldn't add the template. Open it from the list below and add items by hand.");
         setNewName("");
         setTemplateId("");
+        setShowNew(false);
         await load();
         return;
       }
@@ -415,6 +418,11 @@ export default function Dashboard() {
     } finally {
       setCreating(false);
     }
+  }
+
+  function openNewProject() {
+    setUpgradeNotice(null);
+    setShowNew(true);
   }
 
   // From the first-run screen: one click makes the project and opens it.
@@ -519,9 +527,12 @@ export default function Dashboard() {
       <main className="project-main project-main-wide">
         <div className="page-head">
           <h1>Dashboard</h1>
-          <div className="stat-row">
-            <div className="stat"><strong>{totalOpenDecisions}</strong> decisions awaiting response</div>
-            <div className="stat"><strong>{totalOverdue}</strong> overdue tasks</div>
+          <div className="page-head-actions">
+            <div className="stat-row">
+              <div className="stat"><strong>{totalOpenDecisions}</strong> decisions awaiting response</div>
+              <div className="stat"><strong>{totalOverdue}</strong> overdue tasks</div>
+            </div>
+            <button type="button" className="btn btn-primary" onClick={openNewProject}>New project</button>
           </div>
         </div>
 
@@ -600,79 +611,102 @@ export default function Dashboard() {
           </div>
         )}
 
-        <form className="inline-form" onSubmit={createProject}>
-          <input aria-label="New project name"
-            placeholder="New project name"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-          />
-          <select
-            aria-label="Start from"
-            value={templateId}
-            onChange={(e) => setTemplateId(e.target.value)}
-            style={{ maxWidth: 240 }}
-          >
-            <option value="">Blank project</option>
-            {PROJECT_TEMPLATES.map((t) => (
-              <option key={t.id} value={t.id}>{t.name}</option>
-            ))}
-            {myTemplates.length > 0 && (
-              <optgroup label="Your templates">
-                {myTemplates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-              </optgroup>
-            )}
-          </select>
-          <label className="checkbox-row" style={{ alignSelf: "center", opacity: templateId ? 0.5 : 1 }}>
-            <input
-              type="checkbox"
-              checked={seedExample && !templateId}
-              disabled={!!templateId}
-              onChange={(e) => setSeedExample(e.target.checked)}
-            />
-            Start with example data
-          </label>
-          <button
-            type="button"
-            className="btn btn-ghost"
-            onClick={() => setShowSetup((v) => !v)}
-            aria-expanded={showSetup}
-          >
-            {showSetup ? "Hide setup" : "Set up"}
-          </button>
-          <button className="btn btn-primary" disabled={creating}>Create project</button>
-        </form>
-        {showSetup && (
-          <div className="setup-panel">
-            <ProjectSetupPicker
-              size={setupSize}
-              approach={setupApproach}
-              onChange={(n) => { setSetupSize(n.size); setSetupApproach(n.approach); }}
-            />
-          </div>
-        )}
-        {templateId && getTemplate(templateId) && (
-          <p className="muted" style={{ marginTop: -12, marginBottom: 20 }}>
-            {getTemplate(templateId)!.blurb} We'll add {templateSummary(getTemplate(templateId)!)}, with dates counted
-            from today. It works best with the {getTemplate(templateId)!.suggestedApproach} approach (change it under Set up).
-            Stakeholders are placeholder roles; replace them with real people. Delete anything you don't need.
-          </p>
-        )}
-        {templateId && !getTemplate(templateId) && myTemplates.find((t) => t.id === templateId) && (
-          <p className="muted" style={{ marginTop: -12, marginBottom: 20 }}>
-            {myTemplates.find((t) => t.id === templateId)!.description || "Your saved template."} We'll add{" "}
-            {myTemplates.find((t) => t.id === templateId)!.summary}, with dates counted from today. Statuses start fresh and no
-            people are copied. Delete anything you don't need.
-          </p>
-        )}
-        {seedExample && !templateId && (
-          <p className="muted" style={{ marginTop: -12, marginBottom: 20 }}>
-            We'll pre-fill this project with sample tasks, a roadmap, and one issue, risk,
-            assumption, and dependency, so you have something to explore right away. Delete
-            anything you don't want.
-          </p>
+        {showNew && (
+          <Modal title="New project" onClose={() => setShowNew(false)}>
+            <form className="new-project-form" onSubmit={createProject}>
+              <label className="field">
+                Project name
+                <input
+                  aria-label="New project name"
+                  placeholder="New project name"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  data-autofocus
+                />
+              </label>
+              <label className="field">
+                Start from
+                <select
+                  aria-label="Start from"
+                  value={templateId}
+                  onChange={(e) => setTemplateId(e.target.value)}
+                >
+                  <option value="">Blank project</option>
+                  {PROJECT_TEMPLATES.map((t) => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                  {myTemplates.length > 0 && (
+                    <optgroup label="Your templates">
+                      {myTemplates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    </optgroup>
+                  )}
+                </select>
+              </label>
+              {templateId && getTemplate(templateId) && (
+                <p className="muted">
+                  {getTemplate(templateId)!.blurb} We'll add {templateSummary(getTemplate(templateId)!)}, with dates counted
+                  from today. It works best with the {getTemplate(templateId)!.suggestedApproach} approach (change it under More options).
+                  Stakeholders are placeholder roles; replace them with real people. Delete anything you don't need.
+                </p>
+              )}
+              {templateId && !getTemplate(templateId) && myTemplates.find((t) => t.id === templateId) && (
+                <p className="muted">
+                  {myTemplates.find((t) => t.id === templateId)!.description || "Your saved template."} We'll add{" "}
+                  {myTemplates.find((t) => t.id === templateId)!.summary}, with dates counted from today. Statuses start fresh and no
+                  people are copied. Delete anything you don't need.
+                </p>
+              )}
+              <div>
+                <button
+                  type="button"
+                  className="btn-link"
+                  onClick={() => setShowSetup((v) => !v)}
+                  aria-expanded={showSetup}
+                  aria-controls="new-project-more"
+                >
+                  {showSetup ? "Hide options" : "More options"}
+                </button>
+              </div>
+              <div id="new-project-more" className="new-project-more" hidden={!showSetup}>
+                <label className="checkbox-row" style={{ opacity: templateId ? 0.5 : 1 }}>
+                  <input
+                    type="checkbox"
+                    checked={seedExample && !templateId}
+                    disabled={!!templateId}
+                    onChange={(e) => setSeedExample(e.target.checked)}
+                  />
+                  Start with example data
+                </label>
+                {seedExample && !templateId && (
+                  <p className="muted">
+                    We'll pre-fill this project with sample tasks, a roadmap, and one issue, risk,
+                    assumption, and dependency, so you have something to explore right away. Delete
+                    anything you don't want.
+                  </p>
+                )}
+                <div className="setup-panel">
+                  <ProjectSetupPicker
+                    size={setupSize}
+                    approach={setupApproach}
+                    onChange={(n) => { setSetupSize(n.size); setSetupApproach(n.approach); }}
+                  />
+                </div>
+              </div>
+              {upgradeNotice && (
+                <p className="form-error" role="alert">
+                  {upgradeNotice}{" "}
+                  <Link to="/app/billing">Upgrade to Pro</Link>
+                </p>
+              )}
+              <div className="new-project-actions">
+                <button type="button" className="btn btn-ghost" onClick={() => setShowNew(false)}>Cancel</button>
+                <button className="btn btn-primary" disabled={creating}>Create project</button>
+              </div>
+            </form>
+          </Modal>
         )}
 
-        {upgradeNotice && (
+        {upgradeNotice && !showNew && (
           <p className="form-error">
             {upgradeNotice}{" "}
             <Link to="/app/billing">Upgrade to Pro</Link>
@@ -690,7 +724,7 @@ export default function Dashboard() {
             ))}
           </div>
         ) : projects.length === 0 ? (
-          <p className="muted">No projects yet. Create your first one above.</p>
+          <p className="muted">No projects yet. <button type="button" className="btn-link" onClick={openNewProject}>Create your first project</button>.</p>
         ) : visibleProjects.length === 0 ? (
           <p className="muted">No projects in this stage yet.</p>
         ) : (

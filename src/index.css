@@ -2016,3 +2016,20 @@ a:hover { color: var(--navy); }
 }
 .stage-next-head h2 { font-size: 18px; }
 .stage-progress { margin: 8px 0 4px; height: 6px; }
+
+/* Generic dialog (New project). Reuses the confirm overlay/card look; wider card, scrolls on short screens. */
+.modal-overlay { align-items: flex-start; overflow-y: auto; }
+.modal-card { max-width: 560px; margin: 6vh auto; }
+.modal-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.modal-head h2 { margin: 0; font-size: 22px; }
+.modal-close { background: none; border: none; font-size: 26px; line-height: 1; color: var(--slate); cursor: pointer; padding: 2px 8px; border-radius: 8px; width: auto; }
+.modal-close:hover { color: var(--navy); }
+.new-project-form { display: flex; flex-direction: column; gap: 14px; }
+.new-project-form label.field { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 600; color: var(--navy); }
+.new-project-form input, .new-project-form select { margin: 0; }
+.new-project-more { display: flex; flex-direction: column; gap: 14px; }
+.new-project-more[hidden] { display: none; }
+.new-project-more .setup-panel { margin: 0; padding: 16px; box-shadow: none; border: 1px solid var(--border); }
+.new-project-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 4px; }
+.new-project-form .muted { margin: 0; font-size: 13px; }
+.page-head-actions { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }

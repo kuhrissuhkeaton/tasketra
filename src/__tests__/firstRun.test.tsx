@@ -128,7 +128,7 @@ describe("Dashboard first run", () => {
     expect(container.textContent).toContain("I built Tasketra because I was tired of gluing five tools together.");
     expect(container.querySelector('a[href="/app/resources#how-it-works"]')?.textContent).toBe("How a project runs from Initiate to Close");
     expect(cardButton("Start with example data").textContent).toBe("Use this template");
-    for (const gone of ["Set up", "Create project"]) expect(button(gone)).toBeUndefined();
+    for (const gone of ["New project", "Create project"]) expect(button(gone)).toBeUndefined();
     for (const gone of ["Active projects", "Tasks by status", "Upcoming milestones", "Project health"]) {
       expect(container.textContent).not.toContain(gone);
     }
@@ -148,7 +148,8 @@ describe("Dashboard first run", () => {
     expect(container.querySelector("h1")?.textContent).toBe("Dashboard");
     expect(container.textContent).toContain("Tasks by status");
     expect(container.textContent).toContain("Project health");
-    expect(button("Set up")).toBeTruthy();
+    expect(button("New project")).toBeTruthy();
+    expect(container.querySelector("form.new-project-form")).toBeNull();
     expect(container.textContent).not.toContain("WELCOME TO TASKETRA");
   });
 
@@ -188,6 +189,79 @@ describe("Dashboard first run", () => {
     await flush();
     expect(container.querySelector('[role="alert"]')?.textContent).toBe("Something broke.");
     expect(container.querySelector('a[href="/app/billing"]')).toBeNull();
+  });
+});
+
+describe("New project dialog", () => {
+  async function open() {
+    await renderDashboard([project("p1")], [{ id: "p1", totalTasks: 5 }]);
+    const opener = button("New project");
+    opener.focus();
+    await act(async () => { opener.click(); });
+    return opener;
+  }
+  const dialog = () => container.querySelector('[role="dialog"]') as HTMLElement | null;
+  const nameInput = () => container.querySelector('input[aria-label="New project name"]') as HTMLInputElement;
+
+  it("opens a labelled modal dialog with focus on the name field and options collapsed", async () => {
+    await open();
+    const d = dialog()!;
+    expect(d.getAttribute("aria-modal")).toBe("true");
+    expect(d.querySelector("h2")?.textContent).toBe("New project");
+    expect(d.getAttribute("aria-labelledby")).toBe(d.querySelector("h2")!.id);
+    expect(document.activeElement).toBe(nameInput());
+    const more = button("More options");
+    expect(more.getAttribute("aria-expanded")).toBe("false");
+    expect(d.querySelector("#new-project-more")!.hasAttribute("hidden")).toBe(true);
+    await act(async () => { more.click(); });
+    expect(button("Hide options").getAttribute("aria-expanded")).toBe("true");
+    expect(d.querySelector("#new-project-more")!.hasAttribute("hidden")).toBe(false);
+  });
+
+  it("Escape closes it and focus returns to the New project button", async () => {
+    const opener = await open();
+    await act(async () => { document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); });
+    expect(dialog()).toBeNull();
+    expect(document.activeElement).toBe(opener);
+  });
+
+  it("keeps what you typed when you cancel and reopen", async () => {
+    await open();
+    await act(async () => {
+      const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+      set.call(nameInput(), "Draft name");
+      nameInput().dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => { button("Cancel").click(); });
+    expect(dialog()).toBeNull();
+    await act(async () => { button("New project").click(); });
+    expect(nameInput().value).toBe("Draft name");
+  });
+
+  it("creates the project with the same arguments and opens it", async () => {
+    await open();
+    await act(async () => {
+      const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+      set.call(nameInput(), "Launch plan");
+      nameInput().dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => { button("Create project").click(); });
+    await flush();
+    expect(calls.createProject).toHaveBeenCalledWith("Launch plan", undefined, false, { size: "standard", approach: "hybrid" });
+    expect(container.querySelector('[data-testid="where"]')?.textContent).toBe("/app/projects/new1");
+  });
+
+  it("shows a creation error inside the dialog", async () => {
+    calls.createProject.mockRejectedValue(new Error("Nope."));
+    await open();
+    await act(async () => {
+      const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+      set.call(nameInput(), "X");
+      nameInput().dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => { button("Create project").click(); });
+    await flush();
+    expect(dialog()!.querySelector('[role="alert"]')?.textContent).toContain("Nope.");
   });
 });
 
