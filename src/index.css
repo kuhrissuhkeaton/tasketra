@@ -2084,3 +2084,18 @@ a:hover { color: var(--navy); }
 .dash-ms-date { color: var(--slate); font-size: 13px; white-space: nowrap; }
 .dash-ms-project { color: var(--slate); font-size: 13px; }
 @media (max-width: 560px) { .dash-ms-row { grid-template-columns: 1fr; gap: 0; } }
+
+/* Breadcrumb on sidebar views and Trash: Dashboard > Project > View. */
+.breadcrumb { margin: 0 0 6px; font-size: 13px; }
+.breadcrumb ol { display: flex; align-items: center; flex-wrap: nowrap; gap: 0; margin: 0; padding: 0; list-style: none; min-width: 0; }
+.breadcrumb li { display: inline-flex; align-items: center; min-width: 0; color: var(--slate); }
+.breadcrumb li + li::before { content: "\203A" / ""; margin: 0 8px; color: var(--slate); flex: none; }
+.breadcrumb a { color: var(--slate); text-decoration: none; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.breadcrumb a:hover { color: var(--navy); text-decoration: underline; }
+.breadcrumb li[aria-current="page"] { color: var(--navy); font-weight: 700; white-space: nowrap; flex: none; }
+.breadcrumb-project { flex: 0 1 auto; }
+/* Project actions menu next to the stage chip. */
+.page-head-actions .row-menu-btn { min-width: 36px; min-height: 36px; font-size: 20px; border: 1px solid var(--border); background: var(--panel); color: var(--navy); }
+.page-head-actions .row-menu-btn:hover, .page-head-actions .row-menu-btn[aria-expanded="true"] { background: var(--tint); }
+.project-main .page-head { align-items: center; }
+.breadcrumb li:first-child { flex: none; }

@@ -274,6 +274,13 @@ export default function ProjectHome() {
   const visibleGroups = SECONDARY_NAV_GROUPS
     .map((g) => ({ ...g, tabs: g.tabs.filter((t) => t.id === tab || !isTabHidden(t.id, size, showAll)) }))
     .filter((g) => g.tabs.length > 0);
+  // Sidebar views (everything outside the tab strip) and Trash get a breadcrumb and
+  // use the view name as the page heading; strip views keep the project name.
+  const viewLabel: string | null = PRIMARY_TABS.some((t) => t.id === tab)
+    ? null
+    : tab === "trash"
+      ? "Trash"
+      : SECONDARY_NAV_GROUPS.flatMap((g) => g.tabs).find((t) => t.id === tab)?.label ?? null;
 
   return (
     <div className="project-shell">
@@ -302,22 +309,27 @@ export default function ProjectHome() {
             ))}
           </NavGroup>
         ))}
-        <NavGroup label="Reference" defaultCollapsed={tab !== "trash"}>
-          <button
-            className={tab === "trash" ? "side-tab active" : "side-tab"}
-            onClick={() => setParams({ tab: "trash" })}
-            type="button"
-          >
-            <NavIcon name="trash" active={tab === "trash"} />
-            Trash
-          </button>
-        </NavGroup>
       </AppSidebar>
 
       <main className={`project-main${TABLE_TABS.has(tab) ? " project-main-tables" : ""}`}>
+        {viewLabel && (
+          <nav className="breadcrumb" aria-label="Breadcrumb">
+            <ol>
+              <li><Link to="/app">Dashboard</Link></li>
+              <li className="breadcrumb-project"><Link to={`/app/projects/${id}`}>{project?.name || "Project"}</Link></li>
+              <li aria-current="page">{viewLabel}</li>
+            </ol>
+          </nav>
+        )}
         <div className="page-head">
-          <h1>{project?.name || "Project"}</h1>
-          <StageChip stage={project?.stage} />
+          <h1>{viewLabel ?? (project?.name || "Project")}</h1>
+          <div className="page-head-actions">
+            <StageChip stage={project?.stage} />
+            <RowActionsMenu
+              label="Project actions"
+              items={[{ label: "Trash", onSelect: () => setParams({ tab: "trash" }) }]}
+            />
+          </div>
           {user && (
             <FirstRunChecklist
               userId={user.id}
