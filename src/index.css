@@ -2099,3 +2099,23 @@ a:hover { color: var(--navy); }
 .page-head-actions .row-menu-btn:hover, .page-head-actions .row-menu-btn[aria-expanded="true"] { background: var(--tint); }
 .project-main .page-head { align-items: center; }
 .breadcrumb li:first-child { flex: none; }
+
+/* Jump-to-form button for the register entry forms (phones and portrait tablets). */
+.quick-add-jump { display: none; }
+@media (max-width: 860px) {
+  .quick-add { scroll-margin-top: calc(var(--ds-tabstrip-height, 32px) + 12px); }
+  .project-main:has(form.quick-add) { padding-bottom: 88px; }
+  .quick-add-jump {
+    display: inline-flex; align-items: center; justify-content: center;
+    position: fixed; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); z-index: 30;
+    min-height: 44px; padding: 0 16px; border-radius: var(--radius-pill);
+    background: var(--panel); color: var(--navy); border: 1px solid var(--border);
+    box-shadow: var(--shadow-sm); font-family: inherit; font-size: 14px; font-weight: 700; cursor: pointer;
+  }
+  .quick-add-jump[data-clear="false"] { visibility: hidden; pointer-events: none; }
+  .quick-add-jump:hover { background: var(--tint); }
+}
+@media (max-width: 860px) and (prefers-reduced-motion: no-preference) {
+  .quick-add-jump { animation: quick-add-jump-in 120ms ease-out; }
+}
+@keyframes quick-add-jump-in { from { opacity: 0; } to { opacity: 1; } }

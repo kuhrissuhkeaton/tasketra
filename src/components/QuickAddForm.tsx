@@ -1,4 +1,5 @@
 import { useId, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { QuickAddJump } from "./QuickAddJump";
 
 // Compact entry form for the project registers: the fields people need to log an
 // item sit on one quick row; everything else lives under a "More details" toggle.
@@ -57,6 +58,7 @@ export function QuickAddForm({
   const [open, setOpen] = useState<boolean>(() => readChoice(key) ?? startExpanded ?? !hasRows);
   const panelId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
 
   function toggle() {
     const next = !open;
@@ -82,7 +84,8 @@ export function QuickAddForm({
   }
 
   return (
-    <form className="stacked-form quick-add" onSubmit={onSubmit} onInvalidCapture={onInvalidCapture}>
+    <>
+    <form ref={formRef} className="stacked-form quick-add" onSubmit={onSubmit} onInvalidCapture={onInvalidCapture}>
       <div className="quick-add-row">{quick}</div>
       <button
         type="button"
@@ -98,5 +101,7 @@ export function QuickAddForm({
         {more}
       </div>
     </form>
+    <QuickAddJump formRef={formRef} />
+    </>
   );
 }
