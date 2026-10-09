@@ -56,7 +56,7 @@ export function NavGroup({
  * account controls in one place so the app always feels like one product,
  * not a set of disconnected top bars.
  */
-export function AppSidebar({ children }: { children?: ReactNode }) {
+export function AppSidebar({ children, menuLabel = "Menu" }: { children?: ReactNode; menuLabel?: string }) {
   const { user, logout } = useAuth();
   const { pathname, search } = useLocation();
   const [feedbackOpen, setFeedbackOpen] = useState(false);
@@ -150,7 +150,7 @@ export function AppSidebar({ children }: { children?: ReactNode }) {
             aria-controls="sidebar-nav"
             onClick={() => setMenuOpen((o) => !o)}
           >
-            {menuOpen ? "Close" : "Menu"}
+            {menuOpen ? "Close" : menuLabel}
           </button>
           <button
             type="button"

@@ -1980,3 +1980,22 @@ a:hover { color: var(--navy); }
   text-align: left; cursor: pointer;
 }
 .row-title-btn:hover { text-decoration: underline; }
+
+/* Slim project tab strip: Home, Roadmap, Tasks, Budget, Meetings. Replaces the pill buttons. */
+.project-tabs {
+  display: flex; gap: 2px; margin: 0 0 20px; padding: 0;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto; scrollbar-width: none;
+  position: sticky; top: 0; z-index: 20; background: var(--panel);
+}
+.project-tabs::-webkit-scrollbar { display: none; }
+.project-tab {
+  flex: none; min-height: var(--ds-tabstrip-height); padding: 6px 14px;
+  background: none; border: none; border-bottom: var(--ds-tab-indicator) solid transparent; margin-bottom: -1px;
+  font-family: inherit; font-size: 14px; font-weight: 600; color: var(--slate); cursor: pointer; white-space: nowrap;
+  transition: color var(--ease), border-color var(--ease);
+}
+.project-tab:hover { color: var(--navy); }
+.project-tab.is-active { color: var(--navy); font-weight: 700; border-bottom-color: var(--navy); }
+@media (max-width: 560px) { .project-tab { padding: 6px 9px; } }
+@media (max-width: 420px) { .project-tab { padding: 6px 7px; font-size: 13px; } }

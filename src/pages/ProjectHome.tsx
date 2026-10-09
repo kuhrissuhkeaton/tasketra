@@ -277,7 +277,7 @@ export default function ProjectHome() {
 
   return (
     <div className="project-shell">
-      <AppSidebar>
+      <AppSidebar menuLabel="Project tools">
         <div className="side-nav-group">
           <div className="side-nav-label">{project?.name || "Project"}</div>
         </div>
@@ -329,19 +329,20 @@ export default function ProjectHome() {
           )}
         </div>
 
-        <div className="inline-form primary-tabs">
+        <nav className="project-tabs primary-tabs" aria-label="Project views">
           {primaryTabs.map((t) => (
             <button
               key={t.id}
               type="button"
-              className={tab === t.id ? "btn btn-primary" : "btn btn-ghost"}
+              className={tab === t.id ? "project-tab is-active" : "project-tab"}
+              aria-current={tab === t.id ? "page" : undefined}
               onClick={() => setParams({ tab: t.id })}
               data-tour={`tab-${t.id}`}
             >
               {t.label}
             </button>
           ))}
-        </div>
+        </nav>
 
         {tab === "home" && (
           <HomeTab
