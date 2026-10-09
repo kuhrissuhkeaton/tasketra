@@ -1713,26 +1713,37 @@ function IssuesTab({ projectId, highlightId }: { projectId: string; highlightId?
         Problems that are already happening and need someone to sort them out. Log them here so they
         get an owner and a status, not just a mention in a meeting.
       </p>
-      <form className="stacked-form" onSubmit={addIssue}>
-        <label htmlFor="f-projecthome-1595">Issue</label>
-        <input id="f-projecthome-1595" placeholder="What's the issue?" value={title} onChange={(e) => setTitle(e.target.value)} />
-        <label htmlFor="f-projecthome-1597">Description (optional)</label>
-        <textarea id="f-projecthome-1597" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
-        <div className="inline-form" style={{ marginTop: 8, marginBottom: 0 }}>
-          <select aria-label="Severity" value={severity} onChange={(e) => setSeverity(e.target.value as Issue["severity"])}>
-            {Object.entries(SEVERITY_LABEL).map(([value, label]) => (
-              <option key={value} value={value}>{label} severity</option>
-            ))}
-          </select>
-          <input aria-label="Owner (optional)" placeholder="Owner (optional)" value={owner} onChange={(e) => setOwner(e.target.value)} />
-          <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as Issue["status"])} title="Status">
-            {Object.entries(ISSUE_STATUS_LABEL).map(([value, label]) => (
-              <option key={value} value={value}>{label}</option>
-            ))}
-          </select>
-          <button className="btn btn-primary">Log issue</button>
-        </div>
-      </form>
+      <QuickAddForm
+        storageKey="issues"
+        hasRows={issues.length > 0}
+        onSubmit={addIssue}
+        quick={
+          <>
+            <label htmlFor="f-projecthome-1595" className="sr-only">Issue</label>
+            <input id="f-projecthome-1595" className="quick-add-title" placeholder="What's the issue?" value={title} onChange={(e) => setTitle(e.target.value)} />
+            <select aria-label="Severity" value={severity} onChange={(e) => setSeverity(e.target.value as Issue["severity"])}>
+              {Object.entries(SEVERITY_LABEL).map(([value, label]) => (
+                <option key={value} value={value}>{label} severity</option>
+              ))}
+            </select>
+            <button className="btn btn-primary">Log issue</button>
+          </>
+        }
+        more={
+          <>
+            <label htmlFor="f-projecthome-1597">Description (optional)</label>
+            <textarea id="f-projecthome-1597" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
+            <div className="inline-form" style={{ marginTop: 8, marginBottom: 0 }}>
+              <input aria-label="Owner (optional)" placeholder="Owner (optional)" value={owner} onChange={(e) => setOwner(e.target.value)} />
+              <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as Issue["status"])} title="Status">
+                {Object.entries(ISSUE_STATUS_LABEL).map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
+            </div>
+          </>
+        }
+      />
       {error && <p className="form-error">{error}</p>}
 
       <div className="view-toggle">
@@ -2440,22 +2451,33 @@ function AssumptionsTab({ projectId }: { projectId: string }) {
         Things you're treating as true for planning purposes. Write them down so the plan gets
         revisited if one turns out wrong.
       </p>
-      <form className="stacked-form" onSubmit={addAssumption}>
-        <label htmlFor="f-projecthome-2302">Assumption</label>
-        <input id="f-projecthome-2302" placeholder="What are you assuming is true?" value={statement} onChange={(e) => setStatement(e.target.value)} />
-        <label htmlFor="f-projecthome-2304">Notes (optional)</label>
-        <textarea id="f-projecthome-2304" value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
-        <div className="inline-form" style={{ marginTop: 8, marginBottom: 0 }}>
-          <input aria-label="Owner (optional)" placeholder="Owner (optional)" value={owner} onChange={(e) => setOwner(e.target.value)} />
-          <input aria-label="Check by" type="date" value={checkBy} onChange={(e) => setCheckBy(e.target.value)} />
-          <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as Assumption["status"])} title="Status">
-            {Object.entries(ASSUMPTION_STATUS_LABEL).map(([value, label]) => (
-              <option key={value} value={value}>{label}</option>
-            ))}
-          </select>
-          <button className="btn btn-primary">Log assumption</button>
-        </div>
-      </form>
+      <QuickAddForm
+        storageKey="assumptions"
+        hasRows={assumptions.length > 0}
+        onSubmit={addAssumption}
+        quick={
+          <>
+            <label htmlFor="f-projecthome-2302" className="sr-only">Assumption</label>
+            <input className="quick-add-title" id="f-projecthome-2302" placeholder="What are you assuming is true?" value={statement} onChange={(e) => setStatement(e.target.value)} />
+            <button className="btn btn-primary">Log assumption</button>
+          </>
+        }
+        more={
+          <>
+            <label htmlFor="f-projecthome-2304">Notes (optional)</label>
+            <textarea id="f-projecthome-2304" value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
+            <div className="inline-form" style={{ marginTop: 8, marginBottom: 0 }}>
+              <input aria-label="Owner (optional)" placeholder="Owner (optional)" value={owner} onChange={(e) => setOwner(e.target.value)} />
+              <input aria-label="Check by" type="date" value={checkBy} onChange={(e) => setCheckBy(e.target.value)} />
+              <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as Assumption["status"])} title="Status">
+                {Object.entries(ASSUMPTION_STATUS_LABEL).map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
+            </div>
+          </>
+        }
+      />
       {error && <p className="form-error">{error}</p>}
 
       <div className="view-toggle">
@@ -2669,27 +2691,38 @@ function DependenciesTab({ projectId }: { projectId: string }) {
         Work that can't start or finish until something else does -- internal (another task) or
         external (a vendor, client, or regulatory step).
       </p>
-      <form className="stacked-form" onSubmit={addDependency}>
-        <label htmlFor="f-projecthome-2526">Dependency</label>
-        <input id="f-projecthome-2526" placeholder="What's this waiting on?" value={title} onChange={(e) => setTitle(e.target.value)} />
-        <label htmlFor="f-projecthome-2528">Description (optional)</label>
-        <textarea id="f-projecthome-2528" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
-        <div className="inline-form" style={{ marginTop: 8, marginBottom: 0 }}>
-          <select aria-label="Direction" value={direction} onChange={(e) => setDirection(e.target.value as Dependency["direction"])}>
-            {Object.entries(DEPENDENCY_DIRECTION_LABEL).map(([value, label]) => (
-              <option key={value} value={value}>{label}</option>
-            ))}
-          </select>
-          <input aria-label="Owner (optional)" placeholder="Owner (optional)" value={owner} onChange={(e) => setOwner(e.target.value)} />
-          <input aria-label="Needed by" type="date" value={neededBy} onChange={(e) => setNeededBy(e.target.value)} />
-          <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as Dependency["status"])} title="Status">
-            {Object.entries(DEPENDENCY_STATUS_LABEL).map(([value, label]) => (
-              <option key={value} value={value}>{label}</option>
-            ))}
-          </select>
-          <button className="btn btn-primary">Log dependency</button>
-        </div>
-      </form>
+      <QuickAddForm
+        storageKey="dependencies"
+        hasRows={dependencies.length > 0}
+        onSubmit={addDependency}
+        quick={
+          <>
+            <label htmlFor="f-projecthome-2526" className="sr-only">Dependency</label>
+            <input className="quick-add-title" id="f-projecthome-2526" placeholder="What's this waiting on?" value={title} onChange={(e) => setTitle(e.target.value)} />
+            <select aria-label="Direction" value={direction} onChange={(e) => setDirection(e.target.value as Dependency["direction"])}>
+              {Object.entries(DEPENDENCY_DIRECTION_LABEL).map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </select>
+            <button className="btn btn-primary">Log dependency</button>
+          </>
+        }
+        more={
+          <>
+            <label htmlFor="f-projecthome-2528">Description (optional)</label>
+            <textarea id="f-projecthome-2528" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
+            <div className="inline-form" style={{ marginTop: 8, marginBottom: 0 }}>
+              <input aria-label="Owner (optional)" placeholder="Owner (optional)" value={owner} onChange={(e) => setOwner(e.target.value)} />
+              <input aria-label="Needed by" type="date" value={neededBy} onChange={(e) => setNeededBy(e.target.value)} />
+              <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as Dependency["status"])} title="Status">
+                {Object.entries(DEPENDENCY_STATUS_LABEL).map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
+            </div>
+          </>
+        }
+      />
       {error && <p className="form-error">{error}</p>}
 
       <div className="view-toggle">
@@ -2912,26 +2945,37 @@ function QualityTab({ projectId }: { projectId: string }) {
         the rest of RAID, since "is this good enough" is a different question from "is something
         broken."
       </p>
-      <form className="stacked-form" onSubmit={addItem}>
-        <label htmlFor="f-projecthome-2769">Quality item</label>
-        <input id="f-projecthome-2769" placeholder="What needs to meet a bar, or get reviewed?" value={title} onChange={(e) => setTitle(e.target.value)} />
-        <label htmlFor="f-projecthome-2771">Description (optional)</label>
-        <textarea id="f-projecthome-2771" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
-        <div className="inline-form" style={{ marginTop: 8, marginBottom: 0 }}>
-          <select aria-label="Category" value={category} onChange={(e) => setCategory(e.target.value as QualityItem["category"])}>
-            {Object.entries(QUALITY_CATEGORY_LABEL).map(([value, label]) => (
-              <option key={value} value={value}>{label}</option>
-            ))}
-          </select>
-          <input aria-label="Owner (optional)" placeholder="Owner (optional)" value={owner} onChange={(e) => setOwner(e.target.value)} />
-          <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as QualityItem["status"])} title="Status">
-            {Object.entries(QUALITY_STATUS_LABEL).map(([value, label]) => (
-              <option key={value} value={value}>{label}</option>
-            ))}
-          </select>
-          <button className="btn btn-primary">Log quality item</button>
-        </div>
-      </form>
+      <QuickAddForm
+        storageKey="quality"
+        hasRows={items.length > 0}
+        onSubmit={addItem}
+        quick={
+          <>
+            <label htmlFor="f-projecthome-2769" className="sr-only">Quality item</label>
+            <input className="quick-add-title" id="f-projecthome-2769" placeholder="What needs to meet a bar, or get reviewed?" value={title} onChange={(e) => setTitle(e.target.value)} />
+            <select aria-label="Category" value={category} onChange={(e) => setCategory(e.target.value as QualityItem["category"])}>
+              {Object.entries(QUALITY_CATEGORY_LABEL).map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </select>
+            <button className="btn btn-primary">Log quality item</button>
+          </>
+        }
+        more={
+          <>
+            <label htmlFor="f-projecthome-2771">Description (optional)</label>
+            <textarea id="f-projecthome-2771" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
+            <div className="inline-form" style={{ marginTop: 8, marginBottom: 0 }}>
+              <input aria-label="Owner (optional)" placeholder="Owner (optional)" value={owner} onChange={(e) => setOwner(e.target.value)} />
+              <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as QualityItem["status"])} title="Status">
+                {Object.entries(QUALITY_STATUS_LABEL).map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
+            </div>
+          </>
+        }
+      />
       {error && <p className="form-error">{error}</p>}
 
       <div className="view-toggle">
@@ -3156,27 +3200,38 @@ function ComplianceTab({ projectId }: { projectId: string }) {
         tracked alongside the rest of RAID, since "are we compliant with this" is a different
         question from "is this good enough" (Quality) or "is something broken" (Issues).
       </p>
-      <form className="stacked-form" onSubmit={addItem}>
-        <label htmlFor="f-projecthome-3013">Compliance item</label>
-        <input id="f-projecthome-3013" placeholder="What regulation, policy, or standard applies here?" value={title} onChange={(e) => setTitle(e.target.value)} />
-        <label htmlFor="f-projecthome-3015">Description (optional)</label>
-        <textarea id="f-projecthome-3015" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
-        <div className="inline-form" style={{ marginTop: 8, marginBottom: 0 }}>
-          <select aria-label="Category" value={category} onChange={(e) => setCategory(e.target.value as ComplianceItem["category"])}>
-            {Object.entries(COMPLIANCE_CATEGORY_LABEL).map(([value, label]) => (
-              <option key={value} value={value}>{label}</option>
-            ))}
-          </select>
-          <input aria-label="Owner (optional)" placeholder="Owner (optional)" value={owner} onChange={(e) => setOwner(e.target.value)} />
-          <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as ComplianceItem["status"])} title="Status">
-            {Object.entries(COMPLIANCE_STATUS_LABEL).map(([value, label]) => (
-              <option key={value} value={value}>{label}</option>
-            ))}
-          </select>
-          <input type="date" title="Due date (optional)" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
-          <button className="btn btn-primary">Log compliance item</button>
-        </div>
-      </form>
+      <QuickAddForm
+        storageKey="compliance"
+        hasRows={items.length > 0}
+        onSubmit={addItem}
+        quick={
+          <>
+            <label htmlFor="f-projecthome-3013" className="sr-only">Compliance item</label>
+            <input className="quick-add-title" id="f-projecthome-3013" placeholder="What regulation, policy, or standard applies here?" value={title} onChange={(e) => setTitle(e.target.value)} />
+            <select aria-label="Category" value={category} onChange={(e) => setCategory(e.target.value as ComplianceItem["category"])}>
+              {Object.entries(COMPLIANCE_CATEGORY_LABEL).map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </select>
+            <button className="btn btn-primary">Log compliance item</button>
+          </>
+        }
+        more={
+          <>
+            <label htmlFor="f-projecthome-3015">Description (optional)</label>
+            <textarea id="f-projecthome-3015" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
+            <div className="inline-form" style={{ marginTop: 8, marginBottom: 0 }}>
+              <input aria-label="Owner (optional)" placeholder="Owner (optional)" value={owner} onChange={(e) => setOwner(e.target.value)} />
+              <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as ComplianceItem["status"])} title="Status">
+                {Object.entries(COMPLIANCE_STATUS_LABEL).map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
+              <input type="date" title="Due date (optional)" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+            </div>
+          </>
+        }
+      />
       {error && <p className="form-error">{error}</p>}
 
       <div className="view-toggle">
