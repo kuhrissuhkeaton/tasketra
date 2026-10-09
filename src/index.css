@@ -1999,3 +1999,20 @@ a:hover { color: var(--navy); }
 .project-tab.is-active { color: var(--navy); font-weight: 700; border-bottom-color: var(--navy); }
 @media (max-width: 560px) { .project-tab { padding: 6px 9px; } }
 @media (max-width: 420px) { .project-tab { padding: 6px 7px; font-size: 13px; } }
+
+/* Readiness checklist groups (Recommended next / Blocked / Outstanding / Completed). */
+.stage-group-label { margin: 14px 0 2px; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--slate); font-family: inherit; }
+.stage-done-toggle { display: inline-block; margin-top: 12px; }
+.stage-list[hidden] { display: none; }
+
+/* Compact stage header on wide screens: the step row and the stage actions share one line,
+   and the "Where this project is" label stays available to screen readers only. */
+@media (min-width: 861px) {
+  .stage-rail { display: grid; grid-template-columns: 1fr auto; column-gap: 16px; row-gap: 14px; align-items: center; }
+  .stage-rail > * { grid-column: 1 / -1; }
+  .stage-rail > .stage-steps { grid-column: 1; grid-row: 1; }
+  .stage-rail > .stage-rail-top { grid-column: 2; grid-row: 1; }
+  .stage-rail-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+}
+.stage-next-head h2 { font-size: 18px; }
+.stage-progress { margin: 8px 0 4px; height: 6px; }

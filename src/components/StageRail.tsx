@@ -59,6 +59,7 @@ export function StageRail({
   const [gateOffer, setGateOffer] = useState<{ from: ProjectStage; to: ProjectStage } | null>(null);
   const [gateBusy, setGateBusy] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [showDone, setShowDone] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   function load() {
@@ -148,8 +149,38 @@ export function StageRail({
     commit(stage);
   }
 
-  // One-primary rule: only the first unfinished checklist item gets the lime button.
-  const firstOpenId = data.checklist.items.find((it) => it.status !== "done")?.id;
+  // Checklist groups. Recommended next = the first unfinished item (the one lime button);
+  // Outstanding = the other unfinished items; Completed = done items (collapsed).
+  // Blocked only appears when a sponsor sign-off is actually pending or has asked for changes.
+  const openList = data.checklist.items.filter((it) => it.status !== "done");
+  const doneList = data.checklist.items.filter((it) => it.status === "done");
+  const recommended = openList[0] ?? null;
+  const outstanding = openList.slice(1);
+  const blockedByGate = !!gate && !gateOffer && (gate.status === "pending" || gate.status === "changes_requested");
+
+  function renderItem(item: StageData["checklist"]["items"][number], kind: "primary" | "ghost" | "link") {
+    return (
+      <li key={item.id} className="stage-item">
+        <span className={`stage-item-mark stage-item-mark-${item.status}`} aria-hidden="true">
+          {item.status === "done" ? <CheckIcon /> : item.status === "partial" ? <span className="stage-item-dot" /> : null}
+        </span>
+        <div className="stage-item-text">
+          <p className="stage-item-title">
+            {item.title}
+            <span className="sr-only">{item.status === "done" ? " (done)" : item.status === "partial" ? " (in progress)" : " (to do)"}</span>
+          </p>
+          <p className="stage-item-meta">{item.meta}</p>
+        </div>
+        <button
+          type="button"
+          className={kind === "link" ? "stage-item-link" : kind === "primary" ? "btn btn-primary stage-item-cta" : "btn btn-ghost stage-item-cta"}
+          onClick={() => onOpenTab(item.tab)}
+        >
+          {item.action}
+        </button>
+      </li>
+    );
+  }
 
   return (
     <section className="stage-rail" aria-label="Project stage">
@@ -161,7 +192,7 @@ export function StageRail({
               Change stage
             </button>
             {nextStage && (
-              <button type="button" className="btn btn-primary" onClick={() => requestMove(nextStage)} disabled={saving}>
+              <button type="button" className={openItems === 0 ? "btn btn-primary" : "btn btn-ghost"} onClick={() => requestMove(nextStage)} disabled={saving}>
                 Move to {STAGE_LABEL[nextStage]}
               </button>
             )}
@@ -222,18 +253,12 @@ export function StageRail({
           </div>
         </div>
       )}
-      {gate && !gateOffer && (
+      {gate && !gateOffer && gate.status === "approved" && (
         <div className="stage-gate-status">
           <span className={`charter-dot charter-dot-${gate.status}`} aria-hidden="true" />
           <span>
-            {STAGE_LABEL[gate.from]} to {STAGE_LABEL[gate.to]}:{" "}
-            {gate.status === "pending" && "waiting on your sponsor"}
-            {gate.status === "approved" && `approved by ${gate.responderName}`}
-            {gate.status === "changes_requested" && `${gate.responderName} asked for changes`}
+            {STAGE_LABEL[gate.from]} to {STAGE_LABEL[gate.to]}: approved by {gate.responderName}
           </span>
-          {gate.status === "pending" && isOwner && (
-            <button type="button" className="btn btn-ghost" onClick={() => copyGateLink(gate.publicToken)}>{copied ? "Copied" : "Copy link"}</button>
-          )}
         </div>
       )}
       {error && <p className="stage-error" role="alert">{error}</p>}
@@ -253,35 +278,48 @@ export function StageRail({
         >
           <div className="stage-progress-fill" style={{ width: `${data.checklist.total ? (data.checklist.done / data.checklist.total) * 100 : 0}%` }} />
         </div>
-        <ul className="stage-list">
-          {data.checklist.items.map((item) => (
-            <li key={item.id} className="stage-item">
-              <span className={`stage-item-mark stage-item-mark-${item.status}`} aria-hidden="true">
-                {item.status === "done" ? <CheckIcon /> : item.status === "partial" ? <span className="stage-item-dot" /> : null}
+        {recommended && (
+          <>
+            <h3 className="stage-group-label">Recommended next</h3>
+            <ul className="stage-list">{renderItem(recommended, "primary")}</ul>
+          </>
+        )}
+        {blockedByGate && gate && (
+          <>
+            <h3 className="stage-group-label">Blocked</h3>
+            <div className="stage-gate-status">
+              <span className={`charter-dot charter-dot-${gate.status}`} aria-hidden="true" />
+              <span>
+                {STAGE_LABEL[gate.from]} to {STAGE_LABEL[gate.to]}:{" "}
+                {gate.status === "pending" && "waiting on your sponsor"}
+                {gate.status === "changes_requested" && `${gate.responderName} asked for changes`}
               </span>
-              <div className="stage-item-text">
-                <p className="stage-item-title">
-                  {item.title}
-                  <span className="sr-only">{item.status === "done" ? " (done)" : item.status === "partial" ? " (in progress)" : " (to do)"}</span>
-                </p>
-                <p className="stage-item-meta">{item.meta}</p>
-              </div>
-              <button
-                type="button"
-                className={
-                  item.status === "done"
-                    ? "stage-item-link"
-                    : item.id === firstOpenId
-                      ? "btn btn-primary stage-item-cta"
-                      : "btn btn-ghost stage-item-cta"
-                }
-                onClick={() => onOpenTab(item.tab)}
-              >
-                {item.action}
-              </button>
-            </li>
-          ))}
-        </ul>
+              {gate.status === "pending" && isOwner && (
+                <button type="button" className="btn btn-ghost" onClick={() => copyGateLink(gate.publicToken)}>{copied ? "Copied" : "Copy link"}</button>
+              )}
+            </div>
+          </>
+        )}
+        {outstanding.length > 0 && (
+          <>
+            <h3 className="stage-group-label">Outstanding</h3>
+            <ul className="stage-list">{outstanding.map((it) => renderItem(it, "ghost"))}</ul>
+          </>
+        )}
+        {doneList.length > 0 && (
+          <>
+            <button
+              type="button"
+              className="btn-link stage-done-toggle"
+              aria-expanded={showDone}
+              aria-controls="stage-done-list"
+              onClick={() => setShowDone((o) => !o)}
+            >
+              Completed ({doneList.length}) <span aria-hidden="true">{showDone ? "▴" : "▾"}</span>
+            </button>
+            <ul id="stage-done-list" className="stage-list" hidden={!showDone}>{doneList.map((it) => renderItem(it, "link"))}</ul>
+          </>
+        )}
         {data.checklist.optionalNote && <p className="stage-next-note">{data.checklist.optionalNote}</p>}
       </div>
     </section>
