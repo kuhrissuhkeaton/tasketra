@@ -118,6 +118,77 @@
   --skel-highlight: #323B26;
 }
 
+/* Design-system tokens (UX redesign, Phase A). ADDITIVE ONLY: nothing in the
+   app references these yet, so adding them changes no pixel. They are the
+   target scale that later steps adopt one screen or component at a time.
+   Prefixed --ds- so they can never collide with the existing tokens above.
+   Existing --radius (16px) is left alone; the card radius is decided when
+   cards are migrated, not here.
+   Type scale: 12 / 13 / 14 / 16 / 20 / 28. Spacing: 4px scale. Radii: three.
+   Shadows: two. Status colors checked at >= 4.5:1 on both light surfaces
+   (#FFFFFF, #F2EBD9) and both dark surfaces (#242B1C, #1E2417). */
+:root {
+  --ds-text-xs: 12px;
+  --ds-text-sm: 13px;
+  --ds-text-md: 14px;
+  --ds-text-lg: 16px;
+  --ds-text-xl: 20px;
+  --ds-text-2xl: 28px;
+  --ds-leading-tight: 1.25;
+  --ds-leading-normal: 1.5;
+
+  --ds-space-1: 4px;
+  --ds-space-2: 8px;
+  --ds-space-3: 12px;
+  --ds-space-4: 16px;
+  --ds-space-6: 24px;
+  --ds-space-8: 32px;
+
+  --ds-radius-sm: 6px;
+  --ds-radius-md: 10px;
+  --ds-radius-pill: 999px;
+
+  --ds-shadow-resting: 0 1px 2px rgba(28, 36, 21, 0.06);
+  --ds-shadow-raised: 0 8px 24px rgba(28, 36, 21, 0.12);
+
+  /* Status colors, for text and icons on a surface (never color alone). */
+  --ds-status-success: #46702A;
+  --ds-status-warning: #7A5B00;
+  --ds-status-danger: #8A3B2C;
+  --ds-status-info: #2F5E7A;
+
+  /* Keyboard focus: dark ink ring in light mode, lime ring in dark mode. */
+  --ds-focus-color: #1C2415;
+  --ds-focus-width: 2px;
+  --ds-focus-offset: 2px;
+
+  /* Layout budgets used by the later header and tab-strip steps. */
+  --ds-header-height: 64px;
+  --ds-tabstrip-height: 32px;
+  --ds-row-height: 40px;
+  --ds-tab-indicator: 2px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ds-shadow-resting: 0 1px 2px rgba(0, 0, 0, 0.35);
+    --ds-shadow-raised: 0 8px 24px rgba(0, 0, 0, 0.5);
+    --ds-status-success: #7FBF52;
+    --ds-status-warning: #E3B341;
+    --ds-status-danger: #E2725A;
+    --ds-status-info: #7DB4D6;
+    --ds-focus-color: #CFEA46;
+  }
+}
+:root[data-theme="dark"] {
+  --ds-shadow-resting: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --ds-shadow-raised: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --ds-status-success: #7FBF52;
+  --ds-status-warning: #E3B341;
+  --ds-status-danger: #E2725A;
+  --ds-status-info: #7DB4D6;
+  --ds-focus-color: #CFEA46;
+}
+
 .project-shell { background: var(--panel); }
 
 * { box-sizing: border-box; }
