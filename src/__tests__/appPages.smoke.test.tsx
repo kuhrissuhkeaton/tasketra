@@ -89,7 +89,7 @@ async function mountPage(element: React.ReactNode, path = "/", routePath = "/") 
 
 describe("signed-in pages render without errors", () => {
   const pages: [string, () => React.ReactNode, string, string][] = [
-    ["Dashboard", () => <Dashboard />, "/app", "/app"],
+    ["Projects page", () => <Dashboard />, "/app/projects", "/app/projects"],
     ["Resource hub", () => <Resources />, "/app/resources", "/app/resources"],
     ["Resource hub at a section link", () => <Resources />, "/app/resources#how-it-works", "/app/resources"],
     ["What's new", () => <WhatsNew />, "/app/whats-new", "/app/whats-new"],

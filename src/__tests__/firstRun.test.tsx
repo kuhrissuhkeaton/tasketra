@@ -145,7 +145,7 @@ describe("Dashboard first run", () => {
 
   it("keeps the full dashboard once a project has tasks", async () => {
     await renderDashboard([project("p1")], [{ id: "p1", totalTasks: 5 }]);
-    expect(container.querySelector("h1")?.textContent).toBe("Dashboard");
+    expect(container.querySelector("h1")?.textContent).toBe("Projects");
     expect(container.textContent).toContain("Charts and analytics");
     expect(container.textContent).toContain("Project health");
     expect(button("New project")).toBeTruthy();

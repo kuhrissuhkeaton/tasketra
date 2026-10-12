@@ -71,8 +71,8 @@ describe("AppSidebar collapse", () => {
     expect(tabs().some((t) => t.hasAttribute("title"))).toBe(false);
 
     await act(async () => { toggle().click(); });
-    const dashboard = tabs().find((t) => t.textContent?.trim() === "Dashboard");
-    expect(dashboard?.getAttribute("title")).toBe("Dashboard");
+    const dashboard = tabs().find((t) => t.textContent?.trim() === "Today");
+    expect(dashboard?.getAttribute("title")).toBe("Today");
 
     await act(async () => { toggle().click(); });
     expect(tabs().some((t) => t.hasAttribute("title"))).toBe(false);

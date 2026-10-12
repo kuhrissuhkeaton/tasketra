@@ -168,8 +168,12 @@ export function AppSidebar({ children, menuLabel = "Menu" }: { children?: ReactN
       <nav className="side-nav" id="sidebar-nav" aria-label="Main">
         <NavGroup label="Workspace" defaultCollapsed={!!children}>
           <Link to="/app" className={pathname === "/app" ? "side-tab active" : "side-tab"}>
-            <NavIcon name="dashboard" active={pathname === "/app"} />
-            Dashboard
+            <NavIcon name="today" active={pathname === "/app"} />
+            Today
+          </Link>
+          <Link to="/app/projects" className={pathname === "/app/projects" ? "side-tab active" : "side-tab"}>
+            <NavIcon name="dashboard" active={pathname === "/app/projects"} />
+            Projects
           </Link>
           <Link
             to="/app/resources"

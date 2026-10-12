@@ -14,6 +14,7 @@ const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const VerifyEmail = lazy(() => import("./pages/VerifyEmail"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
+const Today = lazy(() => import("./pages/Today"));
 const ProjectHome = lazy(() => import("./pages/ProjectHome"));
 const DecisionPublic = lazy(() => import("./pages/DecisionPublic"));
 const RoadmapPublic = lazy(() => import("./pages/RoadmapPublic"));
@@ -81,7 +82,8 @@ export default function App() {
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/verify-email" element={<VerifyEmail />} />
-            <Route path="/app" element={<Protected><Dashboard /></Protected>} />
+            <Route path="/app" element={<Protected><Today /></Protected>} />
+            <Route path="/app/projects" element={<Protected><Dashboard /></Protected>} />
             <Route path="/app/resources" element={<Protected><Resources /></Protected>} />
             <Route path="/app/whats-new" element={<Protected><WhatsNew /></Protected>} />
             <Route path="/app/billing" element={<Protected><Billing /></Protected>} />

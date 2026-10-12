@@ -77,8 +77,8 @@ describe("breadcrumb and page heading", () => {
     const n = crumb()!;
     expect(n).not.toBeNull();
     const links = [...n.querySelectorAll("a")];
-    expect(links.map((a) => a.textContent)).toEqual(["Dashboard", "Chrome Project"]);
-    expect(links.map((a) => a.getAttribute("href"))).toEqual(["/app", "/app/projects/p1"]);
+    expect(links.map((a) => a.textContent)).toEqual(["Projects", "Chrome Project"]);
+    expect(links.map((a) => a.getAttribute("href"))).toEqual(["/app/projects", "/app/projects/p1"]);
     const cur = n.querySelector('[aria-current="page"]')!;
     expect(cur.textContent).toBe("Risks");
     expect(cur.querySelector("a")).toBeNull();

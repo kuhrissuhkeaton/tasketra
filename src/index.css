@@ -2176,3 +2176,70 @@ a:hover { color: var(--navy); }
   .dashboard-filters .roadmap-filter-group { min-width: 0; max-width: 100%; flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 4px; scrollbar-width: thin; }
   .dashboard-filters .roadmap-filter-group > * { flex: none; }
 }
+
+/* ---- Today screen (redesign Concept A, batch 1) ---------------------------
+   The daily landing page. Uses the existing tokens so dark mode follows; the
+   "Start here" card uses the fixed chrome tokens (--ink / --ivory) so it stays
+   a dark card in both themes, like the sidebar. */
+.tw-main { display: flex; flex-direction: column; gap: 16px; }
+.tw-sub { margin: 4px 0 0; font-variant-numeric: tabular-nums; }
+.tw-grid { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 20px; align-items: start; }
+.tw-col, .tw-rail { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.tw-toggle { display: flex; flex-wrap: wrap; gap: 8px; }
+.tw-toggle .btn { padding: 6px 14px; min-height: 40px; }
+.tw-toggle .btn[aria-pressed="true"] { background: var(--ink); color: var(--ivory); border-color: var(--ink); }
+.tw-card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; min-width: 0; }
+.tw-card h3 { font-size: 16px; margin: 0 0 6px; }
+.tw-focus { background: var(--ink); color: var(--ivory); border: 1px solid color-mix(in srgb, var(--ivory) 22%, var(--ink)); border-radius: 14px; padding: 16px 18px; display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; align-items: center; }
+.tw-focus h2 { color: var(--ivory); font-size: 20px; margin: 2px 0; overflow-wrap: anywhere; }
+.tw-focus-label { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.8; }
+.tw-focus-meta { font-size: 13px; opacity: 0.85; }
+.tw-focus-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.tw-focus-ghost { background: transparent; color: var(--ivory); border: 1.5px solid color-mix(in srgb, var(--ivory) 55%, transparent); }
+.tw-focus-ghost:hover { background: color-mix(in srgb, var(--ivory) 12%, transparent); }
+.tw-clear { background: var(--surface-muted); border-radius: 14px; padding: 16px 18px; }
+.tw-clear h2 { font-size: 20px; margin: 0 0 4px; }
+.tw-empty { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 12px; padding: 40px 16px; border: 1px dashed var(--border); border-radius: 16px; background: var(--panel); }
+.tw-empty h2 { font-size: 22px; margin: 0; }
+.tw-add { display: flex; flex-wrap: wrap; gap: 8px; }
+.tw-add input[type="text"], .tw-add input:not([type]) { flex: 1 1 220px; min-width: 0; padding: 9px 12px; border: 1.5px solid var(--border); border-radius: 10px; background: var(--panel); color: var(--navy); font: inherit; }
+.tw-add select { width: auto; flex: 0 1 240px; min-width: 0; max-width: 100%; padding: 9px 10px; border: 1.5px solid var(--border); border-radius: 10px; background: var(--panel); color: var(--navy); font: inherit; }
+.tw-wrap { background: var(--panel); border: 2px solid var(--gold); border-radius: 14px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
+.tw-wrap h2 { font-size: 18px; margin: 0; }
+.tw-wrap textarea { width: 100%; resize: vertical; padding: 8px 10px; border: 1.5px solid var(--border); border-radius: 10px; background: var(--surface-muted); color: var(--navy); font: inherit; }
+.tw-note-label { font-size: 12px; font-weight: 600; color: var(--slate-text); }
+.tw-wrap-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.tw-group { margin-top: 6px; }
+.tw-group-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin: 8px 0 2px; }
+.tw-group-head h3 { margin: 0; }
+.tw-count { font-weight: 400; font-variant-numeric: tabular-nums; }
+.tw-hint { font-size: 12px; }
+.tw-list { list-style: none; margin: 0; padding: 0; }
+.tw-row::before, .tw-rail-row::before { content: none; }
+.tw-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--border); min-width: 0; }
+.tw-group .tw-list > .tw-row:first-child { border-top: 0; }
+.tw-row-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.tw-row-title { font-weight: 600; color: var(--navy); text-decoration: none; overflow-wrap: anywhere; }
+.tw-row-title:hover { text-decoration: underline; }
+.tw-row-meta { font-size: 12px; overflow-wrap: anywhere; }
+.tw-check { width: 24px; height: 24px; flex: none; border-radius: 7px; border: 2px solid var(--slate); background: transparent; padding: 0; cursor: pointer; display: grid; place-items: center; }
+.tw-check:hover { border-color: var(--navy); background: var(--tint); }
+.tw-check.done { background: var(--gold); border-color: var(--gold); color: var(--ink); font-size: 14px; line-height: 1; cursor: default; }
+.tw-row-done .tw-row-title { text-decoration: line-through; color: var(--slate-text); }
+.tw-date { display: inline-flex; align-items: center; gap: 6px; flex: none; }
+.tw-date input { padding: 3px 6px; border: 1px dashed var(--border); border-radius: 8px; background: var(--surface-muted); color: var(--navy); font: inherit; font-size: 12px; font-variant-numeric: tabular-nums; min-height: 32px; }
+.tw-date.late input { border-color: var(--red); color: var(--red); }
+.tw-late { font-size: 11px; font-weight: 700; color: var(--red); white-space: nowrap; }
+.tw-later summary { cursor: pointer; padding: 8px 0; font-weight: 600; }
+.tw-rail-row { display: flex; flex-direction: column; gap: 2px; padding: 8px 0; border-top: 1px solid var(--border); min-width: 0; }
+.tw-rail .tw-list > .tw-rail-row:first-child { border-top: 0; }
+.tw-rail-row a { font-weight: 600; color: var(--navy); overflow-wrap: anywhere; }
+.tw-rail-project { flex-direction: row; align-items: center; justify-content: space-between; gap: 8px; }
+@media (max-width: 900px) {
+  .tw-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 600px) {
+  .tw-row { flex-wrap: wrap; row-gap: 2px; }
+  .tw-row-text { flex: 1 1 calc(100% - 40px); }
+  .tw-date { margin-left: 34px; }
+}

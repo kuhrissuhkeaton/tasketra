@@ -18,6 +18,7 @@ import { createElement, type SVGProps } from "react";
 
 export type NavIconName =
   | "dashboard"
+  | "today"
   | "resources"
   | "whatsnew"
   | "account"
@@ -57,6 +58,10 @@ const SHAPES: Record<NavIconName, Shape[]> = {
     { tag: "rect", attrs: { x: 11, y: 3, width: 6, height: 6, rx: 1.5 } },
     { tag: "rect", attrs: { x: 3, y: 11, width: 6, height: 6, rx: 1.5 } },
     { tag: "rect", attrs: { x: 11, y: 11, width: 6, height: 6, rx: 1.5 } },
+  ],
+  today: [
+    { tag: "circle", attrs: { cx: 10, cy: 10, r: 7 } },
+    { tag: "path", attrs: { d: "M6.8 10.2l2.2 2.2 4.2-4.6" } },
   ],
   resources: [
     { tag: "path", attrs: { d: "M10 6c-1.4-1-3.4-1.5-5.5-1.5-.6 0-1 .4-1 1v9c0 .6.4 1 1 1 2.1 0 4.1.5 5.5 1.5m0-11c1.4-1 3.4-1.5 5.5-1.5.6 0 1 .4 1 1v9c0 .6-.4 1-1 1-2.1 0-4.1.5-5.5 1.5m0-11v11" } },

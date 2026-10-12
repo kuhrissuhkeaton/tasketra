@@ -325,7 +325,7 @@ export default function ProjectHome() {
         {viewLabel && (
           <nav className="breadcrumb" aria-label="Breadcrumb">
             <ol>
-              <li><Link to="/app">Dashboard</Link></li>
+              <li><Link to="/app/projects">Projects</Link></li>
               <li className="breadcrumb-project"><Link to={`/app/projects/${id}`}>{project?.name || "Project"}</Link></li>
               <li aria-current="page">{viewLabel}</li>
             </ol>
@@ -6160,13 +6160,13 @@ function TeamTab({ projectId, isOwner, onSetupChange }: { projectId: string; isO
 
   async function deleteProject() {
     if (!project) return;
-    if (!(await confirmDialog(`Delete "${project.name}"? Everything in it -- tasks, decisions, meetings, everything -- goes with it. You can restore the project from the Dashboard's Recently deleted section.`))) {
+    if (!(await confirmDialog(`Delete "${project.name}"? Everything in it -- tasks, decisions, meetings, everything -- goes with it. You can restore the project from the Projects page's Recently deleted section.`))) {
       return;
     }
     setDeleting(true);
     try {
       await api.deleteProject(projectId);
-      navigate("/app");
+      navigate("/app/projects");
     } catch (err: any) {
       setDeleting(false);
       setError(err.message || "Failed to delete project.");

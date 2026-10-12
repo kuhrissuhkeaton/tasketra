@@ -48,12 +48,12 @@ describe("error pages", () => {
     expect(container.querySelector(".error-code")?.textContent).toBe("404");
     const link = container.querySelector("a");
     expect(link?.textContent).toBe("Back to my projects");
-    expect(link?.getAttribute("href")).toBe("/app");
+    expect(link?.getAttribute("href")).toBe("/app/projects");
   });
 
   it("403 page says no access and links back", () => {
     mount(<MemoryRouter><Forbidden /></MemoryRouter>);
     expect(container.querySelector(".error-code")?.textContent).toBe("403");
-    expect(container.querySelector("a")?.getAttribute("href")).toBe("/app");
+    expect(container.querySelector("a")?.getAttribute("href")).toBe("/app/projects");
   });
 });

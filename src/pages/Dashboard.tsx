@@ -297,7 +297,7 @@ function PortfolioOverview({ data, wide }: { data: PortfolioData; wide: boolean 
 }
 
 export default function Dashboard() {
-  useDocumentTitle("Dashboard");
+  useDocumentTitle("Projects");
   const wide = useIsWide();
   const [showAllAttention, setShowAllAttention] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -576,7 +576,7 @@ export default function Dashboard() {
 
       <main id="main-content" className="project-main project-main-wide">
         <div className="page-head">
-          <h1>Dashboard</h1>
+          <h1>Projects</h1>
           <div className="page-head-actions">
             <div className="stat-row">
               <div className="stat"><strong>{totalOpenDecisions}</strong> decisions awaiting response</div>

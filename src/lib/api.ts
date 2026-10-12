@@ -702,6 +702,21 @@ export type PortfolioData = {
   upcomingMilestones: { id: string; title: string; date: string; status: RoadmapItem["status"]; projectId: string; projectName: string }[];
 };
 
+export type MyTodayData = {
+  tasks: {
+    id: string;
+    title: string;
+    status: Task["status"];
+    owner_name: string | null;
+    due_date: string | null;
+    project_id: string;
+    project_name: string;
+    project_stage: string;
+  }[];
+  recentlyDone: { id: string; updated_at: string }[];
+  truncated: boolean;
+};
+
 export type NotificationItem = {
   id: string;
   type: "decision_response" | "feedback_update" | "feedback_inbox";
@@ -1294,6 +1309,9 @@ export const api = {
     request<{ ok: true }>("/notifications", { method: "PATCH", body: JSON.stringify({ markAllRead: true }) }),
   setWhatsNewSeen: (version: string) =>
     request<{ ok: true }>("/notifications", { method: "PATCH", body: JSON.stringify({ whatsNewSeen: version }) }),
+
+  /** Read-only: open tasks across every project the user can see (Today screen). */
+  getMyToday: () => request<MyTodayData>("/my-today"),
 
   getPortfolio: (projectId?: string, stage?: ProjectStage) => {
     const qs = new URLSearchParams();
