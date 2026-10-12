@@ -4,6 +4,7 @@ import { api, type AccountRemovalPreview, type AdminAccount, type AdminAccountsS
 import { AppSidebar } from "../components/AppSidebar";
 import { ResizableTable } from "../components/ResizableTable";
 import { fmtDate } from "../lib/format";
+import { useDocumentTitle } from "../lib/documentTitle";
 
 type Removal = { account: AdminAccount; mode: "founding" | "delete" };
 
@@ -12,6 +13,7 @@ function plural(n: number, word: string) {
 }
 
 export default function AdminFoundingMembers() {
+  useDocumentTitle("Founding members");
   const [accounts, setAccounts] = useState<AdminAccount[]>([]);
   const [summary, setSummary] = useState<AdminAccountsSummary | null>(null);
   const [showAll, setShowAll] = useState(false);
@@ -42,7 +44,7 @@ export default function AdminFoundingMembers() {
     <div className="project-shell">
       <AppSidebar />
 
-      <main className="project-main">
+      <main id="main-content" className="project-main">
         <div className="page-head">
           <h1>Founding members</h1>
           {summary && (

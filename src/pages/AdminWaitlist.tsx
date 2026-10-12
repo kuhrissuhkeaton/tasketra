@@ -4,8 +4,10 @@ import { AppSidebar } from "../components/AppSidebar";
 import { useConfirm } from "../components/ConfirmDialog";
 import { ResizableTable } from "../components/ResizableTable";
 import { fmtDate } from "../lib/format";
+import { useDocumentTitle } from "../lib/documentTitle";
 
 export default function AdminWaitlist() {
+  useDocumentTitle("Waitlist");
   const confirmDialog = useConfirm();
   const [signups, setSignups] = useState<WaitlistSignup[]>([]);
   const [loading, setLoading] = useState(true);
@@ -43,7 +45,7 @@ export default function AdminWaitlist() {
     <div className="project-shell">
       <AppSidebar />
 
-      <main className="project-main">
+      <main id="main-content" className="project-main">
         <div className="page-head">
           <h1>Waitlist</h1>
           <div className="stat-row">
@@ -61,7 +63,7 @@ export default function AdminWaitlist() {
         ) : (
           <ResizableTable id="admin-waitlist">
             <thead>
-              <tr><th>Email</th><th>Status</th><th>Joined</th><th></th></tr>
+              <tr><th>Email</th><th>Status</th><th>Joined</th><th><span className="sr-only">Actions</span></th></tr>
             </thead>
             <tbody>
               {signups.map((s) => (

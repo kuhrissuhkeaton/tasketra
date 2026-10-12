@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import { api, type RoadmapItem } from "../lib/api";
 import { Wordmark } from "../components/Wordmark";
 import { RoadmapTimeline } from "../components/RoadmapTimeline";
+import { useDocumentTitle } from "../lib/documentTitle";
 
 export default function RoadmapPublic() {
   const { token } = useParams<{ token: string }>();
@@ -11,6 +12,7 @@ export default function RoadmapPublic() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
+  useDocumentTitle(projectName ? `Roadmap | ${projectName}` : "Roadmap");
   useEffect(() => {
     if (!token) return;
     api
@@ -25,23 +27,23 @@ export default function RoadmapPublic() {
 
   if (loading) {
     return (
-      <div className="public-roadmap">
+      <main className="public-roadmap">
         <div className="skel-loading-block"><div className="skel skel-text" style={{ width: "45%" }} /><div className="skel skel-text" style={{ width: "80%" }} /><div className="skel skel-text" style={{ width: "60%", marginBottom: 0 }} /></div>
-      </div>
+      </main>
     );
   }
 
   if (error) {
     return (
-      <div className="public-roadmap">
+      <main className="public-roadmap">
         <Wordmark size="sm" />
         <p className="form-error">{error}</p>
-      </div>
+      </main>
     );
   }
 
   return (
-    <div className="public-roadmap">
+    <main className="public-roadmap">
       <Wordmark size="sm" />
       <p className="muted">Roadmap for: {projectName}</p>
       <h1>{projectName}</h1>
@@ -49,6 +51,6 @@ export default function RoadmapPublic() {
       <p className="muted" style={{ marginTop: 24, fontSize: 12 }}>
         This is a read-only view shared by the project owner. Built with Tasketra.
       </p>
-    </div>
+    </main>
   );
 }

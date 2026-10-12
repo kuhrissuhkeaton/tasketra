@@ -2,11 +2,13 @@ import { useState } from "react";
 import { api, ApiError } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
 import { Wordmark } from "./Wordmark";
+import { useDocumentTitle } from "../lib/documentTitle";
 
 // Shown in place of the app until the person confirms their email address.
 // They can ask for another link, fix a mistyped address, or sign out.
 
 export function VerifyEmailGate() {
+  useDocumentTitle("Check your email");
   const { user, refresh, logout } = useAuth();
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -41,10 +43,10 @@ export function VerifyEmailGate() {
   }
 
   return (
-    <div className="auth-screen">
+    <main className="auth-screen">
       <div className="auth-card">
         <Wordmark beta />
-        <p className="auth-tagline">Check your email</p>
+        <h1 className="auth-tagline">Check your email</h1>
         <p>
           We sent a confirmation link to <strong>{user?.email}</strong>. Click it to finish setting up your account. It can take a minute to arrive; check spam too.
         </p>
@@ -71,6 +73,6 @@ export function VerifyEmailGate() {
           </>
         )}
       </div>
-    </div>
+    </main>
   );
 }

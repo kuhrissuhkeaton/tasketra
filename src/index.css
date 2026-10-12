@@ -28,9 +28,11 @@
   --panel: #FFFFFF;  /* card/page-level white surfaces (drawers, modals, inputs,
                          the page body itself) -- flips to a dark surface. */
   --slate: #6B6A5A;
+  --slate-text: color-mix(in srgb, var(--slate) 88%, var(--navy)); /* slate for small text on the beige --surface-muted (4.49:1 plain); same hue, a touch darker */
   --slate-2: #9A9683; /* NON-TEXT only (borders, dots, marks): 2.5:1 on cream fails text contrast. Use --slate for muted text. */
   --red: #8A3B2C;
   --red-border: #E3C9C0;
+  --text-ok: #3D5F24;     /* green TEXT on tint/cream surfaces; lime-green in dark so it stays readable */
   --success: #46702A; /* 4.9:1 on cream, 5.8:1 on white (was #4F7A2E, 4.25:1 on cream) */
   --border: #E7DFC8;
 
@@ -95,6 +97,7 @@
     --border: #3A4530;
     --red: #E2725A;
     --success: #7FBF52;
+    --text-ok: #7FBF52;
     --tint: #2A3420;
     --tint-strong: #3A4A26;
     --surface-muted: #232A1B;
@@ -111,6 +114,7 @@
   --border: #3A4530;
   --red: #E2725A;
   --success: #7FBF52;
+  --text-ok: #7FBF52;
   --tint: #2A3420;
   --tint-strong: #3A4A26;
   --surface-muted: #232A1B;
@@ -229,6 +233,8 @@ h1, h2, h3, h4 {
   letter-spacing: -0.4px;
 }
 h1 { font-size: 36px; }
+/* A section title that is an <h2> for the outline but keeps the compact look the old <h4> had. */
+.heading-sm { font-size: 1em; }
 
 .muted { color: var(--slate); font-size: 14px; }
 
@@ -251,7 +257,16 @@ h1 { font-size: 36px; }
   background:
     radial-gradient(circle at 15% 10%, rgba(201, 222, 69, 0.18), transparent 45%),
     radial-gradient(circle at 85% 90%, rgba(27, 31, 20, 0.05), transparent 45%),
-    white;
+    var(--panel);
+}
+/* Dark mode: the lime glow is much quieter on a dark page. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .auth-screen {
+    background: radial-gradient(circle at 15% 10%, rgba(201, 222, 69, 0.07), transparent 45%), var(--panel);
+  }
+}
+:root[data-theme="dark"] .auth-screen {
+  background: radial-gradient(circle at 15% 10%, rgba(201, 222, 69, 0.07), transparent 45%), var(--panel);
 }
 .auth-card {
   background: var(--cream);
@@ -262,6 +277,8 @@ h1 { font-size: 36px; }
   max-width: 380px;
 }
 .auth-tagline { color: var(--slate); margin: 8px 0 24px; }
+/* Where the tagline is also the page's <h1>: keep it looking like body text. */
+h1.auth-tagline { font-family: inherit; font-size: inherit; font-weight: inherit; letter-spacing: normal; }
 /* Register mode: the offer the person came in on, in place of the tagline. */
 .auth-offer { margin: 16px 0 20px; }
 .auth-headline { font-size: 26px; line-height: 1.2; margin: 0 0 8px; }
@@ -373,6 +390,13 @@ textarea { resize: vertical; }
 .inline-form select { min-width: 118px; }
 .inline-form input[type="text"], .inline-form input:not([type]) { min-width: 110px; }
 .inline-form input[type="date"] { min-width: 138px; }
+/* A date field with a visible short label ("Start", "Due") so two bare mm/dd/yyyy boxes are never ambiguous. */
+.datefield { display: inline-flex; align-items: center; gap: 6px; margin: 0; }
+.datefield-label { font-size: 13px; font-weight: 600; white-space: nowrap; color: var(--navy); }
+@media (max-width: 560px) {
+  .inline-form > .datefield { flex: 1 1 100%; }
+  .datefield input { flex: 1; width: 100%; }
+}
 .inline-form-wide input, .inline-form-wide select { flex: 1; }
 
 /* Secondary, in-page view switches (List/Board/Matrix, Today/Feed, Weekly
@@ -524,9 +548,11 @@ td.row-actions > *:last-child { margin-right: 0; }
 .roadmap-filter-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; margin-bottom: 4px; }
 .roadmap-filter-group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .roadmap-filter-label { font-size: 12px; font-weight: 600; color: var(--slate); text-transform: uppercase; letter-spacing: 0.04em; margin-right: 2px; }
-.filter-chip { display: inline-flex; align-items: center; padding: 5px 13px; border-radius: 999px; font-size: 12px; font-weight: 600; border: none; background: var(--surface-muted); color: var(--slate); cursor: pointer; transition: color 0.15s ease, background 0.15s ease; }
+.filter-chip { display: inline-flex; align-items: center; padding: 5px 13px; border-radius: 999px; font-size: 12px; font-weight: 600; border: none; background: var(--surface-muted); color: var(--slate-text); cursor: pointer; transition: color 0.15s ease, background 0.15s ease; }
 .filter-chip:hover { background: var(--tint); color: var(--navy); }
-.filter-chip-active:hover { filter: brightness(0.95); }
+/* Selected chip: lime tint, so on and off never look the same (colored status chips override this inline). */
+.filter-chip-active { background: var(--tint-strong); color: var(--navy); }
+.filter-chip-active:hover { filter: brightness(0.95); background: var(--tint-strong); }
 
 /* Item detail drawer -- shared by Tasks/Issues/Risks (src/components/ItemDrawer.tsx) */
 .drawer-backdrop {
@@ -590,7 +616,9 @@ td.row-actions > *:last-child { margin-right: 0; }
 }
 .status-select:hover { filter: brightness(0.97); }
 .status-select:focus { box-shadow: 0 0 0 3px rgba(207, 234, 70, 0.4); }
-.status-select-not_started, .status-select-requested, .status-select-cancelled { background-color: var(--surface-muted); color: var(--slate); }
+/* The pill has no border, so the lime halo alone is nearly invisible on cream. Keyboard focus gets the same ink ring as every other control. */
+.status-select:focus-visible { outline: 2px solid var(--navy); outline-offset: 2px; }
+.status-select-not_started, .status-select-requested, .status-select-cancelled { background-color: var(--surface-muted); color: var(--slate-text); }
 .status-select-in_progress, .status-select-monitoring, .status-select-unconfirmed, .status-select-proposed, .status-select-at_risk { background-color: var(--tag-tan); color: #6B4A1C; }
 .status-select-blocked, .status-select-open, .status-select-invalidated, .status-select-rejected, .status-select-failed, .status-select-non_compliant, .status-select-off_track { background-color: var(--red-border); color: #8A3B2C; }
 .status-select-done, .status-select-resolved, .status-select-confirmed, .status-select-approved, .status-select-implemented, .status-select-passed, .status-select-active, .status-select-completed, .status-select-compliant, .status-select-on_track, .status-select-achieved { background-color: var(--tag-sage); color: #3D5F24; }
@@ -613,7 +641,7 @@ td.row-actions > *:last-child { margin-right: 0; }
 .table { width: 100%; border-collapse: collapse; background: var(--cream); border-radius: 18px; overflow: hidden; box-shadow: var(--shadow-sm); }
 .table th, .table td { text-align: left; padding: 11px 14px; font-size: 14px; overflow-wrap: break-word; }
 .table td { border-bottom: 1px solid rgba(231, 223, 200, 0.45); }
-.table th { background: var(--surface-muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--slate); border-bottom: 1px solid var(--border); }
+.table th { background: var(--surface-muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--slate-text); border-bottom: 1px solid var(--border); }
 .table tbody tr { transition: background var(--ease); }
 .table tbody tr:hover { background: var(--surface-muted); }
 .table tr:last-child td { border-bottom: none; }
@@ -723,7 +751,7 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
 .side-nav-group { margin-bottom: 18px; }
 .side-nav-label {
   font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em;
-  color: #7D8467; margin: 0 0 6px; padding-left: 14px;
+  color: #8E9576; margin: 0 0 6px; padding-left: 14px;
 }
 .side-nav-label.collapsible {
   display: flex; align-items: center; cursor: pointer; user-select: none; padding-right: 10px;
@@ -890,7 +918,9 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
 .member-avatar {
   width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
-  font-size: 13px; font-weight: 700; color: var(--navy);
+  font-size: 13px; font-weight: 700;
+  /* Fixed dark ink: the pastel circles stay pastel in dark mode, so the initials must not flip to cream. */
+  color: var(--ink);
 }
 .member-avatar-sm { width: 22px; height: 22px; font-size: 11px; }
 .member-info { flex: 1; min-width: 0; }
@@ -1014,7 +1044,7 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
 }
 .gantt-track-wrap { flex: 1; overflow-x: auto; }
 .gantt-header { height: 28px; position: relative; border-bottom: 1px solid var(--border); background: var(--surface-muted); }
-.gantt-header-tick { position: absolute; top: 0; height: 28px; border-left: 1px solid var(--border); font-size: 10px; color: var(--slate); padding-left: 4px; line-height: 28px; white-space: nowrap; }
+.gantt-header-tick { position: absolute; top: 0; height: 28px; border-left: 1px solid var(--border); font-size: 10px; color: var(--slate-text); padding-left: 4px; line-height: 28px; white-space: nowrap; }
 .gantt-header-tick-today { border-left-color: var(--gold); color: var(--navy); font-weight: 700; }
 .gantt-row { height: 36px; position: relative; border-bottom: 1px solid var(--border); }
 .gantt-bar { position: absolute; top: 8px; height: 20px; border-radius: 4px; min-width: 8px; }
@@ -1391,7 +1421,7 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
 .whats-new-entry { padding: 18px 0; border-bottom: 1px solid var(--border); }
 .whats-new-entry:last-child { border-bottom: none; }
 .whats-new-meta { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
-.whats-new-entry h4 { margin: 0 0 6px; }
+.whats-new-entry h4, .whats-new-entry h2.heading-sm { margin: 0 0 6px; }
 .whats-new-entry p { margin: 0; font-size: 14px; }
 
 /* --- Product tour --- */
@@ -1480,7 +1510,7 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
 .stage-band-title { font-size: 13px; font-weight: 700; }
 .stage-band-msg { font-size: 13px; color: var(--slate); }
 .stage-band-attention { background: var(--tint); border-top-color: var(--success); }
-.stage-band-attention .stage-band-msg { color: #3D5F24; font-weight: 600; }
+.stage-band-attention .stage-band-msg { color: var(--text-ok); font-weight: 600; }
 
 .stage-band-escalate { background: var(--red-border); border-top-color: var(--red); }
 .stage-band-escalate .stage-band-title, .stage-band-escalate .stage-band-msg { color: #8A3B2C; font-weight: 700; }
@@ -1642,7 +1672,7 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
 .template-phases { font-weight: 600; color: var(--navy, #1b2a4a); }
 .template-details { margin: 6px 0 14px; font-size: 14px; }
 .template-details summary { cursor: pointer; font-weight: 600; color: var(--slate); }
-.template-details h5 { margin: 12px 0 2px; font-size: 13px; }
+.template-details h5, .template-details h4 { margin: 12px 0 2px; font-size: 13px; }
 .template-details ul { margin: 2px 0 6px; }
 .resource-card .btn { margin-top: 4px; }
 .template-grid { align-items: start; }

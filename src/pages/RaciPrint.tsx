@@ -4,6 +4,7 @@ import { api, type Project, type RaciData } from "../lib/api";
 import { Wordmark } from "../components/Wordmark";
 import { RaciDocument } from "../components/RaciDocument";
 import { ShareBox } from "../components/ShareBox";
+import { useDocumentTitle } from "../lib/documentTitle";
 
 // Signed-in printable RACI page. Anyone with project access can print it;
 // only the owner sees the share-link controls.
@@ -13,6 +14,7 @@ export default function RaciPrint() {
   const [data, setData] = useState<RaciData | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  useDocumentTitle(project ? `RACI matrix | ${project.name}` : "RACI matrix");
   useEffect(() => {
     if (!id) return;
     Promise.all([api.getProject(id), api.getRaci(id)])
@@ -20,11 +22,11 @@ export default function RaciPrint() {
       .catch((e) => setError(e.message));
   }, [id]);
 
-  if (error) return <div className="public-roadmap"><Wordmark size="sm" /><p className="form-error">{error}</p></div>;
-  if (!project || !data) return <div className="public-roadmap"><div className="skel-loading-block"><div className="skel skel-text" style={{ width: "45%" }} /></div></div>;
+  if (error) return <main className="public-roadmap"><Wordmark size="sm" /><p className="form-error">{error}</p></main>;
+  if (!project || !data) return <main className="public-roadmap"><div className="skel-loading-block"><div className="skel skel-text" style={{ width: "45%" }} /></div></main>;
 
   return (
-    <div className="public-roadmap share-public">
+    <main className="public-roadmap share-public">
       <div className="no-print share-public-bar">
         <Link to={`/app/projects/${id}?tab=raci`} className="muted">← Back to the RACI tab</Link>
         <div className="share-public-actions">
@@ -47,6 +49,6 @@ export default function RaciPrint() {
         assignments={data.assignments}
         dateLabel={new Date().toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })}
       />
-    </div>
+    </main>
   );
 }

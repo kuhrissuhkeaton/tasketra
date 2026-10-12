@@ -18,6 +18,7 @@ import { shouldShowHubTip, HUB_TIP_STORAGE_KEY } from "../lib/hubTip";
 import { FirstRunScreen, type FirstRunChoice } from "../components/FirstRun";
 import { isFirstRun, startChecklist } from "../lib/firstRun";
 import { track } from "../lib/analytics";
+import { useDocumentTitle } from "../lib/documentTitle";
 
 const TASK_STATUS_ORDER: Task["status"][] = ["not_started", "in_progress", "blocked", "done"];
 
@@ -295,6 +296,7 @@ function PortfolioOverview({ data, wide }: { data: PortfolioData; wide: boolean 
 }
 
 export default function Dashboard() {
+  useDocumentTitle("Dashboard");
   const wide = useIsWide();
   const [showAllAttention, setShowAllAttention] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -519,7 +521,7 @@ export default function Dashboard() {
       {showDeleted && (
         <ResizableTable id="dashboard-deleted" style={{ marginTop: 12, maxWidth: 640 }}>
           <thead>
-            <tr><th>Project</th><th>Deleted</th><th></th></tr>
+            <tr><th>Project</th><th>Deleted</th><th><span className="sr-only">Actions</span></th></tr>
           </thead>
           <tbody>
             {deletedProjects.map((p) => (
@@ -548,7 +550,7 @@ export default function Dashboard() {
     return (
       <div className="project-shell">
         <AppSidebar />
-        <main className="project-main">
+        <main id="main-content" className="project-main">
           <FirstRunScreen
             onChoose={startFirstProject}
             busy={firstRunBusy}
@@ -570,7 +572,7 @@ export default function Dashboard() {
     <div className="project-shell">
       <AppSidebar />
 
-      <main className="project-main project-main-wide">
+      <main id="main-content" className="project-main project-main-wide">
         <div className="page-head">
           <h1>Dashboard</h1>
           <div className="page-head-actions">
@@ -589,6 +591,7 @@ export default function Dashboard() {
               <button
                 type="button"
                 className={`filter-chip${selectedStage === null ? " filter-chip-active" : ""}`}
+                aria-pressed={selectedStage === null}
                 onClick={() => selectStage(null)}
               >
                 All stages
@@ -598,6 +601,7 @@ export default function Dashboard() {
                   key={s.id}
                   type="button"
                   className={`filter-chip${selectedStage === s.id ? " filter-chip-active" : ""}`}
+                  aria-pressed={selectedStage === s.id}
                   onClick={() => selectStage(s.id)}
                 >
                   {s.label} {stageCount(s.id)}
@@ -608,6 +612,7 @@ export default function Dashboard() {
               <button
                 type="button"
                 className={`filter-chip${selectedProjectId === null ? " filter-chip-active" : ""}`}
+                aria-pressed={selectedProjectId === null}
                 onClick={() => selectProject(null)}
               >
                 All projects
@@ -617,6 +622,7 @@ export default function Dashboard() {
                   key={p.id}
                   type="button"
                   className={`filter-chip${selectedProjectId === p.id ? " filter-chip-active" : ""}`}
+                  aria-pressed={selectedProjectId === p.id}
                   onClick={() => selectProject(p.id)}
                 >
                   {p.name}

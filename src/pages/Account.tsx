@@ -5,6 +5,7 @@ import { api, type ReferralInfo } from "../lib/api";
 import { avatarColor, initials } from "../lib/avatar";
 import { DeleteAccountCard } from "../components/DeleteAccountCard";
 import { readStoredTheme, setTheme, type Theme } from "../lib/theme";
+import { useDocumentTitle } from "../lib/documentTitle";
 
 const TIMEZONES: string[] = (() => {
   try {
@@ -15,6 +16,7 @@ const TIMEZONES: string[] = (() => {
 })();
 
 export default function Account() {
+  useDocumentTitle("Account");
   const { user, refresh } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -131,7 +133,7 @@ export default function Account() {
   return (
     <div className="project-shell">
       <AppSidebar />
-      <main className="project-main">
+      <main id="main-content" className="project-main">
         <div className="page-head">
           <h1>Account</h1>
         </div>

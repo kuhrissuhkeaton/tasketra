@@ -4,6 +4,7 @@ import { api, ApiError } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
 import { Wordmark } from "../components/Wordmark";
 import { track } from "../lib/analytics";
+import { useDocumentTitle } from "../lib/documentTitle";
 
 /** Which offer brought someone to sign up: the tasketra.com pricing buttons
  *  link here with ?plan=pro or ?plan=founding; anything else is the free plan. */
@@ -44,6 +45,7 @@ export default function Login() {
   const [mode, setMode] = useState<"login" | "register">(params.get("mode") === "register" ? "register" : "login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  useDocumentTitle(mode === "register" ? "Create your account" : "Sign in");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -96,7 +98,7 @@ export default function Login() {
   const showFoundingCount = plan === "founding" && founding !== null && !founding.full && founding.cap > 0;
 
   return (
-    <div className="auth-screen">
+    <main className="auth-screen">
       <div className="auth-card">
         <Wordmark beta />
         {mode === "register" ? (
@@ -109,7 +111,10 @@ export default function Login() {
             </p>
           </div>
         ) : (
-          <p className="auth-tagline">Project management built for project managers.</p>
+          <>
+            <h1 className="sr-only">Sign in to Tasketra</h1>
+            <p className="auth-tagline">Project management built for project managers.</p>
+          </>
         )}
 
         {mode === "register" && refCode && (
@@ -182,6 +187,6 @@ export default function Login() {
           </>
         )}
       </div>
-    </div>
+    </main>
   );
 }

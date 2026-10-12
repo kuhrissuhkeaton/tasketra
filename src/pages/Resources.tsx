@@ -10,6 +10,7 @@ import { ApplyTemplateDrawer } from "../components/ApplyTemplateDrawer";
 import { FormsAndDownloads } from "../components/FormsAndDownloads";
 import { ProjectFlowGuide } from "../components/ProjectFlowGuide";
 import { STAKEHOLDER_QUADRANTS } from "../lib/stakeholderGrid";
+import { useDocumentTitle } from "../lib/documentTitle";
 
 type Methodology = { name: string; points: string[]; bestWhen: string };
 
@@ -278,6 +279,7 @@ const STATUS_REPORT_TIPS: string[] = [
 ];
 
 export default function Resources() {
+  useDocumentTitle("Resource hub");
   const [query, setQuery] = useState("");
   const [replaying, setReplaying] = useState(false);
   const [applyTemplateId, setApplyTemplateId] = useState<string | null>(null);
@@ -351,7 +353,7 @@ export default function Resources() {
     <div className="project-shell">
       <AppSidebar />
 
-      <main className="project-main">
+      <main id="main-content" className="project-main">
         <div className="page-head">
           <h1>Resource hub</h1>
         </div>
@@ -401,7 +403,7 @@ export default function Resources() {
                 const planned = planPhases(t);
                 return (
                   <div className="resource-card" key={t.id}>
-                    <h4>{t.name}</h4>
+                    <h3 className="heading-sm">{t.name}</h3>
                     <p>{t.blurb}</p>
                     <p className="muted" style={{ fontSize: 13 }}>
                       <strong>Good for:</strong> {t.bestFor}
@@ -417,15 +419,15 @@ export default function Resources() {
                       <summary>See what's inside</summary>
                       {t.phases.map((p, i) => (
                         <div key={p.title}>
-                          <h5>{p.title} <span className="muted">({planned[i].startDay === 0 ? "start" : `week ${Math.floor(planned[i].startDay / 7) + 1}`}, {Math.round(p.days / 7)} wk)</span></h5>
+                          <h4>{p.title} <span className="muted">({planned[i].startDay === 0 ? "start" : `week ${Math.floor(planned[i].startDay / 7) + 1}`}, {Math.round(p.days / 7)} wk)</span></h4>
                           <ul>
                             {t.tasks.filter((x) => x.phase === i).map((x) => <li key={x.title}>{x.title}</li>)}
                           </ul>
                         </div>
                       ))}
-                      <h5>Risks to watch</h5>
+                      <h4>Risks to watch</h4>
                       <ul>{t.risks.map((x) => <li key={x.title}>{x.title}</li>)}</ul>
-                      <h5>Stakeholder roles</h5>
+                      <h4>Stakeholder roles</h4>
                       <ul>{t.stakeholders.map((x) => <li key={x.name}>{x.name}</li>)}</ul>
                     </details>
                     <button type="button" className="btn btn-primary" onClick={() => navigate(`/app?template=${t.id}`)}>
@@ -473,7 +475,7 @@ export default function Resources() {
             <div className="resource-grid">
               {methodologies.map((m) => (
                 <div className="resource-card" key={m.name}>
-                  <h4>{m.name}</h4>
+                  <h3 className="heading-sm">{m.name}</h3>
                   <ul>
                     {m.points.map((pt, i) => <li key={i}>{pt}</li>)}
                   </ul>
@@ -516,7 +518,7 @@ export default function Resources() {
             <div className="resource-grid">
               {raidItems.map((r) => (
                 <div className="resource-card" key={r.term}>
-                  <h4>{r.term}</h4>
+                  <h3 className="heading-sm">{r.term}</h3>
                   <p>{r.definition}</p>
                   <div className="callout"><strong>Example:</strong> {r.example}</div>
                   <p className="muted" style={{ marginTop: 10, fontSize: 13 }}>{r.whereInApp}</p>
@@ -537,7 +539,7 @@ export default function Resources() {
             <div className="resource-grid">
               {quadrants.map((s) => (
                 <div className="resource-card" key={s.name}>
-                  <h4>{s.name}</h4>
+                  <h3 className="heading-sm">{s.name}</h3>
                   <p className="muted" style={{ fontSize: 13, marginBottom: 8 }}>{s.axis}</p>
                   <p>{s.strategy}</p>
                 </div>
@@ -552,7 +554,7 @@ export default function Resources() {
             <div className="resource-grid">
               {meetings.map((m) => (
                 <div className="resource-card" key={m.name}>
-                  <h4>{m.name}</h4>
+                  <h3 className="heading-sm">{m.name}</h3>
                   <p className="muted" style={{ fontSize: 13, marginBottom: 8 }}>{m.cadence}</p>
                   <p>{m.purpose}</p>
                   <ul>

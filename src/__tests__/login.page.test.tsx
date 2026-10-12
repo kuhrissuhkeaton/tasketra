@@ -125,7 +125,7 @@ describe("register page, by plan", () => {
   it("sign-in mode keeps Sign in and no offer", async () => {
     await render("/login?plan=founding");
     expect(submitButton().textContent).toBe("Sign in");
-    expect(container.querySelector("h1")).toBeNull();
+    expect(container.querySelector(".auth-headline")).toBeNull();
     expect(container.textContent).not.toContain("Built by a PM");
   });
 });

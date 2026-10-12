@@ -1,4 +1,6 @@
+import { useRef } from "react";
 import type { RoadmapItem } from "../lib/api";
+import { useIsScrollable } from "../lib/scrollRegion";
 import { phaseProgress } from "../lib/phaseProgress";
 
 // Shared between the owner-facing Roadmap tab (ProjectHome.tsx) and the
@@ -96,6 +98,8 @@ export function RoadmapTimeline({
 }) {
   const dated = items.filter((i) => i.start_date);
   const undated = items.filter((i) => !i.start_date);
+  const trackRef = useRef<HTMLDivElement>(null);
+  const trackScrolls = useIsScrollable(trackRef, dated.length > 0);
   const swimlanes = Array.from(new Set(items.map((i) => i.swimlane))).sort();
 
   if (dated.length === 0) {
@@ -175,7 +179,11 @@ export function RoadmapTimeline({
             </div>
           ))}
         </div>
-        <div className="gantt-track-wrap roadmap-track-wrap">
+        <div
+          className="gantt-track-wrap roadmap-track-wrap"
+          ref={trackRef}
+          {...(trackScrolls ? { tabIndex: 0, role: "region", "aria-label": "Roadmap timeline, scrollable" } : {})}
+        >
           <div style={{ width: trackWidth, position: "relative" }}>
             <div className="gantt-header" style={{ width: trackWidth }}>
               {monthTicks.map((tick) => (

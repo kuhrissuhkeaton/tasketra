@@ -4,6 +4,7 @@ import { api, ApiError, type BroadcastProgress } from "../lib/api";
 import { AppSidebar } from "../components/AppSidebar";
 import { useConfirm } from "../components/ConfirmDialog";
 import { fmtDate } from "../lib/format";
+import { useDocumentTitle } from "../lib/documentTitle";
 
 const DEFAULT_SUBJECT = "Thank you for being one of the first 100";
 const DEFAULT_BODY = `Hi {first_name},
@@ -21,6 +22,7 @@ Thank you for building this with me.
 -- Karissa`;
 
 export default function AdminBroadcast() {
+  useDocumentTitle("Email founding members");
   const confirm = useConfirm();
   const [subject, setSubject] = useState(DEFAULT_SUBJECT);
   const [body, setBody] = useState(DEFAULT_BODY);
@@ -99,7 +101,7 @@ export default function AdminBroadcast() {
   return (
     <div className="project-shell">
       <AppSidebar />
-      <main className="project-main">
+      <main id="main-content" className="project-main">
         <div className="page-head">
           <h1>Email founding members</h1>
           {audience !== null && <div className="stat-row"><div className="stat"><strong>{audience}</strong> will receive it</div></div>}

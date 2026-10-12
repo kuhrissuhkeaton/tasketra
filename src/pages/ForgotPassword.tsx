@@ -2,8 +2,10 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../lib/api";
 import { Wordmark } from "../components/Wordmark";
+import { useDocumentTitle } from "../lib/documentTitle";
 
 export default function ForgotPassword() {
+  useDocumentTitle("Reset your password");
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
@@ -24,10 +26,10 @@ export default function ForgotPassword() {
   }
 
   return (
-    <div className="auth-screen">
+    <main className="auth-screen">
       <div className="auth-card">
         <Wordmark beta />
-        <p className="auth-tagline">Reset your password</p>
+        <h1 className="auth-tagline">Reset your password</h1>
 
         {sent ? (
           <p className="muted" style={{ marginTop: 16 }}>
@@ -48,6 +50,6 @@ export default function ForgotPassword() {
           <Link to="/login">Back to sign in</Link>
         </p>
       </div>
-    </div>
+    </main>
   );
 }

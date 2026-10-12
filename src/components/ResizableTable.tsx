@@ -1,5 +1,6 @@
-import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { fitColumns, refitColumns } from "../lib/fitColumns";
+import { useIsScrollable } from "../lib/scrollRegion";
 
 /**
  * Drop-in replacement for `<table className="table">` that makes every
@@ -56,9 +57,13 @@ function loadWidths(id: string): number[] | null {
 function labelNeededWidth(th: HTMLElement): number {
   const prevWhiteSpace = th.style.whiteSpace;
   th.style.whiteSpace = "nowrap";
+  // Screen-reader-only text (an "Actions" label on an icon-less column) takes no visible room.
+  const hiddenText = Array.from(th.querySelectorAll<HTMLElement>(".sr-only"));
+  hiddenText.forEach((el) => { el.style.display = "none"; });
   const range = document.createRange();
   range.selectNodeContents(th);
   const textWidth = range.getBoundingClientRect().width;
+  hiddenText.forEach((el) => { el.style.display = ""; });
   const style = getComputedStyle(th);
   const padding = (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0);
   th.style.whiteSpace = prevWhiteSpace;
@@ -110,6 +115,7 @@ export function ResizableTable({
   className = "table",
   style,
   minColWidths,
+  label,
   children,
 }: {
   id: string;
@@ -119,9 +125,14 @@ export function ResizableTable({
    *  controls or pills that must not be squeezed into overlapping their
    *  neighbours; the table scrolls sideways instead. */
   minColWidths?: number[];
+  /** Accessible name for the table. Defaults to a name made from `id`. */
+  label?: string;
   children: ReactNode;
 }) {
   const tableRef = useRef<HTMLTableElement>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const scrollable = useIsScrollable(wrapRef);
+  const tableName = label ?? `${id.replace(/[-_]+/g, " ")} table`;
   const [widths, setWidths] = useState<number[] | null>(null);
   const widthsRef = useRef<number[] | null>(null);
   widthsRef.current = widths;
@@ -289,12 +300,26 @@ export function ResizableTable({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
+  // Tell assistive tech which header cells head a column. Done on the DOM
+  // because the <thead> comes from every caller's own markup.
+  useEffect(() => {
+    tableRef.current?.querySelectorAll("thead th:not([scope])").forEach((th) => {
+      if (!(th as HTMLTableCellElement).colSpan || (th as HTMLTableCellElement).colSpan === 1) th.setAttribute("scope", "col");
+    });
+  });
+
   const totalWidth = widths ? widths.reduce((sum, w) => sum + w, 0) : undefined;
 
   return (
-    <div className="resizable-table-wrap" style={style}>
+    <div
+      className="resizable-table-wrap"
+      style={style}
+      ref={wrapRef}
+      {...(scrollable ? { tabIndex: 0, role: "region", "aria-label": `${tableName}, scrollable` } : {})}
+    >
       <table
         ref={tableRef}
+        aria-label={tableName}
         className={className}
         style={widths ? { tableLayout: "fixed", width: totalWidth } : undefined}
       >

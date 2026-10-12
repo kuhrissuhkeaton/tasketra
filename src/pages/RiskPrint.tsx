@@ -4,6 +4,7 @@ import { api, type Project, type Risk } from "../lib/api";
 import { Wordmark } from "../components/Wordmark";
 import { RiskDocument } from "../components/RiskDocument";
 import { ShareBox } from "../components/ShareBox";
+import { useDocumentTitle } from "../lib/documentTitle";
 
 // Signed-in printable risk page. Anyone with project access can print it;
 // only the owner sees the share-link controls.
@@ -14,6 +15,7 @@ export default function RiskPrint() {
   const [error, setError] = useState<string | null>(null);
   const [includeResolved, setIncludeResolved] = useState(false);
 
+  useDocumentTitle(project ? `Risk register | ${project.name}` : "Risk register");
   useEffect(() => {
     if (!id) return;
     Promise.all([api.getProject(id), api.listRisks(id)])
@@ -21,13 +23,13 @@ export default function RiskPrint() {
       .catch((e) => setError(e.message));
   }, [id]);
 
-  if (error) return <div className="public-roadmap"><Wordmark size="sm" /><p className="form-error">{error}</p></div>;
-  if (!project) return <div className="public-roadmap"><div className="skel-loading-block"><div className="skel skel-text" style={{ width: "45%" }} /></div></div>;
+  if (error) return <main className="public-roadmap"><Wordmark size="sm" /><p className="form-error">{error}</p></main>;
+  if (!project) return <main className="public-roadmap"><div className="skel-loading-block"><div className="skel skel-text" style={{ width: "45%" }} /></div></main>;
 
   const shown = risks.filter((r) => includeResolved || r.status !== "resolved");
 
   return (
-    <div className="public-roadmap share-public">
+    <main className="public-roadmap share-public">
       <div className="no-print share-public-bar">
         <Link to={`/app/projects/${id}`} className="muted">← Back to {project.name}</Link>
         <div className="share-public-actions">
@@ -51,6 +53,6 @@ export default function RiskPrint() {
         risks={shown}
         dateLabel={new Date().toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })}
       />
-    </div>
+    </main>
   );
 }

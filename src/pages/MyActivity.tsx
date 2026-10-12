@@ -3,11 +3,13 @@ import { Link } from "react-router-dom";
 import { AppSidebar } from "../components/AppSidebar";
 import { api, type ActivityItem } from "../lib/api";
 import { fmtDateTime } from "../lib/format";
+import { useDocumentTitle } from "../lib/documentTitle";
 
 const VERB: Record<string, string> = { created: "Created", updated: "Updated", deleted: "Deleted", restored: "Restored" };
 const label = (entityType: string) => entityType.replace(/_/g, " ");
 
 export default function MyActivity() {
+  useDocumentTitle("My activity");
   const [items, setItems] = useState<ActivityItem[] | null>(null);
   const [error, setError] = useState("");
 
@@ -18,7 +20,7 @@ export default function MyActivity() {
   return (
     <div className="project-shell">
       <AppSidebar />
-      <main className="project-main">
+      <main id="main-content" className="project-main">
         <div className="page-head"><h1>My activity</h1></div>
         {error && <p className="form-error" role="alert">{error}</p>}
         {items && items.length === 0 && (

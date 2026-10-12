@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { Wordmark } from "../components/Wordmark";
 import { fmtDateTime } from "../lib/format";
+import { useDocumentTitle } from "../lib/documentTitle";
 
 export default function DecisionPublic() {
   const { token } = useParams<{ token: string }>();
@@ -14,6 +15,7 @@ export default function DecisionPublic() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
+  useDocumentTitle(decision?.title ?? "Decision request");
   useEffect(() => {
     if (!token) return;
     api
@@ -41,21 +43,21 @@ export default function DecisionPublic() {
     }
   }
 
-  if (loading) return <div className="public-decision"><div className="skel-loading-block"><div className="skel skel-text" style={{ width: "45%" }} /><div className="skel skel-text" style={{ width: "80%" }} /><div className="skel skel-text" style={{ width: "60%", marginBottom: 0 }} /></div></div>;
+  if (loading) return <main className="public-decision"><div className="skel-loading-block"><div className="skel skel-text" style={{ width: "45%" }} /><div className="skel skel-text" style={{ width: "80%" }} /><div className="skel skel-text" style={{ width: "60%", marginBottom: 0 }} /></div></main>;
 
   if (error && !decision) {
     return (
-      <div className="public-decision">
+      <main className="public-decision">
         <Wordmark size="sm" />
         <p className="form-error">{error}</p>
-      </div>
+      </main>
     );
   }
 
   if (!decision) return null;
 
   return (
-    <div className="public-decision">
+    <main className="public-decision">
       <Wordmark size="sm" />
       <p className="muted">Regarding project: {decision.project_name}</p>
       <h1>{decision.title}</h1>
@@ -89,6 +91,6 @@ export default function DecisionPublic() {
           </button>
         </form>
       )}
-    </div>
+    </main>
   );
 }

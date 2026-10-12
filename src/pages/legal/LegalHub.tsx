@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { Wordmark } from "../../components/Wordmark";
+import { useDocumentTitle } from "../../lib/documentTitle";
 
 const DOCS = [
   {
@@ -25,6 +26,7 @@ const DOCS = [
 ];
 
 export default function LegalHub() {
+  useDocumentTitle("Legal");
   return (
     <div className="shell legal-page">
       <header className="topbar">

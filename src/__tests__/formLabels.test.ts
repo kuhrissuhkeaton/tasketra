@@ -1,6 +1,7 @@
 // Every <input>, <select> and <textarea> in the app must have an accessible
 // name: wrapped in a <label>, tied to one with htmlFor/id, or given an
-// aria-label / aria-labelledby / title. A visible <label> sitting next to a
+// aria-label / aria-labelledby. (A title attribute alone is not enough:
+// axe flags it as "label-title-only" and it is not announced reliably.) A visible <label> sitting next to a
 // field is NOT enough on its own (screen readers announce "edit text, blank").
 // This reads the source with the TypeScript compiler, so a new unlabelled
 // field fails here instead of reaching a screen-reader user.
@@ -40,7 +41,7 @@ function unlabelled(file: string, src: string): string[] {
       for (let p: ts.Node | undefined = n.parent; p; p = p.parent) {
         if (ts.isJsxElement(p) && p.openingElement.tagName.getText() === "label") { wrapped = true; break; }
       }
-      const named = wrapped || spread || a["aria-label"] || a["aria-labelledby"] || a.title ||
+      const named = wrapped || spread || a["aria-label"] || a["aria-labelledby"] ||
         (a.id && htmlFor.has(a.id.replace(/[{}`"']/g, "")));
       if (!named && !/hidden|submit/.test(a.type ?? "")) {
         bad.push(`${file}:${sf.getLineAndCharacterOfPosition(n.getStart()).line + 1} <${n.tagName.getText()}>`);

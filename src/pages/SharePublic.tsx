@@ -4,6 +4,7 @@ import { api, type SharedDocument } from "../lib/api";
 import { Wordmark } from "../components/Wordmark";
 import { RiskDocument } from "../components/RiskDocument";
 import { RaciDocument } from "../components/RaciDocument";
+import { useDocumentTitle } from "../lib/documentTitle";
 
 // Public, read-only view of a shared document. Works for any signed-out
 // visitor; the server only returns it while the owner's link is active.
@@ -12,6 +13,7 @@ export default function SharePublic() {
   const [data, setData] = useState<SharedDocument | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  useDocumentTitle(data ? `${data.kind === "raci" ? "RACI matrix" : "Risk register"} | ${data.project.name}` : "Shared document");
   useEffect(() => {
     const meta = document.createElement("meta");
     meta.name = "robots";
@@ -28,7 +30,7 @@ export default function SharePublic() {
   const dateLabel = `As of ${new Date().toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })}`;
 
   return (
-    <div className="public-roadmap share-public">
+    <main className="public-roadmap share-public">
       <div className="no-print share-public-bar">
         <Wordmark size="sm" />
         {data && <button className="btn btn-primary" type="button" onClick={() => window.print()}>Print / Save as PDF</button>}
@@ -49,6 +51,6 @@ export default function SharePublic() {
           </p>
         </>
       )}
-    </div>
+    </main>
   );
 }

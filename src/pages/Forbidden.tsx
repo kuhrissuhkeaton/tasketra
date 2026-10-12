@@ -1,7 +1,9 @@
 import { Link } from "react-router-dom";
 import { ErrorPage } from "../components/ErrorPage";
+import { useDocumentTitle } from "../lib/documentTitle";
 
 export default function Forbidden() {
+  useDocumentTitle("No access");
   return (
     <ErrorPage
       code="403"

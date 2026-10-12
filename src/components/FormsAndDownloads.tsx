@@ -56,7 +56,7 @@ export function FormsAndDownloads() {
           <div className="template-grid">
             {FORM_DOCS.map((d) => (
               <div className="template-card" key={d.type}>
-                <h4>{d.title}</h4>
+                <h2 className="heading-sm">{d.title}</h2>
                 <p className="muted">{d.blurb}</p>
                 <button type="button" className="btn btn-primary" disabled={busy === d.type} onClick={() => download(d.type, d.title)}>
                   {busy === d.type ? "Generating..." : "Download .docx"}
@@ -64,22 +64,22 @@ export function FormsAndDownloads() {
               </div>
             ))}
             <div className="template-card">
-              <h4>Risk matrix and register</h4>
+              <h2 className="heading-sm">Risk matrix and register</h2>
               <p className="muted">Printable page with the probability and impact grid. Save as PDF, or share a read-only link.</p>
               <Link className="btn btn-primary" to={`/app/projects/${projectId}/print/risks`}>Open printable page</Link>
             </div>
             <div className="template-card">
-              <h4>RACI chart</h4>
+              <h2 className="heading-sm">RACI chart</h2>
               <p className="muted">Printable page of who is Responsible, Accountable, Consulted and Informed. Save as PDF, or share a read-only link.</p>
               <Link className="btn btn-primary" to={`/app/projects/${projectId}/print/raci`}>Open printable page</Link>
             </div>
             <div className="template-card">
-              <h4>Stakeholder grid</h4>
+              <h2 className="heading-sm">Stakeholder grid</h2>
               <p className="muted">Printable power / interest grid showing who to manage closely, keep satisfied, keep informed or monitor. Save as PDF.</p>
               <Link className="btn btn-primary" to={`/app/projects/${projectId}/print/stakeholders`}>Open printable page</Link>
             </div>
             <div className="template-card">
-              <h4>Weekly report</h4>
+              <h2 className="heading-sm">Weekly report</h2>
               <p className="muted">The week's progress, risks and next steps, ready to print or save as PDF.</p>
               <Link className="btn btn-primary" to={`/app/projects/${projectId}?tab=report`}>Open report</Link>
             </div>

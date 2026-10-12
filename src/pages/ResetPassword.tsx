@@ -3,8 +3,10 @@ import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
 import { Wordmark } from "../components/Wordmark";
+import { useDocumentTitle } from "../lib/documentTitle";
 
 export default function ResetPassword() {
+  useDocumentTitle("Choose a new password");
   const [params] = useSearchParams();
   const token = params.get("token") || "";
   const [password, setPassword] = useState("");
@@ -35,23 +37,24 @@ export default function ResetPassword() {
 
   if (!token) {
     return (
-      <div className="auth-screen">
+      <main className="auth-screen">
         <div className="auth-card">
           <Wordmark beta />
+          <h1 className="sr-only">Password reset link</h1>
           <p className="muted" style={{ marginTop: 16 }}>
             This reset link is missing its token. Request a new one from the{" "}
             <Link to="/forgot-password">forgot password</Link> page.
           </p>
         </div>
-      </div>
+      </main>
     );
   }
 
   return (
-    <div className="auth-screen">
+    <main className="auth-screen">
       <div className="auth-card">
         <Wordmark beta />
-        <p className="auth-tagline">Choose a new password</p>
+        <h1 className="auth-tagline">Choose a new password</h1>
 
         <form onSubmit={onSubmit}>
           <label htmlFor="f-resetpassword-58">New password</label>
@@ -64,6 +67,6 @@ export default function ResetPassword() {
           </button>
         </form>
       </div>
-    </div>
+    </main>
   );
 }

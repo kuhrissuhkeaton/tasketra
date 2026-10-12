@@ -1,7 +1,9 @@
 import { Link } from "react-router-dom";
 import { ErrorPage } from "../components/ErrorPage";
+import { useDocumentTitle } from "../lib/documentTitle";
 
 export default function NotFound() {
+  useDocumentTitle("Page not found");
   return (
     <ErrorPage
       code="404"

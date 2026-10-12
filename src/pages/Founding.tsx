@@ -3,8 +3,10 @@ import { AppSidebar } from "../components/AppSidebar";
 import { useAuth } from "../lib/auth-context";
 import { api, type FoundingMe, type FoundingWallMember, type ReferralInfo } from "../lib/api";
 import { fmtDate } from "../lib/format";
+import { useDocumentTitle } from "../lib/documentTitle";
 
 export default function Founding() {
+  useDocumentTitle("Founder hub");
   const { user } = useAuth();
   const isFounder = user?.plan === "founding";
   const [me, setMe] = useState<FoundingMe | null>(null);
@@ -49,7 +51,7 @@ export default function Founding() {
     return (
       <div className="project-shell">
         <AppSidebar />
-        <main className="project-main">
+        <main id="main-content" className="project-main">
           <div className="page-head"><h1>Founder hub</h1></div>
           <p className="muted">This page is for founding members.</p>
         </main>
@@ -60,7 +62,7 @@ export default function Founding() {
   return (
     <div className="project-shell">
       <AppSidebar />
-      <main className="project-main">
+      <main id="main-content" className="project-main">
         <div className="page-head"><h1>Founder hub</h1></div>
         {error && <p className="form-error" role="alert">{error}</p>}
 

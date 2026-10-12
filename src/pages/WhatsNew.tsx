@@ -1,11 +1,13 @@
 import { AppSidebar } from "../components/AppSidebar";
 import { CHANGES } from "../lib/whatsNewData";
+import { useDocumentTitle } from "../lib/documentTitle";
 
 export default function WhatsNew() {
+  useDocumentTitle("What's new");
   return (
     <div className="project-shell">
       <AppSidebar />
-      <main className="project-main">
+      <main id="main-content" className="project-main">
         <div className="page-head">
           <h1>What's new</h1>
         </div>
@@ -22,7 +24,7 @@ export default function WhatsNew() {
                 <span className="pill pill-navy">{c.version}</span>
                 <span className="muted">{c.date}</span>
               </div>
-              <h4>{c.title}</h4>
+              <h2 className="heading-sm">{c.title}</h2>
               <p className="muted">{c.body}</p>
             </div>
           ))}

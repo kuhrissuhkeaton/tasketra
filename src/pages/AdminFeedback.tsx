@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, type Feedback } from "../lib/api";
 import { AppSidebar } from "../components/AppSidebar";
 import { fmtDate } from "../lib/format";
+import { useDocumentTitle } from "../lib/documentTitle";
 
 const STATUS_PILL: Record<Feedback["status"], string> = {
   new: "pill-gold",
@@ -11,6 +12,7 @@ const STATUS_PILL: Record<Feedback["status"], string> = {
 };
 
 export default function AdminFeedback() {
+  useDocumentTitle("Feedback");
   const [items, setItems] = useState<Feedback[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -64,7 +66,7 @@ export default function AdminFeedback() {
     <div className="project-shell">
       <AppSidebar />
 
-      <main className="project-main">
+      <main id="main-content" className="project-main">
         <div className="page-head">
           <h1>Feedback</h1>
           <div className="stat-row">

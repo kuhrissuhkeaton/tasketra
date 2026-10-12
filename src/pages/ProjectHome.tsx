@@ -28,10 +28,12 @@ import { FirstRunChecklist } from "../components/FirstRunChecklist";
 import { noteProjectActivity } from "../lib/firstRun";
 import { StageRail, StageChip, STAGE_LABEL } from "../components/StageRail";
 import { ProjectSetupPicker } from "../components/ProjectSetup";
+import { useIsScrollable } from "../lib/scrollRegion";
 import { CharterTab } from "../components/CharterTab";
 import { BaselineCard } from "../components/BaselineCard";
 import { EscalationSettings } from "../components/EscalationSettings";
 import { isTabHidden, primaryTabOrder, defaultTasksView, hiddenTabLabels, SIZE_LABEL, type ProjectSize, type ProjectApproach } from "../lib/projectView";
+import { useDocumentTitle } from "../lib/documentTitle";
 
 
 export type Tab = "home" | "roadmap" | "tasks" | "charter" | "okrs" | "issues" | "risks" | "assumptions" | "dependencies" | "quality" | "compliance" | "budget" | "meetings" | "documents" | "stakeholders" | "decisions" | "team" | "raci" | "procurement" | "comms" | "closure" | "report" | "templates" | "export" | "connections" | "trash";
@@ -259,6 +261,12 @@ export default function ProjectHome() {
     // the state-clearing navigate() call below.
   }, [location.state, id, user]);
 
+  // Browser-tab title: "<view> | <project> | Tasketra" (just the project name on the Home view).
+  const titleTabLabel = tab === "trash"
+    ? "Trash"
+    : [...PRIMARY_TABS, ...SECONDARY_NAV_GROUPS.flatMap((g) => g.tabs)].find((t) => t.id === tab)?.label ?? null;
+  useDocumentTitle(project?.name ? (titleTabLabel && tab !== "home" ? `${titleTabLabel} | ${project.name}` : project.name) : null);
+
   if (!id) return null;
 
   // Size hides tabs (never data). The product tour and "show all tabs" both
@@ -311,7 +319,7 @@ export default function ProjectHome() {
         ))}
       </AppSidebar>
 
-      <main className={`project-main${TABLE_TABS.has(tab) ? " project-main-tables" : ""}`}>
+      <main id="main-content" className={`project-main${TABLE_TABS.has(tab) ? " project-main-tables" : ""}`}>
         {viewLabel && (
           <nav className="breadcrumb" aria-label="Breadcrumb">
             <ol>
@@ -936,7 +944,7 @@ function TrashTab({ projectId }: { projectId: string }) {
       ) : (
         <ResizableTable id="trash">
           <thead>
-            <tr><th>Item</th><th>Type</th><th>Deleted</th><th></th></tr>
+            <tr><th>Item</th><th>Type</th><th>Deleted</th><th><span className="sr-only">Actions</span></th></tr>
           </thead>
           <tbody>
             {items.map((item) => (
@@ -1173,15 +1181,21 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
       <form className="inline-form inline-form-wide" onSubmit={addTask}>
         <input aria-label="Task title" placeholder="Task title" value={title} onChange={(e) => setTitle(e.target.value)} />
         <input aria-label="Owner (optional)" placeholder="Owner (optional)" value={owner} onChange={(e) => setOwner(e.target.value)} />
-        <input type="date" title="Start date (optional)" value={start} onChange={(e) => setStart(e.target.value)} />
-        <input type="date" title="Due date" value={due} onChange={(e) => setDue(e.target.value)} />
-        <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as Task["status"])} title="Status">
+        <span className="datefield">
+          <span className="datefield-label" aria-hidden="true">Start</span>
+          <input type="date" title="Start date (optional)" aria-label="Start date (optional)" value={start} onChange={(e) => setStart(e.target.value)} />
+        </span>
+        <span className="datefield">
+          <span className="datefield-label" aria-hidden="true">Due</span>
+          <input type="date" title="Due date" aria-label="Due date" value={due} onChange={(e) => setDue(e.target.value)} />
+        </span>
+        <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as Task["status"])} title="Status" aria-label="Status">
           {Object.entries(STATUS_LABEL).map(([value, label]) => (
             <option key={value} value={value}>{label}</option>
           ))}
         </select>
         {phases.length > 0 && (
-          <select value={newPhase} onChange={(e) => setNewPhase(e.target.value)} title="Phase (optional) -- tie this task to a phase on your roadmap">
+          <select value={newPhase} onChange={(e) => setNewPhase(e.target.value)} title="Phase (optional) -- tie this task to a phase on your roadmap" aria-label="Phase (optional)">
             <option value="">No phase</option>
             {phases.map((p) => (
               <option key={p.id} value={p.id}>{p.title}</option>
@@ -1229,7 +1243,7 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
       {view === "list" ? (
         <ResizableTable id="tasks" minColWidths={[220, 110, 110, 150, 0]}>
           <thead>
-            <tr><th>Task</th><th>Owner</th><th>Due</th><th>Status</th><th></th></tr>
+            <tr><th>Task</th><th>Owner</th><th>Due</th><th>Status</th><th><span className="sr-only">Actions</span></th></tr>
           </thead>
           <tbody>
             {buildTaskRows(tasks).map(({ task: t, depth }) => (
@@ -1284,8 +1298,14 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
                       >
                         <input aria-label="Sub-task title" placeholder="Sub-task title" value={subTitle} onChange={(e) => setSubTitle(e.target.value)} autoFocus />
                         <input aria-label="Owner (optional)" placeholder="Owner (optional)" value={subOwner} onChange={(e) => setSubOwner(e.target.value)} />
-                        <input type="date" title="Start date (optional)" value={subStart} onChange={(e) => setSubStart(e.target.value)} />
-                        <input type="date" title="Due date" value={subDue} onChange={(e) => setSubDue(e.target.value)} />
+                        <span className="datefield">
+                          <span className="datefield-label" aria-hidden="true">Start</span>
+                          <input type="date" title="Start date (optional)" aria-label="Start date (optional)" value={subStart} onChange={(e) => setSubStart(e.target.value)} />
+                        </span>
+                        <span className="datefield">
+                          <span className="datefield-label" aria-hidden="true">Due</span>
+                          <input type="date" title="Due date" aria-label="Due date" value={subDue} onChange={(e) => setSubDue(e.target.value)} />
+                        </span>
                         <button className="btn btn-primary">Add</button>
                         <button className="btn btn-ghost" type="button" onClick={() => setAddingSubtaskFor(null)}>Cancel</button>
                       </form>
@@ -1491,6 +1511,8 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
 }
 
 function TimelineView({ tasks }: { tasks: Task[] }) {
+  const trackRef = useRef<HTMLDivElement>(null);
+  const trackScrolls = useIsScrollable(trackRef, tasks.some((t) => t.due_date));
   const dated = tasks.filter((t) => t.due_date);
   if (dated.length === 0) {
     return <p className="muted">Add due dates to your tasks to see them on the timeline.</p>;
@@ -1536,7 +1558,11 @@ function TimelineView({ tasks }: { tasks: Task[] }) {
             </div>
           ))}
         </div>
-        <div className="gantt-track-wrap">
+        <div
+          className="gantt-track-wrap"
+          ref={trackRef}
+          {...(trackScrolls ? { tabIndex: 0, role: "region", "aria-label": "Task timeline, scrollable" } : {})}
+        >
           <div style={{ width: trackWidth, position: "relative" }}>
             <div className="gantt-header" style={{ width: trackWidth }}>
               {weekTicks.map((tick) => (
@@ -1747,7 +1773,7 @@ function IssuesTab({ projectId, highlightId }: { projectId: string; highlightId?
             <textarea id="f-projecthome-1597" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
             <div className="inline-form" style={{ marginTop: 8, marginBottom: 0 }}>
               <input aria-label="Owner (optional)" placeholder="Owner (optional)" value={owner} onChange={(e) => setOwner(e.target.value)} />
-              <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as Issue["status"])} title="Status">
+              <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as Issue["status"])} title="Status" aria-label="Status">
                 {Object.entries(ISSUE_STATUS_LABEL).map(([value, label]) => (
                   <option key={value} value={value}>{label}</option>
                 ))}
@@ -1812,7 +1838,7 @@ function IssuesTab({ projectId, highlightId }: { projectId: string; highlightId?
       ) : (
       <ResizableTable id="raid-issues">
         <thead>
-          <tr><th>Issue</th><th>Severity</th><th>Owner</th><th>Status</th><th></th></tr>
+          <tr><th>Issue</th><th>Severity</th><th>Owner</th><th>Status</th><th><span className="sr-only">Actions</span></th></tr>
         </thead>
         <tbody>
           {issues.map((i) => (
@@ -2139,7 +2165,7 @@ function RisksTab({ projectId, highlightId }: { projectId: string; highlightId?:
             <textarea id="f-projecthome-1966" value={mitigation} onChange={(e) => setMitigation(e.target.value)} rows={2} />
             <div className="inline-form" style={{ marginTop: 8, marginBottom: 0 }}>
               <input aria-label="Owner (optional)" placeholder="Owner (optional)" value={owner} onChange={(e) => setOwner(e.target.value)} />
-              <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as Risk["status"])} title="Status">
+              <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as Risk["status"])} title="Status" aria-label="Status">
                 {Object.entries(RISK_STATUS_LABEL).map(([value, label]) => (
                   <option key={value} value={value}>{label}</option>
                 ))}
@@ -2230,7 +2256,7 @@ function RisksTab({ projectId, highlightId }: { projectId: string; highlightId?:
       ) : (
       <ResizableTable id="raid-risks">
         <thead>
-          <tr><th>Risk</th><th>Exposure</th><th>Owner</th><th>Status</th><th></th></tr>
+          <tr><th>Risk</th><th>Exposure</th><th>Owner</th><th>Status</th><th><span className="sr-only">Actions</span></th></tr>
         </thead>
         <tbody>
           {risks.map((r) => (
@@ -2487,7 +2513,7 @@ function AssumptionsTab({ projectId }: { projectId: string }) {
             <div className="inline-form" style={{ marginTop: 8, marginBottom: 0 }}>
               <input aria-label="Owner (optional)" placeholder="Owner (optional)" value={owner} onChange={(e) => setOwner(e.target.value)} />
               <input aria-label="Check by" type="date" value={checkBy} onChange={(e) => setCheckBy(e.target.value)} />
-              <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as Assumption["status"])} title="Status">
+              <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as Assumption["status"])} title="Status" aria-label="Status">
                 {Object.entries(ASSUMPTION_STATUS_LABEL).map(([value, label]) => (
                   <option key={value} value={value}>{label}</option>
                 ))}
@@ -2551,7 +2577,7 @@ function AssumptionsTab({ projectId }: { projectId: string }) {
       ) : (
       <ResizableTable id="raid-assumptions">
         <thead>
-          <tr><th>Assumption</th><th>Owner</th><th>Check by</th><th>Status</th><th></th></tr>
+          <tr><th>Assumption</th><th>Owner</th><th>Check by</th><th>Status</th><th><span className="sr-only">Actions</span></th></tr>
         </thead>
         <tbody>
           {assumptions.map((a) => (
@@ -2732,7 +2758,7 @@ function DependenciesTab({ projectId }: { projectId: string }) {
             <div className="inline-form" style={{ marginTop: 8, marginBottom: 0 }}>
               <input aria-label="Owner (optional)" placeholder="Owner (optional)" value={owner} onChange={(e) => setOwner(e.target.value)} />
               <input aria-label="Needed by" type="date" value={neededBy} onChange={(e) => setNeededBy(e.target.value)} />
-              <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as Dependency["status"])} title="Status">
+              <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as Dependency["status"])} title="Status" aria-label="Status">
                 {Object.entries(DEPENDENCY_STATUS_LABEL).map(([value, label]) => (
                   <option key={value} value={value}>{label}</option>
                 ))}
@@ -2799,7 +2825,7 @@ function DependenciesTab({ projectId }: { projectId: string }) {
       ) : (
       <ResizableTable id="raid-dependencies">
         <thead>
-          <tr><th>Dependency</th><th>Direction</th><th>Owner</th><th>Needed by</th><th>Status</th><th></th></tr>
+          <tr><th>Dependency</th><th>Direction</th><th>Owner</th><th>Needed by</th><th>Status</th><th><span className="sr-only">Actions</span></th></tr>
         </thead>
         <tbody>
           {dependencies.map((d) => (
@@ -2985,7 +3011,7 @@ function QualityTab({ projectId }: { projectId: string }) {
             <textarea id="f-projecthome-2771" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
             <div className="inline-form" style={{ marginTop: 8, marginBottom: 0 }}>
               <input aria-label="Owner (optional)" placeholder="Owner (optional)" value={owner} onChange={(e) => setOwner(e.target.value)} />
-              <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as QualityItem["status"])} title="Status">
+              <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as QualityItem["status"])} title="Status" aria-label="Status">
                 {Object.entries(QUALITY_STATUS_LABEL).map(([value, label]) => (
                   <option key={value} value={value}>{label}</option>
                 ))}
@@ -3050,7 +3076,7 @@ function QualityTab({ projectId }: { projectId: string }) {
       ) : (
       <ResizableTable id="raid-quality">
         <thead>
-          <tr><th>Quality item</th><th>Category</th><th>Owner</th><th>Status</th><th></th></tr>
+          <tr><th>Quality item</th><th>Category</th><th>Owner</th><th>Status</th><th><span className="sr-only">Actions</span></th></tr>
         </thead>
         <tbody>
           {items.map((q) => (
@@ -3240,12 +3266,12 @@ function ComplianceTab({ projectId }: { projectId: string }) {
             <textarea id="f-projecthome-3015" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
             <div className="inline-form" style={{ marginTop: 8, marginBottom: 0 }}>
               <input aria-label="Owner (optional)" placeholder="Owner (optional)" value={owner} onChange={(e) => setOwner(e.target.value)} />
-              <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as ComplianceItem["status"])} title="Status">
+              <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as ComplianceItem["status"])} title="Status" aria-label="Status">
                 {Object.entries(COMPLIANCE_STATUS_LABEL).map(([value, label]) => (
                   <option key={value} value={value}>{label}</option>
                 ))}
               </select>
-              <input type="date" title="Due date (optional)" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+              <input type="date" title="Due date (optional)" aria-label="Due date (optional)" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
             </div>
           </>
         }
@@ -3306,7 +3332,7 @@ function ComplianceTab({ projectId }: { projectId: string }) {
       ) : (
       <ResizableTable id="raid-compliance">
         <thead>
-          <tr><th>Compliance item</th><th>Category</th><th>Owner</th><th>Due</th><th>Status</th><th></th></tr>
+          <tr><th>Compliance item</th><th>Category</th><th>Owner</th><th>Due</th><th>Status</th><th><span className="sr-only">Actions</span></th></tr>
         </thead>
         <tbody>
           {items.map((c) => (
@@ -3591,7 +3617,7 @@ function OkrsTab({ projectId }: { projectId: string }) {
             <textarea id="f-projecthome-3355" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
             <div className="inline-form" style={{ marginTop: 8, marginBottom: 0 }}>
               <input aria-label="Owner (optional)" placeholder="Owner (optional)" value={ownerName} onChange={(e) => setOwnerName(e.target.value)} />
-              <select value={status} onChange={(e) => setStatus(e.target.value as Objective["status"])} title="Status">
+              <select value={status} onChange={(e) => setStatus(e.target.value as Objective["status"])} title="Status" aria-label="Status">
                 {Object.entries(OBJECTIVE_STATUS_LABEL).map(([value, label]) => (
                   <option key={value} value={value}>{label}</option>
                 ))}
@@ -3613,7 +3639,7 @@ function OkrsTab({ projectId }: { projectId: string }) {
                 <textarea aria-label="Description" value={editDescription} onChange={(e) => setEditDescription(e.target.value)} rows={2} />
                 <div className="inline-form" style={{ marginTop: 8, marginBottom: 0 }}>
                   <input aria-label="Owner (optional)" placeholder="Owner (optional)" value={editOwnerName} onChange={(e) => setEditOwnerName(e.target.value)} />
-                  <input type="date" title="Target date" value={editTargetDate} onChange={(e) => setEditTargetDate(e.target.value)} />
+                  <input type="date" title="Target date" aria-label="Target date" value={editTargetDate} onChange={(e) => setEditTargetDate(e.target.value)} />
                   <button className="btn btn-primary" type="button" onClick={() => saveEdit(o.id)}>Save</button>
                   <button className="btn btn-ghost" type="button" onClick={() => setEditingId(null)}>Cancel</button>
                 </div>
@@ -3877,7 +3903,7 @@ function CommsPlanTab({ projectId }: { projectId: string }) {
 
       <ResizableTable id="comms-plan">
         <thead>
-          <tr><th>Audience</th><th>What they need</th><th>Frequency</th><th>Channel</th><th>Owner</th><th></th></tr>
+          <tr><th>Audience</th><th>What they need</th><th>Frequency</th><th>Channel</th><th>Owner</th><th><span className="sr-only">Actions</span></th></tr>
         </thead>
         <tbody>
           {items.map((item) => (
@@ -4099,7 +4125,7 @@ function ProcurementTab({ projectId }: { projectId: string }) {
             <textarea id="f-projecthome-3834" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
             <div className="inline-form" style={{ marginTop: 8, marginBottom: 0 }}>
               <input aria-label="Owner (optional)" placeholder="Owner (optional)" value={owner} onChange={(e) => setOwner(e.target.value)} />
-              <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as ProcurementItem["status"])} title="Status">
+              <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as ProcurementItem["status"])} title="Status" aria-label="Status">
                 {Object.entries(PROCUREMENT_STATUS_LABEL).map(([value, label]) => (
                   <option key={value} value={value}>{label}</option>
                 ))}
@@ -4111,8 +4137,14 @@ function ProcurementTab({ projectId }: { projectId: string }) {
               <input aria-label="Sub-category (optional)" placeholder="Sub-category (optional)" value={vendorSubcategory} onChange={(e) => setVendorSubcategory(e.target.value)} />
             </div>
             <div className="inline-form" style={{ marginTop: 8, marginBottom: 0 }}>
-              <input type="date" title="Start date (optional)" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-              <input type="date" title="End date (optional)" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+              <span className="datefield">
+                <span className="datefield-label" aria-hidden="true">Start</span>
+                <input type="date" title="Start date (optional)" aria-label="Start date (optional)" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+              </span>
+              <span className="datefield">
+                <span className="datefield-label" aria-hidden="true">End</span>
+                <input type="date" title="End date (optional)" aria-label="End date (optional)" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+              </span>
             </div>
           </>
         }
@@ -4174,7 +4206,7 @@ function ProcurementTab({ projectId }: { projectId: string }) {
       ) : (
       <ResizableTable id="procurement-vendors">
         <thead>
-          <tr><th>Vendor / contract</th><th>Type</th><th>Role</th><th>Category</th><th>Sub-category</th><th>Owner</th><th>Cost</th><th>Dates</th><th>Status</th><th></th></tr>
+          <tr><th>Vendor / contract</th><th>Type</th><th>Role</th><th>Category</th><th>Sub-category</th><th>Owner</th><th>Cost</th><th>Dates</th><th>Status</th><th><span className="sr-only">Actions</span></th></tr>
         </thead>
         <tbody>
           {items.map((p) => (
@@ -4197,8 +4229,8 @@ function ProcurementTab({ projectId }: { projectId: string }) {
                 <td><input aria-label="Owner" value={editOwner} onChange={(e) => setEditOwner(e.target.value)} /></td>
                 <td><input aria-label="Cost" type="number" step="0.01" value={editCost} onChange={(e) => setEditCost(e.target.value)} style={{ maxWidth: 100 }} /></td>
                 <td>
-                  <input type="date" title="Start date" value={editStartDate} onChange={(e) => setEditStartDate(e.target.value)} style={{ marginBottom: 4 }} />
-                  <input type="date" title="End date" value={editEndDate} onChange={(e) => setEditEndDate(e.target.value)} />
+                  <input type="date" title="Start date" aria-label="Start date" value={editStartDate} onChange={(e) => setEditStartDate(e.target.value)} style={{ marginBottom: 4 }} />
+                  <input type="date" title="End date" aria-label="End date" value={editEndDate} onChange={(e) => setEditEndDate(e.target.value)} />
                 </td>
                 <td className="muted">{PROCUREMENT_STATUS_LABEL[p.status]}</td>
                 <td className="row-actions">
@@ -4321,7 +4353,7 @@ function BudgetTab({ projectId, onOpenTab }: { projectId: string; onOpenTab: (ta
               onChange={(e) => setBacInput(e.target.value)}
               type="number" min="0" step="0.01"
             />
-            <input
+            <input aria-label="Contingency reserve (optional)"
               placeholder="Contingency reserve (optional), e.g. 5000"
               value={reserveInput}
               onChange={(e) => setReserveInput(e.target.value)}
@@ -4409,7 +4441,7 @@ function BudgetTab({ projectId, onOpenTab }: { projectId: string; onOpenTab: (ta
         </div>
       </div>
 
-      <h4 style={{ marginTop: 28 }}>Log actual cost</h4>
+      <h2 className="heading-sm" style={{ marginTop: 28 }}>Log actual cost</h2>
       <form className="inline-form inline-form-wide" onSubmit={addCost}>
         <input aria-label="Description" placeholder="Description" value={desc} onChange={(e) => setDesc(e.target.value)} />
         <input aria-label="Amount" placeholder="Amount" type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} />
@@ -4691,9 +4723,15 @@ function RoadmapTab({ projectId, isOwner, showBudget }: { projectId: string; isO
             <datalist id="roadmap-swimlane-options">
               {swimlaneNames.map((s) => <option key={s} value={s} />)}
             </datalist>
-            <input type="date" title="Start date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-            <input type="date" title="End date (optional)" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
-            <select value={status} onChange={(e) => setStatus(e.target.value as RoadmapItem["status"])} title="Status">
+            <span className="datefield">
+              <span className="datefield-label" aria-hidden="true">Start</span>
+              <input type="date" title="Start date" aria-label="Start date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+            </span>
+            <span className="datefield">
+              <span className="datefield-label" aria-hidden="true">End</span>
+              <input type="date" title="End date (optional)" aria-label="End date (optional)" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+            </span>
+            <select value={status} onChange={(e) => setStatus(e.target.value as RoadmapItem["status"])} title="Status" aria-label="Status">
               {Object.entries(ROADMAP_STATUS_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
           </div>
@@ -4716,6 +4754,7 @@ function RoadmapTab({ projectId, isOwner, showBudget }: { projectId: string; isO
                 key={t}
                 type="button"
                 className={`filter-chip${active ? " filter-chip-active" : ""}`}
+                aria-pressed={active}
                 onClick={() => toggleType(t)}
               >
                 {ROADMAP_TYPE_LABEL[t]}
@@ -4733,7 +4772,8 @@ function RoadmapTab({ projectId, isOwner, showBudget }: { projectId: string; isO
                 key={s}
                 type="button"
                 className={`filter-chip${active ? " filter-chip-active" : ""}`}
-                style={active ? { color, background: `color-mix(in srgb, ${color} 24%, transparent)` } : undefined}
+                aria-pressed={active}
+                style={active ? { color: `color-mix(in srgb, ${color} 62%, var(--navy))`, background: `color-mix(in srgb, ${color} 24%, transparent)` } : undefined}
                 onClick={() => toggleStatus(s)}
               >
                 {ROADMAP_STATUS_LABEL[s]}
@@ -4776,7 +4816,7 @@ function RoadmapTab({ projectId, isOwner, showBudget }: { projectId: string; isO
       <div style={{ marginTop: 28 }}>
         <ResizableTable id="roadmap-list" className="table table-compact" minColWidths={[190, 0, 120, 0, 0]}>
         <thead>
-          <tr><th>Item</th><th>Type / swimlane</th><th>Dates</th><th>Status</th><th></th></tr>
+          <tr><th>Item</th><th>Type / swimlane</th><th>Dates</th><th>Status</th><th><span className="sr-only">Actions</span></th></tr>
         </thead>
         <tbody>
           {visibleItems.map((item) => (
@@ -4853,8 +4893,8 @@ function RoadmapTab({ projectId, isOwner, showBudget }: { projectId: string; isO
                         </select>
                       </div>
                       <div className="inline-form" style={{ marginTop: 8 }}>
-                        <input type="date" title="Start date" value={editStart} onChange={(e) => setEditStart(e.target.value)} />
-                        <input type="date" title="End date" value={editEnd} onChange={(e) => setEditEnd(e.target.value)} />
+                        <input type="date" title="Start date" aria-label="Start date" value={editStart} onChange={(e) => setEditStart(e.target.value)} />
+                        <input type="date" title="End date" aria-label="End date" value={editEnd} onChange={(e) => setEditEnd(e.target.value)} />
                       </div>
                       <label style={{ marginTop: 8 }}>Notes</label>
                       <textarea aria-label="Notes" value={editDescription} onChange={(e) => setEditDescription(e.target.value)} rows={3} />
@@ -4884,7 +4924,7 @@ function RoadmapTab({ projectId, isOwner, showBudget }: { projectId: string; isO
 
       {isOwner && (
         <div className="template-card" style={{ marginTop: 28 }}>
-          <h4>Share roadmap</h4>
+          <h2 className="heading-sm">Share roadmap</h2>
           <p className="muted">
             Turn this on to get a read-only link for exec sponsors or stakeholders -- no Tasketra account needed.
           </p>
@@ -5026,7 +5066,10 @@ function MeetingsTab({ projectId }: { projectId: string }) {
               <option key={value} value={value}>{label}</option>
             ))}
           </select>
-          <input type="date" title="Meeting date" value={meetingDate} onChange={(e) => setMeetingDate(e.target.value)} />
+          <span className="datefield">
+            <span className="datefield-label" aria-hidden="true">Date</span>
+            <input type="date" title="Meeting date" aria-label="Meeting date" value={meetingDate} onChange={(e) => setMeetingDate(e.target.value)} />
+          </span>
           <input aria-label="Attendees (optional)" placeholder="Attendees (optional)" value={attendees} onChange={(e) => setAttendees(e.target.value)} />
           <button
             type="button"
@@ -5046,7 +5089,7 @@ function MeetingsTab({ projectId }: { projectId: string }) {
 
       <ResizableTable id="meetings" style={{ marginTop: 20 }}>
         <thead>
-          <tr><th>Meeting</th><th>Type</th><th>Date</th><th>Action items</th><th></th></tr>
+          <tr><th>Meeting</th><th>Type</th><th>Date</th><th>Action items</th><th><span className="sr-only">Actions</span></th></tr>
         </thead>
         <tbody>
           {meetings.map((m) => (
@@ -5246,7 +5289,7 @@ function DocumentsTab({ projectId }: { projectId: string }) {
 
       <ResizableTable id="documents" style={{ marginTop: 20 }}>
         <thead>
-          <tr><th>File</th><th>Type</th><th>Size</th><th>Uploaded by</th><th>Uploaded</th><th></th></tr>
+          <tr><th>File</th><th>Type</th><th>Size</th><th>Uploaded by</th><th>Uploaded</th><th><span className="sr-only">Actions</span></th></tr>
         </thead>
         <tbody>
           {documents.map((doc) => {
@@ -5409,7 +5452,7 @@ function StakeholdersTab({ projectId }: { projectId: string }) {
       {shView === "list" && (
       <ResizableTable id="stakeholders">
         <thead>
-          <tr><th>Name</th><th>Role</th><th>Power</th><th>Interest</th><th>Prefers</th><th>Contact</th><th>Decisions</th><th></th></tr>
+          <tr><th>Name</th><th>Role</th><th>Power</th><th>Interest</th><th>Prefers</th><th>Contact</th><th>Decisions</th><th><span className="sr-only">Actions</span></th></tr>
         </thead>
         <tbody>
           {stakeholders.map((s) => {
@@ -5859,7 +5902,7 @@ function ChangeRequestsTab({ projectId }: { projectId: string }) {
 
       <ResizableTable id="change-requests">
         <thead>
-          <tr><th>Change request</th><th>Schedule</th><th>Budget</th><th>Requested by</th><th>Status</th><th></th></tr>
+          <tr><th>Change request</th><th>Schedule</th><th>Budget</th><th>Requested by</th><th>Status</th><th><span className="sr-only">Actions</span></th></tr>
         </thead>
         <tbody>
           {items.map((c) => (
@@ -6747,7 +6790,7 @@ function LessonsLearnedTab({ projectId }: { projectId: string }) {
 
       <ResizableTable id="lessons-learned">
         <thead>
-          <tr><th>Lesson</th><th>Category</th><th>Owner</th><th></th><th></th></tr>
+          <tr><th>Lesson</th><th>Category</th><th>Owner</th><th><span className="sr-only">Follow-up</span></th><th><span className="sr-only">Actions</span></th></tr>
         </thead>
         <tbody>
           {lessons.map((l) => (
@@ -6839,7 +6882,7 @@ function TemplatesTab({ projectId, projectName }: { projectId: string; projectNa
       <div className="template-grid">
         {TEMPLATES.map((t) => (
           <div key={t.type} className="template-card">
-            <h4>{t.title}</h4>
+            <h2 className="heading-sm">{t.title}</h2>
             <p className="muted">{t.blurb}</p>
             <button
               className="btn btn-ghost"
@@ -6852,17 +6895,17 @@ function TemplatesTab({ projectId, projectName }: { projectId: string; projectNa
           </div>
         ))}
         <div className="template-card">
-          <h4>Risk matrix (print or share)</h4>
+          <h2 className="heading-sm">Risk matrix (print or share)</h2>
           <p className="muted">A printable probability and impact grid plus the full register. Save it as a PDF from the print dialog, or create a read-only link for someone outside Tasketra.</p>
           <Link className="btn btn-ghost" to={`/app/projects/${projectId}/print/risks`}>Open printable page</Link>
         </div>
         <div className="template-card">
-          <h4>RACI chart (print or share)</h4>
+          <h2 className="heading-sm">RACI chart (print or share)</h2>
           <p className="muted">Your RACI as a printable page, with a read-only link for people outside Tasketra.</p>
           <Link className="btn btn-ghost" to={`/app/projects/${projectId}/print/raci`}>Open printable page</Link>
         </div>
         <div className="template-card">
-          <h4>Stakeholder grid (print)</h4>
+          <h2 className="heading-sm">Stakeholder grid (print)</h2>
           <p className="muted">Your stakeholders on a power and interest grid, as a printable page you can save as a PDF.</p>
           <Link className="btn btn-ghost" to={`/app/projects/${projectId}/print/stakeholders`}>Open printable page</Link>
         </div>
@@ -6933,7 +6976,7 @@ function ConnectionsTab({ projectId }: { projectId: string }) {
       </p>
 
       <div className="template-card" style={{ maxWidth: 640, marginBottom: 20 }}>
-        <h4>Webhook URL</h4>
+        <h2 className="heading-sm">Webhook URL</h2>
         <p className="muted">Applies to your whole account — saving here updates it everywhere.</p>
         {isOwner ? (
           <>
@@ -6958,7 +7001,7 @@ function ConnectionsTab({ projectId }: { projectId: string }) {
       </div>
 
       <div className="template-card" style={{ maxWidth: 640 }}>
-        <h4>This project</h4>
+        <h2 className="heading-sm">This project</h2>
         <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: isOwner && savedUrl ? "pointer" : "default" }}>
           <input type="checkbox" checked={enabled} onChange={toggle} disabled={!isOwner || !savedUrl} />
           Send this project's events to the webhook above

@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { Wordmark } from "./Wordmark";
+import { useDocumentTitle } from "../lib/documentTitle";
 
 const DOCS = [
   { path: "/legal/terms", label: "Terms of Service" },
@@ -19,6 +20,7 @@ type LegalLayoutProps = {
  *  so a reader (or a link from the footer/signup form) always lands
  *  somewhere they can get to the others. */
 export function LegalLayout({ title, updated, children }: LegalLayoutProps) {
+  useDocumentTitle(title);
   return (
     <div className="shell legal-page">
       <header className="topbar">

@@ -1,4 +1,6 @@
+import { useRef } from "react";
 import { RiskMatrix } from "./RiskMatrix";
+import { useIsScrollable } from "../lib/scrollRegion";
 import { LEVEL_LABEL, riskExposure, type RiskLevel } from "../lib/riskExposure";
 
 export type DocRisk = {
@@ -16,6 +18,8 @@ const RANK = { high: 0, medium: 1, low: 2 } as const;
 
 /** The printable risk matrix + register. Used by the signed-in print page and the public share page. */
 export function RiskDocument({ projectName, risks, dateLabel }: { projectName: string; risks: DocRisk[]; dateLabel: string }) {
+  const tableRef = useRef<HTMLTableElement>(null);
+  const tableScrolls = useIsScrollable(tableRef, risks.length);
   const sorted = [...risks].sort((a, b) => {
     const s = (a.status === "resolved" ? 1 : 0) - (b.status === "resolved" ? 1 : 0);
     if (s) return s;
@@ -39,7 +43,12 @@ export function RiskDocument({ projectName, risks, dateLabel }: { projectName: s
         {sorted.length === 0 ? (
           <p className="muted">No risks recorded.</p>
         ) : (
-          <table className="risk-doc-table">
+          <table
+            className="risk-doc-table"
+            ref={tableRef}
+            aria-label="Risk register"
+            {...(tableScrolls ? { tabIndex: 0 } : {})}
+          >
             <thead>
               <tr><th>#</th><th>Risk</th><th>Probability</th><th>Impact</th><th>Exposure</th><th>Mitigation</th><th>Owner</th><th>Status</th></tr>
             </thead>

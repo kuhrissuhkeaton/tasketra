@@ -4,6 +4,7 @@ import { AppSidebar } from "../components/AppSidebar";
 import { useAuth } from "../lib/auth-context";
 import { api, ApiError, type BillingStatus } from "../lib/api";
 import { fmtDate } from "../lib/format";
+import { useDocumentTitle } from "../lib/documentTitle";
 
 const PLAN_LABEL: Record<string, string> = {
   founding: "Founding member",
@@ -14,6 +15,7 @@ const PLAN_LABEL: Record<string, string> = {
 };
 
 export default function Billing() {
+  useDocumentTitle("Billing");
   const { user, refresh } = useAuth();
   const [params] = useSearchParams();
   const [loadingInterval, setLoadingInterval] = useState<"month" | "year" | null>(null);
@@ -83,7 +85,7 @@ export default function Billing() {
   return (
     <div className="project-shell">
       <AppSidebar />
-      <main className="project-main">
+      <main id="main-content" className="project-main">
         <div className="page-head">
           <h1>Billing</h1>
         </div>
