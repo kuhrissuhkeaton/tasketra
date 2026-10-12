@@ -19,6 +19,7 @@ import { FirstRunScreen, type FirstRunChoice } from "../components/FirstRun";
 import { isFirstRun, startChecklist } from "../lib/firstRun";
 import { track } from "../lib/analytics";
 import { useDocumentTitle } from "../lib/documentTitle";
+import { announce } from "../lib/announce";
 
 const TASK_STATUS_ORDER: Task["status"][] = ["not_started", "in_progress", "blocked", "done"];
 
@@ -407,6 +408,7 @@ export default function Dashboard() {
     setRestoringId(id);
     await api.restoreProject(id);
     await load();
+    announce("Project restored.");
     setRestoringId(null);
   }
 
@@ -419,6 +421,7 @@ export default function Dashboard() {
     try {
       await api.deleteProject(p.id);
       await load();
+      announce("Project deleted.");
     } finally {
       setDeletingId(null);
     }

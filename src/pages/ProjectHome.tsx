@@ -29,6 +29,8 @@ import { noteProjectActivity } from "../lib/firstRun";
 import { StageRail, StageChip, STAGE_LABEL } from "../components/StageRail";
 import { ProjectSetupPicker } from "../components/ProjectSetup";
 import { useIsScrollable } from "../lib/scrollRegion";
+import { announce } from "../lib/announce";
+import { AddForm } from "../components/AddForm";
 import { CharterTab } from "../components/CharterTab";
 import { BaselineCard } from "../components/BaselineCard";
 import { EscalationSettings } from "../components/EscalationSettings";
@@ -488,13 +490,13 @@ function FeedTab({ projectId }: { projectId: string }) {
   const [loading, setLoading] = useState(true);
 
   async function load() {
-    setLoading(true);
     const { feed } = await api.getFeed(projectId);
     setFeed(feed);
     setLoading(false);
   }
 
   useEffect(() => {
+    setLoading(true);
     load();
   }, [projectId]);
 
@@ -914,19 +916,20 @@ function TrashTab({ projectId }: { projectId: string }) {
   const [restoringId, setRestoringId] = useState<string | null>(null);
 
   async function load() {
-    setLoading(true);
     const { items } = await api.getTrash(projectId);
     setItems(items);
     setLoading(false);
   }
 
   useEffect(() => {
+    setLoading(true);
     load();
   }, [projectId]);
 
   async function restore(item: TrashItem) {
     setRestoringId(item.id);
     await api.restoreItem(item.entity_type, item.id);
+    announce("Restored.");
     await load();
     setRestoringId(null);
   }
@@ -1007,7 +1010,6 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
   const [error, setError] = useState("");
 
   async function load() {
-    setLoading(true);
     const [{ tasks }, { riskLinks, issueLinks }, { links: taskLinks }, roadmap] = await Promise.all([
       api.listTasks(projectId),
       api.listRaidTaskLinks(projectId),
@@ -1025,6 +1027,7 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
   }
 
   useEffect(() => {
+    setLoading(true);
     load();
   }, [projectId]);
 
@@ -1055,6 +1058,7 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
       setDue("");
       setNewStatus("not_started");
       setNewPhase("");
+      announce("Task added.");
       load();
     } catch (err: any) {
       setError(err.message || "Couldn't add that task.");
@@ -1071,6 +1075,7 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
     setSubStart("");
     setSubDue("");
     setAddingSubtaskFor(null);
+    announce("Sub-task added.");
     load();
   }
 
@@ -1122,6 +1127,7 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
   async function removeTask(id: string, label: string) {
     if (!(await confirmDialog(`Delete task "${label}"? Sub-tasks will be deleted too. You can restore from Trash.`))) return;
     await api.deleteTask(id);
+    announce("Deleted.");
     load();
   }
 
@@ -1178,8 +1184,8 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
 
   return (
     <div>
-      <form className="inline-form inline-form-wide" onSubmit={addTask}>
-        <input aria-label="Task title" placeholder="Task title" value={title} onChange={(e) => setTitle(e.target.value)} />
+      <AddForm className="inline-form inline-form-wide" onSubmit={addTask}>
+        <input aria-label="Task title" aria-required="true" placeholder="Task title" value={title} onChange={(e) => setTitle(e.target.value)} />
         <input aria-label="Owner (optional)" placeholder="Owner (optional)" value={owner} onChange={(e) => setOwner(e.target.value)} />
         <span className="datefield">
           <span className="datefield-label" aria-hidden="true">Start</span>
@@ -1203,7 +1209,7 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
           </select>
         )}
         <button className="btn btn-primary">Add task</button>
-      </form>
+      </AddForm>
       {error && <p className="form-error">{error}</p>}
 
       <div className="view-toggle">
@@ -1629,7 +1635,6 @@ function IssuesTab({ projectId, highlightId }: { projectId: string; highlightId?
   const [error, setError] = useState("");
 
   async function load() {
-    setLoading(true);
     const [{ issues }, { tasks }, { issueLinks }] = await Promise.all([
       api.listIssues(projectId),
       api.listTasks(projectId),
@@ -1642,6 +1647,7 @@ function IssuesTab({ projectId, highlightId }: { projectId: string; highlightId?
   }
 
   useEffect(() => {
+    setLoading(true);
     load();
   }, [projectId]);
 
@@ -1670,6 +1676,7 @@ function IssuesTab({ projectId, highlightId }: { projectId: string; highlightId?
       setSeverity("medium");
       setOwner("");
       setNewStatus("open");
+      announce("Issue added.");
       load();
     } catch (err: any) {
       setError(err.message || "Couldn't log that issue.");
@@ -1716,6 +1723,7 @@ function IssuesTab({ projectId, highlightId }: { projectId: string; highlightId?
   async function removeIssue(id: string, label: string) {
     if (!(await confirmDialog(`Delete issue "${label}"? You can restore it from Trash.`))) return;
     await api.deleteIssue(id);
+    announce("Deleted.");
     load();
   }
 
@@ -1758,7 +1766,7 @@ function IssuesTab({ projectId, highlightId }: { projectId: string; highlightId?
         quick={
           <>
             <label htmlFor="f-projecthome-1595" className="sr-only">Issue</label>
-            <input id="f-projecthome-1595" className="quick-add-title" placeholder="What's the issue?" value={title} onChange={(e) => setTitle(e.target.value)} />
+            <input id="f-projecthome-1595" className="quick-add-title" aria-required="true" placeholder="What's the issue?" value={title} onChange={(e) => setTitle(e.target.value)} />
             <select aria-label="Severity" value={severity} onChange={(e) => setSeverity(e.target.value as Issue["severity"])}>
               {Object.entries(SEVERITY_LABEL).map(([value, label]) => (
                 <option key={value} value={value}>{label} severity</option>
@@ -1994,7 +2002,6 @@ function RisksTab({ projectId, highlightId }: { projectId: string; highlightId?:
   const [error, setError] = useState("");
 
   async function load() {
-    setLoading(true);
     const [{ risks }, { tasks }, { riskLinks }] = await Promise.all([
       api.listRisks(projectId),
       api.listTasks(projectId),
@@ -2007,6 +2014,7 @@ function RisksTab({ projectId, highlightId }: { projectId: string; highlightId?:
   }
 
   useEffect(() => {
+    setLoading(true);
     load();
   }, [projectId]);
 
@@ -2037,6 +2045,7 @@ function RisksTab({ projectId, highlightId }: { projectId: string; highlightId?:
       setMitigation("");
       setOwner("");
       setNewStatus("open");
+      announce("Risk added.");
       load();
     } catch (err: any) {
       setError(err.message || "Couldn't log that risk.");
@@ -2083,6 +2092,7 @@ function RisksTab({ projectId, highlightId }: { projectId: string; highlightId?:
   async function removeRisk(id: string, label: string) {
     if (!(await confirmDialog(`Delete risk "${label}"? You can restore it from Trash.`))) return;
     await api.deleteRisk(id);
+    announce("Deleted.");
     load();
   }
 
@@ -2143,7 +2153,7 @@ function RisksTab({ projectId, highlightId }: { projectId: string; highlightId?:
         quick={
           <>
             <label htmlFor="f-projecthome-1962" className="sr-only">Risk</label>
-            <input id="f-projecthome-1962" className="quick-add-title" placeholder="What could go wrong?" value={title} onChange={(e) => setTitle(e.target.value)} />
+            <input id="f-projecthome-1962" className="quick-add-title" aria-required="true" placeholder="What could go wrong?" value={title} onChange={(e) => setTitle(e.target.value)} />
             <select aria-label="Probability" value={probability} onChange={(e) => setProbability(e.target.value as Risk["probability"])}>
               {Object.entries(LEVEL_LABEL).map(([value, label]) => (
                 <option key={value} value={value}>{label} probability</option>
@@ -2424,13 +2434,13 @@ function AssumptionsTab({ projectId }: { projectId: string }) {
   const [error, setError] = useState("");
 
   async function load() {
-    setLoading(true);
     const { assumptions } = await api.listAssumptions(projectId);
     setAssumptions(assumptions);
     setLoading(false);
   }
 
   useEffect(() => {
+    setLoading(true);
     load();
   }, [projectId]);
 
@@ -2445,6 +2455,7 @@ function AssumptionsTab({ projectId }: { projectId: string }) {
       setOwner("");
       setCheckBy("");
       setNewStatus("unconfirmed");
+      announce("Assumption added.");
       load();
     } catch (err: any) {
       setError(err.message || "Couldn't log that assumption.");
@@ -2484,6 +2495,7 @@ function AssumptionsTab({ projectId }: { projectId: string }) {
   async function removeAssumption(id: string, label: string) {
     if (!(await confirmDialog(`Delete assumption "${label}"? You can restore it from Trash.`))) return;
     await api.deleteAssumption(id);
+    announce("Deleted.");
     load();
   }
 
@@ -2502,7 +2514,7 @@ function AssumptionsTab({ projectId }: { projectId: string }) {
         quick={
           <>
             <label htmlFor="f-projecthome-2302" className="sr-only">Assumption</label>
-            <input className="quick-add-title" id="f-projecthome-2302" placeholder="What are you assuming is true?" value={statement} onChange={(e) => setStatement(e.target.value)} />
+            <input className="quick-add-title" aria-required="true" id="f-projecthome-2302" placeholder="What are you assuming is true?" value={statement} onChange={(e) => setStatement(e.target.value)} />
             <button className="btn btn-primary">Log assumption</button>
           </>
         }
@@ -2662,13 +2674,13 @@ function DependenciesTab({ projectId }: { projectId: string }) {
   const [error, setError] = useState("");
 
   async function load() {
-    setLoading(true);
     const { dependencies } = await api.listDependencies(projectId);
     setDependencies(dependencies);
     setLoading(false);
   }
 
   useEffect(() => {
+    setLoading(true);
     load();
   }, [projectId]);
 
@@ -2684,6 +2696,7 @@ function DependenciesTab({ projectId }: { projectId: string }) {
       setOwner("");
       setNeededBy("");
       setNewStatus("blocked");
+      announce("Dependency added.");
       load();
     } catch (err: any) {
       setError(err.message || "Couldn't log that dependency.");
@@ -2724,6 +2737,7 @@ function DependenciesTab({ projectId }: { projectId: string }) {
   async function removeDependency(id: string, label: string) {
     if (!(await confirmDialog(`Delete dependency "${label}"? You can restore it from Trash.`))) return;
     await api.deleteDependency(id);
+    announce("Deleted.");
     load();
   }
 
@@ -2742,7 +2756,7 @@ function DependenciesTab({ projectId }: { projectId: string }) {
         quick={
           <>
             <label htmlFor="f-projecthome-2526" className="sr-only">Dependency</label>
-            <input className="quick-add-title" id="f-projecthome-2526" placeholder="What's this waiting on?" value={title} onChange={(e) => setTitle(e.target.value)} />
+            <input className="quick-add-title" aria-required="true" id="f-projecthome-2526" placeholder="What's this waiting on?" value={title} onChange={(e) => setTitle(e.target.value)} />
             <select aria-label="Direction" value={direction} onChange={(e) => setDirection(e.target.value as Dependency["direction"])}>
               {Object.entries(DEPENDENCY_DIRECTION_LABEL).map(([value, label]) => (
                 <option key={value} value={value}>{label}</option>
@@ -2918,13 +2932,13 @@ function QualityTab({ projectId }: { projectId: string }) {
   const [error, setError] = useState("");
 
   async function load() {
-    setLoading(true);
     const { qualityItems } = await api.listQuality(projectId);
     setItems(qualityItems);
     setLoading(false);
   }
 
   useEffect(() => {
+    setLoading(true);
     load();
   }, [projectId]);
 
@@ -2939,6 +2953,7 @@ function QualityTab({ projectId }: { projectId: string }) {
       setCategory("review");
       setOwner("");
       setNewStatus("open");
+      announce("Quality item added.");
       load();
     } catch (err: any) {
       setError(err.message || "Couldn't log that quality item.");
@@ -2977,6 +2992,7 @@ function QualityTab({ projectId }: { projectId: string }) {
   async function removeItem(id: string, label: string) {
     if (!(await confirmDialog(`Delete quality item "${label}"? You can restore it from Trash.`))) return;
     await api.deleteQuality(id);
+    announce("Deleted.");
     load();
   }
 
@@ -2996,7 +3012,7 @@ function QualityTab({ projectId }: { projectId: string }) {
         quick={
           <>
             <label htmlFor="f-projecthome-2769" className="sr-only">Quality item</label>
-            <input className="quick-add-title" id="f-projecthome-2769" placeholder="What needs to meet a bar, or get reviewed?" value={title} onChange={(e) => setTitle(e.target.value)} />
+            <input className="quick-add-title" aria-required="true" id="f-projecthome-2769" placeholder="What needs to meet a bar, or get reviewed?" value={title} onChange={(e) => setTitle(e.target.value)} />
             <select aria-label="Category" value={category} onChange={(e) => setCategory(e.target.value as QualityItem["category"])}>
               {Object.entries(QUALITY_CATEGORY_LABEL).map(([value, label]) => (
                 <option key={value} value={value}>{label}</option>
@@ -3170,13 +3186,13 @@ function ComplianceTab({ projectId }: { projectId: string }) {
   const [error, setError] = useState("");
 
   async function load() {
-    setLoading(true);
     const { complianceItems } = await api.listCompliance(projectId);
     setItems(complianceItems);
     setLoading(false);
   }
 
   useEffect(() => {
+    setLoading(true);
     load();
   }, [projectId]);
 
@@ -3192,6 +3208,7 @@ function ComplianceTab({ projectId }: { projectId: string }) {
       setOwner("");
       setNewStatus("not_started");
       setDueDate("");
+      announce("Compliance item added.");
       load();
     } catch (err: any) {
       setError(err.message || "Couldn't log that compliance item.");
@@ -3232,6 +3249,7 @@ function ComplianceTab({ projectId }: { projectId: string }) {
   async function removeItem(id: string, label: string) {
     if (!(await confirmDialog(`Delete compliance item "${label}"? You can restore it from Trash.`))) return;
     await api.deleteCompliance(id);
+    announce("Deleted.");
     load();
   }
 
@@ -3251,7 +3269,7 @@ function ComplianceTab({ projectId }: { projectId: string }) {
         quick={
           <>
             <label htmlFor="f-projecthome-3013" className="sr-only">Compliance item</label>
-            <input className="quick-add-title" id="f-projecthome-3013" placeholder="What regulation, policy, or standard applies here?" value={title} onChange={(e) => setTitle(e.target.value)} />
+            <input className="quick-add-title" aria-required="true" id="f-projecthome-3013" placeholder="What regulation, policy, or standard applies here?" value={title} onChange={(e) => setTitle(e.target.value)} />
             <select aria-label="Category" value={category} onChange={(e) => setCategory(e.target.value as ComplianceItem["category"])}>
               {Object.entries(COMPLIANCE_CATEGORY_LABEL).map(([value, label]) => (
                 <option key={value} value={value}>{label}</option>
@@ -3459,13 +3477,13 @@ function OkrsTab({ projectId }: { projectId: string }) {
   const [editKrCurrent, setEditKrCurrent] = useState("0");
 
   async function load() {
-    setLoading(true);
     const { objectives } = await api.listObjectives(projectId);
     setObjectives(objectives);
     setLoading(false);
   }
 
   useEffect(() => {
+    setLoading(true);
     load();
   }, [projectId]);
 
@@ -3483,6 +3501,7 @@ function OkrsTab({ projectId }: { projectId: string }) {
       setOwnerName("");
       setTargetDate("");
       setStatus("on_track");
+      announce("Objective added.");
       load();
     } catch (err: any) {
       setError(err.message || "Couldn't add that objective.");
@@ -3515,6 +3534,7 @@ function OkrsTab({ projectId }: { projectId: string }) {
   async function removeObjective(o: Objective) {
     if (!(await confirmDialog(`Delete objective "${o.title}"? Its key results go with it. You can restore both from Trash.`))) return;
     await api.deleteObjective(o.id);
+    announce("Deleted.");
     if (expandedId === o.id) setExpandedId(null);
     load();
   }
@@ -3582,6 +3602,7 @@ function OkrsTab({ projectId }: { projectId: string }) {
   async function removeKeyResult(kr: KeyResult) {
     if (!(await confirmDialog(`Delete key result "${kr.title}"?`))) return;
     await api.deleteKeyResult(kr.id);
+    announce("Deleted.");
     load();
   }
 
@@ -3603,7 +3624,7 @@ function OkrsTab({ projectId }: { projectId: string }) {
         quick={
           <>
             <label htmlFor="f-projecthome-3353" className="sr-only">Objective</label>
-            <input id="f-projecthome-3353" className="quick-add-title" placeholder="What outcome are you driving toward?" value={title} onChange={(e) => setTitle(e.target.value)} />
+            <input id="f-projecthome-3353" className="quick-add-title" aria-required="true" placeholder="What outcome are you driving toward?" value={title} onChange={(e) => setTitle(e.target.value)} />
             <span className="quick-add-datefield">
               <span className="quick-add-datefield-label" aria-hidden="true">Target date</span>
               <input type="date" title="Target date" aria-label="Target date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} />
@@ -3802,13 +3823,13 @@ function CommsPlanTab({ projectId }: { projectId: string }) {
   const [error, setError] = useState("");
 
   async function load() {
-    setLoading(true);
     const { commPlanItems } = await api.listCommPlan(projectId);
     setItems(commPlanItems);
     setLoading(false);
   }
 
   useEffect(() => {
+    setLoading(true);
     load();
   }, [projectId]);
 
@@ -3824,6 +3845,7 @@ function CommsPlanTab({ projectId }: { projectId: string }) {
       setChannel("email");
       setOwner("");
       setNotes("");
+      announce("Plan item added.");
       load();
     } catch (err: any) {
       setError(err.message || "Couldn't add that to the plan.");
@@ -3853,6 +3875,7 @@ function CommsPlanTab({ projectId }: { projectId: string }) {
   async function removeItem(id: string, label: string) {
     if (!(await confirmDialog(`Remove "${label}" from the communications plan? You can restore it from Trash.`))) return;
     await api.deleteCommPlanItem(id);
+    announce("Deleted.");
     load();
   }
 
@@ -3873,9 +3896,9 @@ function CommsPlanTab({ projectId }: { projectId: string }) {
         quick={
           <>
             <label htmlFor="f-projecthome-3608" className="sr-only">Audience</label>
-            <input id="f-projecthome-3608" className="quick-add-title" placeholder="Who needs it?" value={audience} onChange={(e) => setAudience(e.target.value)} />
+            <input id="f-projecthome-3608" className="quick-add-title" aria-required="true" placeholder="Who needs it?" value={audience} onChange={(e) => setAudience(e.target.value)} />
             <label htmlFor="f-projecthome-3610" className="sr-only">What they need</label>
-            <input id="f-projecthome-3610" className="quick-add-title" placeholder="What do they need?" value={topic} onChange={(e) => setTopic(e.target.value)} />
+            <input id="f-projecthome-3610" className="quick-add-title" aria-required="true" placeholder="What do they need?" value={topic} onChange={(e) => setTopic(e.target.value)} />
             <select aria-label="Frequency" value={frequency} onChange={(e) => setFrequency(e.target.value as CommPlanItem["frequency"])}>
               {Object.entries(FREQUENCY_LABEL).map(([value, label]) => (
                 <option key={value} value={value}>{label}</option>
@@ -4005,13 +4028,13 @@ function ProcurementTab({ projectId }: { projectId: string }) {
   const [error, setError] = useState("");
 
   async function load() {
-    setLoading(true);
     const { procurementItems } = await api.listProcurement(projectId);
     setItems(procurementItems);
     setLoading(false);
   }
 
   useEffect(() => {
+    setLoading(true);
     load();
   }, [projectId]);
 
@@ -4036,6 +4059,7 @@ function ProcurementTab({ projectId }: { projectId: string }) {
       setCost("");
       setStartDate("");
       setEndDate("");
+      announce("Vendor added.");
       load();
     } catch (err: any) {
       setError(err.message || "Couldn't log that vendor.");
@@ -4089,6 +4113,7 @@ function ProcurementTab({ projectId }: { projectId: string }) {
   async function removeItem(id: string, label: string) {
     if (!(await confirmDialog(`Delete "${label}"? You can restore it from Trash.`))) return;
     await api.deleteProcurement(id);
+    announce("Deleted.");
     load();
   }
 
@@ -4109,7 +4134,7 @@ function ProcurementTab({ projectId }: { projectId: string }) {
         quick={
           <>
             <label htmlFor="f-projecthome-3832" className="sr-only">Vendor or contract</label>
-            <input id="f-projecthome-3832" className="quick-add-title" placeholder="Who are you buying from, or what's the agreement?" value={vendorName} onChange={(e) => setVendorName(e.target.value)} />
+            <input id="f-projecthome-3832" className="quick-add-title" aria-required="true" placeholder="Who are you buying from, or what's the agreement?" value={vendorName} onChange={(e) => setVendorName(e.target.value)} />
             <select aria-label="Category" value={category} onChange={(e) => setCategory(e.target.value as ProcurementItem["category"])}>
               {Object.entries(PROCUREMENT_CATEGORY_LABEL).map(([value, label]) => (
                 <option key={value} value={value}>{label}</option>
@@ -4333,6 +4358,7 @@ function BudgetTab({ projectId, onOpenTab }: { projectId: string; onOpenTab: (ta
     setDesc("");
     setAmount("");
     setIncurredDate("");
+    announce("Cost added.");
     load();
   }
 
@@ -4442,12 +4468,12 @@ function BudgetTab({ projectId, onOpenTab }: { projectId: string; onOpenTab: (ta
       </div>
 
       <h2 className="heading-sm" style={{ marginTop: 28 }}>Log actual cost</h2>
-      <form className="inline-form inline-form-wide" onSubmit={addCost}>
-        <input aria-label="Description" placeholder="Description" value={desc} onChange={(e) => setDesc(e.target.value)} />
-        <input aria-label="Amount" placeholder="Amount" type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} />
+      <AddForm className="inline-form inline-form-wide" onSubmit={addCost}>
+        <input aria-label="Description" aria-required="true" placeholder="Description" value={desc} onChange={(e) => setDesc(e.target.value)} />
+        <input aria-label="Amount" aria-required="true" data-positive="true" placeholder="Amount" type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} />
         <input aria-label="Incurred date" type="date" value={incurredDate} onChange={(e) => setIncurredDate(e.target.value)} />
         <button className="btn btn-primary">Add cost</button>
-      </form>
+      </AddForm>
 
       <ResizableTable id="budget">
         <thead>
@@ -4565,13 +4591,12 @@ function RoadmapTab({ projectId, isOwner, showBudget }: { projectId: string; isO
   const [zoom, setZoom] = useState<"auto" | "week" | "month" | "quarter">("auto");
 
   async function load() {
-    setLoading(true);
     const { items } = await api.listRoadmapItems(projectId);
     setItems(items);
     setLoading(false);
   }
 
-  useEffect(() => { load(); }, [projectId]);
+  useEffect(() => { setLoading(true); load(); }, [projectId]);
   useEffect(() => {
     if (isOwner) api.getProject(projectId).then(({ project }) => setProject(project));
   }, [projectId, isOwner]);
@@ -4595,6 +4620,7 @@ function RoadmapTab({ projectId, isOwner, showBudget }: { projectId: string; isO
       });
       setTitle(""); setSwimlane(""); setStartDate(""); setEndDate(""); setDescription(""); setType("milestone"); setStatus("not_started");
       setShowForm(false);
+      announce("Roadmap item added.");
       load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't add that item.");
@@ -4647,6 +4673,7 @@ function RoadmapTab({ projectId, isOwner, showBudget }: { projectId: string; isO
   async function removeItem(item: RoadmapItem) {
     if (!(await confirmDialog(`Delete "${item.title}"? You can restore it from Trash.`))) return;
     await api.deleteRoadmapItem(item.id);
+    announce("Deleted.");
     load();
   }
 
@@ -4707,9 +4734,9 @@ function RoadmapTab({ projectId, isOwner, showBudget }: { projectId: string; isO
       )}
 
       {showForm && (
-        <form className="stacked-form" onSubmit={addItem} style={{ marginTop: 16 }}>
+        <AddForm className="stacked-form" onSubmit={addItem} style={{ marginTop: 16 }}>
           <label htmlFor="f-projecthome-4420">Title</label>
-          <input id="f-projecthome-4420" placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
+          <input id="f-projecthome-4420" aria-required="true" placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
           <div className="inline-form" style={{ marginTop: 8 }}>
             <select aria-label="Type" value={type} onChange={(e) => setType(e.target.value as RoadmapItemType)}>
               {Object.entries(ROADMAP_TYPE_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
@@ -4740,7 +4767,7 @@ function RoadmapTab({ projectId, isOwner, showBudget }: { projectId: string; isO
           <div style={{ marginTop: 8 }}>
             <button className="btn btn-primary">Add to roadmap</button>
           </div>
-        </form>
+        </AddForm>
       )}
       {error && <p className="form-error">{error}</p>}
 
@@ -4970,13 +4997,13 @@ function MeetingsTab({ projectId }: { projectId: string }) {
   const [convertingItemId, setConvertingItemId] = useState<string | null>(null);
 
   async function load() {
-    setLoading(true);
     const { meetings } = await api.listMeetings(projectId);
     setMeetings(meetings);
     setLoading(false);
   }
 
   useEffect(() => {
+    setLoading(true);
     load();
   }, [projectId]);
 
@@ -4991,6 +5018,7 @@ function MeetingsTab({ projectId }: { projectId: string }) {
       setAttendees("");
       setNotes("");
       setMeetingType("status");
+      announce("Meeting added.");
       load();
     } catch (err: any) {
       setError(err.message || "Couldn't log that meeting.");
@@ -5044,6 +5072,7 @@ function MeetingsTab({ projectId }: { projectId: string }) {
   async function removeMeeting(m: Meeting) {
     if (!(await confirmDialog(`Delete meeting "${m.title}"? You can restore it from Trash.`))) return;
     await api.deleteMeeting(m.id);
+    announce("Deleted.");
     if (expandedId === m.id) setExpandedId(null);
     load();
   }
@@ -5057,9 +5086,9 @@ function MeetingsTab({ projectId }: { projectId: string }) {
         and action items that carry straight into Tasks so nothing gets lost between the call and the work.
       </p>
 
-      <form className="stacked-form" style={{ maxWidth: "none" }} onSubmit={addMeeting}>
+      <AddForm className="stacked-form" style={{ maxWidth: "none" }} onSubmit={addMeeting}>
         <label htmlFor="f-projecthome-4748">Meeting</label>
-        <input id="f-projecthome-4748" placeholder="Meeting title" value={title} onChange={(e) => setTitle(e.target.value)} />
+        <input id="f-projecthome-4748" aria-required="true" placeholder="Meeting title" value={title} onChange={(e) => setTitle(e.target.value)} />
         <div className="inline-form" style={{ marginTop: 8 }}>
           <select aria-label="Meeting type" value={meetingType} onChange={(e) => setMeetingType(e.target.value as Meeting["meeting_type"])}>
             {Object.entries(MEETING_TYPE_LABEL).map(([value, label]) => (
@@ -5084,7 +5113,7 @@ function MeetingsTab({ projectId }: { projectId: string }) {
         <div style={{ marginTop: 8 }}>
           <button className="btn btn-primary">Log meeting</button>
         </div>
-      </form>
+      </AddForm>
       {error && <p className="form-error">{error}</p>}
 
       <ResizableTable id="meetings" style={{ marginTop: 20 }}>
@@ -5213,7 +5242,6 @@ function DocumentsTab({ projectId }: { projectId: string }) {
   const [upgradeRequired, setUpgradeRequired] = useState(false);
 
   async function load() {
-    setLoading(true);
     const { documents, storage } = await api.listDocuments(projectId);
     setDocuments(documents);
     setStorage(storage);
@@ -5221,6 +5249,7 @@ function DocumentsTab({ projectId }: { projectId: string }) {
   }
 
   useEffect(() => {
+    setLoading(true);
     load();
   }, [projectId]);
 
@@ -5249,6 +5278,7 @@ function DocumentsTab({ projectId }: { projectId: string }) {
   async function removeDocument(doc: ProjectDocument) {
     if (!(await confirmDialog(`Delete "${doc.filename}"? You can restore it from Trash.`))) return;
     await api.deleteDocument(doc.id);
+    announce("Deleted.");
     load();
   }
 
@@ -5354,13 +5384,13 @@ function StakeholdersTab({ projectId }: { projectId: string }) {
   const [error, setError] = useState("");
 
   async function load() {
-    setLoading(true);
     const { stakeholders } = await api.listStakeholders(projectId);
     setStakeholders(stakeholders);
     setLoading(false);
   }
 
   useEffect(() => {
+    setLoading(true);
     load();
   }, [projectId]);
 
@@ -5374,6 +5404,7 @@ function StakeholdersTab({ projectId }: { projectId: string }) {
       setEmail("");
       setPhone("");
       setRole("");
+      announce("Stakeholder added.");
       load();
     } catch (err: any) {
       setError(err.message || "Couldn't add that stakeholder.");
@@ -5421,6 +5452,7 @@ function StakeholdersTab({ projectId }: { projectId: string }) {
   async function removeStakeholder(id: string, label: string) {
     if (!(await confirmDialog(`Delete stakeholder "${label}"? You can restore it from Trash.`))) return;
     await api.deleteStakeholder(id);
+    announce("Deleted.");
     load();
   }
 
@@ -5432,13 +5464,13 @@ function StakeholdersTab({ projectId }: { projectId: string }) {
         Everyone with a stake in this project: sponsors, customers, teams, and anyone who can help or
         block it. Rate their power and interest so you know how closely to keep them in the loop.
       </p>
-      <form className="inline-form inline-form-wide" onSubmit={addStakeholder}>
-        <input aria-label="Name" placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} />
+      <AddForm className="inline-form inline-form-wide" onSubmit={addStakeholder}>
+        <input aria-label="Name" aria-required="true" placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} />
         <input aria-label="Email (optional)" placeholder="Email (optional)" value={email} onChange={(e) => setEmail(e.target.value)} />
         <input aria-label="Phone (optional)" placeholder="Phone (optional)" value={phone} onChange={(e) => setPhone(e.target.value)} />
         <input aria-label="Role (optional)" placeholder="Role (optional)" value={role} onChange={(e) => setRole(e.target.value)} />
         <button className="btn btn-primary">Add stakeholder</button>
-      </form>
+      </AddForm>
       {error && <p className="form-error">{error}</p>}
 
       <div className="view-toggle">
@@ -5609,7 +5641,6 @@ function StakeholderDecisionsTab({ projectId }: { projectId: string }) {
   const [error, setError] = useState("");
 
   async function load() {
-    setLoading(true);
     const [d, s] = await Promise.all([api.listDecisions(projectId), api.listStakeholders(projectId)]);
     setDecisions(d.decisions);
     setStakeholders(s.stakeholders);
@@ -5617,6 +5648,7 @@ function StakeholderDecisionsTab({ projectId }: { projectId: string }) {
   }
 
   useEffect(() => {
+    setLoading(true);
     load();
   }, [projectId]);
 
@@ -5636,6 +5668,7 @@ function StakeholderDecisionsTab({ projectId }: { projectId: string }) {
       setDeadline("");
       setSelectedStakeholders([]);
       setShowForm(false);
+      announce("Decision added.");
       load();
     } catch (err: any) {
       setError(err.message || "Couldn't create that decision request.");
@@ -5645,6 +5678,7 @@ function StakeholderDecisionsTab({ projectId }: { projectId: string }) {
   async function removeDecision(id: string, label: string) {
     if (!(await confirmDialog(`Delete decision "${label}"? You can restore it from Trash.`))) return;
     await api.deleteDecision(id);
+    announce("Deleted.");
     load();
   }
 
@@ -5772,7 +5806,6 @@ function ChangeRequestsTab({ projectId }: { projectId: string }) {
   const [statusError, setStatusError] = useState("");
 
   async function load() {
-    setLoading(true);
     const [{ changeRequests }, { project }, { members }] = await Promise.all([
       api.listChangeRequests(projectId),
       api.getProject(projectId),
@@ -5787,6 +5820,7 @@ function ChangeRequestsTab({ projectId }: { projectId: string }) {
   }
 
   useEffect(() => {
+    setLoading(true);
     load();
   }, [projectId]);
 
@@ -5817,6 +5851,7 @@ function ChangeRequestsTab({ projectId }: { projectId: string }) {
       setScheduleImpactDays("");
       setBudgetImpact("");
       setRequestedBy("");
+      announce("Change request added.");
       load();
     } catch (err: any) {
       setError(err.message || "Couldn't log that change request.");
@@ -5854,6 +5889,7 @@ function ChangeRequestsTab({ projectId }: { projectId: string }) {
   async function removeChangeRequest(id: string, label: string) {
     if (!(await confirmDialog(`Delete change request "${label}"? You can restore it from Trash.`))) return;
     await api.deleteChangeRequest(id);
+    announce("Deleted.");
     load();
   }
 
@@ -5873,7 +5909,7 @@ function ChangeRequestsTab({ projectId }: { projectId: string }) {
         quick={
           <>
             <label htmlFor="f-projecthome-5549" className="sr-only">Change request</label>
-            <input className="quick-add-title" id="f-projecthome-5549" placeholder="What's changing?" value={title} onChange={(e) => setTitle(e.target.value)} />
+            <input className="quick-add-title" aria-required="true" id="f-projecthome-5549" placeholder="What's changing?" value={title} onChange={(e) => setTitle(e.target.value)} />
             <input className="quick-add-num" aria-label="Schedule impact (days)"
               type="number" placeholder="Schedule impact (days)"
               value={scheduleImpactDays} onChange={(e) => setScheduleImpactDays(e.target.value)}
@@ -6046,7 +6082,6 @@ function TeamTab({ projectId, isOwner, onSetupChange }: { projectId: string; isO
   const [deleting, setDeleting] = useState(false);
 
   async function load() {
-    setLoading(true);
     const [{ owner, members }, { tasks }, { project }] = await Promise.all([
       api.listMembers(projectId),
       api.listTasks(projectId),
@@ -6095,6 +6130,7 @@ function TeamTab({ projectId, isOwner, onSetupChange }: { projectId: string; isO
   }
 
   useEffect(() => {
+    setLoading(true);
     load();
   }, [projectId]);
 
@@ -6370,7 +6406,6 @@ function ClosureTab({ projectId }: { projectId: string }) {
   const [error, setError] = useState("");
 
   async function load() {
-    setLoading(true);
     const [{ project }, { risks }, { issues }] = await Promise.all([
       api.getProject(projectId),
       api.listRisks(projectId),
@@ -6386,6 +6421,7 @@ function ClosureTab({ projectId }: { projectId: string }) {
   }
 
   useEffect(() => {
+    setLoading(true);
     load();
   }, [projectId]);
 
@@ -6699,13 +6735,13 @@ function LessonsLearnedTab({ projectId }: { projectId: string }) {
   const [error, setError] = useState("");
 
   async function load() {
-    setLoading(true);
     const { lessons } = await api.listLessons(projectId);
     setLessons(lessons);
     setLoading(false);
   }
 
   useEffect(() => {
+    setLoading(true);
     load();
   }, [projectId]);
 
@@ -6718,6 +6754,7 @@ function LessonsLearnedTab({ projectId }: { projectId: string }) {
       setSummary("");
       setDetails("");
       setOwner("");
+      announce("Lesson added.");
       load();
     } catch (err: any) {
       setError(err.message || "Couldn't log that lesson.");
@@ -6748,6 +6785,7 @@ function LessonsLearnedTab({ projectId }: { projectId: string }) {
   async function removeLesson(id: string, label: string) {
     if (!(await confirmDialog(`Delete lesson "${label}"? You can restore it from Trash.`))) return;
     await api.deleteLesson(id);
+    announce("Deleted.");
     load();
   }
 
@@ -6767,7 +6805,7 @@ function LessonsLearnedTab({ projectId }: { projectId: string }) {
         quick={
           <>
             <label htmlFor="f-projecthome-6430" className="sr-only">Lesson</label>
-            <input id="f-projecthome-6430" className="quick-add-title" placeholder="What happened?" value={summary} onChange={(e) => setSummary(e.target.value)} />
+            <input id="f-projecthome-6430" className="quick-add-title" aria-required="true" placeholder="What happened?" value={summary} onChange={(e) => setSummary(e.target.value)} />
             <select aria-label="Category" value={category} onChange={(e) => setCategory(e.target.value as Lesson["category"])}>
               {Object.entries(LESSON_CATEGORY_LABEL).map(([value, label]) => (
                 <option key={value} value={value}>{label}</option>
@@ -6926,7 +6964,6 @@ function ConnectionsTab({ projectId }: { projectId: string }) {
   const [savedMsg, setSavedMsg] = useState(false);
 
   async function load() {
-    setLoading(true);
     const [{ webhook_url }, { project }] = await Promise.all([
       api.getWebhookSettings(),
       api.getProject(projectId),
@@ -6938,7 +6975,7 @@ function ConnectionsTab({ projectId }: { projectId: string }) {
     setLoading(false);
   }
 
-  useEffect(() => { load(); }, [projectId]);
+  useEffect(() => { setLoading(true); load(); }, [projectId]);
 
   async function saveUrl() {
     setSaving(true);

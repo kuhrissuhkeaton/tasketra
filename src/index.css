@@ -382,6 +382,11 @@ input:focus, textarea:focus, select:focus {
   border-color: var(--navy);
   box-shadow: 0 0 0 3px rgba(207, 234, 70, 0.55);
 }
+input[aria-invalid="true"], textarea[aria-invalid="true"], select[aria-invalid="true"] {
+  border-color: var(--red);
+}
+.quick-add-error { margin: 8px 0 0; }
+.inline-form > .add-form-error { flex: 1 1 100%; margin: 0; }
 textarea { resize: vertical; }
 .form-error { color: var(--red); font-size: 13px; margin-top: 8px; }
 

@@ -1,5 +1,6 @@
 import { useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { QuickAddJump } from "./QuickAddJump";
+import { refocusFirstField, useRequiredFields } from "../lib/requiredFields";
 
 // Compact entry form for the project registers: the fields people need to log an
 // item sit on one quick row; everything else lives under a "More details" toggle.
@@ -59,6 +60,23 @@ export function QuickAddForm({
   const panelId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
+  const required = useRequiredFields();
+  const inputKind = useRef<"keyboard" | "mouse" | "touch">("mouse");
+
+  // Empty main field: say so and put focus there, instead of doing nothing.
+  // After a successful add (the parent clears the field), the cursor goes back
+  // to the first field for the next entry.
+  function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    const form = e.currentTarget;
+    if (!required.check(form)) {
+      e.preventDefault();
+      return;
+    }
+    const result = onSubmit(e) as unknown;
+    Promise.resolve(result).then(() => {
+      requestAnimationFrame(() => refocusFirstField(form, inputKind.current));
+    });
+  }
 
   function toggle() {
     const next = !open;
@@ -85,8 +103,19 @@ export function QuickAddForm({
 
   return (
     <>
-    <form ref={formRef} className="stacked-form quick-add" onSubmit={onSubmit} onInvalidCapture={onInvalidCapture}>
+    <form
+      ref={formRef}
+      className="stacked-form quick-add"
+      onSubmit={handleSubmit}
+      onInvalidCapture={onInvalidCapture}
+      onInput={(e) => required.clearInvalid(e.target)}
+      onPointerDownCapture={(e) => { inputKind.current = e.pointerType === "touch" ? "touch" : "mouse"; }}
+      onKeyDownCapture={() => { inputKind.current = "keyboard"; }}
+    >
       <div className="quick-add-row">{quick}</div>
+      {required.message && (
+        <p id={required.messageId} className="form-error quick-add-error" role="alert">{required.message}</p>
+      )}
       <button
         type="button"
         className="btn-link quick-add-toggle"
