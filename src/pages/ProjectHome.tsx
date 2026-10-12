@@ -1762,6 +1762,7 @@ function IssuesTab({ projectId, highlightId }: { projectId: string; highlightId?
       <QuickAddForm
         storageKey="issues"
         hasRows={issues.length > 0}
+        startExpanded={false}
         onSubmit={addIssue}
         quick={
           <>
@@ -2149,6 +2150,7 @@ function RisksTab({ projectId, highlightId }: { projectId: string; highlightId?:
       <QuickAddForm
         storageKey="risks"
         hasRows={risks.length > 0}
+        startExpanded={false}
         onSubmit={addRisk}
         quick={
           <>
@@ -2510,6 +2512,7 @@ function AssumptionsTab({ projectId }: { projectId: string }) {
       <QuickAddForm
         storageKey="assumptions"
         hasRows={assumptions.length > 0}
+        startExpanded={false}
         onSubmit={addAssumption}
         quick={
           <>
@@ -2755,6 +2758,7 @@ function DependenciesTab({ projectId }: { projectId: string }) {
       <QuickAddForm
         storageKey="dependencies"
         hasRows={dependencies.length > 0}
+        startExpanded={false}
         onSubmit={addDependency}
         quick={
           <>
@@ -3014,6 +3018,7 @@ function QualityTab({ projectId }: { projectId: string }) {
       <QuickAddForm
         storageKey="quality"
         hasRows={items.length > 0}
+        startExpanded={false}
         onSubmit={addItem}
         quick={
           <>
@@ -3274,6 +3279,7 @@ function ComplianceTab({ projectId }: { projectId: string }) {
       <QuickAddForm
         storageKey="compliance"
         hasRows={items.length > 0}
+        startExpanded={false}
         onSubmit={addItem}
         quick={
           <>

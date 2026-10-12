@@ -217,8 +217,8 @@ function PortfolioOverview({ data, wide }: { data: PortfolioData; wide: boolean 
                   </td>
                   <td className="muted">{p.doneTasks}/{p.totalTasks}</td>
                   <td className="muted" style={p.overdueTasks > 0 ? { color: "var(--red)" } : undefined}>{p.overdueTasks}</td>
-                  <td className="muted">{p.openRisks}{p.highRisks > 0 ? ` (${p.highRisks} high)` : ""}</td>
-                  <td className="muted">{p.openIssues}{p.highIssues > 0 ? ` (${p.highIssues} high)` : ""}</td>
+                  <td className="muted nowrap-cell">{p.openRisks}{p.highRisks > 0 ? ` (${p.highRisks} high)` : ""}</td>
+                  <td className="muted nowrap-cell">{p.openIssues}{p.highIssues > 0 ? ` (${p.highIssues} high)` : ""}</td>
                   <td className="muted">{p.objectivesCount > 0 ? fmtPct100(p.avgObjectiveProgress) : "--"}</td>
                 </tr>
               ))}
@@ -514,7 +514,6 @@ export default function Dashboard() {
   const firstRun = !loading && isFirstRun(projects, taskCounts);
 
   const totalOpenDecisions = projects.reduce((sum, p) => sum + (p.open_decisions || 0), 0);
-  const totalOverdue = projects.reduce((sum, p) => sum + (p.overdue_tasks || 0), 0);
 
   const deletedSection = deletedProjects.length > 0 && (
     <div style={{ marginTop: 32 }}>
@@ -581,14 +580,13 @@ export default function Dashboard() {
           <div className="page-head-actions">
             <div className="stat-row">
               <div className="stat"><strong>{totalOpenDecisions}</strong> decisions awaiting response</div>
-              <div className="stat"><strong>{totalOverdue}</strong> overdue tasks</div>
             </div>
             <button type="button" className="btn btn-primary" onClick={openNewProject}>New project</button>
           </div>
         </div>
 
         {!loading && projects.length > 1 && (
-          <div className="roadmap-filter-bar" style={{ marginBottom: 4 }}>
+          <div className="roadmap-filter-bar dashboard-filters" style={{ marginBottom: 4 }}>
             <div className="roadmap-filter-group" role="group" aria-label="Filter by stage">
               <span className="filter-group-label">Stage</span>
               <button

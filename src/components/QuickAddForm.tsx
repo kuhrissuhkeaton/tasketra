@@ -14,11 +14,9 @@ import { refocusFirstField, useRequiredFields } from "../lib/requiredFields";
 // the full form) and closed once the register has rows. A register can opt out with
 // startExpanded={false} so that, even when empty, only the compact row shows.
 //
-// KNOWN INCONSISTENCY (documented in v112, intentionally not changed): the older
-// registers (Risks, Issues, Assumptions, Dependencies, Quality, Compliance) do not
-// pass startExpanded, so they still open More details automatically when empty.
-// Change Requests, Lessons, Communications plan, Vendors and Objectives pass
-// startExpanded={false}. Align them in a separate, approved step.
+// All eleven registers (Risks, Issues, Assumptions, Dependencies, Quality, Compliance,
+// Change Requests, Lessons, Communications plan, Vendors, Objectives) pass
+// startExpanded={false}, so an empty register shows only the compact row (aligned in v118).
 
 function readChoice(key: string): boolean | null {
   try {

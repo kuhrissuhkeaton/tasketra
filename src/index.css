@@ -544,7 +544,7 @@ td.row-actions > *:last-child { margin-right: 0; }
 .project-card-menu-backdrop { position: fixed; inset: 0; z-index: 4; background: transparent; }
 
 /* --- Pills --- */
-.pill { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; letter-spacing: 0.01em; }
+.pill { display: inline-block; white-space: nowrap; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; letter-spacing: 0.01em; }
 .pill-gold { background: var(--tag-tan); color: #6B4A1C; }
 .pill-green { background: var(--tag-sage); color: #3D5F24; }
 .pill-red { background: var(--red-border); color: #8A3B2C; }
@@ -1054,7 +1054,7 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
 .gantt-row { height: 36px; position: relative; border-bottom: 1px solid var(--border); }
 .gantt-bar { position: absolute; top: 8px; height: 20px; border-radius: 4px; min-width: 8px; }
 .gantt-bar-not_started { background: var(--slate); }
-.gantt-bar-in_progress { background: var(--ink); }
+.gantt-bar-in_progress { background: var(--navy); }
 .gantt-bar-blocked { background: var(--red); }
 .gantt-bar-done { background: var(--success); }
 .gantt-legend { display: flex; gap: 18px; margin-top: 12px; font-size: 13px; color: var(--slate); flex-wrap: wrap; }
@@ -1458,7 +1458,7 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
 }
 .stage-chip-sm { font-size: 12px; gap: 6px; padding: 3px 10px; }
 .stage-chip-sm .stage-chip-dot { width: 7px; height: 7px; }
-.stage-chip-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ink); }
+.stage-chip-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--navy); }
 
 .stage-rail {
   background: var(--cream); border-radius: var(--radius); box-shadow: var(--shadow-sm);
@@ -2107,12 +2107,13 @@ a:hover { color: var(--navy); }
 .dash-attention-empty { margin: 0; padding: 10px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--panel); color: var(--slate); font-size: 14px; }
 
 .dash-reporting { margin-top: 24px; }
-.dash-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 18px; }
-.dash-kpis .evm-card { padding: 10px 14px; }
+.dash-kpis { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 18px; }
+.dash-kpis .evm-card { padding: 10px 14px; flex: 1 1 calc(25% - 10px); min-width: 0; box-sizing: border-box; }
 .dash-kpis .evm-sub { margin-top: 2px; }
-/* Seven across only where each card keeps its full-size label and number; below that the cards wrap (4, then 2 per row). */
-@media (min-width: 1400px) { .dash-kpis { grid-template-columns: repeat(7, minmax(0, 1fr)); } }
-@media (max-width: 860px) { .dash-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .dash-kpis > .evm-card:last-child:nth-child(odd) { grid-column: 1 / -1; } }
+/* Tiles are sized by row (4 per row, 7 on wide screens, 2 on narrow) and grow to share any leftover space, so the last row is never ragged. */
+@media (min-width: 1400px) { .dash-kpis .evm-card { flex-basis: calc(14.2857% - 10px); } }
+@media (max-width: 860px) { .dash-kpis .evm-card { flex-basis: calc(50% - 10px); } }
+.nowrap-cell { white-space: nowrap; }
 
 .dash-ms-list { list-style: none; margin: 0; padding: 0; }
 .dash-ms-row { display: grid; grid-template-columns: 96px 1fr auto; gap: 12px; align-items: baseline; padding: 6px 2px; border-bottom: 1px solid var(--border); font-size: 14px; }
@@ -2167,4 +2168,11 @@ a:hover { color: var(--navy); }
   .project-main .project-page-head .row-menu-wrap { grid-column: 2; grid-row: 1; }
   .project-main .project-page-head .stage-chip { grid-column: 1 / -1; grid-row: 2; justify-self: start; }
   .project-main .project-page-head > :not(h1):not(.page-head-actions) { grid-column: 1 / -1; }
+}
+
+/* ---- v118: Dashboard filter rows scroll sideways on phones instead of stacking ---- */
+@media (max-width: 640px) {
+  .dashboard-filters.roadmap-filter-bar { min-width: 0; max-width: 100%; flex-direction: column; align-items: stretch; gap: 8px; }
+  .dashboard-filters .roadmap-filter-group { min-width: 0; max-width: 100%; flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 4px; scrollbar-width: thin; }
+  .dashboard-filters .roadmap-filter-group > * { flex: none; }
 }
