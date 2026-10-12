@@ -91,6 +91,30 @@ export function NotificationBell() {
     };
   }, [open]);
 
+  // Opening the panel moves focus into it (first enabled control, else the
+  // panel itself) so keyboard and screen-reader users land in the content.
+  useEffect(() => {
+    if (!open) return;
+    const panel = panelRef.current;
+    if (!panel) return;
+    const first = panel.querySelector<HTMLElement>("button:not([disabled]), a[href]");
+    (first ?? panel).focus();
+  }, [open]);
+
+  // Tab stays inside the open panel; Escape (above) closes it and returns to the bell.
+  function onPanelKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    if (e.key !== "Tab") return;
+    const panel = panelRef.current;
+    if (!panel) return;
+    const els = Array.from(panel.querySelectorAll<HTMLElement>("button:not([disabled]), a[href]"));
+    if (els.length === 0) { e.preventDefault(); return; }
+    const first = els[0];
+    const last = els[els.length - 1];
+    const active = document.activeElement;
+    if (e.shiftKey && (active === first || active === panel)) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && active === last) { e.preventDefault(); first.focus(); }
+  }
+
   const unreadCount = newEntries.length + items.filter((i) => i.unread).length;
   const badge = badgeText(unreadCount);
 
@@ -134,7 +158,7 @@ export function NotificationBell() {
         {badge && <span className="sidebar-bell-badge" aria-hidden="true">{badge}</span>}
       </button>
       {open && createPortal(
-        <div ref={panelRef} className="notif-panel" role="dialog" aria-label="Notifications">
+        <div ref={panelRef} className="notif-panel" role="dialog" aria-label="Notifications" tabIndex={-1} onKeyDown={onPanelKeyDown}>
           <div className="notif-head">
             <strong>Notifications</strong>
             <button type="button" className="notif-markall" onClick={markAllRead} disabled={unreadCount === 0}>

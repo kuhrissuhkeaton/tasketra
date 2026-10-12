@@ -1,4 +1,5 @@
 import type { RaciPerson, RaciRow } from "../lib/api";
+import { breakable } from "../lib/breakable";
 import { RACI_LEGEND, cellMap, rowHeadLabel, startsOtherTasks, type RaciAssignment } from "../lib/raci";
 
 const TYPE_LABEL: Record<string, string> = { phase: "Phase", milestone: "Milestone", task: "Task" };
@@ -27,7 +28,7 @@ export function RaciDocument({
                   <th className="raci-row-head">{rowHeadLabel(rows)}</th>
                   {people.map((p) => (
                     <th key={p.key} className="raci-col-head">
-                      <span className="raci-person">{p.name}</span>
+                      <span className="raci-person">{breakable(p.name)}</span>
                       {p.role && <span className="raci-person-role">{p.role}</span>}
                     </th>
                   ))}

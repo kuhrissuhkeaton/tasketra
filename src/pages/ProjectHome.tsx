@@ -1297,12 +1297,12 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
                 {addingSubtaskFor === t.id && (
                   <tr>
                     <td colSpan={5}>
-                      <form
+                      <AddForm
                         className="inline-form inline-form-wide"
                         style={{ marginLeft: (depth + 1) * 20, marginBottom: 0 }}
                         onSubmit={(e) => addSubtask(e, t.id)}
                       >
-                        <input aria-label="Sub-task title" placeholder="Sub-task title" value={subTitle} onChange={(e) => setSubTitle(e.target.value)} autoFocus />
+                        <input aria-label="Sub-task title" aria-required="true" placeholder="Sub-task title" value={subTitle} onChange={(e) => setSubTitle(e.target.value)} autoFocus />
                         <input aria-label="Owner (optional)" placeholder="Owner (optional)" value={subOwner} onChange={(e) => setSubOwner(e.target.value)} />
                         <span className="datefield">
                           <span className="datefield-label" aria-hidden="true">Start</span>
@@ -1314,7 +1314,7 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
                         </span>
                         <button className="btn btn-primary">Add</button>
                         <button className="btn btn-ghost" type="button" onClick={() => setAddingSubtaskFor(null)}>Cancel</button>
-                      </form>
+                      </AddForm>
                     </td>
                   </tr>
                 )}
@@ -2628,7 +2628,10 @@ function AssumptionsTab({ projectId }: { projectId: string }) {
                 </td>
                 <td className="row-actions">
                   <button className="btn-link" type="button" onClick={() => startEdit(a)}>Edit</button>
-                  <button className="btn-link btn-link-danger" type="button" onClick={() => removeAssumption(a.id, a.statement)}>Delete</button>
+                  <RowActionsMenu
+                    label={`More actions for ${a.statement}`}
+                    items={[{ label: "Delete", danger: true, onSelect: () => removeAssumption(a.id, a.statement) }]}
+                  />
                 </td>
               </tr>
             )
@@ -2886,7 +2889,10 @@ function DependenciesTab({ projectId }: { projectId: string }) {
                 </td>
                 <td className="row-actions">
                   <button className="btn-link" type="button" onClick={() => startEdit(d)}>Edit</button>
-                  <button className="btn-link btn-link-danger" type="button" onClick={() => removeDependency(d.id, d.title)}>Delete</button>
+                  <RowActionsMenu
+                    label={`More actions for ${d.title}`}
+                    items={[{ label: "Delete", danger: true, onSelect: () => removeDependency(d.id, d.title) }]}
+                  />
                 </td>
               </tr>
             )
@@ -3137,7 +3143,10 @@ function QualityTab({ projectId }: { projectId: string }) {
                 </td>
                 <td className="row-actions">
                   <button className="btn-link" type="button" onClick={() => startEdit(q)}>Edit</button>
-                  <button className="btn-link btn-link-danger" type="button" onClick={() => removeItem(q.id, q.title)}>Delete</button>
+                  <RowActionsMenu
+                    label={`More actions for ${q.title}`}
+                    items={[{ label: "Delete", danger: true, onSelect: () => removeItem(q.id, q.title) }]}
+                  />
                 </td>
               </tr>
             )
@@ -3397,7 +3406,10 @@ function ComplianceTab({ projectId }: { projectId: string }) {
                 </td>
                 <td className="row-actions">
                   <button className="btn-link" type="button" onClick={() => startEdit(c)}>Edit</button>
-                  <button className="btn-link btn-link-danger" type="button" onClick={() => removeItem(c.id, c.title)}>Delete</button>
+                  <RowActionsMenu
+                    label={`More actions for ${c.title}`}
+                    items={[{ label: "Delete", danger: true, onSelect: () => removeItem(c.id, c.title) }]}
+                  />
                 </td>
               </tr>
             )
@@ -3687,7 +3699,10 @@ function OkrsTab({ projectId }: { projectId: string }) {
                       ))}
                     </select>
                     <button className="btn-link" type="button" onClick={() => startEdit(o)}>Edit</button>
-                    <button className="btn-link btn-link-danger" type="button" onClick={() => removeObjective(o)}>Delete</button>
+                    <RowActionsMenu
+                    label={`More actions for ${o.title}`}
+                    items={[{ label: "Delete", danger: true, onSelect: () => removeObjective(o) }]}
+                  />
                   </div>
                 </div>
 
@@ -3736,7 +3751,10 @@ function OkrsTab({ projectId }: { projectId: string }) {
                                   : `${fmtKeyResultValue(kr, kr.current_value)} of ${fmtKeyResultValue(kr, kr.target_value)}`}
                               </div>
                               <button className="btn-link" type="button" onClick={() => startEditKr(kr)}>Edit</button>
-                              <button className="btn-link btn-link-danger" type="button" onClick={() => removeKeyResult(kr)}>Delete</button>
+                              <RowActionsMenu
+                    label={`More actions for ${kr.title}`}
+                    items={[{ label: "Delete", danger: true, onSelect: () => removeKeyResult(kr) }]}
+                  />
                             </div>
                             <div className="progress-track" style={{ marginTop: 6 }}>
                               <div className={`progress-fill ${OBJECTIVE_PROGRESS_FILL[o.status]}`} style={{ width: `${kr.progress ?? 0}%` }} />
@@ -3969,7 +3987,10 @@ function CommsPlanTab({ projectId }: { projectId: string }) {
                 <td>{item.owner_name || "--"}</td>
                 <td className="row-actions">
                   <button className="btn-link" type="button" onClick={() => startEdit(item)}>Edit</button>
-                  <button className="btn-link btn-link-danger" type="button" onClick={() => removeItem(item.id, `${item.audience}: ${item.topic}`)}>Delete</button>
+                  <RowActionsMenu
+                    label={`More actions for ${`${item.audience}: ${item.topic}`}`}
+                    items={[{ label: "Delete", danger: true, onSelect: () => removeItem(item.id, `${item.audience}: ${item.topic}`) }]}
+                  />
                 </td>
               </tr>
             )
@@ -4293,7 +4314,10 @@ function ProcurementTab({ projectId }: { projectId: string }) {
                 </td>
                 <td className="row-actions">
                   <button className="btn-link" type="button" onClick={() => startEdit(p)}>Edit</button>
-                  <button className="btn-link btn-link-danger" type="button" onClick={() => removeItem(p.id, p.vendor_name)}>Delete</button>
+                  <RowActionsMenu
+                    label={`More actions for ${p.vendor_name}`}
+                    items={[{ label: "Delete", danger: true, onSelect: () => removeItem(p.id, p.vendor_name) }]}
+                  />
                 </td>
               </tr>
             )
@@ -4736,7 +4760,7 @@ function RoadmapTab({ projectId, isOwner, showBudget }: { projectId: string; isO
       {showForm && (
         <AddForm className="stacked-form" onSubmit={addItem} style={{ marginTop: 16 }}>
           <label htmlFor="f-projecthome-4420">Title</label>
-          <input id="f-projecthome-4420" aria-required="true" placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
+          <input id="f-projecthome-4420" aria-required="true" autoFocus placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
           <div className="inline-form" style={{ marginTop: 8 }}>
             <select aria-label="Type" value={type} onChange={(e) => setType(e.target.value as RoadmapItemType)}>
               {Object.entries(ROADMAP_TYPE_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
@@ -4901,7 +4925,10 @@ function RoadmapTab({ projectId, isOwner, showBudget }: { projectId: string; isO
                   <button className="btn-link" type="button" onClick={() => startEdit(item)}>
                     {editingId === item.id ? "Close" : "Edit"}
                   </button>
-                  <button className="btn-link btn-link-danger" type="button" onClick={() => removeItem(item)}>Delete</button>
+                  <RowActionsMenu
+                    label={`More actions for ${item.title}`}
+                    items={[{ label: "Delete", danger: true, onSelect: () => removeItem(item) }]}
+                  />
                 </td>
               </tr>
               {editingId === item.id && (
@@ -5509,7 +5536,10 @@ function StakeholdersTab({ projectId }: { projectId: string }) {
                 <td>{s.decisions_resolved ?? 0} / {s.decisions_sent ?? 0} resolved</td>
                 <td className="row-actions">
                   <button className="btn-link" type="button" onClick={() => openDrawer(s)}>Details</button>
-                  <button className="btn-link btn-link-danger" type="button" onClick={() => removeStakeholder(s.id, s.name)}>Delete</button>
+                  <RowActionsMenu
+                    label={`More actions for ${s.name}`}
+                    items={[{ label: "Delete", danger: true, onSelect: () => removeStakeholder(s.id, s.name) }]}
+                  />
                 </td>
               </tr>
             );
@@ -5655,7 +5685,12 @@ function StakeholderDecisionsTab({ projectId }: { projectId: string }) {
   async function createDecision(e: React.FormEvent) {
     e.preventDefault();
     const opts = options.split(",").map((o) => o.trim()).filter(Boolean);
-    if (!title.trim() || opts.length < 2) return;
+    if (!title.trim()) return;
+    if (opts.length < 2) {
+      setError("Add at least two options, separated by commas.");
+      document.getElementById("f-projecthome-5353")?.focus();
+      return;
+    }
     setError("");
     try {
       const { shareUrl } = await api.createDecision(
@@ -5699,13 +5734,13 @@ function StakeholderDecisionsTab({ projectId }: { projectId: string }) {
       )}
 
       {showForm && (
-        <form className="stacked-form" onSubmit={createDecision}>
+        <AddForm className="stacked-form" onSubmit={createDecision}>
           <label htmlFor="f-projecthome-5349">Title</label>
-          <input id="f-projecthome-5349" value={title} onChange={(e) => setTitle(e.target.value)} required />
+          <input id="f-projecthome-5349" value={title} onChange={(e) => setTitle(e.target.value)} aria-required="true" autoFocus />
           <label htmlFor="f-projecthome-5351">Context</label>
           <textarea id="f-projecthome-5351" value={context} onChange={(e) => setContext(e.target.value)} rows={3} />
           <label htmlFor="f-projecthome-5353">Options (comma separated)</label>
-          <input id="f-projecthome-5353" value={options} onChange={(e) => setOptions(e.target.value)} required />
+          <input id="f-projecthome-5353" value={options} onChange={(e) => { setOptions(e.target.value); if (error) setError(""); }} aria-required="true" aria-describedby={error ? "decision-error" : undefined} aria-invalid={error ? true : undefined} />
           <label htmlFor="f-projecthome-5355">Deadline (optional)</label>
           <input id="f-projecthome-5355" type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
           <label>Send to</label>
@@ -5727,8 +5762,8 @@ function StakeholderDecisionsTab({ projectId }: { projectId: string }) {
             {stakeholders.length === 0 && <p className="muted">Add stakeholders first to route this to someone.</p>}
           </div>
           <button className="btn btn-primary" type="submit">Create decision request</button>
-          {error && <p className="form-error">{error}</p>}
-        </form>
+          {error && <p id="decision-error" className="form-error" role="alert">{error}</p>}
+        </AddForm>
       )}
 
       <div className="decision-list">
@@ -6005,7 +6040,10 @@ function ChangeRequestsTab({ projectId }: { projectId: string }) {
                 </td>
                 <td className="row-actions">
                   <button className="btn-link" type="button" onClick={() => startEdit(c)}>Edit</button>
-                  <button className="btn-link btn-link-danger" type="button" onClick={() => removeChangeRequest(c.id, c.title)}>Delete</button>
+                  <RowActionsMenu
+                    label={`More actions for ${c.title}`}
+                    items={[{ label: "Delete", danger: true, onSelect: () => removeChangeRequest(c.id, c.title) }]}
+                  />
                 </td>
               </tr>
             )
@@ -6863,7 +6901,10 @@ function LessonsLearnedTab({ projectId }: { projectId: string }) {
                 </td>
                 <td className="row-actions">
                   <button className="btn-link" type="button" onClick={() => startEdit(l)}>Edit</button>
-                  <button className="btn-link btn-link-danger" type="button" onClick={() => removeLesson(l.id, l.summary)}>Delete</button>
+                  <RowActionsMenu
+                    label={`More actions for ${l.summary}`}
+                    items={[{ label: "Delete", danger: true, onSelect: () => removeLesson(l.id, l.summary) }]}
+                  />
                 </td>
               </tr>
             )

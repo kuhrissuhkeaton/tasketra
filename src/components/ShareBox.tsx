@@ -40,7 +40,7 @@ export function ShareBox({ projectId, kind, recipientsSee }: { projectId: string
   }
 
   async function regenerate() {
-    const ok = await confirm("Make a new link? The current link will stop working for anyone who has it.");
+    const ok = await confirm("Make a new link? The current link will stop working for anyone who has it.", "Make new link");
     if (ok) run(() => api.createShareLink(projectId, kind, true));
   }
 

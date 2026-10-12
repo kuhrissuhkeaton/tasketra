@@ -71,7 +71,8 @@ export default function AdminBroadcast() {
   async function send(force = false) {
     setError(null); setNotice(null);
     const ok = await confirm(
-      `Send "${subject}" to ${audience ?? "all"} founding member${audience === 1 ? "" : "s"} now? This can't be undone. Send yourself a test first if you haven't.`
+      `Send "${subject}" to ${audience ?? "all"} founding member${audience === 1 ? "" : "s"} now? This can't be undone. Send yourself a test first if you haven't.`,
+      "Send"
     );
     if (!ok) return;
     setBusy(true);
@@ -80,7 +81,7 @@ export default function AdminBroadcast() {
       setNotice(done.failed > 0 ? `Sent to ${done.sent}. ${done.failed} could not be sent.` : `Sent to ${done.sent} founding members.`);
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
-        const again = await confirm(`${err.message} Send it again anyway?`);
+        const again = await confirm(`${err.message} Send it again anyway?`, "Send again");
         if (again) { setBusy(false); return send(true); }
       } else {
         setError(err instanceof Error ? err.message : "Sending stopped. Reload to see how far it got.");

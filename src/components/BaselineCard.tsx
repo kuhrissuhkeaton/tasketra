@@ -32,7 +32,7 @@ export function BaselineCard({ projectId, isOwner, showBudget }: { projectId: st
 
   async function lock() {
     if (data?.baseline) {
-      const ok = await confirmDialog("Re-lock the baseline? Today's plan becomes the new baseline. Earlier baselines are kept as history.");
+      const ok = await confirmDialog("Re-lock the baseline? Today's plan becomes the new baseline. Earlier baselines are kept as history.", "Re-lock");
       if (!ok) return;
     }
     setBusy(true);

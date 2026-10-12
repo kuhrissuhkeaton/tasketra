@@ -73,6 +73,17 @@ function labelNeededWidth(th: HTMLElement): number {
 // The width a body cell needs to show everything on one line (same idea as
 // labelNeededWidth, for a data cell). Used for the Actions column, whose links
 // (Details, Delete, + Sub-task) must never be clipped.
+// True when a header cell shows a label. Text inside .sr-only (the "Actions"
+// name given to the otherwise empty action column) does not count: that column
+// is still an Actions column and must keep its never-clipped width floor.
+export function hasVisibleLabel(th: HTMLElement): boolean {
+  return Array.from(th.childNodes).some((n) =>
+    n.nodeType === Node.TEXT_NODE
+      ? !!n.textContent?.trim()
+      : !(n as HTMLElement).classList?.contains("sr-only") && !!n.textContent?.trim()
+  );
+}
+
 function cellNeededWidth(td: HTMLElement): number {
   const prevWhiteSpace = td.style.whiteSpace;
   td.style.whiteSpace = "nowrap";
@@ -170,7 +181,7 @@ export function ResizableTable({
     const contentMin = measureMinContent(table, ths);
     const bodyRows = Array.from(table.querySelectorAll("tbody > tr"));
     ths.forEach((th, i) => {
-      if (th.textContent?.trim()) return;
+      if (hasVisibleLabel(th)) return;
       for (const tr of bodyRows) {
         const td = tr.children[i] as HTMLElement | undefined;
         if (td && tr.children.length === ths.length) actionNeed[i] = Math.max(actionNeed[i], cellNeededWidth(td));

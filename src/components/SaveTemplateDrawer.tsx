@@ -43,7 +43,7 @@ export function SaveTemplateDrawer({ open, onClose, projectId }: { open: boolean
   }
 
   async function remove(t: UserTemplate) {
-    if (!(await confirmDialog(`Delete your template "${t.name}"? Projects you already made from it are not affected.`))) return;
+    if (!(await confirmDialog(`Delete your template "${t.name}"? Projects you already made from it are not affected.`, "Delete"))) return;
     try {
       await api.deleteUserTemplate(t.id);
       setMine((m) => m.filter((x) => x.id !== t.id));

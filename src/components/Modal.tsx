@@ -20,6 +20,21 @@ export function Modal({
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
 
+  // The page behind a modal does not scroll while it is open. The scrollbar's
+  // width is added back as padding so the page does not jump sideways.
+  useEffect(() => {
+    const body = document.body;
+    const prevOverflow = body.style.overflow;
+    const prevPadding = body.style.paddingRight;
+    const barWidth = window.innerWidth - document.documentElement.clientWidth;
+    body.style.overflow = "hidden";
+    if (barWidth > 0) body.style.paddingRight = `${barWidth}px`;
+    return () => {
+      body.style.overflow = prevOverflow;
+      body.style.paddingRight = prevPadding;
+    };
+  }, []);
+
   useEffect(() => {
     const opener = document.activeElement as HTMLElement | null;
     const card = cardRef.current;

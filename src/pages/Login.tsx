@@ -64,6 +64,15 @@ export default function Login() {
     return () => { cancelled = true; };
   }, [plan]);
 
+  // Switching between Sign in and Create account starts clean: an error from
+  // the other mode no longer follows you across.
+  function switchMode(next: "login" | "register") {
+    if (next === mode) return;
+    setMode(next);
+    setError(null);
+    setSuggestion(null);
+  }
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
@@ -82,6 +91,9 @@ export default function Login() {
       navigate(mode === "register" && plan === "pro" ? "/app/billing" : "/app");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
+      // The Sign in button is disabled while busy, which drops focus to the
+      // page. Put it back on the field the person most likely needs to fix.
+      document.getElementById(mode === "login" ? "f-login-75" : "f-login-73")?.focus();
       if (err instanceof ApiError && err.suggestion) setSuggestion(err.suggestion);
     } finally {
       setBusy(false);
@@ -130,10 +142,10 @@ export default function Login() {
         )}
 
         <div className="auth-tabs">
-          <button className={mode === "login" ? "tab active" : "tab"} onClick={() => setMode("login")} type="button">
+          <button className={mode === "login" ? "tab active" : "tab"} onClick={() => switchMode("login")} type="button" aria-pressed={mode === "login"}>
             Sign in
           </button>
-          <button className={mode === "register" ? "tab active" : "tab"} onClick={() => setMode("register")} type="button">
+          <button className={mode === "register" ? "tab active" : "tab"} onClick={() => switchMode("register")} type="button" aria-pressed={mode === "register"}>
             Create account
           </button>
         </div>
@@ -156,7 +168,7 @@ export default function Login() {
             </button>
           </div>
           {mode === "register" && <p className="muted" style={{ fontSize: 12, margin: "4px 0 0" }}>At least 8 characters. One email, one account.</p>}
-          {error && <div className="form-error">{error}</div>}
+          {error && <div className="form-error" role="alert">{error}</div>}
           {suggestion && (
             <button type="button" className="btn btn-ghost" onClick={() => { setEmail(suggestion); setError(null); setSuggestion(null); }}>
               Use {suggestion}

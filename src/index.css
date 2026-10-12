@@ -481,7 +481,7 @@ td.row-actions { display: table-cell; vertical-align: middle; white-space: norma
 td.row-actions > * { margin-right: 12px; }
 td.row-actions > *:last-child { margin-right: 0; }
 .btn-link {
-  background: none; border: none; padding: 0; font-size: 13px; font-weight: 600; color: var(--slate);
+  background: none; border: none; padding: 0; font-size: 13px; font-weight: 600; color: var(--slate-text);
   min-height: 24px; /* WCAG 2.2 minimum target size */
   cursor: pointer; font-family: inherit; transition: color var(--ease);
 }
@@ -2154,3 +2154,17 @@ a:hover { color: var(--navy); }
   .quick-add-jump { animation: quick-add-jump-in 120ms ease-out; }
 }
 @keyframes quick-add-jump-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* ---- Batch C ---- */
+.notif-panel:focus { outline: none; }
+.modal-overlay { overscroll-behavior: contain; }
+@media (max-width: 640px) {
+  /* Project page head: the title and the ... menu share the first row; the
+     stage chip always sits on its own row beneath, whatever the title length. */
+  .project-main .page-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; row-gap: 8px; align-items: center; }
+  .project-main .page-head > h1 { grid-column: 1; grid-row: 1; min-width: 0; }
+  .project-main .page-head > .page-head-actions { display: contents; }
+  .project-main .page-head .row-menu-wrap { grid-column: 2; grid-row: 1; }
+  .project-main .page-head .stage-chip { grid-column: 1 / -1; grid-row: 2; justify-self: start; }
+  .project-main .page-head > :not(h1):not(.page-head-actions) { grid-column: 1 / -1; }
+}

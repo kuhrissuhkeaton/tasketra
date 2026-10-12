@@ -414,7 +414,7 @@ export default function Dashboard() {
 
   async function deleteProject(p: Project) {
     setOpenMenuId(null);
-    if (!(await confirmDialog(`Delete "${p.name}"? Everything in it -- tasks, decisions, meetings, everything -- goes with it. You can restore it from Recently deleted below.`))) {
+    if (!(await confirmDialog(`Delete "${p.name}"? Everything in it -- tasks, decisions, meetings, everything -- goes with it. You can restore it from Recently deleted below.`, "Delete"))) {
       return;
     }
     setDeletingId(p.id);

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { breakable } from "../lib/breakable";
 import { Link } from "react-router-dom";
 import { api, type RaciData, type Task } from "../lib/api";
 import { useConfirm } from "./ConfirmDialog";
@@ -39,7 +40,7 @@ export function RaciTab({ projectId }: { projectId: string }) {
   async function removeTask(taskId: string, title: string) {
     if (!data) return;
     const hasLetters = data.assignments.some((a) => a.itemId === taskId);
-    if (hasLetters && !(await confirmDialog(`Remove "${title}" from the RACI? Its letters are cleared. The task itself is not touched.`))) return;
+    if (hasLetters && !(await confirmDialog(`Remove "${title}" from the RACI? Its letters are cleared. The task itself is not touched.`, "Remove"))) return;
     setError(null);
     try {
       await api.removeRaciTask(projectId, taskId);
@@ -115,7 +116,7 @@ export function RaciTab({ projectId }: { projectId: string }) {
                 <th className="raci-row-head">{rowHeadLabel(data.rows)}</th>
                 {data.people.map((p) => (
                   <th key={p.key} className="raci-col-head" title={p.role ?? undefined}>
-                    <span className="raci-person">{p.name}</span>
+                    <span className="raci-person">{breakable(p.name)}</span>
                     {p.role && <span className="raci-person-role">{p.role}</span>}
                   </th>
                 ))}

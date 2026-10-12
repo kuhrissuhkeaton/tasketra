@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 
-type ConfirmFn = (message: string) => Promise<boolean>;
+type ConfirmFn = (message: string, confirmLabel?: string) => Promise<boolean>;
 
 const ConfirmContext = createContext<ConfirmFn | null>(null);
 
@@ -13,13 +13,15 @@ const ConfirmContext = createContext<ConfirmFn | null>(null);
  */
 export function ConfirmProvider({ children }: { children: React.ReactNode }) {
   const [message, setMessage] = useState<string | null>(null);
+  const [label, setLabel] = useState("Confirm");
   const resolver = useRef<((value: boolean) => void) | null>(null);
 
   const opener = useRef<HTMLElement | null>(null);
 
-  const confirm = useCallback<ConfirmFn>((msg: string) => {
+  const confirm = useCallback<ConfirmFn>((msg: string, confirmLabel = "Confirm") => {
     // Remember what had focus *before* the dialog's own autoFocus moves it.
     opener.current = document.activeElement as HTMLElement | null;
+    setLabel(confirmLabel);
     setMessage(msg);
     return new Promise<boolean>((resolve) => {
       resolver.current = resolve;
@@ -58,7 +60,7 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
                 Cancel
               </button>
               <button type="button" className="btn btn-danger" onClick={() => handle(true)}>
-                Confirm
+                {label}
               </button>
             </div>
           </div>
