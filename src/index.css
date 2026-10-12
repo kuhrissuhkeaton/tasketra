@@ -2161,10 +2161,10 @@ a:hover { color: var(--navy); }
 @media (max-width: 640px) {
   /* Project page head: the title and the ... menu share the first row; the
      stage chip always sits on its own row beneath, whatever the title length. */
-  .project-main .page-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; row-gap: 8px; align-items: center; }
-  .project-main .page-head > h1 { grid-column: 1; grid-row: 1; min-width: 0; }
-  .project-main .page-head > .page-head-actions { display: contents; }
-  .project-main .page-head .row-menu-wrap { grid-column: 2; grid-row: 1; }
-  .project-main .page-head .stage-chip { grid-column: 1 / -1; grid-row: 2; justify-self: start; }
-  .project-main .page-head > :not(h1):not(.page-head-actions) { grid-column: 1 / -1; }
+  .project-main .project-page-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; row-gap: 8px; align-items: center; }
+  .project-main .project-page-head > h1 { grid-column: 1; grid-row: 1; min-width: 0; }
+  .project-main .project-page-head > .page-head-actions { display: contents; }
+  .project-main .project-page-head .row-menu-wrap { grid-column: 2; grid-row: 1; }
+  .project-main .project-page-head .stage-chip { grid-column: 1 / -1; grid-row: 2; justify-self: start; }
+  .project-main .project-page-head > :not(h1):not(.page-head-actions) { grid-column: 1 / -1; }
 }

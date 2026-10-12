@@ -331,7 +331,7 @@ export default function ProjectHome() {
             </ol>
           </nav>
         )}
-        <div className="page-head">
+        <div className="page-head project-page-head">
           <h1>{viewLabel ?? (project?.name || "Project")}</h1>
           <div className="page-head-actions">
             <StageChip stage={project?.stage} />

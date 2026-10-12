@@ -93,3 +93,15 @@ describe("hasVisibleLabel (Actions column detection)", () => {
     expect(hasVisibleLabel(th('Owner <span class="sr-only">(sortable)</span>'))).toBe(true);
   });
 });
+
+describe("phone page-head layout is scoped to project pages", () => {
+  it("never applies the grid rule to every .page-head (the Dashboard header broke when it did)", async () => {
+    // @ts-ignore node builtin: the app tsconfig has no node types, vitest runs in node
+    const { readFileSync } = await import("node:fs");
+    const css: string = readFileSync("src/index.css", "utf8");
+    const phoneBlock = css.slice(css.indexOf("/* Project page head"));
+    expect(phoneBlock).toContain(".project-main .project-page-head");
+    expect(phoneBlock).not.toMatch(/\.project-main \.page-head\b/);
+    expect(projectHome).toContain('className="page-head project-page-head"');
+  });
+});
