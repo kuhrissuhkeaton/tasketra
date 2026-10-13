@@ -1,12 +1,22 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { AppSidebar } from "../components/AppSidebar";
 import { api, type ActivityItem } from "../lib/api";
-import { fmtDateTime } from "../lib/format";
 import { useDocumentTitle } from "../lib/documentTitle";
+import { PageHeader, SoftCard, AlignedList, ListGroupHead, ListRow } from "../components/ui";
+import { localDateKey } from "../lib/today";
 
 const VERB: Record<string, string> = { created: "Created", updated: "Updated", deleted: "Deleted", restored: "Restored" };
 const label = (entityType: string) => entityType.replace(/_/g, " ");
+const dayTitle = (iso: string, now: Date) => {
+  const key = localDateKey(new Date(iso));
+  if (key === localDateKey(now)) return "Today";
+  const y = new Date(now); y.setDate(y.getDate() - 1);
+  if (key === localDateKey(y)) return "Yesterday";
+  const d = new Date(iso);
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", ...(d.getFullYear() === now.getFullYear() ? {} : { year: "numeric" }) });
+};
+const timeOf = (iso: string) => new Date(iso).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
 
 export default function MyActivity() {
   useDocumentTitle("My activity");
@@ -21,7 +31,10 @@ export default function MyActivity() {
     <div className="project-shell">
       <AppSidebar />
       <main id="main-content" className="project-main">
-        <div className="page-head"><h1>My activity</h1></div>
+        <PageHeader
+          title="My activity"
+          subtitle={items ? (items.length === 0 ? "Nothing yet" : `Your ${items.length} most recent actions across your projects`) : "Loading your activity..."}
+        />
         {error && <p className="form-error" role="alert">{error}</p>}
         {items && items.length === 0 && (
           <p className="muted">
@@ -30,23 +43,25 @@ export default function MyActivity() {
           </p>
         )}
         {items && items.length > 0 && (
-          <div className="settings-card" style={{ maxWidth: 760 }}>
-            <ul aria-label="Your recent activity" style={{ listStyle: "none", padding: 0, margin: 0 }}>
-              {items.map((it) => (
-                <li key={it.id} style={{ padding: "10px 0", borderBottom: "1px solid var(--line, #e6e0d2)" }}>
-                  <div>
-                    <strong>{VERB[it.action] ?? it.action}</strong> {label(it.entityType)}
-                    {it.entityTitle ? <> &ldquo;{it.entityTitle}&rdquo;</> : null}
-                  </div>
-                  <div className="muted" style={{ fontSize: 13 }}>
-                    <Link to={`/app/projects/${it.projectId}`}>{it.projectName}</Link> &middot; {fmtDateTime(it.createdAt)}
-                  </div>
-                  {it.summary && <div className="muted" style={{ fontSize: 13 }}>{it.summary}</div>}
-                </li>
-              ))}
-            </ul>
-            <p className="muted" style={{ fontSize: 13, marginBottom: 0 }}>Showing your most recent {items.length} actions.</p>
-          </div>
+          <SoftCard className="ui-narrow">
+            <AlignedList label="Your recent activity">
+              {items.map((it, i) => {
+                const now = new Date();
+                const day = dayTitle(it.createdAt, now);
+                const head = i === 0 || dayTitle(items[i - 1].createdAt, now) !== day;
+                return (
+                  <Fragment key={it.id}>
+                    {head && <ListGroupHead title={day} />}
+                    <ListRow
+                      title={<><strong>{VERB[it.action] ?? it.action}</strong> {label(it.entityType)}{it.entityTitle ? <> &ldquo;{it.entityTitle}&rdquo;</> : null}</>}
+                      meta={<><Link to={`/app/projects/${it.projectId}`}>{it.projectName}</Link>{it.summary ? <> &middot; {it.summary}</> : null}</>}
+                      date={timeOf(it.createdAt)}
+                    />
+                  </Fragment>
+                );
+              })}
+            </AlignedList>
+          </SoftCard>
         )}
       </main>
     </div>

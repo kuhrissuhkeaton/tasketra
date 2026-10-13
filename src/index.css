@@ -2296,3 +2296,30 @@ a:hover { color: var(--navy); }
 .hs-next { font-size: 13px; min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hs-new { background: var(--border); color: var(--slate-text); }
 @media (max-width: 600px) { .hs-next { white-space: normal; } }
+
+/* ---- Shared "Today look" pieces (redesign foundation batch) ----------------
+   Aligned list rows: status, flag and date each own a fixed column, so an extra
+   item (like "3 days late") never pushes the other columns out of line. */
+.pill-neutral { background: var(--border); color: var(--slate-text); }
+.ui-card-title { font-size: 16px; margin: 0 0 6px; }
+.ar-list { list-style: none; margin: 0; padding: 0; }
+.ar-row::before, .ar-group-head::before { content: none; }
+.ar-row { display: grid; grid-template-columns: minmax(0, 1fr) 84px 92px 92px; column-gap: 10px; align-items: center; padding: 10px 0; border-top: 1px solid var(--border); min-width: 0; }
+.ar-row.has-lead { grid-template-columns: auto minmax(0, 1fr) 84px 92px 92px; }
+.ar-group-head + .ar-row { border-top: 0; }
+.ar-group-head { margin: 14px 0 2px; }
+.ar-group-head:first-child { margin-top: 0; }
+.ar-group-head h2 { font-size: 16px; margin: 0; }
+.ar-main { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.ar-title { font-weight: 600; color: var(--navy); overflow-wrap: anywhere; }
+.ar-meta { font-size: 13px; overflow-wrap: anywhere; }
+.ar-status, .ar-flag, .ar-date { display: flex; align-items: center; min-width: 0; font-size: 12px; font-variant-numeric: tabular-nums; }
+.ar-date { justify-content: flex-end; }
+@media (max-width: 600px) {
+  .ar-row, .ar-row.has-lead { grid-template-columns: auto minmax(0, 1fr) auto; row-gap: 6px; }
+  .ar-main { grid-column: 1 / -1; }
+  .ar-row.has-lead .ar-main { grid-column: 2 / -1; }
+  .ar-status:empty, .ar-flag:empty, .ar-date:empty { display: none; }
+  .ar-date { justify-content: flex-start; }
+}
+.ui-narrow { max-width: 760px; }

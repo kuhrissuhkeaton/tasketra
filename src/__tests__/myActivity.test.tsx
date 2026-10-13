@@ -56,6 +56,15 @@ describe("My activity", () => {
     expect(list.querySelector('a[href="/app/projects/p1"]')?.textContent).toBe("Website Relaunch");
   });
 
+  it("groups actions by day and shows the time in its own column", async () => {
+    m.getMyActivity.mockResolvedValue({ items: ITEMS });
+    await renderPage();
+    const heads = Array.from(container.querySelectorAll(".ar-group-head")).map((h) => h.textContent);
+    expect(heads).toEqual(["Oct 6", "Oct 5"]);
+    expect(container.querySelectorAll('.ar-row [data-slot="date"]')).toHaveLength(2);
+    expect(container.querySelector(".tw-sub")?.textContent).toContain("2 most recent actions");
+  });
+
   it("explains an empty list, including that older actions are not included", async () => {
     m.getMyActivity.mockResolvedValue({ items: [] });
     await renderPage();
