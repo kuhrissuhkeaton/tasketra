@@ -98,3 +98,12 @@ describe("app pages use the shared page header and cards", () => {
     expect(del).toContain("danger-card");
   });
 });
+
+describe("sign-in and public pages use the Today card look", () => {
+  it("auth and public cards share one panel style; the share page always has a heading", async () => {
+    const css = await readText("src/index.css");
+    expect(css).toMatch(/\.auth-card, \.public-decision, \.public-roadmap \{[^}]*background: var\(--panel\)/);
+    const share = await readText("src/pages/SharePublic.tsx");
+    expect(share).toContain('<h1 className="sr-only">Shared document</h1>');
+  });
+});

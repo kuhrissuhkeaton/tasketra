@@ -2419,3 +2419,18 @@ a:hover { color: var(--navy); }
 /* A row with only a title and a line of detail (reference lists): one full-width column. */
 .rg-plain .rg-row { grid-template-columns: minmax(0, 1fr); }
 .rg-plain .rg-row > .rg-pill, .rg-plain .rg-row > .rg-flag, .rg-plain .rg-row > .rg-date, .rg-plain .rg-row > .rg-control, .rg-plain .rg-row > .rg-actions { display: none; }
+
+/* ---- Sign-in and public pages in the Today look (v130): panel surface, hairline border, soft shadow ---- */
+.auth-card, .public-decision, .public-roadmap {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow-md);
+}
+.public-decision .stacked-form { background: transparent; box-shadow: none; padding: 0; margin: 20px 0 0; max-width: none; }
+.public-decision .option-list { margin: 8px 0 16px; }
+.public-decision .option-row {
+  border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin: 8px 0; cursor: pointer; background: var(--panel);
+}
+.public-decision .option-row:hover { border-color: var(--navy); }
+.public-decision .option-row:has(input:checked) { border-color: var(--navy); background: var(--tint); font-weight: 600; }
+.public-decision .stacked-form .btn { width: 100%; justify-content: center; margin-top: 8px; }
+.public-decision .decision-record-card { background: var(--tint); border-left: 4px solid var(--navy); box-shadow: none; }
+.public-decision h1, .public-roadmap h1 { margin: 6px 0 12px; }

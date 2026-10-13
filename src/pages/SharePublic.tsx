@@ -36,9 +36,13 @@ export default function SharePublic() {
         {data && <button className="btn btn-primary" type="button" onClick={() => window.print()}>Print / Save as PDF</button>}
       </div>
       {error ? (
-        <p className="form-error">{error}</p>
+        <>
+          <h1 className="sr-only">Shared document</h1>
+          <p className="form-error">{error}</p>
+        </>
       ) : !data ? (
-        <div className="skel-loading-block"><div className="skel skel-text" style={{ width: "45%" }} /><div className="skel skel-text" style={{ width: "80%" }} /></div>
+        <div className="skel-loading-block">
+          <h1 className="sr-only">Shared document</h1><div className="skel skel-text" style={{ width: "45%" }} /><div className="skel skel-text" style={{ width: "80%" }} /></div>
       ) : (
         <>
           {data.kind === "raci" ? (
