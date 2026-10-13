@@ -23,13 +23,13 @@ describe("every register's quick-add starts collapsed when empty", () => {
 describe("Dashboard polish", () => {
   it("header shows decisions only; overdue stays as a KPI tile", async () => {
     const src = await read("src/pages/Dashboard.tsx");
-    expect(src).toContain("decisions awaiting response");
+    expect(src).toContain("decisions await");
     expect(src).not.toMatch(/overdue tasks<\/div>/);
     expect(src).toContain("Overdue");
   });
-  it("KPI tiles flex-wrap so the last row fills, pills never wrap, dark-mode colours use --navy", async () => {
+  it("Summary tiles use a four-column grid, pills never wrap, dark-mode colours use --navy", async () => {
     const css = await read("src/index.css");
-    expect(css).toMatch(/\.dash-kpis \{ display: flex; flex-wrap: wrap;/);
+    expect(css).toMatch(/\.kp-grid \{ display: grid; grid-template-columns: repeat\(4/);
     expect(css).toMatch(/\.pill \{ display: inline-block; white-space: nowrap;/);
     expect(css).toMatch(/\.stage-chip-dot \{[^}]*background: var\(--navy\)/);
     expect(css).toMatch(/\.gantt-bar-in_progress \{ background: var\(--navy\)/);

@@ -2107,12 +2107,7 @@ a:hover { color: var(--navy); }
 .dash-attention-empty { margin: 0; padding: 10px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--panel); color: var(--slate); font-size: 14px; }
 
 .dash-reporting { margin-top: 24px; }
-.dash-kpis { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 18px; }
-.dash-kpis .evm-card { padding: 10px 14px; flex: 1 1 calc(25% - 10px); min-width: 0; box-sizing: border-box; }
-.dash-kpis .evm-sub { margin-top: 2px; }
 /* Tiles are sized by row (4 per row, 7 on wide screens, 2 on narrow) and grow to share any leftover space, so the last row is never ragged. */
-@media (min-width: 1400px) { .dash-kpis .evm-card { flex-basis: calc(14.2857% - 10px); } }
-@media (max-width: 860px) { .dash-kpis .evm-card { flex-basis: calc(50% - 10px); } }
 .nowrap-cell { white-space: nowrap; }
 
 .dash-ms-list { list-style: none; margin: 0; padding: 0; }
@@ -2243,3 +2238,51 @@ a:hover { color: var(--navy); }
   .tw-row-text { flex: 1 1 calc(100% - 40px); }
   .tw-date { margin-left: 34px; }
 }
+
+/* ---- Projects list (redesign Concept A, batch 1b) --------------------------
+   Same look as Today: panel rows, quiet borders, pills for health. */
+.pw-filters { display: flex; flex-wrap: wrap; gap: 8px; }
+.pw-list { list-style: none; margin: 0; padding: 0; background: var(--panel); border: 1px solid var(--border); border-radius: 14px; }
+.pw-row::before { content: none; }
+.pw-row { position: relative; display: flex; align-items: center; gap: 14px; padding: 12px 16px; border-top: 1px solid var(--border); min-width: 0; }
+.pw-row:first-child { border-top: 0; }
+.pw-row:hover { background: var(--surface-muted); border-radius: 14px; }
+.pw-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.pw-name { font-weight: 600; font-size: 16px; color: var(--navy); text-decoration: none; overflow-wrap: anywhere; }
+.pw-name:hover { text-decoration: underline; }
+.pw-reason { font-size: 13px; overflow-wrap: anywhere; }
+.pw-meta { display: flex; align-items: center; gap: 12px; flex: none; }
+.pw-progress { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; font-variant-numeric: tabular-nums; min-width: 120px; }
+.pw-progress .progress-track { width: 64px; flex: none; }
+.pw-menu { position: relative; flex: none; }
+.pw-foot { margin: 4px 0 0; font-size: 13px; }
+@media (max-width: 760px) {
+  .pw-row { flex-wrap: wrap; row-gap: 8px; padding-right: 48px; }
+  .pw-main { flex: 1 1 100%; }
+  .pw-meta { flex-wrap: wrap; gap: 8px; }
+  .pw-menu { position: absolute; top: 8px; right: 8px; }
+}
+.pw-menu .project-card-menu-btn { position: static; }
+.pw-menu .project-card-menu { top: 32px; right: 0; }
+@media (max-width: 760px) { .pw-menu .project-card-menu { top: 32px; right: 0; } }
+.pw-filters .tw-count { margin-left: 6px; }
+.pw-progress .progress-track { display: block; }
+.pw-progress .progress-fill { display: block; }
+.pw-cell-health { width: 84px; }
+.pw-cell-stage { width: 92px; }
+.pw-progress { width: 140px; min-width: 0; }
+@media (max-width: 760px) { .pw-cell-health, .pw-cell-stage, .pw-progress { width: auto; } }
+.pw-selects { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
+.pw-select { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; min-width: 0; }
+.pw-select select { width: auto; max-width: 260px; min-width: 0; padding: 7px 10px; border: 1.5px solid var(--border); border-radius: 10px; background: var(--panel); color: var(--navy); font: inherit; }
+
+/* ---- Dashboard summary tiles (redesign Concept A, batch 1b) ----------------
+   Four tiles, each a question and a link. Red only when the number is above 0. */
+.kp-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 18px; }
+.kp-tile { display: flex; flex-direction: column; gap: 2px; text-align: left; text-decoration: none; background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 12px 16px; min-width: 0; color: var(--navy); font: inherit; cursor: pointer; }
+.kp-tile:hover { background: var(--surface-muted); }
+.kp-label { font-size: 12px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--slate-text); }
+.kp-value { font-family: 'Fraunces', serif; font-size: 28px; font-weight: 700; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.kp-bad .kp-value { color: var(--red); }
+.kp-sub { font-size: 13px; color: var(--slate-text); }
+@media (max-width: 860px) { .kp-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

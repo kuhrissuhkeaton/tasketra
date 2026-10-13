@@ -146,6 +146,10 @@ describe("Dashboard first run", () => {
   it("keeps the full dashboard once a project has tasks", async () => {
     await renderDashboard([project("p1")], [{ id: "p1", totalTasks: 5 }]);
     expect(container.querySelector("h1")?.textContent).toBe("Projects");
+    expect(container.querySelector(".pw-row")).toBeTruthy();
+    expect(container.textContent).not.toContain("Charts and analytics");
+    await act(async () => { button("Dashboard").click(); });
+    await flush();
     expect(container.textContent).toContain("Charts and analytics");
     expect(container.textContent).toContain("Project health");
     expect(button("New project")).toBeTruthy();
@@ -271,7 +275,7 @@ describe("Dashboard command center", () => {
   }
   afterEach(() => { delete (window as any).matchMedia; });
 
-  async function render(wide: boolean, extra: { overdue?: number; decisions?: number; ms?: number } = {}) {
+  async function render(wide: boolean, extra: { overdue?: number; decisions?: number; ms?: number } = {}, entry = "/app?view=dashboard") {
     setMatchMedia(wide);
     const projs = [
       { ...project("p1", "Alpha"), open_decisions: extra.decisions ?? 0 },
@@ -281,11 +285,13 @@ describe("Dashboard command center", () => {
     const base = portfolio([{ id: "p1", totalTasks: 5 }, { id: "p2", totalTasks: 3 }]) as any;
     base.projects[0].name = "Alpha"; base.projects[0].overdueTasks = extra.overdue ?? 0; base.projects[0].nextUp = "Add tasks";
     base.projects[1].name = "Beta";
+    base.kpis.overdueTasks = extra.overdue ?? 0;
+    if (extra.overdue) { base.kpis.atRiskProjects = 1; base.projects[0].health = "at_risk"; base.kpis.highIssues = 2; base.projects[0].highRisks = 1; }
     base.upcomingMilestones = Array.from({ length: extra.ms ?? 0 }, (_, i) => ({ id: `m${i}`, title: `Milestone ${i}`, date: "2026-11-01", status: "planned", projectId: "p1", projectName: "Alpha" }));
     calls.getPortfolio.mockResolvedValue(base);
     await act(async () => {
       root.render(
-        <MemoryRouter initialEntries={["/app"]}>
+        <MemoryRouter initialEntries={[entry]}>
           <ConfirmProvider>
             <Routes><Route path="/app" element={<Dashboard />} /><Route path="*" element={<Where />} /></Routes>
           </ConfirmProvider>
@@ -315,12 +321,11 @@ describe("Dashboard command center", () => {
     expect(container.querySelector("table")).toBeNull();
   });
 
-  it("puts Needs attention and Your projects before the reporting sections", async () => {
+  it("puts Needs attention before the reporting sections on the Dashboard view", async () => {
     await render(true, { overdue: 2 });
     const order = h2s();
     expect(order.indexOf("Needs attention")).toBeGreaterThan(-1);
-    expect(order.indexOf("Needs attention")).toBeLessThan(order.indexOf("Your projects"));
-    expect(order.indexOf("Your projects")).toBeLessThan(order.indexOf("Project health"));
+    expect(order.indexOf("Needs attention")).toBeLessThan(order.indexOf("Project health"));
     expect(order.indexOf("Project health")).toBeLessThan(order.indexOf("Upcoming milestones"));
     expect(order.indexOf("Upcoming milestones")).toBeLessThan(order.indexOf("Charts and analytics"));
   });
@@ -355,6 +360,77 @@ describe("Dashboard command center", () => {
     await act(async () => { sec("Project health").click(); });
     expect(sec("Project health").getAttribute("aria-expanded")).toBe("false");
     expect(container.querySelector("table")).toBeNull();
+  });
+
+  const tiles = () => [...container.querySelectorAll(".kp-tile")].map((t) => [t.querySelector(".kp-label")?.textContent, t.querySelector(".kp-value")?.textContent, t.querySelector(".kp-sub")?.textContent]);
+
+  it("shows four summary tiles that read plainly, calm when everything is fine", async () => {
+    await render(true, {});
+    expect(tiles()).toEqual([
+      ["Need attention", "0", "Everything is on track"],
+      ["Overdue tasks", "0", "Nothing is late"],
+      ["High-severity items", "0", "No high issues or risks"],
+      ["Due in 7 days", "0", "No milestones this week"],
+    ]);
+    expect(container.querySelectorAll(".kp-bad").length).toBe(0);
+  });
+
+  it("counts problems, turns them red, and Need attention opens the filtered list", async () => {
+    await render(true, { overdue: 2 });
+    expect(tiles()).toEqual([
+      ["Need attention", "1", "of 2 projects"],
+      ["Overdue tasks", "2", "across 1 project"],
+      ["High-severity items", "3", "2 issues, 1 risk"],
+      ["Due in 7 days", "0", "No milestones this week"],
+    ]);
+    expect(container.querySelectorAll(".kp-bad").length).toBe(3);
+    expect(container.querySelector('a.kp-tile')?.getAttribute("href")).toBe("/app");
+    await act(async () => { (container.querySelector("button.kp-tile") as HTMLButtonElement).click(); });
+    await flush();
+    expect(container.querySelector(".pw-row")).toBeTruthy();
+    expect(chip("Needs attention").getAttribute("aria-pressed")).toBe("true");
+  });
+
+  const rowNames = () => [...container.querySelectorAll(".pw-row .pw-name")].map((n) => n.textContent);
+  const chip = (label: string) => [...container.querySelectorAll(".pw-filters button")].find((b) => b.textContent?.startsWith(label)) as HTMLButtonElement;
+
+  it("opens on a clean list: no charts or KPIs, one primary button, worst health first with a reason line", async () => {
+    await render(true, { overdue: 2, decisions: 1 }, "/app");
+    expect(container.querySelector("h1")?.textContent).toBe("Projects");
+    expect(container.textContent).not.toContain("Charts and analytics");
+    expect(container.querySelector(".kp-tile")).toBeNull();
+    expect(container.querySelectorAll("button.btn-primary").length).toBe(1);
+    expect(rowNames()).toEqual(["Alpha", "Beta"]);
+    const first = container.querySelector(".pw-row")!;
+    expect(first.querySelector(".pw-reason")?.textContent).toBe("2 tasks overdue, 1 high risk");
+    expect(container.querySelector(".tw-sub")?.textContent).toContain("2 projects");
+  });
+
+  it("filters the list by All, Needs attention and On track, with counts", async () => {
+    await render(true, {}, "/app");
+    // Alpha and Beta are both on track in the default fixture
+    expect(chip("All").textContent).toContain("2");
+    expect(chip("Needs attention").textContent).toContain("0");
+    await act(async () => { chip("Needs attention").click(); });
+    expect(rowNames()).toEqual([]);
+    expect(container.textContent).toContain("Nothing needs attention right now.");
+    await act(async () => { chip("On track").click(); });
+    expect(rowNames().length).toBe(2);
+    expect(chip("On track").getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("switches between List and Dashboard through the URL and keeps New project available", async () => {
+    await render(true, { ms: 2 }, "/app");
+    expect(button("List").getAttribute("aria-pressed")).toBe("true");
+    await act(async () => { button("Dashboard").click(); });
+    await flush();
+    expect(button("Dashboard").getAttribute("aria-pressed")).toBe("true");
+    expect(container.textContent).toContain("Charts and analytics");
+    expect(container.querySelector(".pw-row")).toBeNull();
+    await act(async () => { button("List").click(); });
+    await flush();
+    expect(container.querySelector(".pw-row")).toBeTruthy();
+    expect(button("New project")).toBeTruthy();
   });
 
   it("caps milestones at five with a Show all control", async () => {

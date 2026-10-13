@@ -42,7 +42,7 @@ export function CollapsibleSection({
   }
 
   return (
-    <section className="dash-sec" aria-labelledby={headId}>
+    <section className="dash-sec" id={`dash-sec-${id}`} aria-labelledby={headId}>
       <h2 className="dash-sec-head" id={headId}>
         <button type="button" className="dash-sec-btn" aria-expanded={open} aria-controls={panelId} onClick={toggle}>
           <span className="dash-sec-title">{title}</span>

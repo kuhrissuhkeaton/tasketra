@@ -10,6 +10,8 @@ import { useConfirm } from "../components/ConfirmDialog";
 import { Modal } from "../components/Modal";
 import { CollapsibleSection } from "../components/CollapsibleSection";
 import { useIsWide } from "../lib/dashPrefs";
+import { projectReason, sortByHealth } from "../lib/projectReason";
+import { localDateKey, addDays } from "../lib/today";
 import { buildNeedsAttention } from "../lib/needsAttention";
 import { ResizableTable } from "../components/ResizableTable";
 import { useAuth } from "../lib/auth-context";
@@ -148,46 +150,49 @@ function IssueSeverityDonut({ breakdown }: { breakdown: PortfolioData["issueSeve
   );
 }
 
-function PortfolioOverview({ data, wide }: { data: PortfolioData; wide: boolean }) {
+function jumpTo(sectionId: string) {
+  document.getElementById(`dash-sec-${sectionId}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function PortfolioOverview({ data, wide, onShowAttention }: { data: PortfolioData; wide: boolean; onShowAttention: () => void }) {
   const { kpis } = data;
+  const needAttention = kpis.atRiskProjects + kpis.offTrackProjects;
+  const overdueProjects = data.projects.filter((x) => x.overdueTasks > 0).length;
+  const highRisks = data.projects.reduce((n, x) => n + x.highRisks, 0);
+  const highItems = kpis.highIssues + highRisks;
+  const todayKey = localDateKey(new Date());
+  const weekKey = addDays(todayKey, 7);
+  const dueSoon = data.upcomingMilestones.filter((m) => {
+    const k = String(m.date).slice(0, 10);
+    return k >= todayKey && k <= weekKey;
+  }).length;
   const [showAllMs, setShowAllMs] = useState(false);
   const MS_CAP = 5;
   const milestones = showAllMs ? data.upcomingMilestones : data.upcomingMilestones.slice(0, MS_CAP);
   return (
     <div className="dash-reporting">
-      <div className="evm-grid dash-kpis">
-        <div className="evm-card" title="Projects you own or are an active member of">
-          <div className="evm-label">Active projects</div>
-          <div className="evm-value">{kpis.activeProjects}</div>
-        </div>
-        <div className={`evm-card ${kpis.atRiskProjects > 0 ? "evm-bad" : ""}`} title="Projects whose health score is at risk">
-          <div className="evm-label">At risk</div>
-          <div className="evm-value">{kpis.atRiskProjects}</div>
-        </div>
-        <div className={`evm-card ${kpis.offTrackProjects > 0 ? "evm-bad" : ""}`} title="Projects with a critical issue, an off-track objective, or a badly overrun score">
-          <div className="evm-label">Off track</div>
-          <div className="evm-value">{kpis.offTrackProjects}</div>
-        </div>
-        <div className={`evm-card ${kpis.overdueTasks > 0 ? "evm-bad" : ""}`} title="Leaf tasks past their due date, not yet done">
-          <div className="evm-label">Overdue tasks</div>
-          <div className="evm-value">{kpis.overdueTasks}</div>
-        </div>
-        <div className="evm-card" title="Open risks across every accessible project">
-          <div className="evm-label">Open risks</div>
-          <div className="evm-value">{kpis.openRisks}</div>
-        </div>
-        <div className={`evm-card ${kpis.highIssues > 0 ? "evm-bad" : ""}`} title="Open issues across every accessible project">
-          <div className="evm-label">Open issues</div>
-          <div className="evm-value">{kpis.openIssues}</div>
-          <div className="evm-sub">{kpis.highIssues} high or critical</div>
-        </div>
-        <div className="evm-card" title="Average progress across every key result on every active objective">
-          <div className="evm-label">OKR progress</div>
-          <div className="evm-value">{fmtPct100(kpis.avgObjectiveProgress)}</div>
-          <div className="evm-sub">{kpis.totalObjectives} objective{kpis.totalObjectives === 1 ? "" : "s"} tracked</div>
-        </div>
+      <div className="kp-grid" role="group" aria-label="Portfolio summary">
+        <button type="button" className={`kp-tile${needAttention > 0 ? " kp-bad" : ""}`} onClick={onShowAttention}>
+          <span className="kp-label">Need attention</span>
+          <span className="kp-value">{needAttention}</span>
+          <span className="kp-sub">{needAttention === 0 ? "Everything is on track" : `of ${kpis.activeProjects} ${kpis.activeProjects === 1 ? "project" : "projects"}`}</span>
+        </button>
+        <Link to="/app" className={`kp-tile${kpis.overdueTasks > 0 ? " kp-bad" : ""}`}>
+          <span className="kp-label">Overdue tasks</span>
+          <span className="kp-value">{kpis.overdueTasks}</span>
+          <span className="kp-sub">{kpis.overdueTasks === 0 ? "Nothing is late" : `across ${overdueProjects} ${overdueProjects === 1 ? "project" : "projects"}`}</span>
+        </Link>
+        <button type="button" className={`kp-tile${highItems > 0 ? " kp-bad" : ""}`} onClick={() => jumpTo("health")}>
+          <span className="kp-label">High-severity items</span>
+          <span className="kp-value">{highItems}</span>
+          <span className="kp-sub">{highItems === 0 ? "No high issues or risks" : `${kpis.highIssues} ${kpis.highIssues === 1 ? "issue" : "issues"}, ${highRisks} ${highRisks === 1 ? "risk" : "risks"}`}</span>
+        </button>
+        <button type="button" className="kp-tile" onClick={() => jumpTo("milestones")}>
+          <span className="kp-label">Due in 7 days</span>
+          <span className="kp-value">{dueSoon}</span>
+          <span className="kp-sub">{dueSoon === 0 ? "No milestones this week" : dueSoon === 1 ? "milestone" : "milestones"}</span>
+        </button>
       </div>
-
 
       <CollapsibleSection
         id="health"
@@ -310,7 +315,15 @@ export default function Dashboard() {
   const [portfolioLoading, setPortfolioLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [newName, setNewName] = useState("");
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const view: "list" | "dashboard" = searchParams.get("view") === "dashboard" ? "dashboard" : "list";
+  function setView(v: "list" | "dashboard") {
+    const next = new URLSearchParams(searchParams);
+    if (v === "dashboard") next.set("view", "dashboard"); else next.delete("view");
+    setSearchParams(next, { replace: true });
+  }
+  const [listFilter, setListFilter] = useState<"all" | "attention" | "on_track">("all");
+  const [listSummaries, setListSummaries] = useState<PortfolioProjectSummary[]>([]);
   // Per-browser convenience only: if storage is unavailable the tip simply
   // shows again, which is harmless.
   const [hubTipDismissed, setHubTipDismissed] = useState<boolean>(() => {
@@ -365,6 +378,7 @@ export default function Dashboard() {
     setProjects(projects);
     setDeletedProjects(deleted);
     setPortfolio(portfolioData);
+    setListSummaries(portfolioData.projects);
     setEscalations(Object.fromEntries(portfolioData.projects.map((x) => [x.id, x.escalations])));
     setNextUps(Object.fromEntries(portfolioData.projects.map((x) => [x.id, x.nextUp])));
     setLoading(false);
@@ -515,6 +529,33 @@ export default function Dashboard() {
 
   const totalOpenDecisions = projects.reduce((sum, p) => sum + (p.open_decisions || 0), 0);
 
+  const attentionCount = listSummaries.filter((x) => x.health !== "on_track").length;
+  const byId = new Map(listSummaries.map((x) => [x.id, x]));
+  const rows = sortByHealth(
+    projects.map((p) => {
+      const s2 = byId.get(p.id);
+      const health: PortfolioProjectSummary["health"] = s2?.health ?? "on_track";
+      const total = s2?.totalTasks ?? 0;
+      const done = s2?.doneTasks ?? 0;
+      return {
+        project: p,
+        health,
+        name: p.name,
+        overdueTasks: s2?.overdueTasks ?? 0,
+        total,
+        done,
+        pct: total > 0 ? Math.round((done / total) * 100) : 0,
+        reason: s2 ? projectReason(s2, p.open_decisions ?? 0) : "Loading details...",
+      };
+    }),
+  );
+  const shownRows = rows.filter((r) => (listFilter === "all" ? true : listFilter === "attention" ? r.health !== "on_track" : r.health === "on_track"));
+  const summaryLine = loading
+    ? "Loading your projects..."
+    : projects.length === 0
+    ? "No projects yet"
+    : `${projects.length} ${projects.length === 1 ? "project" : "projects"} · ${attentionCount === 0 ? "all on track" : `${attentionCount} ${attentionCount === 1 ? "needs" : "need"} attention`}${totalOpenDecisions > 0 ? ` · ${totalOpenDecisions} ${totalOpenDecisions === 1 ? "decision awaits" : "decisions await"} a response` : ""}`;
+
   const deletedSection = deletedProjects.length > 0 && (
     <div style={{ marginTop: 32 }}>
       <button className="btn-link" type="button" onClick={() => setShowDeleted((v) => !v)}>
@@ -574,114 +615,20 @@ export default function Dashboard() {
     <div className="project-shell">
       <AppSidebar />
 
-      <main id="main-content" className="project-main project-main-wide">
+      <main id="main-content" className={`project-main tw-main${view === "dashboard" ? " project-main-wide" : ""}`}>
         <div className="page-head">
-          <h1>Projects</h1>
+          <div>
+            <h1>Projects</h1>
+            <p className="muted tw-sub">{summaryLine}</p>
+          </div>
           <div className="page-head-actions">
-            <div className="stat-row">
-              <div className="stat"><strong>{totalOpenDecisions}</strong> decisions awaiting response</div>
+            <div className="tw-toggle" role="group" aria-label="View">
+              <button type="button" className="btn btn-ghost" aria-pressed={view === "list"} onClick={() => setView("list")}>List</button>
+              <button type="button" className="btn btn-ghost" aria-pressed={view === "dashboard"} onClick={() => setView("dashboard")}>Dashboard</button>
             </div>
             <button type="button" className="btn btn-primary" onClick={openNewProject}>New project</button>
           </div>
         </div>
-
-        {!loading && projects.length > 1 && (
-          <div className="roadmap-filter-bar dashboard-filters" style={{ marginBottom: 4 }}>
-            <div className="roadmap-filter-group" role="group" aria-label="Filter by stage">
-              <span className="filter-group-label">Stage</span>
-              <button
-                type="button"
-                className={`filter-chip${selectedStage === null ? " filter-chip-active" : ""}`}
-                aria-pressed={selectedStage === null}
-                onClick={() => selectStage(null)}
-              >
-                All stages
-              </button>
-              {STAGES.map((s) => (
-                <button
-                  key={s.id}
-                  type="button"
-                  className={`filter-chip${selectedStage === s.id ? " filter-chip-active" : ""}`}
-                  aria-pressed={selectedStage === s.id}
-                  onClick={() => selectStage(s.id)}
-                >
-                  {s.label} {stageCount(s.id)}
-                </button>
-              ))}
-            </div>
-            <div className="roadmap-filter-group">
-              <button
-                type="button"
-                className={`filter-chip${selectedProjectId === null ? " filter-chip-active" : ""}`}
-                aria-pressed={selectedProjectId === null}
-                onClick={() => selectProject(null)}
-              >
-                All projects
-              </button>
-              {visibleProjects.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  className={`filter-chip${selectedProjectId === p.id ? " filter-chip-active" : ""}`}
-                  aria-pressed={selectedProjectId === p.id}
-                  onClick={() => selectProject(p.id)}
-                >
-                  {p.name}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {!loading && portfolio && (
-          <section className="dash-sec dash-attention" aria-labelledby="dash-attention-title">
-            <h2 className="dash-sec-head dash-sec-head-static" id="dash-attention-title">
-              <span className="dash-sec-title">Needs attention</span>
-              {attention.length > 0 && <span className="dash-sec-summary">{attention.length} project{attention.length === 1 ? "" : "s"}</span>}
-            </h2>
-            {attention.length === 0 ? (
-              <p className="dash-attention-empty">Nothing needs attention right now.</p>
-            ) : (
-              <>
-                <ul className="dash-attention-list">
-                  {(showAllAttention ? attention : attention.slice(0, ATTENTION_CAP)).map((a) => (
-                    <li key={a.id} className="dash-attention-row">
-                      <Link to={`/app/projects/${a.id}`} className="dash-attention-name">{a.name}</Link>
-                      <span className="dash-attention-reasons">
-                        <span className="sr-only">Flagged because: </span>
-                        {a.reasons.map((r) => (
-                          <span key={r.key} className={`pill pill-${r.tone}`} title={r.explain}>{r.label}<span className="sr-only">. {r.explain}</span></span>
-                        ))}
-                      </span>
-                      {a.nextUp && <span className="dash-attention-next muted"><span>Next up</span> {a.nextUp}</span>}
-                    </li>
-                  ))}
-                </ul>
-                {attention.length > ATTENTION_CAP && (
-                  <button type="button" className="btn-link dash-attention-more" onClick={() => setShowAllAttention((v) => !v)}>
-                    {showAllAttention ? "Show fewer" : `Show all ${attention.length}`}
-                  </button>
-                )}
-              </>
-            )}
-          </section>
-        )}
-
-        <div className="projects-head">
-          <h2>Your projects</h2>
-          <Link to="/app/resources#how-it-works" className="btn-link projects-head-link">How a project runs in Tasketra</Link>
-        </div>
-
-        {shouldShowHubTip({ loading, projectCount: projects.length, dismissed: hubTipDismissed }) && (
-          <div className="hub-tip" role="note">
-            <p>
-              <strong>New here?</strong> See{" "}
-              <Link to="/app/resources#how-it-works">how a project runs from Initiate to Close</Link>, or{" "}
-              <Link to="/app/resources#templates">start from a template</Link> for a ready-made skeleton.
-            </p>
-            <button type="button" className="hub-tip-close" aria-label="Dismiss this tip" onClick={dismissHubTip}>×</button>
-          </div>
-        )}
 
         {showNew && (
           <Modal title="New project" onClose={() => setShowNew(false)}>
@@ -785,71 +732,161 @@ export default function Dashboard() {
           </p>
         )}
 
-        {loading ? (
-          <div className="project-grid">
-            {[0, 1, 2].map((i) => (
-              <div className="project-card" key={i} style={{ pointerEvents: "none" }}>
-                <div className="skel skel-title" />
-                <div className="skel skel-text" style={{ width: "70%" }} />
-                <div className="skel skel-text" style={{ width: "40%", marginBottom: 0 }} />
+        {view === "list" && (
+          <>
+            {!loading && projects.length > 1 && (
+              <div className="pw-filters" role="group" aria-label="Filter projects">
+                {([
+                  ["all", "All", rows.length],
+                  ["attention", "Needs attention", rows.filter((r) => r.health !== "on_track").length],
+                  ["on_track", "On track", rows.filter((r) => r.health === "on_track").length],
+                ] as const).map(([key, label, n]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    className={`filter-chip${listFilter === key ? " filter-chip-active" : ""}`}
+                    aria-pressed={listFilter === key}
+                    onClick={() => setListFilter(key)}
+                  >
+                    {label} <span className="tw-count">{n}</span>
+                  </button>
+                ))}
               </div>
-            ))}
-          </div>
-        ) : projects.length === 0 ? (
-          <p className="muted">No projects yet. <button type="button" className="btn-link" onClick={openNewProject}>Create your first project</button>.</p>
-        ) : visibleProjects.length === 0 ? (
-          <p className="muted">No projects in this stage yet.</p>
-        ) : (
-          <div className="project-grid">
-            {visibleProjects.map((p) => (
-              <div className="project-card-wrap" key={p.id} style={{ opacity: deletingId === p.id ? 0.5 : 1 }}>
-                <Link to={`/app/projects/${p.id}`} className="project-card">
-                  <h3>{p.name}</h3>
-                  {p.description && <p className="muted">{p.description}</p>}
-                  <div className="project-card-stats">
-                    <StageChip stage={p.stage} small />
-                    {(escalations[p.id]?.length ?? 0) > 0 && (
-                      <span className="pill pill-red" title={escalations[p.id].join(". ")}>Needs escalation</span>
-                    )}
-                    {(p.open_decisions ?? 0) > 0 && (
-                      <span className="pill pill-gold">{p.open_decisions} awaiting decision</span>
-                    )}
-                    {(p.overdue_tasks ?? 0) > 0 && (
-                      <span className="pill pill-red">{p.overdue_tasks} overdue</span>
-                    )}
-                  </div>
-                  {nextUps[p.id] && <p className="project-card-next"><span>Next up</span> {nextUps[p.id]}</p>}
-                </Link>
+            )}
 
-                {p.is_owner !== false && (
-                  <>
-                    <button
-                      className="project-card-menu-btn"
-                      type="button"
-                      aria-label="Project actions"
-                      disabled={deletingId === p.id}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        setOpenMenuId(openMenuId === p.id ? null : p.id);
-                      }}
-                    >
-                      ⋮
-                    </button>
-                    {openMenuId === p.id && (
-                      <>
-                        <div className="project-card-menu-backdrop" onClick={() => setOpenMenuId(null)} />
-                        <div className="project-card-menu">
-                          <button className="project-card-menu-item" type="button" onClick={() => deleteProject(p)}>
-                            Delete project
-                          </button>
-                        </div>
-                      </>
-                    )}
-                  </>
-                )}
-              </div>
-            ))}
+        {shouldShowHubTip({ loading, projectCount: projects.length, dismissed: hubTipDismissed }) && (
+          <div className="hub-tip" role="note">
+            <p>
+              <strong>New here?</strong> See{" "}
+              <Link to="/app/resources#how-it-works">how a project runs from Initiate to Close</Link>, or{" "}
+              <Link to="/app/resources#templates">start from a template</Link> for a ready-made skeleton.
+            </p>
+            <button type="button" className="hub-tip-close" aria-label="Dismiss this tip" onClick={dismissHubTip}>×</button>
           </div>
+        )}
+
+            {loading ? (
+              <ul className="pw-list" aria-hidden="true">
+                {[0, 1, 2].map((i) => (
+                  <li className="pw-row" key={i} style={{ pointerEvents: "none" }}>
+                    <div className="pw-main"><div className="skel skel-title" /><div className="skel skel-text" style={{ width: "60%", marginBottom: 0 }} /></div>
+                  </li>
+                ))}
+              </ul>
+            ) : projects.length === 0 ? (
+              <p className="muted">No projects yet. <button type="button" className="btn-link" onClick={openNewProject}>Create your first project</button>.</p>
+            ) : shownRows.length === 0 ? (
+              <p className="muted">{listFilter === "attention" ? "Nothing needs attention right now." : "No projects match this filter."}</p>
+            ) : (
+              <ul className="pw-list">
+                {shownRows.map((r) => (
+                  <li className="pw-row" key={r.project.id} style={{ opacity: deletingId === r.project.id ? 0.5 : 1 }}>
+                    <div className="pw-main">
+                      <Link to={`/app/projects/${r.project.id}`} className="pw-name">{r.project.name}</Link>
+                      <span className="pw-reason muted">{r.reason}</span>
+                    </div>
+                    <div className="pw-meta">
+                      <span className="pw-cell pw-cell-health"><span className={`pill ${HEALTH_PILL[r.health]}`}>{HEALTH_LABEL[r.health]}</span></span>
+                      <span className="pw-cell pw-cell-stage"><StageChip stage={r.project.stage ?? "initiate"} small /></span>
+                      <span className="pw-progress" title={r.total > 0 ? `${r.done} of ${r.total} tasks done` : "No tasks yet"}>
+                        <span className="progress-track" aria-hidden="true"><span className="progress-fill" style={{ width: `${r.pct}%` }} /></span>
+                        <span className="muted">{r.total > 0 ? `${r.done}/${r.total}` : "No tasks"}</span>
+                      </span>
+                    </div>
+                    {r.project.is_owner !== false && (
+                      <div className="pw-menu">
+                        <button
+                          className="project-card-menu-btn"
+                          type="button"
+                          aria-label={`Actions for ${r.project.name}`}
+                          disabled={deletingId === r.project.id}
+                          onClick={() => setOpenMenuId(openMenuId === r.project.id ? null : r.project.id)}
+                        >
+                          ⋮
+                        </button>
+                        {openMenuId === r.project.id && (
+                          <>
+                            <div className="project-card-menu-backdrop" onClick={() => setOpenMenuId(null)} />
+                            <div className="project-card-menu">
+                              <button className="project-card-menu-item" type="button" onClick={() => deleteProject(r.project)}>
+                                Delete project
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p className="pw-foot"><Link to="/app/resources#how-it-works" className="btn-link">How a project runs in Tasketra</Link></p>
+          </>
+        )}
+
+        {view === "dashboard" && (
+          <>
+        {!loading && projects.length > 1 && (
+          <div className="pw-selects dashboard-filters" role="group" aria-label="Filter the dashboard">
+            <label className="pw-select">
+              <span className="muted">Stage</span>
+              <select
+                value={selectedStage ?? ""}
+                onChange={(e) => selectStage(e.target.value ? (e.target.value as ProjectStage) : null)}
+              >
+                <option value="">All stages</option>
+                {STAGES.map((st) => (
+                  <option key={st.id} value={st.id}>{st.label} ({stageCount(st.id)})</option>
+                ))}
+              </select>
+            </label>
+            <label className="pw-select">
+              <span className="muted">Project</span>
+              <select
+                value={selectedProjectId ?? ""}
+                onChange={(e) => selectProject(e.target.value || null)}
+              >
+                <option value="">All projects</option>
+                {visibleProjects.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+        )}
+
+        {!loading && portfolio && (
+          <section className="dash-sec dash-attention" aria-labelledby="dash-attention-title">
+            <h2 className="dash-sec-head dash-sec-head-static" id="dash-attention-title">
+              <span className="dash-sec-title">Needs attention</span>
+              {attention.length > 0 && <span className="dash-sec-summary">{attention.length} project{attention.length === 1 ? "" : "s"}</span>}
+            </h2>
+            {attention.length === 0 ? (
+              <p className="dash-attention-empty">Nothing needs attention right now.</p>
+            ) : (
+              <>
+                <ul className="dash-attention-list">
+                  {(showAllAttention ? attention : attention.slice(0, ATTENTION_CAP)).map((a) => (
+                    <li key={a.id} className="dash-attention-row">
+                      <Link to={`/app/projects/${a.id}`} className="dash-attention-name">{a.name}</Link>
+                      <span className="dash-attention-reasons">
+                        <span className="sr-only">Flagged because: </span>
+                        {a.reasons.map((r) => (
+                          <span key={r.key} className={`pill pill-${r.tone}`} title={r.explain}>{r.label}<span className="sr-only">. {r.explain}</span></span>
+                        ))}
+                      </span>
+                      {a.nextUp && <span className="dash-attention-next muted"><span>Next up</span> {a.nextUp}</span>}
+                    </li>
+                  ))}
+                </ul>
+                {attention.length > ATTENTION_CAP && (
+                  <button type="button" className="btn-link dash-attention-more" onClick={() => setShowAllAttention((v) => !v)}>
+                    {showAllAttention ? "Show fewer" : `Show all ${attention.length}`}
+                  </button>
+                )}
+              </>
+            )}
+          </section>
         )}
 
         {loading ? (
@@ -863,9 +900,12 @@ export default function Dashboard() {
           </div>
         ) : portfolio && projects.length > 0 ? (
           <div style={{ opacity: portfolioLoading ? 0.6 : 1, transition: "opacity 120ms ease" }}>
-            <PortfolioOverview data={portfolio} wide={wide} />
+            <PortfolioOverview data={portfolio} wide={wide} onShowAttention={() => { setListFilter("attention"); setView("list"); }} />
           </div>
         ) : null}
+
+          </>
+        )}
 
         {deletedSection}
       </main>
