@@ -111,7 +111,7 @@ export function RaciTab({ projectId }: { projectId: string }) {
       </ul>
 
       {data.rows.length === 0 ? (
-        <p className="muted">Add phases or milestones on the Roadmap tab and they will appear here as rows.</p>
+        <p className="muted">Add phases or milestones in the Roadmap section and they will appear here as rows.</p>
       ) : data.people.length === 0 ? (
         <p className="muted">Add stakeholders or invite team members and they will appear here as columns.</p>
       ) : (

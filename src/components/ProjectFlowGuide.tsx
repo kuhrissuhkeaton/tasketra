@@ -62,7 +62,7 @@ export function ProjectFlowGuide({ stages }: { stages: GuideStage[] }) {
                 <strong>{step.title}</strong>
                 <p>
                   {step.why}
-                  {step.lightHides && <span className="flow-note"> Hidden on Light projects unless you show all tabs.</span>}
+                  {step.lightHides && <span className="flow-note"> Hidden on Light projects unless you show all sections.</span>}
                 </p>
               </div>
             </li>

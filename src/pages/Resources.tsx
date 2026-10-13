@@ -132,13 +132,13 @@ const RAID_GUIDE: RaidItem[] = [
     term: "Assumptions",
     definition: "Things you're treating as true for planning purposes, without proof -- worth writing down because the plan breaks if they're wrong.",
     example: "\"We're assuming the client's IT team can grant access within 3 business days.\"",
-    whereInApp: "Tracked natively in each project's Issues & risks tab (Assumptions view), with a status of unconfirmed, confirmed, or invalidated.",
+    whereInApp: "Tracked natively in each project's Health section (Assumptions), with a status of unconfirmed, confirmed, or invalidated.",
   },
   {
     term: "Dependencies",
     definition: "Work that can't start or finish until something else does -- internal (another task) or external (a vendor, a client deliverable, a regulatory step).",
     example: "\"Framing can't start until the permit is approved.\"",
-    whereInApp: "Tracked natively in each project's Issues & risks tab (Dependencies view), tagged internal or external with an optional needed-by date. Internal task-to-task ordering also shows up naturally in the WBS hierarchy and Timeline view.",
+    whereInApp: "Tracked natively in each project's Health section (Dependencies), tagged internal or external with an optional needed-by date. Internal task-to-task ordering also shows up naturally in the WBS hierarchy and Timeline view.",
   },
   {
     term: "Quality",
@@ -356,7 +356,7 @@ export default function Resources() {
       <main id="main-content" className="project-main">
         <PageHeader
           title="Resource hub"
-          subtitle="Starting points and plain-English reference for running a project. The reference sections are read-only; your project's own tabs hold the live data. Templates are the one exception: starting from one creates a new project for you."
+          subtitle="Starting points and plain-English reference for running a project. The reference sections are read-only; your project's own sections hold the live data. Templates are the one exception: starting from one creates a new project for you."
         />
 
         <div className="inline-form" style={{ marginBottom: 20, alignItems: "center" }}>
@@ -455,8 +455,8 @@ export default function Resources() {
           <>
             <h2 id="how-it-works" className="hub-h2">How a project runs in Tasketra</h2>
             <p className="muted" style={{ maxWidth: 640, marginTop: 4 }}>
-              Every project moves through four stages. Pick one to see what to do in it and which tab to do
-              it in. Your project's Home tab shows a short checklist for the stage you are in, built from
+              Every project moves through four stages. Pick one to see what to do in it and which section to do
+              it in. Your project's Overview shows a short checklist for the stage you are in, built from
               what is already in the project, so there are no boxes to tick by hand.
             </p>
             <ProjectFlowGuide stages={guideStages} />
@@ -521,7 +521,7 @@ export default function Resources() {
             <h2 id="stakeholder-matrix" className="hub-h2">Stakeholder engagement matrix</h2>
             <p className="muted" style={{ maxWidth: 640, marginBottom: 16 }}>
               Plot each stakeholder on power vs. interest, then match your effort to the quadrant. Set
-              Power and Interest for each person on your project's Stakeholders tab and Tasketra draws this
+              Power and Interest for each person on your project's Stakeholders section and Tasketra draws this
               grid for you, ready to print.
             </p>
             <div className="resource-grid">

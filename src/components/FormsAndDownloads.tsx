@@ -5,7 +5,7 @@ import { api, type Project } from "../lib/api";
 const FORM_DOCS = [
   { type: "charter", title: "Project Charter", blurb: "Purpose, budget, stakeholders, milestones and top risks from the project, with a sign-off block." },
   { type: "risk-register", title: "Risk Register", blurb: "Every logged risk with probability, impact, exposure, mitigation, owner and status." },
-  { type: "raci", title: "RACI matrix (Word)", blurb: "Your live RACI: phases and milestones as rows, the team and stakeholders as columns. Fill it in on the project's RACI tab first." },
+  { type: "raci", title: "RACI matrix (Word)", blurb: "Your live RACI: phases and milestones as rows, the team and stakeholders as columns. Fill it in on the project's RACI section first." },
 ] as const;
 
 /** Forms the PM hands to other people, in one place. Pick a project; the

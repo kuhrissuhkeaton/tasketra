@@ -389,7 +389,7 @@ function HomeTab({ projectId, isOwner, purpose, size, showAll, onShowAllTabs, on
         <p className="view-banner">
           Showing the {SIZE_LABEL[size]} view, which hides {hiddenTabLabels(size).length} tabs.{" "}
           {isOwner && (
-            <button type="button" className="view-banner-link" onClick={onShowAllTabs}>Show all tabs</button>
+            <button type="button" className="view-banner-link" onClick={onShowAllTabs}>Show all sections</button>
           )}
         </p>
       )}
@@ -593,7 +593,7 @@ function TodayTab({ projectId }: { projectId: string }) {
       {nothingToShow && data.taskCount === 0 && (
         <div className="today-section">
           <p className="muted">
-            Nothing here yet because this project is brand new. Head to the Tasks tab to add your
+            Nothing here yet because this project is brand new. Head to the Tasks section to add your
             first task, or Stakeholders to start your register.
           </p>
           <button
@@ -4776,7 +4776,7 @@ function RoadmapTab({ projectId, isOwner, showBudget }: { projectId: string; isO
       <BaselineCard projectId={projectId} isOwner={isOwner} showBudget={showBudget} />
       <p className="muted" style={{ marginBottom: 20, maxWidth: 640 }}>
         The strategic view of this project -- phases, milestones, releases, events, and notes, grouped
-        into swimlanes and laid out on a timeline. For day-to-day execution, use the Tasks tab.
+        into swimlanes and laid out on a timeline. For day-to-day execution, use the Tasks section.
       </p>
 
       <button className="btn btn-primary" onClick={() => setShowForm((v) => !v)} type="button">
@@ -6287,7 +6287,7 @@ function TeamTab({ projectId, isOwner, onSetupChange }: { projectId: string; isO
               disabled={savingSetup}
               onChange={(e) => saveSetup({ show_all_tabs: e.target.checked })}
             />
-            Show all tabs, whatever the size
+            Show all sections, whatever the size
           </label>
           <label className="checkbox-row" style={{ marginTop: 10 }}>
             <input
@@ -6944,7 +6944,7 @@ const TEMPLATES: { type: "charter" | "risk-register" | "raci"; title: string; bl
   {
     type: "raci",
     title: "RACI Matrix (Word)",
-    blurb: "Your live RACI as a Word file: phases and milestones as rows, the team and stakeholders as columns. Fill it in on the RACI tab first.",
+    blurb: "Your live RACI as a Word file: phases and milestones as rows, the team and stakeholders as columns. Fill it in on the RACI section first.",
   },
 ];
 

@@ -28,7 +28,7 @@ export default function RaciPrint() {
   return (
     <main className="public-roadmap share-public">
       <div className="no-print share-public-bar">
-        <Link to={`/app/projects/${id}?tab=raci`} className="muted">← Back to the RACI tab</Link>
+        <Link to={`/app/projects/${id}?tab=raci`} className="muted">← Back to the RACI section</Link>
         <div className="share-public-actions">
           <button className="btn btn-primary" type="button" onClick={() => window.print()}>Print / Save as PDF</button>
         </div>

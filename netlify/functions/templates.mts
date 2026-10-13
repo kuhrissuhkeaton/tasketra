@@ -111,7 +111,7 @@ async function buildCharter(database: any, project: any, projectId: string) {
     h2("Budget"),
     p(project.budget_at_completion !== null && project.budget_at_completion !== undefined
       ? `Approved budget (BAC): ${Number(project.budget_at_completion).toLocaleString(undefined, { style: "currency", currency: "USD" })}`
-      : "No budget baseline set yet -- add one in the Budget tab."),
+      : "No budget baseline set yet -- add one in the Budget section."),
     h2("Stakeholders"),
   ];
 
@@ -157,7 +157,7 @@ async function buildRiskRegister(database: any, project: any, projectId: string)
   ];
 
   if (risks.length === 0) {
-    children.push(p("No risks logged yet. Add risks in the Risks tab, then re-download this register."));
+    children.push(p("No risks logged yet. Add risks in the Health section, then re-download this register."));
   } else {
     children.push(table(
       ["Risk", "Probability", "Impact", "Exposure", "Mitigation", "Owner", "Status"],
@@ -186,7 +186,7 @@ async function buildRaci(database: any, project: any, projectId: string) {
   ];
 
   if (rows.length === 0) {
-    children.push(p("No phases or milestones yet. Add them on the Roadmap tab, then fill in the RACI tab and re-download this matrix."));
+    children.push(p("No phases or milestones yet. Add them in the Roadmap section, then fill in the RACI section and re-download this matrix."));
   } else {
     const firstCol = 3000;
     const per = Math.floor((CONTENT_WIDTH - firstCol) / cols.length);
@@ -197,7 +197,7 @@ async function buildRaci(database: any, project: any, projectId: string) {
         [firstCol, ...cols.map(() => per)]
       )
     );
-    if (people.length > cols.length) children.push(p(`Showing the first ${cols.length} of ${people.length} people. See the RACI tab for all of them.`));
+    if (people.length > cols.length) children.push(p(`Showing the first ${cols.length} of ${people.length} people. See the RACI section for all of them.`));
   }
 
   return new Document({ styles, sections: [{ properties: { page: PAGE }, children }] });

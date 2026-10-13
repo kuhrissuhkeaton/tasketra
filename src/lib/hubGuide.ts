@@ -68,7 +68,7 @@ export const GUIDE_STAGES: GuideStage[] = [
       { title: "Handle changes properly", tab: "Decisions", why: "Change requests record the reason and the schedule and budget impact, with change board approval if you use one. Decisions can also be sent to stakeholders by link." },
       { title: "Re-score risks and clear issues", tab: "Issues", why: "A risk that has happened becomes an issue in one click. Risks not reviewed in 30 days are flagged on Home." },
       { title: "Compare cost to the baseline", tab: "Budget", why: "Earned value metrics (CPI, SPI, EAC) work out whether you are over or under.", lightHides: true },
-      { title: "Send the weekly status report", tab: "Weekly report", why: "Built from your live data, ready to print or save as PDF. Lessons learned are captured in the same tab as you go." },
+      { title: "Send the weekly status report", tab: "Weekly report", why: "Built from your live data, ready to print or save as PDF. Lessons learned are captured in the same section as you go." },
     ],
     checklist: "Change requests decided, risks re-scored, budget compared to baseline, weekly status shared.",
   },
@@ -88,7 +88,7 @@ export const GUIDE_STAGES: GuideStage[] = [
 ];
 
 export const GUIDE_PRINCIPLE =
-  "Nothing blocks you. Stages, baselines, thresholds and approvals prompt or flag; they never stop you moving on. Size only hides tabs, never data, and one switch under Team shows everything.";
+  "Nothing blocks you. Stages, baselines, thresholds and approvals prompt or flag; they never stop you moving on. Size only hides sections, never data, and one switch under Team shows everything.";
 
 /** Every tab name the guide points to, for the drift test. */
 export function guideTabNames(): string[] {

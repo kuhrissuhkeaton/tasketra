@@ -114,7 +114,7 @@ export default withSentry(async (req: Request) => {
         const approvedEmails = new Set(approvals.map((a) => a.email));
         const missing = reviewers.filter((r: any) => !approvedEmails.has(r.email));
         if (reviewers.length === 0) {
-          return json({ error: "This project has CCB enabled but no reviewers assigned yet -- add at least one CCB reviewer on the Team tab before approving." }, { status: 400 });
+          return json({ error: "This project has CCB enabled but no reviewers assigned yet -- add at least one CCB reviewer in the Team section before approving." }, { status: 400 });
         }
         if (missing.length > 0) {
           return json({ error: `Waiting on CCB sign-off from: ${missing.map((r: any) => r.email).join(", ")}.` }, { status: 400 });

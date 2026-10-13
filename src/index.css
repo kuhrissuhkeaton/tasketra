@@ -1414,7 +1414,7 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
 .legal-article a { color: var(--navy); text-decoration: underline; }
 .legal-hub-grid { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
 .legal-hub-card {
-  display: block; background: var(--cream); border: 1px solid var(--border); border-radius: var(--radius);
+  display: block; background: var(--panel); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow-sm, none);
   padding: 18px 20px; text-decoration: none; color: inherit;
 }
 .legal-hub-card:hover { box-shadow: var(--shadow-md); }
@@ -2434,3 +2434,8 @@ a:hover { color: var(--navy); }
 .public-decision .stacked-form .btn { width: 100%; justify-content: center; margin-top: 8px; }
 .public-decision .decision-record-card { background: var(--tint); border-left: 4px solid var(--navy); box-shadow: none; }
 .public-decision h1, .public-roadmap h1 { margin: 6px 0 12px; }
+
+/* Admin accounts list: the actions stack so two long links fit the fixed column */
+.rg-accounts .rg-row > .rg-actions { flex-direction: column; align-items: flex-end; gap: 2px; }
+.rg-accounts .rg-row > .rg-pill .muted { font-size: 12px; }
+@media (max-width: 760px) { .rg-accounts .rg-row > .rg-actions { flex-direction: row; flex-wrap: wrap; } }

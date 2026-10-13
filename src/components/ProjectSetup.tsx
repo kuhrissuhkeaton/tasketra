@@ -68,8 +68,8 @@ export function ProjectSetupPicker({
 
       <p className="setup-summary">
         {hidden.length === 0
-          ? "Every tab is shown."
-          : `Hidden in ${SIZE_LABEL[size]}: ${hidden.join(", ")}. Nothing is deleted, and you can show all tabs any time in project settings.`}
+          ? "Every section is shown."
+          : `Hidden in ${SIZE_LABEL[size]}: ${hidden.join(", ")}. Nothing is deleted, and you can show all sections any time in project settings.`}
       </p>
     </div>
   );

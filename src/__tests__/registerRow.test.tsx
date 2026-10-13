@@ -107,3 +107,16 @@ describe("sign-in and public pages use the Today card look", () => {
     expect(share).toContain('<h1 className="sr-only">Shared document</h1>');
   });
 });
+
+describe("admin pages use the shared header, rows and cards", () => {
+  it("no old page-head or tables; legal hub cards use the panel look", async () => {
+    for (const f of ["AdminWaitlist", "AdminFoundingMembers", "AdminFeedback", "AdminBroadcast"]) {
+      const src = await readText(`src/pages/${f}.tsx`);
+      expect(src).toContain("<PageHeader");
+      expect(src).not.toContain('className="page-head"');
+      expect(src).not.toContain("<ResizableTable");
+    }
+    const css = await readText("src/index.css");
+    expect(css).toMatch(/\.legal-hub-card \{[^}]*background: var\(--panel\)/);
+  });
+});

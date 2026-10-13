@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, type AccountRemovalPreview, type AdminAccount, type AdminAccountsSummary } from "../lib/api";
 import { AppSidebar } from "../components/AppSidebar";
-import { ResizableTable } from "../components/ResizableTable";
+import { PageHeader, RegisterRow, RegisterEmpty } from "../components/ui";
 import { fmtDate } from "../lib/format";
 import { useDocumentTitle } from "../lib/documentTitle";
 
@@ -45,14 +45,10 @@ export default function AdminFoundingMembers() {
       <AppSidebar />
 
       <main id="main-content" className="project-main">
-        <div className="page-head">
-          <h1>Founding members</h1>
-          {summary && (
-            <div className="stat-row">
-              <div className="stat"><strong>{summary.foundingClaimed}</strong> of {summary.cap} spots claimed</div>
-            </div>
-          )}
-        </div>
+        <PageHeader
+          title="Founding members"
+          subtitle={summary ? `${summary.foundingClaimed} of ${summary.cap} spots claimed.` : undefined}
+        />
 
         <p className="muted" style={{ maxWidth: 640 }}>
           Remove a test or duplicate account here. "Remove founding status" keeps the account but gives the spot back;
@@ -72,19 +68,18 @@ export default function AdminFoundingMembers() {
         {loading ? (
           <div className="skel-loading-block"><div className="skel skel-text" style={{ width: "45%" }} /><div className="skel skel-text" style={{ width: "80%" }} /><div className="skel skel-text" style={{ width: "60%", marginBottom: 0 }} /></div>
         ) : accounts.length === 0 ? (
-          <p className="muted">{showAll ? "No accounts yet." : "No founding members yet."}</p>
+          <RegisterEmpty>{showAll ? "No accounts yet." : "No founding members yet."}</RegisterEmpty>
         ) : (
-          <ResizableTable id="admin-accounts" minColWidths={[260, 90, 110, 0, 220]}>
-            <thead>
-              <tr><th>Account</th><th>Projects</th><th>Joined</th><th>Plan</th><th>Actions</th></tr>
-            </thead>
-            <tbody>
-              {accounts.map((a) => (
-                <tr key={a.id}>
-                  <td>
-                    <div>{a.display_name || <span className="muted">No name</span>}{a.job_title ? <span className="muted"> · {a.job_title}</span> : null}</div>
-                    <div className="muted" style={{ wordBreak: "break-all" }}>{a.email}</div>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 4 }}>
+          <ul className="rg-list rg-accounts" aria-label="Accounts">
+            {accounts.map((a) => (
+              <RegisterRow
+                key={a.id}
+                title={<>{a.display_name || <span className="muted">No name</span>}{a.job_title ? <span className="muted"> · {a.job_title}</span> : null}</>}
+                meta={
+                  <>
+                    <span style={{ wordBreak: "break-all" }}>{a.email}</span>
+                    {" · "}{plural(a.project_count, "project")}
+                    <span style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 4 }}>
                       {a.is_you && <span className="pill pill-navy">You</span>}
                       {a.possible_duplicates.length > 0 && (
                         <span className="pill pill-gold" title={`Same mailbox as: ${a.possible_duplicates.join(", ")}`}>
@@ -93,33 +88,31 @@ export default function AdminFoundingMembers() {
                       )}
                       {a.project_count === 0 && <span className="pill">No projects</span>}
                       {!a.email_verified && <span className="pill">Email not verified</span>}
-                    </div>
-                  </td>
-                  <td>{a.project_count}</td>
-                  <td className="muted">{fmtDate(a.created_at)}</td>
-                  <td>
-                    {a.founding_member ? <span className="pill pill-green">Founding</span> : <span className="muted">{a.subscription_status ? `Pro (${a.subscription_status})` : "Free"}</span>}
-                  </td>
-                  <td>
-                    {a.is_you ? (
-                      <span className="muted">Your account</span>
-                    ) : (
-                      <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 4 }}>
-                        {a.founding_member && (
-                          <button type="button" className="btn-link" onClick={() => { setNotice(null); setRemoval({ account: a, mode: "founding" }); }}>
-                            Remove founding status
-                          </button>
-                        )}
-                        <button type="button" className="btn-link btn-link-danger" onClick={() => { setNotice(null); setRemoval({ account: a, mode: "delete" }); }}>
-                          Delete account
+                    </span>
+                  </>
+                }
+                pill={a.founding_member ? <span className="pill pill-green">Founding</span> : <span className="muted">{a.subscription_status ? `Pro (${a.subscription_status})` : "Free"}</span>}
+                date={fmtDate(a.created_at)}
+                dateLabel="Joined"
+                actions={
+                  a.is_you ? (
+                    <span className="muted">Your account</span>
+                  ) : (
+                    <>
+                      {a.founding_member && (
+                        <button type="button" className="btn-link" onClick={() => { setNotice(null); setRemoval({ account: a, mode: "founding" }); }}>
+                          Remove founding status
                         </button>
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </ResizableTable>
+                      )}
+                      <button type="button" className="btn-link btn-link-danger" onClick={() => { setNotice(null); setRemoval({ account: a, mode: "delete" }); }}>
+                        Delete account
+                      </button>
+                    </>
+                  )
+                }
+              />
+            ))}
+          </ul>
         )}
       </main>
 

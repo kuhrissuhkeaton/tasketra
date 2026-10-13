@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { api, type WaitlistSignup } from "../lib/api";
 import { AppSidebar } from "../components/AppSidebar";
 import { useConfirm } from "../components/ConfirmDialog";
-import { ResizableTable } from "../components/ResizableTable";
+import { PageHeader, RegisterRow, RegisterSummary, RegisterEmpty } from "../components/ui";
 import { fmtDate } from "../lib/format";
 import { useDocumentTitle } from "../lib/documentTitle";
 
@@ -46,41 +46,37 @@ export default function AdminWaitlist() {
       <AppSidebar />
 
       <main id="main-content" className="project-main">
-        <div className="page-head">
-          <h1>Waitlist</h1>
-          <div className="stat-row">
-            <div className="stat"><strong>{signups.filter((s) => s.status === "pending").length}</strong> pending</div>
-            <div className="stat"><strong>{signups.filter((s) => s.status === "invited").length}</strong> invited</div>
-          </div>
-        </div>
+        <PageHeader title="Waitlist" subtitle="People who asked for an invite." />
+        <RegisterSummary>
+          {signups.filter((s) => s.status === "pending").length} pending · {signups.filter((s) => s.status === "invited").length} invited
+        </RegisterSummary>
 
         {error && <div className="form-error">{error}</div>}
 
         {loading ? (
           <div className="skel-loading-block"><div className="skel skel-text" style={{ width: "45%" }} /><div className="skel skel-text" style={{ width: "80%" }} /><div className="skel skel-text" style={{ width: "60%", marginBottom: 0 }} /></div>
         ) : signups.length === 0 ? (
-          <p className="muted">No one's signed up yet.</p>
+          <RegisterEmpty>No one's signed up yet.</RegisterEmpty>
         ) : (
-          <ResizableTable id="admin-waitlist">
-            <thead>
-              <tr><th>Email</th><th>Status</th><th>Joined</th><th><span className="sr-only">Actions</span></th></tr>
-            </thead>
-            <tbody>
-              {signups.map((s) => (
-                <tr key={s.id}>
-                  <td>{s.email}</td>
-                  <td><span className={`pill ${s.status === "invited" ? "pill-green" : "pill-gold"}`}>{s.status}</span></td>
-                  <td className="muted">{fmtDate(s.created_at)}</td>
-                  <td className="row-actions">
+          <ul className="rg-list" aria-label="Waitlist signups">
+            {signups.map((s) => (
+              <RegisterRow
+                key={s.id}
+                title={s.email}
+                pill={<span className={`pill ${s.status === "invited" ? "pill-green" : "pill-gold"}`}>{s.status}</span>}
+                date={fmtDate(s.created_at)}
+                dateLabel="Joined"
+                actions={
+                  <>
                     {s.status === "pending" && (
                       <button className="btn-link" type="button" onClick={() => markInvited(s.id)}>Mark invited</button>
                     )}
                     <button className="btn-link btn-link-danger" type="button" onClick={() => remove(s.id, s.email)}>Remove</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </ResizableTable>
+                  </>
+                }
+              />
+            ))}
+          </ul>
         )}
       </main>
     </div>

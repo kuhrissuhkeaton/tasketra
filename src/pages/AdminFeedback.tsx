@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, type Feedback } from "../lib/api";
 import { AppSidebar } from "../components/AppSidebar";
+import { PageHeader, RegisterSummary, RegisterEmpty } from "../components/ui";
 import { fmtDate } from "../lib/format";
 import { useDocumentTitle } from "../lib/documentTitle";
 
@@ -67,25 +68,19 @@ export default function AdminFeedback() {
       <AppSidebar />
 
       <main id="main-content" className="project-main">
-        <div className="page-head">
-          <h1>Feedback</h1>
-          <div className="stat-row">
-            <div className="stat"><strong>{counts.new}</strong> new</div>
-            <div className="stat"><strong>{counts.planned}</strong> planned</div>
-            <div className="stat"><strong>{counts.shipped}</strong> shipped</div>
-          </div>
-        </div>
+        <PageHeader title="Feedback" subtitle="What people sent from the in-app Feedback link." />
+        <RegisterSummary>{counts.new} new · {counts.planned} planned · {counts.shipped} shipped</RegisterSummary>
 
         {error && <div className="form-error">{error}</div>}
 
         {loading ? (
           <div className="skel-loading-block"><div className="skel skel-text" style={{ width: "45%" }} /><div className="skel skel-text" style={{ width: "80%" }} /><div className="skel skel-text" style={{ width: "60%", marginBottom: 0 }} /></div>
         ) : items.length === 0 ? (
-          <p className="muted">No feedback yet -- the in-app Feedback link sends here.</p>
+          <RegisterEmpty>No feedback yet -- the in-app Feedback link sends here.</RegisterEmpty>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {items.map((f) => (
-              <div key={f.id} className="project-card" style={{ cursor: "default" }}>
+              <section key={f.id} className="tw-card" style={{ padding: 16 }} aria-label={`Feedback from ${f.submitter_email}`}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start" }}>
                   <p style={{ margin: 0, whiteSpace: "pre-wrap", flex: 1 }}>{f.message}</p>
                   <span className={`pill ${STATUS_PILL[f.status]}`}>{f.status}</span>
@@ -121,7 +116,7 @@ export default function AdminFeedback() {
                     </button>
                   )}
                 </div>
-              </div>
+              </section>
             ))}
           </div>
         )}

@@ -1,3 +1,4 @@
+import { PageHeader } from "../components/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, ApiError, type BroadcastProgress } from "../lib/api";
@@ -103,10 +104,10 @@ export default function AdminBroadcast() {
     <div className="project-shell">
       <AppSidebar />
       <main id="main-content" className="project-main">
-        <div className="page-head">
-          <h1>Email founding members</h1>
-          {audience !== null && <div className="stat-row"><div className="stat"><strong>{audience}</strong> will receive it</div></div>}
-        </div>
+        <PageHeader
+          title="Email founding members"
+          subtitle={audience !== null ? `${audience} will receive it.` : undefined}
+        />
         <p className="muted" style={{ maxWidth: 640 }}>
           Goes to founding members with a confirmed email, from Tasketra, with replies coming to you. Use {"{first_name}"} for their first name
           ("there" if we don't have one). A short line about stopping updates is added at the bottom automatically.
@@ -116,7 +117,7 @@ export default function AdminBroadcast() {
         {error && <div className="form-error">{error}</div>}
         {notice && <p className="form-success" role="status">{notice}</p>}
 
-        <div className="billing-card" style={{ maxWidth: 720, marginBottom: 24 }}>
+        <section className="tw-card" style={{ maxWidth: 720, marginBottom: 24, padding: 18 }} aria-label="Write the email">
           <label htmlFor="broadcast-subject">Subject</label>
           <input id="broadcast-subject" type="text" maxLength={150} value={subject} onChange={(e) => setSubject(e.target.value)} disabled={busy} />
           <label htmlFor="broadcast-body">Message</label>
@@ -136,11 +137,11 @@ export default function AdminBroadcast() {
               Sent {progress.sent} of {progress.total}{progress.failed > 0 ? `, ${progress.failed} failed` : ""}{progress.pending > 0 ? `, ${progress.pending} to go...` : ""}
             </p>
           )}
-        </div>
+        </section>
 
         {recent.length > 0 && (
           <>
-            <h2>Past sends</h2>
+            <h2 className="hub-h2">Past sends</h2>
             <ul style={{ maxWidth: 720, paddingLeft: 18 }}>
               {recent.map((b) => (
                 <li key={b.id} style={{ marginBottom: 8 }}>

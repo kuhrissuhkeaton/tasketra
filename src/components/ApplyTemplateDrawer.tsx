@@ -86,7 +86,7 @@ export function ApplyTemplateDrawer({
     <Drawer open={open} onClose={onClose} eyebrow="Template" title={template ? `Add "${template.name}"` : "Add from a template"}>
       {done ? (
         <div>
-          <p><strong>Added {done.totalToAdd} {done.totalToAdd === 1 ? "item" : "items"}.</strong> Find them on the Roadmap, Tasks, Risks, Assumptions and Stakeholders tabs.</p>
+          <p><strong>Added {done.totalToAdd} {done.totalToAdd === 1 ? "item" : "items"}.</strong> Find them on the Roadmap, Tasks, Risks, Assumptions and Stakeholders sections.</p>
           <p className="muted" style={{ fontSize: 13 }}>Everything can be edited or deleted. Deleted items go to Trash.</p>
           <button className="btn btn-primary" type="button" onClick={onClose}>Done</button>
         </div>
