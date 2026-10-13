@@ -955,6 +955,7 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
   const [phases, setPhases] = useState<RoadmapItem[]>([]);
   const [newPhase, setNewPhase] = useState("");
   const [editPhase, setEditPhase] = useState("");
+  const [editPriority, setEditPriority] = useState("");
   const [view, setView] = useState<"list" | "board" | "timeline">(defaultView);
   const [dragOverStatus, setDragOverStatus] = useState<Task["status"] | null>(null);
   const [addingSubtaskFor, setAddingSubtaskFor] = useState<string | null>(null);
@@ -1083,6 +1084,7 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
     setEditDue(t.due_date || "");
     setEditDescription(t.description || "");
     setEditPhase(t.roadmap_item_id || "");
+    setEditPriority(t.priority || "");
     setDependsOnPick("");
   }
 
@@ -1096,11 +1098,14 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
     // Only send the phase when it actually changed, so saving other fields
     // never disturbs a link (for instance one to a phase that's in Trash).
     const phaseChanged = editPhase !== (taskById.get(drawerTaskId)?.roadmap_item_id || "");
+    const priorityChanged = editPriority !== (taskById.get(drawerTaskId)?.priority || "");
     await api.updateTask(drawerTaskId, {
       title: editTitle.trim(), owner_name: editOwner || undefined,
       start_date: editStart || undefined, due_date: editDue || undefined,
       description: editDescription || undefined,
       ...(phaseChanged ? { roadmap_item_id: editPhase || null } : {}),
+      // Only sent when it changed, so saving other fields never touches it.
+      ...(priorityChanged ? { priority: (editPriority || null) as Task["priority"] } : {}),
     } as any);
     noteProjectActivity(projectId, "task");
     closeDrawer();
@@ -1270,7 +1275,7 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
                         <RegisterRow
                           rowRef={(el) => setRowRef(t.id, el)}
                           title={<button type="button" className="row-title-btn" onClick={() => openDrawer(t)}>{t.title}</button>}
-                          meta={<>{t.owner_name || "No owner"}{parent ? ` \u00b7 Sub-task of ${parent.title}` : ""}</>}
+                          meta={<>{t.priority ? `${t.priority === "high" ? "High" : t.priority === "medium" ? "Medium" : "Low"} priority \u00b7 ` : ""}{t.owner_name || "No owner"}{parent ? ` \u00b7 Sub-task of ${parent.title}` : ""}</>}
                           pill={phase ? <span className="pill pill-navy task-phase-pill" title={`Roadmap phase: ${phase.title}`}>{phase.title}</span> : null}
                           flag={lateFlag(t.due_date, t.status !== "done")}
                           date={t.due_date ? fmtLocalDate(t.due_date) : null}
@@ -1413,6 +1418,15 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
                 <label htmlFor="f-projecthome-1303">Due date</label>
                 <input id="f-projecthome-1303" type="date" value={editDue} onChange={(e) => setEditDue(e.target.value)} />
               </div>
+            </div>
+            <div className="drawer-field">
+              <label htmlFor="f-task-priority">Priority</label>
+              <select id="f-task-priority" value={editPriority} onChange={(e) => setEditPriority(e.target.value)}>
+                <option value="">No priority</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+              </select>
             </div>
             {(phases.length > 0 || !!drawerTask.roadmap_item_id) && (
               <div className="drawer-field">

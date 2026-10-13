@@ -3,7 +3,7 @@
 
 import { daysUntil } from "./rowFlags";
 
-export type TaskSort = "due" | "owner" | "status" | "title";
+export type TaskSort = "due" | "owner" | "status" | "title" | "newest" | "priority";
 export type TaskGroupId = "overdue" | "week" | "later" | "nodate" | "done";
 
 export const TASK_SORT_LABEL: Record<TaskSort, string> = {
@@ -11,6 +11,8 @@ export const TASK_SORT_LABEL: Record<TaskSort, string> = {
   owner: "Owner",
   status: "Status",
   title: "Title (A to Z)",
+  newest: "Newest first",
+  priority: "Priority (high first)",
 };
 
 export const TASK_GROUP_LABEL: Record<TaskGroupId, string> = {
@@ -30,7 +32,11 @@ type TaskLike = {
   status: "not_started" | "in_progress" | "blocked" | "done";
   owner_name: string | null;
   due_date: string | null;
+  created_at?: string | null;
+  priority?: "low" | "medium" | "high" | null;
 };
+
+const PRIORITY_ORDER = { high: 0, medium: 1, low: 2 } as const;
 
 const STATUS_ORDER: Record<TaskLike["status"], number> = { blocked: 0, in_progress: 1, not_started: 2, done: 3 };
 
@@ -44,7 +50,7 @@ export function groupOfTask(t: TaskLike, now: Date = new Date()): TaskGroupId {
 }
 
 export function isTaskSort(v: unknown): v is TaskSort {
-  return v === "due" || v === "owner" || v === "status" || v === "title";
+  return v === "due" || v === "owner" || v === "status" || v === "title" || v === "newest" || v === "priority";
 }
 
 function cmpText(a: string, b: string) {
@@ -67,6 +73,16 @@ export function sortTasks<T extends TaskLike>(tasks: T[], sort: TaskSort): T[] {
     },
     status: (a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status],
     title: (a, b) => cmpText(a.title, b.title),
+    // High first, then medium, then low; tasks with no priority last.
+    priority: (a, b) => (a.priority ? PRIORITY_ORDER[a.priority] : 3) - (b.priority ? PRIORITY_ORDER[b.priority] : 3),
+    // Most recently created first; tasks with no created time sort last.
+    newest: (a, b) => {
+      if (!a.created_at && b.created_at) return 1;
+      if (a.created_at && !b.created_at) return -1;
+      const x = a.created_at ?? "";
+      const y = b.created_at ?? "";
+      return x < y ? 1 : x > y ? -1 : 0;
+    },
   };
   return [...tasks].sort((a, b) => cmp[sort](a, b) || byDue(a, b) || cmpText(a.title, b.title));
 }

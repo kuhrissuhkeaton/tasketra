@@ -53,13 +53,27 @@ describe("task groups", () => {
     expect(tasks).toEqual(copy);
   });
 
+  it("newest first puts the most recently created task on top and tasks with no created time last", () => {
+    const mk = (id: string, created_at?: string) => ({ id, title: id, status: "not_started" as const, owner_name: null, due_date: null, created_at });
+    const list = [mk("old", "2026-09-01T00:00:00Z"), mk("none"), mk("new", "2026-10-10T00:00:00Z"), mk("mid", "2026-09-20T00:00:00Z")];
+    expect(sortTasks(list, "newest").map((t) => t.id)).toEqual(["new", "mid", "old", "none"]);
+    expect(isTaskSort("newest")).toBe(true);
+  });
+
+  it("priority sort puts high first, then medium, then low, then no priority", () => {
+    const mk = (id: string, priority?: "low" | "medium" | "high" | null) => ({ id, title: id, status: "not_started" as const, owner_name: null, due_date: null, priority });
+    const list = [mk("none"), mk("low", "low"), mk("high", "high"), mk("med", "medium"), mk("cleared", null)];
+    expect(sortTasks(list, "priority").map((t) => t.id)).toEqual(["high", "med", "low", "cleared", "none"]);
+    expect(isTaskSort("priority")).toBe(true);
+  });
+
   it("only Overdue and Next 7 days start open", () => {
     expect([...TASK_GROUPS_OPEN_BY_DEFAULT]).toEqual(["overdue", "week"]);
   });
 
   it("recognises only real sort choices", () => {
     expect(isTaskSort("due")).toBe(true);
-    expect(isTaskSort("priority")).toBe(false);
+    expect(isTaskSort("urgency")).toBe(false);
     expect(isTaskSort(null)).toBe(false);
   });
 });

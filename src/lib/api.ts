@@ -251,6 +251,9 @@ export type Task = {
   parent_task_id: string | null;
   // The roadmap phase this task is tied to (optional). Null = no phase.
   roadmap_item_id: string | null;
+  // Optional. null = not set.
+  priority?: "low" | "medium" | "high" | null;
+  created_at?: string;
 };
 
 export type RiskTaskLink = { id: string; risk_id: string; task_id: string; risk_title: string; task_title: string };
@@ -834,7 +837,7 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ projectId, title, ownerName, dueDate, parentTaskId, startDate, status, description, phaseId }),
     }),
-  updateTask: (id: string, patch: Partial<Pick<Task, "status" | "title" | "owner_name" | "due_date" | "parent_task_id" | "start_date" | "description" | "roadmap_item_id">>) =>
+  updateTask: (id: string, patch: Partial<Pick<Task, "status" | "title" | "owner_name" | "due_date" | "parent_task_id" | "start_date" | "description" | "roadmap_item_id" | "priority">>) =>
     request<{ task: Task }>("/tasks", {
       method: "PATCH",
       body: JSON.stringify({
@@ -843,6 +846,8 @@ export const api = {
         description: patch.description,
         // Only sent when the caller set it; an explicit null unlinks the phase.
         ...("roadmap_item_id" in patch ? { phaseId: patch.roadmap_item_id } : {}),
+        // Same for priority: an explicit null clears it.
+        ...("priority" in patch ? { priority: patch.priority } : {}),
       }),
     }),
   deleteTask: (id: string) => request<{ ok: true }>(`/tasks?id=${id}`, { method: "DELETE" }),
