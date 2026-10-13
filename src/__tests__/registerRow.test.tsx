@@ -84,3 +84,17 @@ describe("the six registers, Tasks and the Overview use the shared rows", () => 
     expect(src.indexOf('aria-label="RACI legend"')).toBeLessThan(src.indexOf('className="raci-scroll"'));
   });
 });
+
+describe("app pages use the shared page header and cards", () => {
+  it("Account, Founder hub, What's new and Resource hub use PageHeader; no old settings-card or table", async () => {
+    for (const f of ["Account", "Founding", "WhatsNew", "Resources"]) {
+      const src = await readText(`src/pages/${f}.tsx`);
+      expect(src).toContain("<PageHeader");
+      expect(src).not.toContain('className="page-head"');
+      expect(src).not.toContain("settings-card");
+      expect(src).not.toContain("<ResizableTable");
+    }
+    const del = await readText("src/components/DeleteAccountCard.tsx");
+    expect(del).toContain("danger-card");
+  });
+});

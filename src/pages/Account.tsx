@@ -3,6 +3,7 @@ import { AppSidebar } from "../components/AppSidebar";
 import { useAuth } from "../lib/auth-context";
 import { api, type ReferralInfo } from "../lib/api";
 import { avatarColor, initials } from "../lib/avatar";
+import { PageHeader, SoftCard } from "../components/ui";
 import { DeleteAccountCard } from "../components/DeleteAccountCard";
 import { readStoredTheme, setTheme, type Theme } from "../lib/theme";
 import { useDocumentTitle } from "../lib/documentTitle";
@@ -134,12 +135,9 @@ export default function Account() {
     <div className="project-shell">
       <AppSidebar />
       <main id="main-content" className="project-main">
-        <div className="page-head">
-          <h1>Account</h1>
-        </div>
+        <PageHeader title="Account" subtitle="Your profile, appearance, password and referral link." />
 
-        <div className="settings-card" style={{ maxWidth: 640 }}>
-          <p className="settings-card-label">Profile picture</p>
+        <SoftCard title="Profile picture" className="ui-narrow billing-card">
           <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
             {user.has_avatar ? (
               <img
@@ -171,10 +169,9 @@ export default function Account() {
             </div>
           </div>
           {avatarError && <div className="form-error">{avatarError}</div>}
-        </div>
+        </SoftCard>
 
-        <div className="settings-card" style={{ maxWidth: 640 }}>
-          <p className="settings-card-label">Profile</p>
+        <SoftCard title="Profile" className="ui-narrow billing-card">
           <form onSubmit={saveProfile}>
             <label htmlFor="f-account-170">Display name</label>
             <input id="f-account-170" type="text" value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder={user.email} />
@@ -193,20 +190,18 @@ export default function Account() {
               {profileBusy ? "Saving..." : "Save profile"}
             </button>
           </form>
-        </div>
+        </SoftCard>
 
-        <div className="settings-card" style={{ maxWidth: 640 }}>
-          <p className="settings-card-label">Appearance</p>
+        <SoftCard title="Appearance" className="ui-narrow billing-card">
           <p className="muted" style={{ marginTop: 0 }}>Light, dark, or match your device's setting.</p>
           <div className="view-toggle" role="group" aria-label="Appearance">
             <button type="button" className={theme === "light" ? "btn btn-primary" : "btn btn-ghost"} onClick={() => chooseTheme("light")}>Light</button>
             <button type="button" className={theme === "dark" ? "btn btn-primary" : "btn btn-ghost"} onClick={() => chooseTheme("dark")}>Dark</button>
             <button type="button" className={theme === "system" ? "btn btn-primary" : "btn btn-ghost"} onClick={() => chooseTheme("system")}>Match system</button>
           </div>
-        </div>
+        </SoftCard>
 
-        <div className="settings-card" style={{ maxWidth: 640 }}>
-          <p className="settings-card-label">Change password</p>
+        <SoftCard title="Change password" className="ui-narrow billing-card">
           <form onSubmit={changePassword}>
             <label htmlFor="f-account-192">Current password</label>
             <input id="f-account-192" type="password" required value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} />
@@ -218,10 +213,9 @@ export default function Account() {
               {passwordBusy ? "Updating..." : "Update password"}
             </button>
           </form>
-        </div>
+        </SoftCard>
 
-        <div className="settings-card" style={{ maxWidth: 640 }}>
-          <p className="settings-card-label">Your referral link</p>
+        <SoftCard title="Your referral link" className="ui-narrow billing-card">
           <p className="muted" style={{ marginTop: 0 }}>
             Share it -- when someone joins through your link and subscribes to Pro, you both get a free month.
           </p>
@@ -239,7 +233,7 @@ export default function Account() {
               </div>
             </>
           )}
-        </div>
+        </SoftCard>
 
         <DeleteAccountCard email={user.email} />
       </main>

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { AppSidebar } from "../components/AppSidebar";
-import { ResizableTable } from "../components/ResizableTable";
+import { PageHeader, RegisterRow } from "../components/ui";
 import { api } from "../lib/api";
 import { PROJECT_TEMPLATES, planPhases, templateSummary } from "../lib/projectTemplates";
 import { APPROACH_LABEL } from "../lib/projectView";
@@ -354,16 +354,10 @@ export default function Resources() {
       <AppSidebar />
 
       <main id="main-content" className="project-main">
-        <div className="page-head">
-          <h1>Resource hub</h1>
-        </div>
-        <p className="muted" style={{ marginBottom: 20, maxWidth: 640 }}>
-          Starting points and plain-English reference for running a project: templates to start from,
-          forms and downloads to hand to others, a map of how a project runs in Tasketra, then methodologies, EVM formulas, RAID log practice,
-          stakeholder mapping, meeting templates, and status reporting. The reference sections are
-          read-only; your project's own tabs hold the live data. Templates are the one exception:
-          starting from one creates a new project for you.
-        </p>
+        <PageHeader
+          title="Resource hub"
+          subtitle="Starting points and plain-English reference for running a project. The reference sections are read-only; your project's own tabs hold the live data. Templates are the one exception: starting from one creates a new project for you."
+        />
 
         <div className="inline-form" style={{ marginBottom: 20, alignItems: "center" }}>
           <button type="button" className="btn btn-ghost" onClick={replayTour} disabled={replaying}>
@@ -391,7 +385,7 @@ export default function Resources() {
 
         {templates.length > 0 && (
           <>
-            <h2 id="templates">Project templates</h2>
+            <h2 id="templates" className="hub-h2">Project templates</h2>
             <p className="muted" style={{ maxWidth: 640, marginTop: 4 }}>
               Start a new project with the skeleton already in place: phases on the roadmap, starter
               tasks tied to those phases, the risks that usually hit this kind of project, and
@@ -447,7 +441,7 @@ export default function Resources() {
 
         {forms.length > 0 && (
           <>
-            <h2 id="forms" style={{ marginTop: templates.length > 0 ? 36 : undefined }}>Forms &amp; downloads</h2>
+            <h2 id="forms" className="hub-h2">Forms &amp; downloads</h2>
             <p className="muted" style={{ maxWidth: 640, marginTop: 4 }}>
               Documents to hand to a sponsor, client or team, built from a project's live data. Word
               files download straight away; the risk page and weekly report print or save as PDF from
@@ -459,7 +453,7 @@ export default function Resources() {
 
         {guideStages.length > 0 && (
           <>
-            <h2 id="how-it-works" style={{ marginTop: templates.length > 0 || forms.length > 0 ? 36 : undefined }}>How a project runs in Tasketra</h2>
+            <h2 id="how-it-works" className="hub-h2">How a project runs in Tasketra</h2>
             <p className="muted" style={{ maxWidth: 640, marginTop: 4 }}>
               Every project moves through four stages. Pick one to see what to do in it and which tab to do
               it in. Your project's Home tab shows a short checklist for the stage you are in, built from
@@ -471,7 +465,7 @@ export default function Resources() {
 
         {methodologies.length > 0 && (
           <>
-            <h2 id="methodologies" style={{ marginTop: templates.length > 0 || forms.length > 0 || guideStages.length > 0 ? 36 : undefined }}>Methodologies</h2>
+            <h2 id="methodologies" className="hub-h2">Methodologies</h2>
             <div className="resource-grid">
               {methodologies.map((m) => (
                 <div className="resource-card" key={m.name}>
@@ -488,28 +482,22 @@ export default function Resources() {
 
         {formulas.length > 0 && (
           <>
-            <h2 id="formulas" style={{ marginTop: 36 }}>EVM &amp; scheduling formulas</h2>
-            <ResizableTable id="resources-formulas">
-              <thead>
-                <tr><th>Code</th><th>Name</th><th>Formula</th><th>What it tells you</th></tr>
-              </thead>
-              <tbody>
-                {formulas.map((f) => (
-                  <tr key={f.code}>
-                    <td><strong>{f.code}</strong></td>
-                    <td>{f.name}</td>
-                    <td>{f.formula}</td>
-                    <td>{f.meaning}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </ResizableTable>
+            <h2 id="formulas" className="hub-h2">EVM &amp; scheduling formulas</h2>
+            <ul className="rg-list rg-plain" aria-label="EVM and scheduling formulas">
+              {formulas.map((f) => (
+                <RegisterRow
+                  key={f.code}
+                  title={<><strong>{f.code}</strong> {f.name}</>}
+                  meta={<><span className="rg-formula">{f.formula}</span><br />{f.meaning}</>}
+                />
+              ))}
+            </ul>
           </>
         )}
 
         {raidItems.length > 0 && (
           <>
-            <h2 id="raid" style={{ marginTop: 36 }}>RAID log guide</h2>
+            <h2 id="raid" className="hub-h2">RAID log guide</h2>
             <p className="muted" style={{ maxWidth: 640, marginBottom: 16 }}>
               Risks, Issues, Assumptions, and Dependencies are the four classic things worth tracking
               separately so nothing quietly falls through the cracks. Quality and Compliance sit
@@ -530,7 +518,7 @@ export default function Resources() {
 
         {quadrants.length > 0 && (
           <>
-            <h2 id="stakeholder-matrix" style={{ marginTop: 36 }}>Stakeholder engagement matrix</h2>
+            <h2 id="stakeholder-matrix" className="hub-h2">Stakeholder engagement matrix</h2>
             <p className="muted" style={{ maxWidth: 640, marginBottom: 16 }}>
               Plot each stakeholder on power vs. interest, then match your effort to the quadrant. Set
               Power and Interest for each person on your project's Stakeholders tab and Tasketra draws this
@@ -550,7 +538,7 @@ export default function Resources() {
 
         {meetings.length > 0 && (
           <>
-            <h2 id="meetings" style={{ marginTop: 36 }}>Meeting cadence templates</h2>
+            <h2 id="meetings" className="hub-h2">Meeting cadence templates</h2>
             <div className="resource-grid">
               {meetings.map((m) => (
                 <div className="resource-card" key={m.name}>
@@ -568,7 +556,7 @@ export default function Resources() {
 
         {statusTips.length > 0 && (
           <>
-            <h2 id="status-reports" style={{ marginTop: 36 }}>Status reporting -- what good looks like</h2>
+            <h2 id="status-reports" className="hub-h2">Status reporting -- what good looks like</h2>
             <div className="resource-card" style={{ maxWidth: 640 }}>
               <ul>
                 {statusTips.map((t, i) => <li key={i}>{t}</li>)}

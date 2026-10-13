@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { PageHeader, SoftCard, RegisterRow } from "../components/ui";
 import { AppSidebar } from "../components/AppSidebar";
 import { useAuth } from "../lib/auth-context";
 import { api, type FoundingMe, type FoundingWallMember, type ReferralInfo } from "../lib/api";
@@ -52,8 +53,7 @@ export default function Founding() {
       <div className="project-shell">
         <AppSidebar />
         <main id="main-content" className="project-main">
-          <div className="page-head"><h1>Founder hub</h1></div>
-          <p className="muted">This page is for founding members.</p>
+          <PageHeader title="Founder hub" subtitle="This page is for founding members." />
         </main>
       </div>
     );
@@ -63,11 +63,10 @@ export default function Founding() {
     <div className="project-shell">
       <AppSidebar />
       <main id="main-content" className="project-main">
-        <div className="page-head"><h1>Founder hub</h1></div>
+        <PageHeader title="Founder hub" subtitle="Your founding badge, your referral link, and the founders' wall." />
         {error && <p className="form-error" role="alert">{error}</p>}
 
-        <div className="settings-card" style={{ maxWidth: 640 }}>
-          <p className="settings-card-label">Your badge</p>
+        <SoftCard title="Your badge" className="ui-narrow billing-card">
           <p style={{ fontSize: 28, fontWeight: 700, margin: "4px 0" }}>
             Founding Member{me?.number ? ` #${me.number}` : ""}
           </p>
@@ -76,10 +75,9 @@ export default function Founding() {
             {me?.since ? `Member since ${fmtDate(me.since)}. ` : ""}
             Pro is free for you, forever.
           </p>
-        </div>
+        </SoftCard>
 
-        <div className="settings-card" style={{ maxWidth: 640 }}>
-          <p className="settings-card-label">Bring someone along</p>
+        <SoftCard title="Bring someone along" className="ui-narrow billing-card">
           <p className="muted" style={{ marginTop: 0 }}>
             Know a project manager who'd use Tasketra? Share your link. You already have Pro free forever, so there's no credit to earn. This is just the easiest way to bring a colleague with you.
           </p>
@@ -96,10 +94,9 @@ export default function Founding() {
               </div>
             </>
           )}
-        </div>
+        </SoftCard>
 
-        <div className="settings-card" style={{ maxWidth: 640 }}>
-          <p className="settings-card-label">Founders' wall</p>
+        <SoftCard title="Founders' wall" className="ui-narrow billing-card">
           <p className="muted" style={{ marginTop: 0 }}>
             Optional. Show your name and number to other founding members. Only your display name is shown, never your email.
           </p>
@@ -116,16 +113,14 @@ export default function Founding() {
             <p className="muted">Add your name on the Account page so you appear on the wall.</p>
           )}
           {wall && wall.length > 0 && (
-            <ul aria-label="Founders on the wall" style={{ listStyle: "none", padding: 0, margin: "12px 0 0" }}>
+            <ul className="rg-list rg-plain" aria-label="Founders on the wall" style={{ marginTop: 12 }}>
               {wall.map((m) => (
-                <li key={m.number} style={{ padding: "4px 0" }}>
-                  <strong>#{m.number}</strong> {m.name}
-                </li>
+                <RegisterRow key={m.number} title={<><strong>#{m.number}</strong> {m.name}</>} />
               ))}
             </ul>
           )}
           {wall && wall.length === 0 && <p className="muted">No one has joined the wall yet.</p>}
-        </div>
+        </SoftCard>
       </main>
     </div>
   );

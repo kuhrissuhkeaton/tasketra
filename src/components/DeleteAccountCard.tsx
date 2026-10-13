@@ -37,8 +37,8 @@ export function DeleteAccountCard({
   }
 
   return (
-    <div className="settings-card" style={{ maxWidth: 640 }}>
-      <p className="settings-card-label">Delete your account</p>
+    <section className="tw-card ui-narrow billing-card danger-card">
+      <h2 className="ui-card-title">Delete your account</h2>
       <p className="muted" style={{ marginTop: 0 }}>
         This permanently deletes your account, the projects you own, and everything in them (tasks, documents,
         budgets and so on). It can't be undone. If you have a paid subscription, cancel it from Billing first. If other
@@ -63,6 +63,6 @@ export function DeleteAccountCard({
           <button type="button" className="btn" onClick={close} disabled={busy}>Cancel</button>
         </form>
       )}
-    </div>
+    </section>
   );
 }

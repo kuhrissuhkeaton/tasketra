@@ -2404,3 +2404,18 @@ a:hover { color: var(--navy); }
 /* Rows inside a narrow card (Team workload): only the columns that have content, so the title never collapses. */
 .rg-compact .rg-row { grid-template-columns: minmax(0, 1fr) 92px 92px; }
 .rg-compact .rg-row > .rg-date, .rg-compact .rg-row > .rg-control, .rg-compact .rg-row > .rg-actions { display: none; }
+
+/* ---- App pages in the Today look (v129) ---- */
+.resource-card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; box-shadow: none; transition: none; }
+.resource-card:hover { box-shadow: none; transform: none; }
+.hub-h2 { margin: 36px 0 4px; }
+.hub-h2:first-of-type { margin-top: 0; }
+.rg-formula { font-variant-numeric: tabular-nums; color: var(--navy); font-weight: 600; }
+.whats-new-list { gap: 12px; max-width: 760px; }
+.whats-new-entry { padding: 16px 18px; border-bottom: 1px solid var(--border); }
+.whats-new-entry:last-child { border-bottom: 1px solid var(--border); }
+.danger-card { border-color: color-mix(in srgb, var(--red) 40%, var(--border)); }
+.danger-card .ui-card-title { color: var(--red); }
+/* A row with only a title and a line of detail (reference lists): one full-width column. */
+.rg-plain .rg-row { grid-template-columns: minmax(0, 1fr); }
+.rg-plain .rg-row > .rg-pill, .rg-plain .rg-row > .rg-flag, .rg-plain .rg-row > .rg-date, .rg-plain .rg-row > .rg-control, .rg-plain .rg-row > .rg-actions { display: none; }
