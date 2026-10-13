@@ -34,6 +34,7 @@ import { AddForm } from "../components/AddForm";
 import { CharterTab } from "../components/CharterTab";
 import { BaselineCard } from "../components/BaselineCard";
 import { EscalationSettings } from "../components/EscalationSettings";
+import { HealthStrip } from "../components/HealthStrip";
 import { isTabHidden, primaryTabOrder, defaultTasksView, hiddenTabLabels, SIZE_LABEL, type ProjectSize, type ProjectApproach } from "../lib/projectView";
 import { useDocumentTitle } from "../lib/documentTitle";
 
@@ -350,6 +351,8 @@ export default function ProjectHome() {
             />
           )}
         </div>
+
+        {id && tab !== "home" && <HealthStrip projectId={id} onOpenTab={(t) => setParams({ tab: t })} />}
 
         <nav className="project-tabs primary-tabs" aria-label="Project views">
           {primaryTabs.map((t) => (
