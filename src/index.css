@@ -2387,3 +2387,13 @@ a:hover { color: var(--navy); }
 .raci-legend-inline li::before { content: none; }
 .rg-sort span { white-space: nowrap; }
 .rg-sort select { width: auto; min-width: 0; }
+
+/* Billing (v125): soft cards; the add-ons area is deliberately quiet. */
+.billing-card { margin-bottom: 16px; }
+.billing-plan-name { margin: 0 0 8px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.billing-addons .muted { margin: 0 0 12px; }
+.billing-addons-form { display: flex; flex-direction: column; gap: 8px; }
+.billing-addons-form textarea { width: 100%; }
+.billing-card.tw-card { padding: 16px 18px; box-shadow: none; background: var(--panel); }
+.billing-addons.tw-card { padding: 16px 18px; }
+.billing-addons .ui-card-title { margin: 0 0 6px; }

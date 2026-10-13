@@ -15,9 +15,10 @@ vi.mock("../lib/auth-context", () => ({
 vi.mock("../components/AppSidebar", () => ({ AppSidebar: () => null }));
 
 const calls = { status: vi.fn(), checkout: vi.fn(), portal: vi.fn() };
+const submit = vi.fn();
 vi.mock("../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../lib/api")>();
-  return { ...actual, api: { ...actual.api, billingStatus: () => calls.status(), createCheckoutSession: (i: string) => calls.checkout(i), createPortalSession: () => calls.portal() } };
+  return { ...actual, api: { ...actual.api, billingStatus: () => calls.status(), createCheckoutSession: (i: string) => calls.checkout(i), createPortalSession: () => calls.portal(), submitFeedback: (m: string, p: string) => submit(m, p) } };
 });
 
 import Billing from "../pages/Billing";
@@ -72,5 +73,43 @@ describe("Billing page", () => {
     await act(async () => { button("Upgrade -- $29/month").click(); });
     await flush();
     expect(calls.portal).toHaveBeenCalled();
+  });
+});
+
+describe("Billing page, founding members", () => {
+  beforeEach(() => { plan = "founding"; calls.status.mockResolvedValue({ plan: "founding", canStartTrial: false, hasBillingAccount: false, cancelAtPeriodEnd: false }); });
+
+  it("says plainly that it is free forever and shows no payment buttons", async () => {
+    await render();
+    expect(container.textContent).toContain("Founding member");
+    expect(container.textContent).toContain("Free forever");
+    expect(container.textContent).not.toContain("Upgrade");
+    expect(button("Manage billing")).toBeUndefined();
+  });
+
+  it("has a quiet add-ons area that only records interest through the feedback path", async () => {
+    submit.mockReset(); submit.mockResolvedValue({ ok: true });
+    await render();
+    expect(container.textContent).toContain("Nothing to buy today");
+    await act(async () => { button("Tell us what you'd want").click(); });
+    const ta = container.querySelector("#addons-note") as HTMLTextAreaElement;
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;
+      setter.call(ta, "More storage");
+      ta.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => { button("Let me know").click(); });
+    await flush();
+    expect(submit).toHaveBeenCalledWith("Add-ons interest: More storage", "/app/billing");
+    expect(container.textContent).toContain("noted");
+    expect(calls.checkout).not.toHaveBeenCalled();
+    expect(calls.portal).not.toHaveBeenCalled();
+  });
+
+  it("other plans do not get the add-ons area", async () => {
+    plan = "free";
+    calls.status.mockResolvedValue({ plan: "free", canStartTrial: true, hasBillingAccount: false, cancelAtPeriodEnd: false });
+    await render();
+    expect(container.textContent).not.toContain("Nothing to buy today");
   });
 });

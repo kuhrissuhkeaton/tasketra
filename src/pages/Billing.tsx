@@ -5,6 +5,8 @@ import { useAuth } from "../lib/auth-context";
 import { api, ApiError, type BillingStatus } from "../lib/api";
 import { fmtDate } from "../lib/format";
 import { useDocumentTitle } from "../lib/documentTitle";
+import { PageHeader, SoftCard, StatusPill } from "../components/ui";
+import { announce } from "../lib/announce";
 
 const PLAN_LABEL: Record<string, string> = {
   founding: "Founding member",
@@ -13,6 +15,58 @@ const PLAN_LABEL: Record<string, string> = {
   past_due: "Pro (payment problem)",
   free: "Free",
 };
+
+
+// The add-ons area for founding members. Nothing is for sale today, so there is no
+// payment form: the only thing here records interest, through the same in-app feedback
+// path the Feedback button uses (it lands in /admin/feedback, prefixed "Add-ons interest:").
+function AddOnsCard() {
+  const [open, setOpen] = useState(false);
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [err, setErr] = useState("");
+
+  async function send(e: React.FormEvent) {
+    e.preventDefault();
+    setErr("");
+    setBusy(true);
+    try {
+      const text = note.trim();
+      await api.submitFeedback(`Add-ons interest: ${text || "(no details given)"}`, "/app/billing");
+      setSent(true);
+      announce("Thanks. We've noted your interest.");
+    } catch (e2: any) {
+      setErr(e2?.message || "Couldn't send that. Try again?");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <SoftCard title="Add-ons" className="ui-narrow billing-addons">
+      <p className="muted">
+        Nothing to buy today. If we ever offer optional extras, you'll choose whether to add them,
+        and your free membership stays exactly as it is.
+      </p>
+      {sent ? (
+        <p className="form-success" role="status">Thanks. We've noted that you'd like to hear about add-ons.</p>
+      ) : open ? (
+        <form onSubmit={send} className="billing-addons-form">
+          <label htmlFor="addons-note">What would you want? (optional)</label>
+          <textarea id="addons-note" rows={3} maxLength={1000} value={note} onChange={(e) => setNote(e.target.value)} placeholder="More storage, extra team seats, something else..." />
+          {err && <p className="form-error">{err}</p>}
+          <div className="inline-form" style={{ marginBottom: 0 }}>
+            <button className="btn btn-primary" type="submit" disabled={busy}>{busy ? "Sending..." : "Let me know"}</button>
+            <button className="btn btn-ghost" type="button" onClick={() => setOpen(false)}>Cancel</button>
+          </div>
+        </form>
+      ) : (
+        <button className="btn btn-ghost" type="button" onClick={() => setOpen(true)}>Tell us what you'd want</button>
+      )}
+    </SoftCard>
+  );
+}
 
 export default function Billing() {
   useDocumentTitle("Billing");
@@ -86,9 +140,10 @@ export default function Billing() {
     <div className="project-shell">
       <AppSidebar />
       <main id="main-content" className="project-main">
-        <div className="page-head">
-          <h1>Billing</h1>
-        </div>
+        <PageHeader
+          title="Billing"
+          subtitle={plan === "founding" ? "Founding member \u00b7 free forever" : PLAN_LABEL[plan]}
+        />
 
         {billingResult === "success" && plan !== "free" && (
           <p className="form-success" style={{ marginBottom: 20 }}>
@@ -111,14 +166,17 @@ export default function Billing() {
           </p>
         )}
 
-        <div className="billing-card" style={{ maxWidth: 640, marginBottom: 24 }}>
+        <SoftCard className="ui-narrow billing-card">
           <p className="muted" style={{ marginBottom: 4 }}>Current plan</p>
-          <h2 style={{ marginTop: 0 }}>{PLAN_LABEL[plan]}</h2>
+          <h2 className="billing-plan-name">
+            {PLAN_LABEL[plan]}
+            {plan === "founding" && <StatusPill tone="green">Free forever</StatusPill>}
+          </h2>
 
           {plan === "founding" && (
             <p className="muted">
-              You're one of our first 100 users -- Pro features are free for you, forever, as a
-              thank-you for helping build Tasketra. No card, no trial, no catch.
+              As a founding member, Tasketra's Pro features are free for you, forever, as a
+              thank-you for helping build it. No card, no trial, no catch.
             </p>
           )}
 
@@ -192,7 +250,9 @@ export default function Billing() {
           )}
 
           {error && <p className="form-error">{error}</p>}
-        </div>
+        </SoftCard>
+
+        {plan === "founding" && <AddOnsCard />}
       </main>
     </div>
   );
