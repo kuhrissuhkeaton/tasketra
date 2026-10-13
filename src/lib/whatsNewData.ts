@@ -10,6 +10,66 @@ export type ChangeEntry = { version: string; date: string; title: string; body: 
 // they can do.
 export const CHANGES: ChangeEntry[] = [
   {
+    version: "v133",
+    date: "October 2026",
+    title: "Task priority, and two new ways to sort tasks",
+    body: "Open a task's Details and set a Priority (High, Medium or Low), or leave it blank. A task with a priority shows it under its title, like \"High priority\". The Sort menu in the Tasks section has two new choices: Newest first, and Priority (high first). Your choice is remembered on this device. Nothing changes for tasks you do not touch.",
+  },
+  {
+    version: "v131",
+    date: "October 2026",
+    title: "Sections, not tabs",
+    body: "The parts of a project are now called sections everywhere in Tasketra, to match how they are laid out. The words in setup, guides, downloads and messages all say section now. Nothing moved and nothing was removed.",
+  },
+  {
+    version: "v130",
+    date: "October 2026",
+    title: "Your account and sign-in pages, refreshed",
+    body: "Account, the Founder hub, this What's new page and the Resource hub now share the same calm look as Today, with a short line under each title and soft cards. The sign-in, forgot password, reset password and verify email pages, plus the pages you share with other people (decisions, roadmap and shared documents), got the same card look in light and dark. On a shared decision, the answer options are now clear rows you click. Everything works the same as before.",
+  },
+  {
+    version: "v128",
+    date: "October 2026",
+    title: "Every list in a project lines up",
+    body: "Lists across a project now use tidy rows with the same columns in the same place: Stakeholders, Vendors, Comms plan, logged costs in Budget, Meetings, Documents, the Roadmap list, Change requests, Lessons learned, Team workload and Trash. Each row has the name and a short line of detail, then a status, a plain-language flag such as \"3 days late\", and a date, so you can scan down a column. Editing, deleting and every other action work as before.",
+  },
+  {
+    version: "v125",
+    date: "October 2026",
+    title: "Billing for founding members: free forever",
+    body: "If you are a founding member, the Billing page now says so plainly: your Pro features are free, forever, with no card, no trial and no catch. There are no payment buttons for you. A small Add-ons area says nothing is for sale today and lets you tell us what you would want, which comes straight to us. Everyone else sees the same plans and buttons as before.",
+  },
+  {
+    version: "v124",
+    date: "October 2026",
+    title: "A project in six sections, and tasks grouped by when they are due",
+    body: "A project now has six main sections: Overview, Tasks, Plan, Health, People and decisions, and Docs. Under each one, small pills take you to the parts inside it. Every old link and bookmark still works. In Tasks, the list is grouped into Overdue, Next 7 days, Later, No due date and Done, with a Sort menu (Due date, Owner, Status, Title) and the Board and Timeline views still one click away. Issues, Risks, Assumptions, Dependencies, Quality and Compliance are tidy rows, and the RACI grid has a short legend above it.",
+  },
+  {
+    version: "v121",
+    date: "October 2026",
+    title: "See how every project is doing at a glance",
+    body: "The Projects page opens on a clean list: one row per project with a plain-language reason, a health label (On track, At risk or Off track), the stage and progress, with the ones that need you first. Switch to Dashboard for the bigger picture, now with four simple tiles. Inside every project, a health strip under the title says how it is doing and why, and each part of the sentence takes you to where you can fix it, with the next thing to do.",
+  },
+  {
+    version: "v119",
+    date: "October 2026",
+    title: "Today is now your home screen",
+    body: "Tasketra opens on Today: your tasks that are overdue, due today, due this week, waiting on others, and later, with a quick add-a-task line. Tick a task done (with Undo) or change its date right there, switch between Mine and unassigned and Everyone, and use Wrap up the day to write a status note and move today's open tasks to tomorrow. The old dashboard moved to Projects in the sidebar.",
+  },
+  {
+    version: "v118",
+    date: "October 2026",
+    title: "Clearer forms and easier on every screen",
+    body: "If you press Add with a required field empty, Tasketra now tells you what is missing and puts the cursor there. After you add something, the form stays ready for the next one instead of reloading the page. Screen readers now hear confirmations such as \"Task added\" and \"Deleted\". Page titles say where you are, status pills show a clear ring when you tab to them, and Dark mode looks right on the Projects page and Roadmap.",
+  },
+  {
+    version: "v114",
+    date: "October 2026",
+    title: "Shorter forms, a row menu, and a jump button on your phone",
+    body: "Forms for risks, issues, assumptions, vendors, lessons and the other registers now start as one short row, with More details one click away, so the list is the first thing you see. Each row has a ... menu for less-used actions. On a phone, a small button at the bottom jumps you back up to the add form while you scroll a long list. Trash now lives in the Project actions menu beside the stage, and sidebar views show where you are with a path at the top.",
+  },
+  {
     version: "v100",
     date: "October 2026",
     title: "A notification bell",

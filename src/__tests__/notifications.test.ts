@@ -29,3 +29,15 @@ describe("badgeText", () => {
     expect(badgeText(10)).toBe("9+");
   });
 });
+
+describe("What's new data", () => {
+  it("has unique versions (the bell finds what you last saw by version) and a title and body on every entry", async () => {
+    const { CHANGES } = await import("../lib/whatsNewData");
+    const versions = CHANGES.map((c) => c.version);
+    expect(new Set(versions).size).toBe(versions.length);
+    for (const c of CHANGES) {
+      expect(c.title.trim().length).toBeGreaterThan(0);
+      expect(c.body.trim().length).toBeGreaterThan(0);
+    }
+  });
+});
