@@ -2400,3 +2400,7 @@ a:hover { color: var(--navy); }
 .rg-detail { list-style: none; border-bottom: 1px solid var(--border); }
 .rg-detail::before { content: none; }
 .rg-amount { font-variant-numeric: tabular-nums; color: var(--navy); }
+
+/* Rows inside a narrow card (Team workload): only the columns that have content, so the title never collapses. */
+.rg-compact .rg-row { grid-template-columns: minmax(0, 1fr) 92px 92px; }
+.rg-compact .rg-row > .rg-date, .rg-compact .rg-row > .rg-control, .rg-compact .rg-row > .rg-actions { display: none; }

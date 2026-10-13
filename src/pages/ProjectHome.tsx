@@ -21,7 +21,6 @@ import { useAuth } from "../lib/auth-context";
 import { AppSidebar } from "../components/AppSidebar";
 import { NAV_GROUPS, STRIP_TABS, groupOf, sectionLabel, visibleGroups } from "../lib/projectNav";
 import { useConfirm } from "../components/ConfirmDialog";
-import { ResizableTable } from "../components/ResizableTable";
 import { RegisterRow, RegisterSummary, RegisterEmpty } from "../components/ui";
 import { daysUntil, lateFlag, expiryFlag } from "../lib/rowFlags";
 import { groupTasks, groupOfTask, isTaskSort, TASK_SORT_LABEL, TASK_GROUPS_OPEN_BY_DEFAULT, type TaskSort, type TaskGroupId } from "../lib/taskGroups";
@@ -911,30 +910,27 @@ function TrashTab({ projectId }: { projectId: string }) {
       ) : items.length === 0 ? (
         <p className="muted">Trash is empty.</p>
       ) : (
-        <ResizableTable id="trash">
-          <thead>
-            <tr><th>Item</th><th>Type</th><th>Deleted</th><th><span className="sr-only">Actions</span></th></tr>
-          </thead>
-          <tbody>
-            {items.map((item) => (
-              <tr key={`${item.entity_type}-${item.id}`}>
-                <td>{item.title || "(untitled)"}</td>
-                <td><span className="pill pill-navy">{TRASH_ENTITY_LABEL[item.entity_type]}</span></td>
-                <td className="muted">{fmtDateTime(item.deleted_at)}</td>
-                <td className="row-actions">
-                  <button
-                    className="btn-link"
-                    type="button"
-                    disabled={restoringId === item.id}
-                    onClick={() => restore(item)}
-                  >
-                    {restoringId === item.id ? "Restoring..." : "Restore"}
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </ResizableTable>
+        <ul className="rg-list" aria-label="Deleted items">
+          {items.map((item) => (
+            <RegisterRow
+              key={`${item.entity_type}-${item.id}`}
+              title={item.title || "(untitled)"}
+              pill={<span className="pill pill-navy">{TRASH_ENTITY_LABEL[item.entity_type]}</span>}
+              date={fmtLocalDate(item.deleted_at)}
+              dateLabel="Deleted"
+              actions={
+                <button
+                  className="btn-link"
+                  type="button"
+                  disabled={restoringId === item.id}
+                  onClick={() => restore(item)}
+                >
+                  {restoringId === item.id ? "Restoring..." : "Restore"}
+                </button>
+              }
+            />
+          ))}
+        </ul>
       )}
     </div>
   );
@@ -4905,17 +4901,13 @@ function RoadmapTab({ projectId, isOwner, showBudget }: { projectId: string; isO
       </div>
 
       <div style={{ marginTop: 28 }}>
-        <ResizableTable id="roadmap-list" className="table table-compact" minColWidths={[190, 0, 120, 0, 0]}>
-        <thead>
-          <tr><th>Item</th><th>Type / swimlane</th><th>Dates</th><th>Status</th><th><span className="sr-only">Actions</span></th></tr>
-        </thead>
-        <tbody>
+        <ul className="rg-list" aria-label="Roadmap items">
           {visibleItems.map((item) => (
             <Fragment key={item.id}>
-              <tr ref={(el) => { if (el) rowRefs.current.set(item.id, el); else rowRefs.current.delete(item.id); }}>
-                <td>
-                  <div className="roadmap-item-cell">
-                    <span>{item.title}</span>
+              <RegisterRow
+                rowRef={(el) => { if (el) rowRefs.current.set(item.id, el); else rowRefs.current.delete(item.id); }}
+                title={item.title}
+                meta={<>{item.swimlane}
                     {item.type === "phase" && (() => {
                       // Every phase shows the same bar-and-count, so rows line up;
                       // a phase with no linked tasks shows an empty bar.
@@ -4940,17 +4932,11 @@ function RoadmapTab({ projectId, isOwner, showBudget }: { projectId: string; isO
                           </span>
                         </span>
                       );
-                    })()}
-                  </div>
-                </td>
-                <td>
-                  <span className="pill pill-navy">{ROADMAP_TYPE_LABEL[item.type]}</span>
-                  <div className="muted roadmap-lane-line">{item.swimlane}</div>
-                </td>
-                <td className="muted">
-                  {fmtRoadmapRange(item.start_date, item.end_date)}
-                </td>
-                <td>
+                    })()}</>}
+                pill={<span className="pill pill-navy">{ROADMAP_TYPE_LABEL[item.type]}</span>}
+                date={fmtRoadmapRange(item.start_date, item.end_date)}
+                dateLabel="Dates"
+                control={
                   <select aria-label="Status"
                     className={`status-select status-select-${item.status}`}
                     value={item.status}
@@ -4960,21 +4946,22 @@ function RoadmapTab({ projectId, isOwner, showBudget }: { projectId: string; isO
                       <option key={value} value={value}>{label}</option>
                     ))}
                   </select>
-                </td>
-                <td className="row-actions">
-                  <button className="btn-link" type="button" onClick={() => startEdit(item)}>
-                    {editingId === item.id ? "Close" : "Edit"}
-                  </button>
-                  <RowActionsMenu
-                    label={`More actions for ${item.title}`}
-                    items={[{ label: "Delete", danger: true, onSelect: () => removeItem(item) }]}
-                  />
-                </td>
-              </tr>
+                }
+                actions={
+                  <>
+                    <button className="btn-link" type="button" onClick={() => startEdit(item)}>
+                      {editingId === item.id ? "Close" : "Edit"}
+                    </button>
+                    <RowActionsMenu
+                      label={`More actions for ${item.title}`}
+                      items={[{ label: "Delete", danger: true, onSelect: () => removeItem(item) }]}
+                    />
+                  </>
+                }
+              />
               {editingId === item.id && (
-                <tr>
-                  <td colSpan={5}>
-                    <div className="settings-card" style={{ margin: "6px 0 14px" }}>
+                <li className="rg-detail">
+                  <div className="settings-card" style={{ margin: "6px 0 14px" }}>
                       <label>Title</label>
                       <input aria-label="Title" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
                       <div className="inline-form" style={{ marginTop: 8 }}>
@@ -4996,24 +4983,20 @@ function RoadmapTab({ projectId, isOwner, showBudget }: { projectId: string; isO
                         <button className="btn btn-primary" type="button" onClick={() => saveEdit(item.id)}>Save</button>
                       </div>
                     </div>
-                  </td>
-                </tr>
+                </li>
               )}
             </Fragment>
           ))}
-          {items.length === 0 && (
-            <tr><td colSpan={5} className="muted">No roadmap items yet. Add phases, milestones, releases, events, or notes above to sketch out the plan.</td></tr>
-          )}
-          {items.length > 0 && visibleItems.length === 0 && (
-            <tr>
-              <td colSpan={5} className="muted">
-                No items match the current filters.{" "}
-                <button type="button" className="btn-link" onClick={resetFilters}>Reset filters</button>
-              </td>
-            </tr>
-          )}
-        </tbody>
-        </ResizableTable>
+        </ul>
+        {items.length === 0 && (
+          <RegisterEmpty>No roadmap items yet. Add phases, milestones, releases, events, or notes above to sketch out the plan.</RegisterEmpty>
+        )}
+        {items.length > 0 && visibleItems.length === 0 && (
+          <RegisterEmpty>
+            No items match the current filters.{" "}
+            <button type="button" className="btn-link" onClick={resetFilters}>Reset filters</button>
+          </RegisterEmpty>
+        )}
       </div>
 
       {isOwner && (
@@ -6017,42 +6000,36 @@ function ChangeRequestsTab({ projectId }: { projectId: string }) {
       {error && <p className="form-error">{error}</p>}
       {statusError && <p className="form-error">{statusError}</p>}
 
-      <ResizableTable id="change-requests">
-        <thead>
-          <tr><th>Change request</th><th>Schedule</th><th>Budget</th><th>Requested by</th><th>Status</th><th><span className="sr-only">Actions</span></th></tr>
-        </thead>
-        <tbody>
-          {items.map((c) => (
-            editingId === c.id ? (
-              <tr key={c.id}>
-                <td>
-                  <input aria-label="Title" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} style={{ marginBottom: 4 }} />
-                  <textarea aria-label="Description" value={editDescription} onChange={(e) => setEditDescription(e.target.value)} rows={2} placeholder="Description" style={{ marginBottom: 4 }} />
-                  <textarea aria-label="Reason" value={editReason} onChange={(e) => setEditReason(e.target.value)} rows={2} placeholder="Reason" />
-                </td>
-                <td className="muted">{fmtSignedDays(c.schedule_impact_days)}</td>
-                <td className="muted">{fmtSignedMoney(c.budget_impact)}</td>
-                <td className="muted">
-                  {c.requested_by || "--"}
-                  <input aria-label="Decided by"
-                    value={editDecidedBy} onChange={(e) => setEditDecidedBy(e.target.value)}
-                    placeholder="Decided by" style={{ marginTop: 4 }}
-                  />
-                </td>
-                <td className="muted">{CR_STATUS_LABEL[c.status]}</td>
-                <td className="row-actions">
-                  <button className="btn btn-primary" type="button" onClick={() => saveEdit(c.id)}>Save</button>
-                  <button className="btn btn-ghost" type="button" onClick={() => setEditingId(null)}>Cancel</button>
-                </td>
-              </tr>
-            ) : (
-              <tr key={c.id}>
-                <td>
-                  {c.title}
-                  {c.reason && <div className="muted">{c.reason}</div>}
-                  {c.decided_by && <div className="muted">Decided by {c.decided_by}</div>}
+      <ul className="rg-list" aria-label="Change requests">
+        {items.map((c) => (
+          editingId === c.id ? (
+            <li key={c.id} className="rg-edit">
+              <div className="rg-edit-fields">
+                <input aria-label="Title" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
+                <textarea aria-label="Description" value={editDescription} onChange={(e) => setEditDescription(e.target.value)} rows={2} placeholder="Description" />
+                <textarea aria-label="Reason" value={editReason} onChange={(e) => setEditReason(e.target.value)} rows={2} placeholder="Reason" />
+                <input aria-label="Decided by"
+                  value={editDecidedBy} onChange={(e) => setEditDecidedBy(e.target.value)}
+                  placeholder="Decided by"
+                />
+              </div>
+              <div className="rg-edit-actions">
+                <span className="muted">{CR_STATUS_LABEL[c.status]} · Schedule {fmtSignedDays(c.schedule_impact_days)} · Budget {fmtSignedMoney(c.budget_impact)}</span>
+                <button className="btn btn-primary" type="button" onClick={() => saveEdit(c.id)}>Save</button>
+                <button className="btn btn-ghost" type="button" onClick={() => setEditingId(null)}>Cancel</button>
+              </div>
+            </li>
+          ) : (
+            <RegisterRow
+              key={c.id}
+              title={c.title}
+              meta={
+                <>
+                  {c.requested_by ? `Requested by ${c.requested_by}` : "No requester"}
+                  {c.reason ? ` \u00b7 ${c.reason}` : ""}
+                  {c.decided_by ? ` \u00b7 Decided by ${c.decided_by}` : ""}
                   {ccbEnabled && (
-                    <div className="muted" style={{ marginTop: 4, fontSize: 12.5 }}>
+                    <span style={{ display: "block", marginTop: 4, fontSize: 12.5 }}>
                       CCB: {c.ccb_approvals.length}/{reviewers.length} signed
                       {reviewers.length > 0 && c.ccb_approvals.length < reviewers.length && isReviewer && !c.ccb_approvals.some((a) => a.email === user?.email) && (
                         <>
@@ -6067,38 +6044,40 @@ function ChangeRequestsTab({ projectId }: { projectId: string }) {
                           </button>
                         </>
                       )}
-                    </div>
+                    </span>
                   )}
-                </td>
-                <td>{fmtSignedDays(c.schedule_impact_days)}</td>
-                <td>{fmtSignedMoney(c.budget_impact)}</td>
-                <td>{c.requested_by || "--"}</td>
-                <td>
-                  <select aria-label="Status"
-                    className={`status-select status-select-${c.status}`}
-                    value={c.status}
-                    onChange={(e) => setStatus(c.id, e.target.value as ChangeRequest["status"])}
-                  >
-                    {Object.entries(CR_STATUS_LABEL).map(([value, label]) => (
-                      <option key={value} value={value}>{label}</option>
-                    ))}
-                  </select>
-                </td>
-                <td className="row-actions">
+                </>
+              }
+              pill={<span className="rg-amount"><span className="sr-only">Schedule impact </span>{fmtSignedDays(c.schedule_impact_days)}</span>}
+              date={<span className="rg-amount">{fmtSignedMoney(c.budget_impact)}</span>}
+              dateLabel="Budget impact"
+              control={
+                <select aria-label="Status"
+                  className={`status-select status-select-${c.status}`}
+                  value={c.status}
+                  onChange={(e) => setStatus(c.id, e.target.value as ChangeRequest["status"])}
+                >
+                  {Object.entries(CR_STATUS_LABEL).map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
+                </select>
+              }
+              actions={
+                <>
                   <button className="btn-link" type="button" onClick={() => startEdit(c)}>Edit</button>
                   <RowActionsMenu
                     label={`More actions for ${c.title}`}
                     items={[{ label: "Delete", danger: true, onSelect: () => removeChangeRequest(c.id, c.title) }]}
                   />
-                </td>
-              </tr>
-            )
-          ))}
-          {items.length === 0 && (
-            <tr><td colSpan={6} className="muted">No change requests logged yet. Add one above if scope shifts.</td></tr>
-          )}
-        </tbody>
-      </ResizableTable>
+                </>
+              }
+            />
+          )
+        ))}
+      </ul>
+      {items.length === 0 && (
+        <RegisterEmpty>No change requests logged yet. Add one above if scope shifts.</RegisterEmpty>
+      )}
     </div>
   );
 }
@@ -6430,25 +6409,20 @@ function TeamTab({ projectId, isOwner, onSetupChange }: { projectId: string; isO
           Capacity is a lightweight signal from open, blocked, and overdue counts, not hours -- overloaded
           means someone's plate looks heavier than what they can realistically move this week.
         </p>
-        <ResizableTable id="team-workload">
-          <thead>
-            <tr><th>Owner</th><th>Open tasks</th><th>Blocked</th><th>Overdue</th><th>Capacity</th></tr>
-          </thead>
-          <tbody>
-            {workload.map((w) => (
-              <tr key={w.owner}>
-                <td>{w.owner}</td>
-                <td>{w.open}</td>
-                <td>{w.blocked > 0 ? <span className="pill pill-red">{w.blocked}</span> : "--"}</td>
-                <td>{w.overdue > 0 ? <span className="pill pill-red">{w.overdue}</span> : <span className="pill pill-green">0</span>}</td>
-                <td><span className={`pill ${CAPACITY_PILL[w.capacity]}`}>{CAPACITY_LABEL[w.capacity]}</span></td>
-              </tr>
-            ))}
-            {workload.length === 0 && (
-              <tr><td colSpan={5} className="muted">No open tasks to show workload for.</td></tr>
-            )}
-          </tbody>
-        </ResizableTable>
+        <ul className="rg-list rg-compact" aria-label="Workload by owner">
+          {workload.map((w) => (
+            <RegisterRow
+              key={w.owner}
+              title={w.owner}
+              meta={`${w.open} open ${w.open === 1 ? "task" : "tasks"}${w.blocked > 0 ? ` \u00b7 ${w.blocked} blocked` : ""}`}
+              pill={<span className={`pill ${CAPACITY_PILL[w.capacity]}`}>{CAPACITY_LABEL[w.capacity]}</span>}
+              flag={w.overdue > 0 ? { text: `${w.overdue} overdue`, bad: true } : null}
+            />
+          ))}
+        </ul>
+        {workload.length === 0 && (
+          <RegisterEmpty>No open tasks to show workload for.</RegisterEmpty>
+        )}
       </div>
 
       {isOwner && (
@@ -6910,56 +6884,48 @@ function LessonsLearnedTab({ projectId }: { projectId: string }) {
       />
       {error && <p className="form-error">{error}</p>}
 
-      <ResizableTable id="lessons-learned">
-        <thead>
-          <tr><th>Lesson</th><th>Category</th><th>Owner</th><th><span className="sr-only">Follow-up</span></th><th><span className="sr-only">Actions</span></th></tr>
-        </thead>
-        <tbody>
-          {lessons.map((l) => (
-            editingId === l.id ? (
-              <tr key={l.id}>
-                <td>
-                  <input aria-label="Summary" value={editSummary} onChange={(e) => setEditSummary(e.target.value)} style={{ marginBottom: 4 }} />
-                  <textarea aria-label="Details" value={editDetails} onChange={(e) => setEditDetails(e.target.value)} rows={2} placeholder="Details" />
-                </td>
-                <td className="muted">{LESSON_CATEGORY_LABEL[l.category]}</td>
-                <td><input aria-label="Owner" value={editOwner} onChange={(e) => setEditOwner(e.target.value)} /></td>
-                <td></td>
-                <td className="row-actions">
-                  <button className="btn btn-primary" type="button" onClick={() => saveEdit(l.id)}>Save</button>
-                  <button className="btn btn-ghost" type="button" onClick={() => setEditingId(null)}>Cancel</button>
-                </td>
-              </tr>
-            ) : (
-              <tr key={l.id}>
-                <td style={{ textDecoration: l.status === "done" ? "line-through" : "none" }}>
-                  {l.summary}
-                  {l.details && <div className="muted" style={{ textDecoration: "none" }}>{l.details}</div>}
-                </td>
-                <td><span className={`pill ${LESSON_CATEGORY_PILL[l.category]}`}>{LESSON_CATEGORY_LABEL[l.category]}</span></td>
-                <td>{l.owner_name || "--"}</td>
-                <td>
-                  {l.category === "action_item" && (
-                    <button className="btn-link" type="button" onClick={() => toggleDone(l)}>
-                      {l.status === "done" ? "Mark open" : "Mark done"}
-                    </button>
-                  )}
-                </td>
-                <td className="row-actions">
+      <ul className="rg-list" aria-label="Lessons learned">
+        {lessons.map((l) => (
+          editingId === l.id ? (
+            <li key={l.id} className="rg-edit">
+              <div className="rg-edit-fields">
+                <input aria-label="Summary" value={editSummary} onChange={(e) => setEditSummary(e.target.value)} />
+                <textarea aria-label="Details" value={editDetails} onChange={(e) => setEditDetails(e.target.value)} rows={2} placeholder="Details" />
+                <input aria-label="Owner" value={editOwner} onChange={(e) => setEditOwner(e.target.value)} />
+              </div>
+              <div className="rg-edit-actions">
+                <span className="muted">{LESSON_CATEGORY_LABEL[l.category]}</span>
+                <button className="btn btn-primary" type="button" onClick={() => saveEdit(l.id)}>Save</button>
+                <button className="btn btn-ghost" type="button" onClick={() => setEditingId(null)}>Cancel</button>
+              </div>
+            </li>
+          ) : (
+            <RegisterRow
+              key={l.id}
+              title={<span style={{ textDecoration: l.status === "done" ? "line-through" : "none" }}>{l.summary}</span>}
+              meta={<>{l.owner_name || "No owner"}{l.details ? ` \u00b7 ${l.details}` : ""}</>}
+              pill={<span className={`pill ${LESSON_CATEGORY_PILL[l.category]}`}>{LESSON_CATEGORY_LABEL[l.category]}</span>}
+              control={l.category === "action_item" ? (
+                <button className="btn-link" type="button" onClick={() => toggleDone(l)}>
+                  {l.status === "done" ? "Mark open" : "Mark done"}
+                </button>
+              ) : null}
+              actions={
+                <>
                   <button className="btn-link" type="button" onClick={() => startEdit(l)}>Edit</button>
                   <RowActionsMenu
                     label={`More actions for ${l.summary}`}
                     items={[{ label: "Delete", danger: true, onSelect: () => removeLesson(l.id, l.summary) }]}
                   />
-                </td>
-              </tr>
-            )
-          ))}
-          {lessons.length === 0 && (
-            <tr><td colSpan={5} className="muted">No lessons logged yet. Log one any time, not just at project close.</td></tr>
-          )}
-        </tbody>
-      </ResizableTable>
+                </>
+              }
+            />
+          )
+        ))}
+      </ul>
+      {lessons.length === 0 && (
+        <RegisterEmpty>No lessons logged yet. Log one any time, not just at project close.</RegisterEmpty>
+      )}
     </div>
   );
 }
