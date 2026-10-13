@@ -120,3 +120,10 @@ describe("admin pages use the shared header, rows and cards", () => {
     expect(css).toMatch(/\.legal-hub-card \{[^}]*background: var\(--panel\)/);
   });
 });
+
+describe("project setup approach labels keep readable contrast", () => {
+  it("unselected Predictive/Hybrid/Agile labels use a text colour darker than plain slate", async () => {
+    const css = await readText("src/index.css");
+    expect(css).toMatch(/\.setup-seg-item \{[^}]*color: color-mix\(in srgb, var\(--slate\) 75%, var\(--navy\)\)/);
+  });
+});
