@@ -53,7 +53,7 @@ describe("RegisterRow", () => {
 
   it("fixed column widths and the phone wrap are in the stylesheet", async () => {
     const css = await readText("src/index.css");
-    expect(css).toMatch(/\.rg-row\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) 92px 116px 92px 150px auto/);
+    expect(css).toMatch(/\.rg-row\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) 92px 116px 92px 150px 116px/);
     expect(css).toMatch(/@media \(max-width: 760px\)\s*\{\s*\.rg-row \{ display: flex; flex-wrap: wrap/);
   });
 });
@@ -65,10 +65,10 @@ describe("the six registers, Tasks and the Overview use the shared rows", () => 
       expect(src).not.toContain(`ResizableTable id="${id}"`);
     }
     expect(src).not.toContain('ResizableTable id="tasks"');
-    for (const id of ["stakeholders", "procurement-vendors", "comms-plan"]) {
+    for (const id of ["stakeholders", "procurement-vendors", "comms-plan", "budget-costs", "meetings", "documents"]) {
       expect(src).not.toContain(`ResizableTable id="${id}"`);
     }
-    for (const label of ["Stakeholders", "Vendors and contracts", "Communications plan"]) {
+    for (const label of ["Stakeholders", "Vendors and contracts", "Communications plan", "Logged costs", "Meetings", "Documents"]) {
       expect(src).toContain(`aria-label="${label}"`);
     }
     for (const label of ["Issues", "Risks", "Assumptions", "Dependencies", "Quality items", "Compliance items"]) {

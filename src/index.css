@@ -2338,7 +2338,7 @@ a:hover { color: var(--navy); }
    never moves the pill or the date. Same tokens as the Today look, dark mode included. */
 .rg-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--border); }
 .rg-row::before { content: none; }
-.rg-row { display: grid; grid-template-columns: minmax(0, 1fr) 92px 116px 92px 150px auto; column-gap: 10px; align-items: center; padding: 10px 2px; border-bottom: 1px solid var(--border); min-width: 0; }
+.rg-row { display: grid; grid-template-columns: minmax(0, 1fr) 92px 116px 92px 150px 116px; column-gap: 10px; align-items: center; padding: 10px 2px; border-bottom: 1px solid var(--border); min-width: 0; }
 .rg-main { min-width: 0; display: flex; align-items: flex-start; gap: 8px; }
 .rg-text { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .rg-title { font-weight: 600; color: var(--navy); overflow-wrap: anywhere; }
@@ -2397,3 +2397,6 @@ a:hover { color: var(--navy); }
 .billing-card.tw-card { padding: 16px 18px; box-shadow: none; background: var(--panel); }
 .billing-addons.tw-card { padding: 16px 18px; }
 .billing-addons .ui-card-title { margin: 0 0 6px; }
+.rg-detail { list-style: none; border-bottom: 1px solid var(--border); }
+.rg-detail::before { content: none; }
+.rg-amount { font-variant-numeric: tabular-nums; color: var(--navy); }

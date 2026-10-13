@@ -4537,23 +4537,25 @@ function BudgetTab({ projectId, onOpenTab }: { projectId: string; onOpenTab: (ta
         <button className="btn btn-primary">Add cost</button>
       </AddForm>
 
-      <ResizableTable id="budget">
-        <thead>
-          <tr><th>Description</th><th>Amount</th><th>Date</th></tr>
-        </thead>
-        <tbody>
+      <RegisterSummary>
+        {costEntries.length} logged {costEntries.length === 1 ? "cost" : "costs"}
+        {" \u00b7 "}{fmtMoney(costEntries.reduce((n, c) => n + Number(c.amount), 0))} total
+      </RegisterSummary>
+      {costEntries.length === 0 ? (
+        <RegisterEmpty>No costs logged yet. Add one above to start tracking spend.</RegisterEmpty>
+      ) : (
+        <ul className="rg-list" aria-label="Logged costs">
           {costEntries.map((c) => (
-            <tr key={c.id}>
-              <td>{c.description}</td>
-              <td>{fmtMoney(Number(c.amount))}</td>
-              <td>{c.incurred_date}</td>
-            </tr>
+            <RegisterRow
+              key={c.id}
+              title={c.description}
+              pill={<strong className="rg-amount">{fmtMoney(Number(c.amount))}</strong>}
+              date={fmtLocalDate(c.incurred_date)}
+              dateLabel="Incurred"
+            />
           ))}
-          {costEntries.length === 0 && (
-            <tr><td colSpan={3} className="muted">No costs logged yet. Add one above to start tracking spend.</td></tr>
-          )}
-        </tbody>
-      </ResizableTable>
+        </ul>
+      )}
     </div>
   );
 }
@@ -5181,32 +5183,36 @@ function MeetingsTab({ projectId }: { projectId: string }) {
       </AddForm>
       {error && <p className="form-error">{error}</p>}
 
-      <ResizableTable id="meetings" style={{ marginTop: 20 }}>
-        <thead>
-          <tr><th>Meeting</th><th>Type</th><th>Date</th><th>Action items</th><th><span className="sr-only">Actions</span></th></tr>
-        </thead>
-        <tbody>
-          {meetings.map((m) => (
-            <Fragment key={m.id}>
-              <tr>
-                <td>{m.title}</td>
-                <td><span className="pill pill-navy">{MEETING_TYPE_LABEL[m.meeting_type]}</span></td>
-                <td className="muted">{fmtLocalDate(m.meeting_date)}</td>
-                <td className="muted">
-                  {m.action_items?.length
-                    ? `${m.action_items.filter((it) => it.done).length}/${m.action_items.length} done`
-                    : "--"}
-                </td>
-                <td className="row-actions">
-                  <button className="btn-link" type="button" onClick={() => expand(m)}>
-                    {expandedId === m.id ? "Close" : "View"}
-                  </button>
-                  <button className="btn-link btn-link-danger" type="button" onClick={() => removeMeeting(m)}>Delete</button>
-                </td>
-              </tr>
-              {expandedId === m.id && (
-                <tr>
-                  <td colSpan={5}>
+      <RegisterSummary>
+        {meetings.length} {meetings.length === 1 ? "meeting" : "meetings"}
+        {" \u00b7 "}{meetings.reduce((n, m) => n + (m.action_items || []).filter((it) => !it.done).length, 0)} open action items
+      </RegisterSummary>
+      {meetings.length === 0 ? (
+        <RegisterEmpty>No meetings logged yet. Add one above to start a record.</RegisterEmpty>
+      ) : (
+        <ul className="rg-list" aria-label="Meetings">
+          {meetings.map((m) => {
+            const open = (m.action_items || []).filter((it) => !it.done).length;
+            return (
+              <Fragment key={m.id}>
+                <RegisterRow
+                  title={m.title}
+                  meta={m.action_items?.length ? `${m.action_items.filter((it) => it.done).length}/${m.action_items.length} action items done` : "No action items"}
+                  pill={<span className="pill pill-navy">{MEETING_TYPE_LABEL[m.meeting_type]}</span>}
+                  flag={open > 0 ? { text: `${open} open ${open === 1 ? "action" : "actions"}`, bad: true } : null}
+                  date={fmtLocalDate(m.meeting_date)}
+                  dateLabel="Held"
+                  actions={
+                    <>
+                      <button className="btn-link" type="button" onClick={() => expand(m)}>
+                        {expandedId === m.id ? "Close" : "View"}
+                      </button>
+                      <button className="btn-link btn-link-danger" type="button" onClick={() => removeMeeting(m)}>Delete</button>
+                    </>
+                  }
+                />
+                {expandedId === m.id && (
+                  <li className="rg-detail">
                     <div className="settings-card" style={{ margin: "6px 0 14px" }}>
                       <label>Attendees</label>
                       <input aria-label="Attendees" value={editAttendees} onChange={(e) => setEditAttendees(e.target.value)} placeholder="Who was there" />
@@ -5252,16 +5258,13 @@ function MeetingsTab({ projectId }: { projectId: string }) {
                         <button className="btn btn-ghost" type="button" onClick={() => addActionItem(m)}>Add</button>
                       </div>
                     </div>
-                  </td>
-                </tr>
-              )}
-            </Fragment>
-          ))}
-          {meetings.length === 0 && (
-            <tr><td colSpan={5} className="muted">No meetings logged yet. Add one above to start a record.</td></tr>
-          )}
-        </tbody>
-      </ResizableTable>
+                  </li>
+                )}
+              </Fragment>
+            );
+          })}
+        </ul>
+      )}
     </div>
   );
 }
@@ -5382,40 +5385,42 @@ function DocumentsTab({ projectId }: { projectId: string }) {
         </p>
       )}
 
-      <ResizableTable id="documents" style={{ marginTop: 20 }}>
-        <thead>
-          <tr><th>File</th><th>Type</th><th>Size</th><th>Uploaded by</th><th>Uploaded</th><th><span className="sr-only">Actions</span></th></tr>
-        </thead>
-        <tbody>
+      <RegisterSummary>
+        {documents.length} {documents.length === 1 ? "document" : "documents"}
+      </RegisterSummary>
+      {documents.length === 0 ? (
+        <RegisterEmpty>No documents uploaded yet. Add one above to start building a reference library.</RegisterEmpty>
+      ) : (
+        <ul className="rg-list" aria-label="Documents">
           {documents.map((doc) => {
             const ext = doc.filename.includes(".") ? doc.filename.split(".").pop()!.toUpperCase() : "FILE";
             return (
-              <tr key={doc.id}>
-                <td>
+              <RegisterRow
+                key={doc.id}
+                title={
                   <a href={api.documentDownloadUrl(doc.id)} target="_blank" rel="noreferrer">
                     {doc.filename}
                   </a>
-                </td>
-                <td><span className="pill pill-navy">{ext}</span></td>
-                <td className="muted">{fmtBytes(doc.size_bytes)}</td>
-                <td className="muted">{doc.uploaded_by_email || "--"}</td>
-                <td className="muted">{fmtDate(doc.created_at)}</td>
-                <td className="row-actions">
-                  <a className="btn-link" href={api.documentDownloadUrl(doc.id)} target="_blank" rel="noreferrer">
-                    {doc.previewable ? "Preview" : "Download"}
-                  </a>
-                  <button className="btn-link btn-link-danger" type="button" onClick={() => removeDocument(doc)}>
-                    Delete
-                  </button>
-                </td>
-              </tr>
+                }
+                meta={`${fmtBytes(doc.size_bytes)} \u00b7 ${doc.uploaded_by_email || "Unknown uploader"}`}
+                pill={<span className="pill pill-navy">{ext}</span>}
+                date={fmtDate(doc.created_at)}
+                dateLabel="Uploaded"
+                actions={
+                  <>
+                    <a className="btn-link" href={api.documentDownloadUrl(doc.id)} target="_blank" rel="noreferrer">
+                      {doc.previewable ? "Preview" : "Download"}
+                    </a>
+                    <button className="btn-link btn-link-danger" type="button" onClick={() => removeDocument(doc)}>
+                      Delete
+                    </button>
+                  </>
+                }
+              />
             );
           })}
-          {documents.length === 0 && (
-            <tr><td colSpan={6} className="muted">No documents uploaded yet. Add one above to start building a reference library.</td></tr>
-          )}
-        </tbody>
-      </ResizableTable>
+        </ul>
+      )}
     </div>
   );
 }
