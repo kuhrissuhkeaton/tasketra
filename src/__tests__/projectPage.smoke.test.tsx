@@ -153,10 +153,10 @@ describe("project page smoke test", () => {
       return undefined;
     });
     expect(errors, errors.join("\n---\n")).toEqual([]);
-    const rows = [...host.querySelectorAll("tbody tr")];
+    const rows = [...host.querySelectorAll("li.rg-row")];
     expect(rows.length).toBe(3);
     for (const r of rows) {
-      const actions = r.querySelector("td.row-actions");
+      const actions = r.querySelector(".rg-actions");
       expect(actions?.textContent).toContain("Details");
       // + Sub-task and Delete live in the row's "..." menu.
       const menuBtn = actions?.querySelector<HTMLButtonElement>("button.row-menu-btn");
@@ -166,8 +166,34 @@ describe("project page smoke test", () => {
       expect(labels).toEqual(["+ Sub-task", "Delete"]);
       await act(async () => menuBtn!.click());
       // The old floating "+" next to the title is gone.
-      expect(r.querySelector("td:first-child .wbs-add-btn")).toBeNull();
+      expect(r.querySelector(".wbs-add-btn")).toBeNull();
     }
+  });
+
+  it("Tasks tab: grouped by due date, with a late flag in its own column, a Sort control, and Board still one click away", async () => {
+    const d = (n: number) => { const x = new Date(); x.setDate(x.getDate() + n); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`; };
+    const task = (id: string, title: string, due: string | null, status = "not_started") => ({
+      id, title, description: null, status, owner_name: null, start_date: null,
+      due_date: due, stakeholder_id: null, parent_task_id: null, roadmap_item_id: null,
+    });
+    await mountProject("standard", "tasks", (url) => {
+      if (/\/api\/tasks\?projectId=/.test(url)) {
+        return { tasks: [task("a", "Late one", d(-3)), task("b", "Soon one", d(2)), task("c", "Far one", d(40)), task("e", "Finished", d(-9), "done")] };
+      }
+      if (/\/api\/raid-task-links/.test(url)) return { riskLinks: [], issueLinks: [] };
+      if (/\/api\/task-dependencies/.test(url)) return { links: [] };
+      if (/\/api\/roadmap\?/.test(url)) return { items: [] };
+      return undefined;
+    });
+    expect(errors, errors.join("\n---\n")).toEqual([]);
+    const heads = [...host.querySelectorAll("summary.rg-group-head h2")].map((h) => h.textContent);
+    expect(heads).toEqual(["Overdue", "Next 7 days", "Later", "Done"]);
+    const open = [...host.querySelectorAll("details.rg-group")].map((x) => (x as HTMLDetailsElement).open);
+    expect(open).toEqual([true, true, false, false]);
+    const late = host.querySelector('details.rg-group li.rg-row [data-slot="flag"]');
+    expect(late?.textContent).toBe("3 days late");
+    expect(host.querySelector('select[aria-label="Sort tasks by"]')).not.toBeNull();
+    expect([...host.querySelectorAll("button")].some((b) => b.textContent === "Board")).toBe(true);
   });
 
   it("the skip link moves focus to the main content", async () => {

@@ -104,6 +104,12 @@ export function RaciTab({ projectId }: { projectId: string }) {
         </div>
       )}
 
+      <ul className="raci-legend raci-legend-inline" aria-label="RACI legend">
+        {RACI_LEGEND.map((l) => (
+          <li key={l.role}><span className={`raci-key raci-${l.role}`}>{l.role}</span> {l.text}</li>
+        ))}
+      </ul>
+
       {data.rows.length === 0 ? (
         <p className="muted">Add phases or milestones on the Roadmap tab and they will appear here as rows.</p>
       ) : data.people.length === 0 ? (
@@ -166,11 +172,6 @@ export function RaciTab({ projectId }: { projectId: string }) {
         </div>
       )}
 
-      <ul className="raci-legend" style={{ marginTop: 16 }}>
-        {RACI_LEGEND.map((l) => (
-          <li key={l.role}><span className={`raci-key raci-${l.role}`}>{l.role}</span> {l.text}</li>
-        ))}
-      </ul>
     </div>
   );
 }

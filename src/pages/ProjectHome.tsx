@@ -22,6 +22,9 @@ import { AppSidebar } from "../components/AppSidebar";
 import { NAV_GROUPS, STRIP_TABS, groupOf, sectionLabel, visibleGroups } from "../lib/projectNav";
 import { useConfirm } from "../components/ConfirmDialog";
 import { ResizableTable } from "../components/ResizableTable";
+import { RegisterRow, RegisterSummary, RegisterEmpty } from "../components/ui";
+import { daysUntil, lateFlag, expiryFlag } from "../lib/rowFlags";
+import { groupTasks, groupOfTask, isTaskSort, TASK_SORT_LABEL, TASK_GROUPS_OPEN_BY_DEFAULT, type TaskSort, type TaskGroupId } from "../lib/taskGroups";
 import { avatarColor, initials } from "../lib/avatar";
 import { TourOverlay, useProductTour } from "../components/ProductTour";
 import { FirstRunChecklist } from "../components/FirstRunChecklist";
@@ -114,8 +117,8 @@ function buildTaskRows(tasks: Task[]): { task: Task; depth: number }[] {
 // read state and its edit state (same key, different <tr>), so the jump
 // still finds the row after startEdit() swaps which one is rendered.
 function useRowHighlight() {
-  const rowRefs = useRef<Map<string, HTMLTableRowElement>>(new Map());
-  function setRowRef(id: string, el: HTMLTableRowElement | null) {
+  const rowRefs = useRef<Map<string, HTMLElement>>(new Map());
+  function setRowRef(id: string, el: HTMLElement | null) {
     if (el) rowRefs.current.set(id, el);
     else rowRefs.current.delete(id);
   }
@@ -560,8 +563,34 @@ function TodayTab({ projectId }: { projectId: string }) {
     data.urgentIssues.length === 0 &&
     data.urgentRisks.length === 0;
 
+  // "Start here": the single most useful next click, taken from what is already on this page.
+  const focus: { title: string; meta: string; tab: string; id: string } | null =
+    data.blockedTasks[0]
+      ? { title: data.blockedTasks[0].title, meta: `Blocked ${daysAgo(data.blockedTasks[0].updated_at)} days \u00b7 can you unblock it?`, tab: "tasks", id: data.blockedTasks[0].id }
+      : data.awaitingDecisions[0]
+        ? { title: data.awaitingDecisions[0].title, meta: `Waiting on a stakeholder ${daysAgo(data.awaitingDecisions[0].created_at)} days`, tab: "decisions", id: data.awaitingDecisions[0].id }
+        : data.urgentIssues[0]
+          ? { title: data.urgentIssues[0].title, meta: "High-severity issue still open", tab: "issues", id: data.urgentIssues[0].id }
+          : data.urgentRisks[0]
+            ? { title: data.urgentRisks[0].title, meta: "High-exposure risk", tab: "risks", id: data.urgentRisks[0].id }
+            : data.staleTasks[0]
+              ? { title: data.staleTasks[0].title, meta: `No movement in ${daysAgo(data.staleTasks[0].updated_at)} days`, tab: "tasks", id: data.staleTasks[0].id }
+              : null;
+
   return (
     <div>
+      {focus && (
+        <section className="tw-focus overview-focus" aria-label="Start here">
+          <div>
+            <span className="tw-focus-label">Start here</span>
+            <h2>{focus.title}</h2>
+            <span className="tw-focus-meta">{focus.meta}</span>
+          </div>
+          <div className="tw-focus-actions">
+            <button type="button" className="btn btn-primary" onClick={() => setParams({ tab: focus.tab, highlight: focus.id })}>Open</button>
+          </div>
+        </section>
+      )}
       {nothingToShow && data.taskCount === 0 && (
         <div className="today-section">
           <p className="muted">
@@ -584,7 +613,7 @@ function TodayTab({ projectId }: { projectId: string }) {
 
       {data.blockedTasks.length > 0 && (
         <div className="today-section">
-          <h4>Blocked tasks</h4>
+          <h3>Blocked tasks</h3>
           <ul className="today-list">
             {data.blockedTasks.map((t) => (
               <li key={t.id} className="today-list-row">
@@ -635,7 +664,7 @@ function TodayTab({ projectId }: { projectId: string }) {
 
       {data.staleTasks.length > 0 && (
         <div className="today-section">
-          <h4>No movement in 3+ days</h4>
+          <h3>No movement in 3+ days</h3>
           <ul className="today-list">
             {data.staleTasks.map((t) => (
               <li key={t.id} className="today-list-row">
@@ -685,7 +714,7 @@ function TodayTab({ projectId }: { projectId: string }) {
 
       {data.awaitingDecisions.length > 0 && (
         <div className="today-section">
-          <h4>Decisions waiting on a stakeholder</h4>
+          <h3>Decisions waiting on a stakeholder</h3>
           <ul className="today-list">
             {data.awaitingDecisions.map((d) => (
               <li key={d.id} className="today-list-row">
@@ -707,7 +736,7 @@ function TodayTab({ projectId }: { projectId: string }) {
 
       {data.urgentIssues.length > 0 && (
         <div className="today-section">
-          <h4>High-severity issues still open</h4>
+          <h3>High-severity issues still open</h3>
           <ul className="today-list">
             {data.urgentIssues.map((i) => (
               <li key={i.id} className="today-list-row">
@@ -757,7 +786,7 @@ function TodayTab({ projectId }: { projectId: string }) {
 
       {data.urgentRisks.length > 0 && (
         <div className="today-section">
-          <h4>High-exposure risks</h4>
+          <h3>High-exposure risks</h3>
           <ul className="today-list">
             {data.urgentRisks.map((r) => (
               <li key={r.id} className="today-list-row">
@@ -945,6 +974,26 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
   const [editDescription, setEditDescription] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  // Sort (remembered in this browser only) and which groups are open. Groups other than
+  // Overdue / Next 7 days start collapsed with a count.
+  const [sortBy, setSortBy] = useState<TaskSort>(() => {
+    try {
+      const v = window.localStorage.getItem("tasketra.tasks.sort");
+      return isTaskSort(v) ? v : "due";
+    } catch { return "due"; }
+  });
+  const [groupToggled, setGroupToggled] = useState<Record<string, boolean>>({});
+  function changeSort(v: string) {
+    if (!isTaskSort(v)) return;
+    setSortBy(v);
+    try { window.localStorage.setItem("tasketra.tasks.sort", v); } catch { /* storage unavailable: the choice just won't be remembered */ }
+  }
+  function isGroupOpen(id: TaskGroupId) {
+    return id in groupToggled ? groupToggled[id] : TASK_GROUPS_OPEN_BY_DEFAULT.includes(id);
+  }
+  function setGroupOpen(id: TaskGroupId, open: boolean) {
+    setGroupToggled((prev) => (prev[id] === open ? prev : { ...prev, [id]: open }));
+  }
 
   async function load() {
     const [{ tasks }, { riskLinks, issueLinks }, { links: taskLinks }, roadmap] = await Promise.all([
@@ -973,6 +1022,7 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
     const match = tasks.find((t) => t.id === highlightId);
     if (!match) return;
     if (view !== "list") setView("list");
+    setGroupOpen(groupOfTask(match), true);
     openDrawer(match);
     jumpTo(highlightId);
     setLocalParams((prev) => {
@@ -1070,6 +1120,7 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
 
   const taskById = new Map(tasks.map((t) => [t.id, t]));
   const phaseById = new Map(phases.map((p) => [p.id, p]));
+  const taskGroupList = groupTasks(tasks, sortBy);
   const drawerTask = drawerTaskId ? taskById.get(drawerTaskId) || null : null;
   // A task's "blocked by" list -- risks/issues that named this task via the
   // Blocks-tasks control in their own drawer. Linking only happens from the
@@ -1184,84 +1235,104 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
       </div>
 
       {view === "list" ? (
-        <ResizableTable id="tasks" minColWidths={[220, 110, 110, 150, 0]}>
-          <thead>
-            <tr><th>Task</th><th>Owner</th><th>Due</th><th>Status</th><th><span className="sr-only">Actions</span></th></tr>
-          </thead>
-          <tbody>
-            {buildTaskRows(tasks).map(({ task: t, depth }) => (
-              <Fragment key={t.id}>
-                <tr ref={(el) => setRowRef(t.id, el)}>
-                  <td>
-                    <span className="wbs-cell" style={{ paddingLeft: depth * 20 }}>
-                      {depth > 0 && <span className="wbs-connector">&#8627;</span>}
-                      <button type="button" className="row-title-btn" onClick={() => openDrawer(t)}>{t.title}</button>
-                    </span>
-                    {t.roadmap_item_id && phaseById.get(t.roadmap_item_id) && (
-                      // The phase always sits on its own line under the title,
-                      // lined up with the title text, so it never wanders.
-                      <div className="task-phase-line" style={{ paddingLeft: depth * 20 + (depth > 0 ? 18 : 0) }}>
-                        <span className="pill pill-navy task-phase-pill" title={`Roadmap phase: ${phaseById.get(t.roadmap_item_id)!.title}`}>
-                          {phaseById.get(t.roadmap_item_id)!.title}
-                        </span>
-                      </div>
-                    )}
-                  </td>
-                  <td>{t.owner_name || "--"}</td>
-                  <td>{t.due_date ? fmtLocalDate(t.due_date) : "--"}</td>
-                  <td>
-                    <select aria-label="Status"
-                      className={`status-select status-select-${t.status}`}
-                      value={t.status}
-                      onChange={(e) => setStatus(t.id, e.target.value as Task["status"])}
-                    >
-                      {Object.entries(STATUS_LABEL).map(([value, label]) => (
-                        <option key={value} value={value}>{label}</option>
-                      ))}
-                    </select>
-                  </td>
-                  <td className="row-actions">
-                    <button className="btn-link" type="button" onClick={() => openDrawer(t)}>Details</button>
-                    <RowActionsMenu
-                      label={`More actions for ${t.title}`}
-                      items={[
-                        { label: "+ Sub-task", onSelect: () => setAddingSubtaskFor(addingSubtaskFor === t.id ? null : t.id) },
-                        { label: "Delete", danger: true, onSelect: () => removeTask(t.id, t.title) },
-                      ]}
-                    />
-                  </td>
-                </tr>
-                {addingSubtaskFor === t.id && (
-                  <tr>
-                    <td colSpan={5}>
-                      <AddForm
-                        className="inline-form inline-form-wide"
-                        style={{ marginLeft: (depth + 1) * 20, marginBottom: 0 }}
-                        onSubmit={(e) => addSubtask(e, t.id)}
-                      >
-                        <input aria-label="Sub-task title" aria-required="true" placeholder="Sub-task title" value={subTitle} onChange={(e) => setSubTitle(e.target.value)} autoFocus />
-                        <input aria-label="Owner (optional)" placeholder="Owner (optional)" value={subOwner} onChange={(e) => setSubOwner(e.target.value)} />
-                        <span className="datefield">
-                          <span className="datefield-label" aria-hidden="true">Start</span>
-                          <input type="date" title="Start date (optional)" aria-label="Start date (optional)" value={subStart} onChange={(e) => setSubStart(e.target.value)} />
-                        </span>
-                        <span className="datefield">
-                          <span className="datefield-label" aria-hidden="true">Due</span>
-                          <input type="date" title="Due date" aria-label="Due date" value={subDue} onChange={(e) => setSubDue(e.target.value)} />
-                        </span>
-                        <button className="btn btn-primary">Add</button>
-                        <button className="btn btn-ghost" type="button" onClick={() => setAddingSubtaskFor(null)}>Cancel</button>
-                      </AddForm>
-                    </td>
-                  </tr>
-                )}
-              </Fragment>
-            ))}
-            {tasks.length === 0 && (
-              <tr><td colSpan={5} className="muted">No tasks yet. Add one above to get started.</td></tr>
-            )}
-          </tbody>
-        </ResizableTable>
+        <>
+          <div className="rg-toolbar">
+            <RegisterSummary>
+              {tasks.length} {tasks.length === 1 ? "task" : "tasks"}
+              {" \u00b7 "}{tasks.filter((t) => groupOfTask(t) === "overdue").length} overdue
+              {" \u00b7 "}{tasks.filter((t) => groupOfTask(t) === "week").length} due in the next 7 days
+            </RegisterSummary>
+            <label className="rg-sort">
+              <span>Sort by</span>
+              <select aria-label="Sort tasks by" value={sortBy} onChange={(e) => changeSort(e.target.value)}>
+                {(Object.keys(TASK_SORT_LABEL) as TaskSort[]).map((k) => (
+                  <option key={k} value={k}>{TASK_SORT_LABEL[k]}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+          {tasks.length === 0 ? (
+            <RegisterEmpty>No tasks yet. Add one above to get started.</RegisterEmpty>
+          ) : (
+            taskGroupList.map((g) => (
+              <details
+                key={g.id}
+                className="rg-group"
+                open={isGroupOpen(g.id)}
+                onToggle={(e) => setGroupOpen(g.id, (e.currentTarget as HTMLDetailsElement).open)}
+              >
+                <summary className="rg-group-head">
+                  <h2>{g.label}</h2>
+                  <span className="muted tw-count">{g.tasks.length}</span>
+                </summary>
+                <ul className="rg-list" aria-label={`${g.label} tasks`}>
+                  {g.tasks.map((t) => {
+                    const parent = t.parent_task_id ? taskById.get(t.parent_task_id) : null;
+                    const phase = t.roadmap_item_id ? phaseById.get(t.roadmap_item_id) : null;
+                    return (
+                      <Fragment key={t.id}>
+                        <RegisterRow
+                          rowRef={(el) => setRowRef(t.id, el)}
+                          title={<button type="button" className="row-title-btn" onClick={() => openDrawer(t)}>{t.title}</button>}
+                          meta={<>{t.owner_name || "No owner"}{parent ? ` \u00b7 Sub-task of ${parent.title}` : ""}</>}
+                          pill={phase ? <span className="pill pill-navy task-phase-pill" title={`Roadmap phase: ${phase.title}`}>{phase.title}</span> : null}
+                          flag={lateFlag(t.due_date, t.status !== "done")}
+                          date={t.due_date ? fmtLocalDate(t.due_date) : null}
+                          dateLabel="Due"
+                          control={
+                            <select aria-label="Status"
+                              className={`status-select status-select-${t.status}`}
+                              value={t.status}
+                              onChange={(e) => setStatus(t.id, e.target.value as Task["status"])}
+                            >
+                              {Object.entries(STATUS_LABEL).map(([value, label]) => (
+                                <option key={value} value={value}>{label}</option>
+                              ))}
+                            </select>
+                          }
+                          actions={
+                            <>
+                              <button className="btn-link" type="button" onClick={() => openDrawer(t)}>Details</button>
+                              <RowActionsMenu
+                                label={`More actions for ${t.title}`}
+                                items={[
+                                  { label: "+ Sub-task", onSelect: () => setAddingSubtaskFor(addingSubtaskFor === t.id ? null : t.id) },
+                                  { label: "Delete", danger: true, onSelect: () => removeTask(t.id, t.title) },
+                                ]}
+                              />
+                            </>
+                          }
+                        />
+                        {addingSubtaskFor === t.id && (
+                          <li className="rg-edit">
+                            <AddForm
+                              className="inline-form inline-form-wide"
+                              style={{ marginBottom: 0 }}
+                              onSubmit={(e) => addSubtask(e, t.id)}
+                            >
+                              <input aria-label="Sub-task title" aria-required="true" placeholder="Sub-task title" value={subTitle} onChange={(e) => setSubTitle(e.target.value)} autoFocus />
+                              <input aria-label="Owner (optional)" placeholder="Owner (optional)" value={subOwner} onChange={(e) => setSubOwner(e.target.value)} />
+                              <span className="datefield">
+                                <span className="datefield-label" aria-hidden="true">Start</span>
+                                <input type="date" title="Start date (optional)" aria-label="Start date (optional)" value={subStart} onChange={(e) => setSubStart(e.target.value)} />
+                              </span>
+                              <span className="datefield">
+                                <span className="datefield-label" aria-hidden="true">Due</span>
+                                <input type="date" title="Due date" aria-label="Due date" value={subDue} onChange={(e) => setSubDue(e.target.value)} />
+                              </span>
+                              <button className="btn btn-primary">Add</button>
+                              <button className="btn btn-ghost" type="button" onClick={() => setAddingSubtaskFor(null)}>Cancel</button>
+                            </AddForm>
+                          </li>
+                        )}
+                      </Fragment>
+                    );
+                  })}
+                </ul>
+              </details>
+            ))
+          )}
+        </>
       ) : view === "board" ? (
         <div className="kanban-board">
           {(Object.keys(STATUS_LABEL) as Task["status"][]).map((status) => (
@@ -1782,46 +1853,54 @@ function IssuesTab({ projectId, highlightId }: { projectId: string; highlightId?
           ))}
         </div>
       ) : (
-      <ResizableTable id="raid-issues">
-        <thead>
-          <tr><th>Issue</th><th>Severity</th><th>Owner</th><th>Status</th><th><span className="sr-only">Actions</span></th></tr>
-        </thead>
-        <tbody>
-          {issues.map((i) => (
-            <tr key={i.id} ref={(el) => setRowRef(i.id, el)}>
-              <td>
-                <button type="button" className="row-title-btn" onClick={() => openDrawer(i)}>{i.title}</button>
-                {i.status === "resolved" && i.resolution && (
-                  <div className="muted">Resolved: {i.resolution}</div>
-                )}
-              </td>
-              <td><span className={`pill ${SEVERITY_PILL[i.severity]}`}>{SEVERITY_LABEL[i.severity]}</span></td>
-              <td>{i.owner_name || "--"}</td>
-              <td>
-                <select aria-label="Status"
-                  className={`status-select status-select-${i.status}`}
-                  value={i.status}
-                  onChange={(e) => setStatus(i.id, e.target.value as Issue["status"])}
-                >
-                  {Object.entries(ISSUE_STATUS_LABEL).map(([value, label]) => (
-                    <option key={value} value={value}>{label}</option>
-                  ))}
-                </select>
-              </td>
-              <td className="row-actions">
-                <button className="btn-link" type="button" onClick={() => openDrawer(i)}>Details</button>
-                <RowActionsMenu
-                  label={`More actions for ${i.title}`}
-                  items={[{ label: "Delete", danger: true, onSelect: () => removeIssue(i.id, i.title) }]}
-                />
-              </td>
-            </tr>
-          ))}
-          {issues.length === 0 && (
-            <tr><td colSpan={5} className="muted">No issues logged yet. Add one above when something goes wrong or gets in the way.</td></tr>
-          )}
-        </tbody>
-      </ResizableTable>
+      <>
+      <RegisterSummary>
+        {issues.filter((i) => i.status !== "resolved").length} open
+        {" \u00b7 "}{issues.filter((i) => i.status !== "resolved" && (i.severity === "high" || i.severity === "critical")).length} high or critical
+        {" \u00b7 "}{issues.filter((i) => i.status === "resolved").length} resolved
+      </RegisterSummary>
+      {issues.length === 0 ? (
+        <RegisterEmpty>No issues logged yet. Add one above when something goes wrong or gets in the way.</RegisterEmpty>
+      ) : (
+        <ul className="rg-list" aria-label="Issues">
+          {issues.map((i) => {
+            const blocks = issueLinks.filter((l) => l.issue_id === i.id).length;
+            return (
+              <RegisterRow
+                key={i.id}
+                rowRef={(el) => setRowRef(i.id, el)}
+                title={<button type="button" className="row-title-btn" onClick={() => openDrawer(i)}>{i.title}</button>}
+                meta={<>{i.owner_name || "No owner"}{i.status === "resolved" && i.resolution ? ` \u00b7 Resolved: ${i.resolution}` : ""}</>}
+                pill={<span className={`pill ${SEVERITY_PILL[i.severity]}`}>{SEVERITY_LABEL[i.severity]}</span>}
+                flag={blocks > 0 ? { text: `Blocks ${blocks} ${blocks === 1 ? "task" : "tasks"}`, bad: i.status !== "resolved" } : null}
+                date={fmtLocalDate(i.created_at)}
+                dateLabel="Logged"
+                control={
+                  <select aria-label="Status"
+                    className={`status-select status-select-${i.status}`}
+                    value={i.status}
+                    onChange={(e) => setStatus(i.id, e.target.value as Issue["status"])}
+                  >
+                    {Object.entries(ISSUE_STATUS_LABEL).map(([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
+                  </select>
+                }
+                actions={
+                  <>
+                    <button className="btn-link" type="button" onClick={() => openDrawer(i)}>Details</button>
+                    <RowActionsMenu
+                      label={`More actions for ${i.title}`}
+                      items={[{ label: "Delete", danger: true, onSelect: () => removeIssue(i.id, i.title) }]}
+                    />
+                  </>
+                }
+              />
+            );
+          })}
+        </ul>
+      )}
+      </>
       )}
 
       <Drawer
@@ -2203,24 +2282,30 @@ function RisksTab({ projectId, highlightId }: { projectId: string; highlightId?:
           ))}
         </div>
       ) : (
-      <ResizableTable id="raid-risks">
-        <thead>
-          <tr><th>Risk</th><th>Exposure</th><th>Owner</th><th>Status</th><th><span className="sr-only">Actions</span></th></tr>
-        </thead>
-        <tbody>
+      <>
+      <RegisterSummary>
+        {risks.filter((r) => r.status !== "resolved").length} open
+        {" \u00b7 "}{risks.filter((r) => r.status !== "resolved" && riskExposure(r.probability, r.impact) === "high").length} high exposure
+        {" \u00b7 "}{risks.filter((r) => r.status === "resolved").length} resolved
+      </RegisterSummary>
+      {risks.length === 0 ? (
+        <RegisterEmpty>No risks logged yet. Add one above if something's worth tracking.</RegisterEmpty>
+      ) : (
+        <ul className="rg-list" aria-label="Risks">
           {risks.map((r) => (
-            <tr key={r.id} ref={(el) => setRowRef(r.id, el)}>
-              <td>
-                <button type="button" className="row-title-btn" onClick={() => openDrawer(r)}>{r.title}</button>
-                {r.mitigation && <div className="muted">Mitigation: {r.mitigation}</div>}
-              </td>
-              <td>
+            <RegisterRow
+              key={r.id}
+              rowRef={(el) => setRowRef(r.id, el)}
+              title={<button type="button" className="row-title-btn" onClick={() => openDrawer(r)}>{r.title}</button>}
+              meta={<>{r.owner_name || "No owner"}{r.mitigation ? ` \u00b7 Mitigation: ${r.mitigation}` : ""}</>}
+              pill={
                 <span className={`pill ${EXPOSURE_PILL[riskExposure(r.probability, r.impact)]}`}>
                   {LEVEL_LABEL[riskExposure(r.probability, r.impact)]}
                 </span>
-              </td>
-              <td>{r.owner_name || "--"}</td>
-              <td>
+              }
+              date={fmtLocalDate(r.created_at)}
+              dateLabel="Logged"
+              control={
                 <select aria-label="Status"
                   className={`status-select status-select-${r.status}`}
                   value={r.status}
@@ -2230,24 +2315,24 @@ function RisksTab({ projectId, highlightId }: { projectId: string; highlightId?:
                     <option key={value} value={value}>{label}</option>
                   ))}
                 </select>
-              </td>
-              <td className="row-actions">
-                <button className="btn-link" type="button" onClick={() => openDrawer(r)}>Details</button>
-                <RowActionsMenu
-                  label={`More actions for ${r.title}`}
-                  items={[
-                    ...(r.status !== "resolved" ? [{ label: "This became an issue", onSelect: () => promoteToIssue(r) }] : []),
-                    { label: "Delete", danger: true, onSelect: () => removeRisk(r.id, r.title) },
-                  ]}
-                />
-              </td>
-            </tr>
+              }
+              actions={
+                <>
+                  <button className="btn-link" type="button" onClick={() => openDrawer(r)}>Details</button>
+                  <RowActionsMenu
+                    label={`More actions for ${r.title}`}
+                    items={[
+                      ...(r.status !== "resolved" ? [{ label: "This became an issue", onSelect: () => promoteToIssue(r) }] : []),
+                      { label: "Delete", danger: true, onSelect: () => removeRisk(r.id, r.title) },
+                    ]}
+                  />
+                </>
+              }
+            />
           ))}
-          {risks.length === 0 && (
-            <tr><td colSpan={5} className="muted">No risks logged yet. Add one above if something's worth tracking.</td></tr>
-          )}
-        </tbody>
-      </ResizableTable>
+        </ul>
+      )}
+      </>
       )}
 
       <Drawer
@@ -2527,35 +2612,40 @@ function AssumptionsTab({ projectId }: { projectId: string }) {
           ))}
         </div>
       ) : (
-      <ResizableTable id="raid-assumptions">
-        <thead>
-          <tr><th>Assumption</th><th>Owner</th><th>Check by</th><th>Status</th><th><span className="sr-only">Actions</span></th></tr>
-        </thead>
-        <tbody>
+      <>
+      <RegisterSummary>
+        {assumptions.filter((a) => a.status === "unconfirmed").length} to check
+        {" \u00b7 "}{assumptions.filter((a) => a.status === "unconfirmed" && (daysUntil(a.check_by) ?? 1) < 0).length} past their check date
+        {" \u00b7 "}{assumptions.filter((a) => a.status === "confirmed").length} confirmed
+      </RegisterSummary>
+      {assumptions.length === 0 ? (
+        <RegisterEmpty>No assumptions logged yet. Add one above to track what you're taking for granted.</RegisterEmpty>
+      ) : (
+        <ul className="rg-list" aria-label="Assumptions">
           {assumptions.map((a) => (
             editingId === a.id ? (
-              <tr key={a.id}>
-                <td>
-                  <input aria-label="Statement" value={editStatement} onChange={(e) => setEditStatement(e.target.value)} style={{ marginBottom: 4 }} />
+              <li key={a.id} className="rg-edit">
+                <div className="rg-edit-fields">
+                  <input aria-label="Statement" value={editStatement} onChange={(e) => setEditStatement(e.target.value)} />
                   <textarea aria-label="Notes" value={editNotes} onChange={(e) => setEditNotes(e.target.value)} rows={2} placeholder="Notes" />
-                </td>
-                <td><input aria-label="Owner" value={editOwner} onChange={(e) => setEditOwner(e.target.value)} /></td>
-                <td><input aria-label="Check by" type="date" value={editCheckBy} onChange={(e) => setEditCheckBy(e.target.value)} /></td>
-                <td className="muted">{ASSUMPTION_STATUS_LABEL[a.status]}</td>
-                <td className="row-actions">
+                  <input aria-label="Owner" value={editOwner} onChange={(e) => setEditOwner(e.target.value)} />
+                  <input aria-label="Check by" type="date" value={editCheckBy} onChange={(e) => setEditCheckBy(e.target.value)} />
+                </div>
+                <div className="rg-edit-actions">
+                  <span className="muted">{ASSUMPTION_STATUS_LABEL[a.status]}</span>
                   <button className="btn btn-primary" type="button" onClick={() => saveEdit(a.id)}>Save</button>
                   <button className="btn btn-ghost" type="button" onClick={() => setEditingId(null)}>Cancel</button>
-                </td>
-              </tr>
+                </div>
+              </li>
             ) : (
-              <tr key={a.id}>
-                <td>
-                  {a.statement}
-                  {a.notes && <div className="muted">{a.notes}</div>}
-                </td>
-                <td>{a.owner_name || "--"}</td>
-                <td>{fmtLocalDate(a.check_by)}</td>
-                <td>
+              <RegisterRow
+                key={a.id}
+                title={a.statement}
+                meta={<>{a.owner_name || "No owner"}{a.notes ? ` \u00b7 ${a.notes}` : ""}</>}
+                flag={lateFlag(a.check_by, a.status === "unconfirmed")}
+                date={a.check_by ? fmtLocalDate(a.check_by) : null}
+                dateLabel="Check by"
+                control={
                   <select aria-label="Status"
                     className={`status-select status-select-${a.status}`}
                     value={a.status}
@@ -2565,22 +2655,22 @@ function AssumptionsTab({ projectId }: { projectId: string }) {
                       <option key={value} value={value}>{label}</option>
                     ))}
                   </select>
-                </td>
-                <td className="row-actions">
-                  <button className="btn-link" type="button" onClick={() => startEdit(a)}>Edit</button>
-                  <RowActionsMenu
-                    label={`More actions for ${a.statement}`}
-                    items={[{ label: "Delete", danger: true, onSelect: () => removeAssumption(a.id, a.statement) }]}
-                  />
-                </td>
-              </tr>
+                }
+                actions={
+                  <>
+                    <button className="btn-link" type="button" onClick={() => startEdit(a)}>Edit</button>
+                    <RowActionsMenu
+                      label={`More actions for ${a.statement}`}
+                      items={[{ label: "Delete", danger: true, onSelect: () => removeAssumption(a.id, a.statement) }]}
+                    />
+                  </>
+                }
+              />
             )
           ))}
-          {assumptions.length === 0 && (
-            <tr><td colSpan={5} className="muted">No assumptions logged yet. Add one above to track what you're taking for granted.</td></tr>
-          )}
-        </tbody>
-      </ResizableTable>
+        </ul>
+      )}
+      </>
       )}
     </div>
   );
@@ -2781,43 +2871,46 @@ function DependenciesTab({ projectId }: { projectId: string }) {
           ))}
         </div>
       ) : (
-      <ResizableTable id="raid-dependencies">
-        <thead>
-          <tr><th>Dependency</th><th>Direction</th><th>Owner</th><th>Needed by</th><th>Status</th><th><span className="sr-only">Actions</span></th></tr>
-        </thead>
-        <tbody>
+      <>
+      <RegisterSummary>
+        {dependencies.filter((d) => d.status !== "resolved").length} waiting
+        {" \u00b7 "}{dependencies.filter((d) => d.status !== "resolved" && (daysUntil(d.needed_by) ?? 1) < 0).length} late
+        {" \u00b7 "}{dependencies.filter((d) => d.status === "resolved").length} resolved
+      </RegisterSummary>
+      {dependencies.length === 0 ? (
+        <RegisterEmpty>No dependencies logged yet. Add one above if this project is waiting on something.</RegisterEmpty>
+      ) : (
+        <ul className="rg-list" aria-label="Dependencies">
           {dependencies.map((d) => (
             editingId === d.id ? (
-              <tr key={d.id}>
-                <td>
-                  <input aria-label="Title" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} style={{ marginBottom: 4 }} />
+              <li key={d.id} className="rg-edit">
+                <div className="rg-edit-fields">
+                  <input aria-label="Title" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
                   <textarea aria-label="Description" value={editDescription} onChange={(e) => setEditDescription(e.target.value)} rows={2} placeholder="Description" />
-                </td>
-                <td>
                   <select aria-label="Direction" value={editDirection} onChange={(e) => setEditDirection(e.target.value as Dependency["direction"])}>
                     {Object.entries(DEPENDENCY_DIRECTION_LABEL).map(([value, label]) => (
                       <option key={value} value={value}>{label}</option>
                     ))}
                   </select>
-                </td>
-                <td><input aria-label="Owner" value={editOwner} onChange={(e) => setEditOwner(e.target.value)} /></td>
-                <td><input aria-label="Needed by" type="date" value={editNeededBy} onChange={(e) => setEditNeededBy(e.target.value)} /></td>
-                <td className="muted">{DEPENDENCY_STATUS_LABEL[d.status]}</td>
-                <td className="row-actions">
+                  <input aria-label="Owner" value={editOwner} onChange={(e) => setEditOwner(e.target.value)} />
+                  <input aria-label="Needed by" type="date" value={editNeededBy} onChange={(e) => setEditNeededBy(e.target.value)} />
+                </div>
+                <div className="rg-edit-actions">
+                  <span className="muted">{DEPENDENCY_STATUS_LABEL[d.status]}</span>
                   <button className="btn btn-primary" type="button" onClick={() => saveEdit(d.id)}>Save</button>
                   <button className="btn btn-ghost" type="button" onClick={() => setEditingId(null)}>Cancel</button>
-                </td>
-              </tr>
+                </div>
+              </li>
             ) : (
-              <tr key={d.id}>
-                <td>
-                  {d.title}
-                  {d.description && <div className="muted">{d.description}</div>}
-                </td>
-                <td><span className="pill pill-navy">{DEPENDENCY_DIRECTION_LABEL[d.direction]}</span></td>
-                <td>{d.owner_name || "--"}</td>
-                <td>{fmtLocalDate(d.needed_by)}</td>
-                <td>
+              <RegisterRow
+                key={d.id}
+                title={d.title}
+                meta={<>{d.owner_name || "No owner"}{d.description ? ` \u00b7 ${d.description}` : ""}</>}
+                pill={<span className="pill pill-navy">{DEPENDENCY_DIRECTION_LABEL[d.direction]}</span>}
+                flag={lateFlag(d.needed_by, d.status !== "resolved")}
+                date={d.needed_by ? fmtLocalDate(d.needed_by) : null}
+                dateLabel="Needed by"
+                control={
                   <select aria-label="Status"
                     className={`status-select status-select-${d.status}`}
                     value={d.status}
@@ -2827,22 +2920,22 @@ function DependenciesTab({ projectId }: { projectId: string }) {
                       <option key={value} value={value}>{label}</option>
                     ))}
                   </select>
-                </td>
-                <td className="row-actions">
-                  <button className="btn-link" type="button" onClick={() => startEdit(d)}>Edit</button>
-                  <RowActionsMenu
-                    label={`More actions for ${d.title}`}
-                    items={[{ label: "Delete", danger: true, onSelect: () => removeDependency(d.id, d.title) }]}
-                  />
-                </td>
-              </tr>
+                }
+                actions={
+                  <>
+                    <button className="btn-link" type="button" onClick={() => startEdit(d)}>Edit</button>
+                    <RowActionsMenu
+                      label={`More actions for ${d.title}`}
+                      items={[{ label: "Delete", danger: true, onSelect: () => removeDependency(d.id, d.title) }]}
+                    />
+                  </>
+                }
+              />
             )
           ))}
-          {dependencies.length === 0 && (
-            <tr><td colSpan={6} className="muted">No dependencies logged yet. Add one above if this project is waiting on something.</td></tr>
-          )}
-        </tbody>
-      </ResizableTable>
+        </ul>
+      )}
+      </>
       )}
     </div>
   );
@@ -3038,41 +3131,42 @@ function QualityTab({ projectId }: { projectId: string }) {
           ))}
         </div>
       ) : (
-      <ResizableTable id="raid-quality">
-        <thead>
-          <tr><th>Quality item</th><th>Category</th><th>Owner</th><th>Status</th><th><span className="sr-only">Actions</span></th></tr>
-        </thead>
-        <tbody>
+      <>
+      <RegisterSummary>
+        {items.filter((q) => q.status === "open" || q.status === "in_progress").length} to do
+        {" \u00b7 "}{items.filter((q) => q.status === "failed").length} failed
+        {" \u00b7 "}{items.filter((q) => q.status === "passed").length} passed
+      </RegisterSummary>
+      {items.length === 0 ? (
+        <RegisterEmpty>No quality items logged yet. Add a standard to meet, a review to run, or a defect you found.</RegisterEmpty>
+      ) : (
+        <ul className="rg-list" aria-label="Quality items">
           {items.map((q) => (
             editingId === q.id ? (
-              <tr key={q.id}>
-                <td>
-                  <input aria-label="Title" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} style={{ marginBottom: 4 }} />
+              <li key={q.id} className="rg-edit">
+                <div className="rg-edit-fields">
+                  <input aria-label="Title" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
                   <textarea aria-label="Description" value={editDescription} onChange={(e) => setEditDescription(e.target.value)} rows={2} placeholder="Description" />
-                </td>
-                <td>
                   <select aria-label="Category" value={editCategory} onChange={(e) => setEditCategory(e.target.value as QualityItem["category"])}>
                     {Object.entries(QUALITY_CATEGORY_LABEL).map(([value, label]) => (
                       <option key={value} value={value}>{label}</option>
                     ))}
                   </select>
-                </td>
-                <td><input aria-label="Owner" value={editOwner} onChange={(e) => setEditOwner(e.target.value)} /></td>
-                <td className="muted">{QUALITY_STATUS_LABEL[q.status]}</td>
-                <td className="row-actions">
+                  <input aria-label="Owner" value={editOwner} onChange={(e) => setEditOwner(e.target.value)} />
+                </div>
+                <div className="rg-edit-actions">
+                  <span className="muted">{QUALITY_STATUS_LABEL[q.status]}</span>
                   <button className="btn btn-primary" type="button" onClick={() => saveEdit(q.id)}>Save</button>
                   <button className="btn btn-ghost" type="button" onClick={() => setEditingId(null)}>Cancel</button>
-                </td>
-              </tr>
+                </div>
+              </li>
             ) : (
-              <tr key={q.id}>
-                <td>
-                  {q.title}
-                  {q.description && <div className="muted">{q.description}</div>}
-                </td>
-                <td><span className="pill pill-navy">{QUALITY_CATEGORY_LABEL[q.category]}</span></td>
-                <td>{q.owner_name || "--"}</td>
-                <td>
+              <RegisterRow
+                key={q.id}
+                title={q.title}
+                meta={<>{q.owner_name || "No owner"}{q.description ? ` \u00b7 ${q.description}` : ""}</>}
+                pill={<span className="pill pill-navy">{QUALITY_CATEGORY_LABEL[q.category]}</span>}
+                control={
                   <select aria-label="Status"
                     className={`status-select status-select-${q.status}`}
                     value={q.status}
@@ -3082,22 +3176,22 @@ function QualityTab({ projectId }: { projectId: string }) {
                       <option key={value} value={value}>{label}</option>
                     ))}
                   </select>
-                </td>
-                <td className="row-actions">
-                  <button className="btn-link" type="button" onClick={() => startEdit(q)}>Edit</button>
-                  <RowActionsMenu
-                    label={`More actions for ${q.title}`}
-                    items={[{ label: "Delete", danger: true, onSelect: () => removeItem(q.id, q.title) }]}
-                  />
-                </td>
-              </tr>
+                }
+                actions={
+                  <>
+                    <button className="btn-link" type="button" onClick={() => startEdit(q)}>Edit</button>
+                    <RowActionsMenu
+                      label={`More actions for ${q.title}`}
+                      items={[{ label: "Delete", danger: true, onSelect: () => removeItem(q.id, q.title) }]}
+                    />
+                  </>
+                }
+              />
             )
           ))}
-          {items.length === 0 && (
-            <tr><td colSpan={5} className="muted">No quality items logged yet. Add a standard to meet, a review to run, or a defect you found.</td></tr>
-          )}
-        </tbody>
-      </ResizableTable>
+        </ul>
+      )}
+      </>
       )}
     </div>
   );
@@ -3300,43 +3394,46 @@ function ComplianceTab({ projectId }: { projectId: string }) {
           ))}
         </div>
       ) : (
-      <ResizableTable id="raid-compliance">
-        <thead>
-          <tr><th>Compliance item</th><th>Category</th><th>Owner</th><th>Due</th><th>Status</th><th><span className="sr-only">Actions</span></th></tr>
-        </thead>
-        <tbody>
+      <>
+      <RegisterSummary>
+        {items.filter((c) => c.status === "not_started" || c.status === "in_progress").length} to do
+        {" \u00b7 "}{items.filter((c) => c.status === "non_compliant").length} non-compliant
+        {" \u00b7 "}{items.filter((c) => c.status === "compliant").length} compliant
+      </RegisterSummary>
+      {items.length === 0 ? (
+        <RegisterEmpty>No compliance items logged yet. Add a regulation, policy, or standard this project needs to satisfy.</RegisterEmpty>
+      ) : (
+        <ul className="rg-list" aria-label="Compliance items">
           {items.map((c) => (
             editingId === c.id ? (
-              <tr key={c.id}>
-                <td>
-                  <input aria-label="Title" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} style={{ marginBottom: 4 }} />
+              <li key={c.id} className="rg-edit">
+                <div className="rg-edit-fields">
+                  <input aria-label="Title" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
                   <textarea aria-label="Description" value={editDescription} onChange={(e) => setEditDescription(e.target.value)} rows={2} placeholder="Description" />
-                </td>
-                <td>
                   <select aria-label="Category" value={editCategory} onChange={(e) => setEditCategory(e.target.value as ComplianceItem["category"])}>
                     {Object.entries(COMPLIANCE_CATEGORY_LABEL).map(([value, label]) => (
                       <option key={value} value={value}>{label}</option>
                     ))}
                   </select>
-                </td>
-                <td><input aria-label="Owner" value={editOwner} onChange={(e) => setEditOwner(e.target.value)} /></td>
-                <td><input aria-label="Due date" type="date" value={editDueDate} onChange={(e) => setEditDueDate(e.target.value)} /></td>
-                <td className="muted">{COMPLIANCE_STATUS_LABEL[c.status]}</td>
-                <td className="row-actions">
+                  <input aria-label="Owner" value={editOwner} onChange={(e) => setEditOwner(e.target.value)} />
+                  <input aria-label="Due date" type="date" value={editDueDate} onChange={(e) => setEditDueDate(e.target.value)} />
+                </div>
+                <div className="rg-edit-actions">
+                  <span className="muted">{COMPLIANCE_STATUS_LABEL[c.status]}</span>
                   <button className="btn btn-primary" type="button" onClick={() => saveEdit(c.id)}>Save</button>
                   <button className="btn btn-ghost" type="button" onClick={() => setEditingId(null)}>Cancel</button>
-                </td>
-              </tr>
+                </div>
+              </li>
             ) : (
-              <tr key={c.id}>
-                <td>
-                  {c.title}
-                  {c.description && <div className="muted">{c.description}</div>}
-                </td>
-                <td><span className="pill pill-navy">{COMPLIANCE_CATEGORY_LABEL[c.category]}</span></td>
-                <td>{c.owner_name || "--"}</td>
-                <td>{c.due_date ? fmtLocalDate(c.due_date) : "--"}</td>
-                <td>
+              <RegisterRow
+                key={c.id}
+                title={c.title}
+                meta={<>{c.owner_name || "No owner"}{c.description ? ` \u00b7 ${c.description}` : ""}</>}
+                pill={<span className="pill pill-navy">{COMPLIANCE_CATEGORY_LABEL[c.category]}</span>}
+                flag={expiryFlag(c.due_date, c.status !== "compliant")}
+                date={c.due_date ? fmtLocalDate(c.due_date) : null}
+                dateLabel="Due"
+                control={
                   <select aria-label="Status"
                     className={`status-select status-select-${c.status}`}
                     value={c.status}
@@ -3346,22 +3443,22 @@ function ComplianceTab({ projectId }: { projectId: string }) {
                       <option key={value} value={value}>{label}</option>
                     ))}
                   </select>
-                </td>
-                <td className="row-actions">
-                  <button className="btn-link" type="button" onClick={() => startEdit(c)}>Edit</button>
-                  <RowActionsMenu
-                    label={`More actions for ${c.title}`}
-                    items={[{ label: "Delete", danger: true, onSelect: () => removeItem(c.id, c.title) }]}
-                  />
-                </td>
-              </tr>
+                }
+                actions={
+                  <>
+                    <button className="btn-link" type="button" onClick={() => startEdit(c)}>Edit</button>
+                    <RowActionsMenu
+                      label={`More actions for ${c.title}`}
+                      items={[{ label: "Delete", danger: true, onSelect: () => removeItem(c.id, c.title) }]}
+                    />
+                  </>
+                }
+              />
             )
           ))}
-          {items.length === 0 && (
-            <tr><td colSpan={6} className="muted">No compliance items logged yet. Add a regulation, policy, or standard this project needs to satisfy.</td></tr>
-          )}
-        </tbody>
-      </ResizableTable>
+        </ul>
+      )}
+      </>
       )}
     </div>
   );
@@ -4519,7 +4616,7 @@ function RoadmapTab({ projectId, isOwner, showBudget }: { projectId: string; isO
   const [project, setProject] = useState<Project | null>(null);
   const [shareBusy, setShareBusy] = useState(false);
   const [copied, setCopied] = useState(false);
-  const rowRefs = useRef<Map<string, HTMLTableRowElement>>(new Map());
+  const rowRefs = useRef<Map<string, HTMLElement>>(new Map());
 
   // Type/status filter chips above the chart -- everything shown by default,
   // click a chip to hide that type or status from both the chart and the

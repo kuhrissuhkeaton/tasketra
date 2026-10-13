@@ -683,7 +683,7 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
 
 /* --- Today view --- */
 .today-section { margin-bottom: 24px; }
-.today-section h4 { margin-bottom: 8px; }
+.today-section h4, .today-section h3 { margin-bottom: 8px; }
 .today-list { list-style: none; margin: 0; padding: 0; }
 .today-list li {
   padding: 10px 6px; border-bottom: 1px solid var(--border); font-size: 14px;
@@ -2333,3 +2333,57 @@ a:hover { color: var(--navy); }
 .section-tab.is-active { background: var(--navy); color: var(--panel); border-color: var(--navy); }
 @media (max-width: 600px) { .section-tabs { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 4px; scrollbar-width: thin; } .section-tab { flex: none; } }
 @media (max-width: 560px) { .primary-tabs { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); } }
+
+/* Register rows (v124): title + one plain line, then fixed columns so a "3 days late" flag
+   never moves the pill or the date. Same tokens as the Today look, dark mode included. */
+.rg-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--border); }
+.rg-row::before { content: none; }
+.rg-row { display: grid; grid-template-columns: minmax(0, 1fr) 92px 116px 92px 150px auto; column-gap: 10px; align-items: center; padding: 10px 2px; border-bottom: 1px solid var(--border); min-width: 0; }
+.rg-main { min-width: 0; display: flex; align-items: flex-start; gap: 8px; }
+.rg-text { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.rg-title { font-weight: 600; color: var(--navy); overflow-wrap: anywhere; }
+.rg-title .row-title-btn { font: inherit; font-weight: 600; text-align: left; }
+.rg-meta { font-size: 13px; overflow-wrap: anywhere; }
+.rg-pill, .rg-flag, .rg-date, .rg-control, .rg-actions { display: flex; align-items: center; min-width: 0; font-size: 12px; font-variant-numeric: tabular-nums; }
+.rg-flag { font-weight: 600; color: var(--slate-text); }
+.rg-flag.is-bad { color: var(--red); font-weight: 700; }
+.rg-date { justify-content: flex-end; color: var(--slate-text); }
+.rg-actions { justify-content: flex-end; gap: 4px; }
+.rg-control select { max-width: 100%; }
+.rg-summary { margin: 0 0 12px; font-variant-numeric: tabular-nums; }
+.rg-empty { padding: 14px 2px; margin: 0; border-bottom: 1px solid var(--border); }
+.rg-group-head { margin: 18px 0 4px; font-size: 16px; display: flex; align-items: baseline; gap: 8px; }
+.rg-group-head .tw-count { font-size: 13px; }
+@media (max-width: 760px) {
+  .rg-row { display: flex; flex-wrap: wrap; row-gap: 6px; }
+  .rg-main { flex: 1 1 100%; }
+  .rg-pill:empty, .rg-flag:empty, .rg-date:empty, .rg-control:empty, .rg-actions:empty { display: none; }
+  .rg-date { justify-content: flex-start; }
+  .rg-actions { margin-left: auto; }
+}
+.rg-edit { display: flex; flex-direction: column; gap: 8px; padding: 12px 2px; border-bottom: 1px solid var(--border); }
+.rg-edit::before { content: none; }
+.rg-edit-fields { display: flex; flex-wrap: wrap; gap: 8px; }
+.rg-edit-fields > * { flex: 1 1 180px; min-width: 0; }
+.rg-edit-fields > textarea { flex: 1 1 100%; }
+.rg-edit-actions { display: flex; align-items: center; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+.rg-toolbar { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
+.rg-toolbar .rg-summary { margin: 0; }
+.rg-sort { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--slate-text); }
+.rg-group { margin-top: 6px; }
+.rg-group > summary { list-style: none; cursor: pointer; display: flex; align-items: baseline; gap: 8px; padding: 10px 0 6px; }
+.rg-group > summary::-webkit-details-marker { display: none; }
+.rg-group > summary::before { content: "\25B8"; color: var(--slate-text); font-size: 12px; transition: transform var(--ease); }
+.rg-group[open] > summary::before { transform: rotate(90deg); }
+.rg-group > summary h2 { margin: 0; font-size: 16px; }
+.rg-group > summary:focus-visible { outline: 2px solid var(--navy); outline-offset: 2px; border-radius: 6px; }
+.task-phase-pill { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; }
+
+/* Overview (v124): soft cards for what needs you, the Today "Start here" card on top. */
+.overview-focus { margin-bottom: 16px; }
+.today-section { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; margin-bottom: 14px; }
+.today-section h3 { font-family: var(--font-display, inherit); font-size: 16px; margin: 0 0 6px; }
+.raci-legend-inline { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0 0 12px; }
+.raci-legend-inline li::before { content: none; }
+.rg-sort span { white-space: nowrap; }
+.rg-sort select { width: auto; min-width: 0; }

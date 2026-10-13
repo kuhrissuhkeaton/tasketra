@@ -8,6 +8,7 @@
 // column, so one extra item never shifts the rest).
 
 import type { ReactNode } from "react";
+import type { RowFlag } from "../lib/rowFlags";
 
 /** Title, one muted summary line, and the header actions (keep it to two buttons, one primary). */
 export function PageHeader({ title, subtitle, actions }: { title: ReactNode; subtitle?: ReactNode; actions?: ReactNode }) {
@@ -86,4 +87,44 @@ export function ListRow({
       <span className="ar-date" data-slot="date">{date}</span>
     </li>
   );
+}
+
+/**
+ * A register row (Issues, Risks, Assumptions, Dependencies, Quality, Compliance, Tasks).
+ * Same idea as ListRow, with the controls a register needs: title + one plain line,
+ * then fixed columns for the pill, the flag ("3 days late"), the date, the status
+ * control and the row actions. Empty columns stay empty, so nothing ever shifts.
+ */
+export function RegisterRow({
+  title, meta, pill, flag, date, dateLabel, control, actions, rowRef, lead, indent = 0,
+}: {
+  title: ReactNode; meta?: ReactNode; pill?: ReactNode; flag?: RowFlag | null; date?: ReactNode; dateLabel?: string;
+  control?: ReactNode; actions?: ReactNode; rowRef?: (el: HTMLLIElement | null) => void; lead?: ReactNode; indent?: number;
+}) {
+  return (
+    <li className="rg-row" ref={rowRef} style={indent ? { paddingLeft: indent * 20 } : undefined}>
+      <div className="rg-main">
+        {lead ? <span className="rg-lead">{lead}</span> : null}
+        <div className="rg-text">
+          <div className="rg-title">{title}</div>
+          {meta ? <div className="rg-meta muted">{meta}</div> : null}
+        </div>
+      </div>
+      <span className="rg-pill" data-slot="pill">{pill}</span>
+      <span className={`rg-flag${flag?.bad ? " is-bad" : ""}`} data-slot="flag">{flag?.text}</span>
+      <span className="rg-date" data-slot="date">{date ? (<>{dateLabel ? <span className="sr-only">{dateLabel} </span> : null}{date}</>) : null}</span>
+      <span className="rg-control" data-slot="control">{control}</span>
+      <span className="rg-actions" data-slot="actions">{actions}</span>
+    </li>
+  );
+}
+
+/** A quiet summary line under a tab's section pills: real numbers, e.g. "5 open · 2 high". */
+export function RegisterSummary({ children }: { children: ReactNode }) {
+  return <p className="rg-summary muted">{children}</p>;
+}
+
+/** The empty state for a register: one sentence. The add form above is the action. */
+export function RegisterEmpty({ children }: { children: ReactNode }) {
+  return <p className="rg-empty muted">{children}</p>;
 }
