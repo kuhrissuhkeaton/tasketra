@@ -310,8 +310,6 @@ export default function Dashboard() {
   const [portfolio, setPortfolio] = useState<PortfolioData | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [selectedStage, setSelectedStage] = useState<ProjectStage | null>(null);
-  const [escalations, setEscalations] = useState<Record<string, string[]>>({});
-  const [nextUps, setNextUps] = useState<Record<string, string | null>>({});
   const [portfolioLoading, setPortfolioLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [newName, setNewName] = useState("");
@@ -379,8 +377,6 @@ export default function Dashboard() {
     setDeletedProjects(deleted);
     setPortfolio(portfolioData);
     setListSummaries(portfolioData.projects);
-    setEscalations(Object.fromEntries(portfolioData.projects.map((x) => [x.id, x.escalations])));
-    setNextUps(Object.fromEntries(portfolioData.projects.map((x) => [x.id, x.nextUp])));
     setLoading(false);
   }
 
