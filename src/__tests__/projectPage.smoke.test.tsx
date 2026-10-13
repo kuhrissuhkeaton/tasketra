@@ -245,14 +245,17 @@ describe("project page smoke test", () => {
     expect(errors, errors.join("\n---\n")).toEqual([]);
   });
 
-  it("shows every sidebar tab with its icon when all tabs are shown", async () => {
+  it("shows the six main tabs, and every section reachable when all tabs are shown", async () => {
+    await mountProject("full", "issues");
+    const main = [...host.querySelectorAll('nav[aria-label="Project views"] .project-tab')].map((b) => b.textContent);
+    expect(main).toEqual(["Overview", "Tasks", "Plan", "Health", "People and decisions", "Docs"]);
+    expect(host.querySelector('nav[aria-label="Project views"] .is-active')?.textContent).toBe("Health");
+    const sections = [...host.querySelectorAll('.section-tabs .section-tab')].map((b) => b.textContent);
+    expect(sections).toEqual(["Issues", "Risks", "Assumptions", "Dependencies", "Quality", "Compliance"]);
+  });
+
+  it("the sidebar no longer lists project tabs, only the project name", async () => {
     await mountProject("full", "home");
-    const buttons = [...host.querySelectorAll(".side-tab[data-tour]")];
-    expect(buttons.length).toBeGreaterThan(15);
-    for (const b of buttons) {
-      expect(b.querySelector("svg"), `no icon on "${b.textContent}"`).not.toBeNull();
-      expect(b.querySelector("svg")!.children.length, `empty icon on "${b.textContent}"`).toBeGreaterThan(0);
-    }
-    expect(buttons.map((b) => b.textContent)).toContain("RACI");
+    expect(host.querySelectorAll(".side-nav .side-tab[data-tour^='tab-']").length).toBe(0);
   });
 });

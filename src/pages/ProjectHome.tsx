@@ -18,8 +18,8 @@ import { tasksToICS, downloadICS } from "../lib/ics";
 import { fmtDate, fmtDateTime, fmtLocalDate } from "../lib/format";
 import { capacityLevel, CAPACITY_LABEL, CAPACITY_PILL, type CapacityLevel } from "../lib/capacity";
 import { useAuth } from "../lib/auth-context";
-import { AppSidebar, NavGroup } from "../components/AppSidebar";
-import { NavIcon, type NavIconName } from "../components/NavIcon";
+import { AppSidebar } from "../components/AppSidebar";
+import { NAV_GROUPS, STRIP_TABS, groupOf, sectionLabel, visibleGroups } from "../lib/projectNav";
 import { useConfirm } from "../components/ConfirmDialog";
 import { ResizableTable } from "../components/ResizableTable";
 import { avatarColor, initials } from "../lib/avatar";
@@ -35,7 +35,7 @@ import { CharterTab } from "../components/CharterTab";
 import { BaselineCard } from "../components/BaselineCard";
 import { EscalationSettings } from "../components/EscalationSettings";
 import { HealthStrip } from "../components/HealthStrip";
-import { isTabHidden, primaryTabOrder, defaultTasksView, hiddenTabLabels, SIZE_LABEL, type ProjectSize, type ProjectApproach } from "../lib/projectView";
+import { isTabHidden, defaultTasksView, hiddenTabLabels, SIZE_LABEL, type ProjectSize, type ProjectApproach } from "../lib/projectView";
 import { useDocumentTitle } from "../lib/documentTitle";
 
 
@@ -172,58 +172,8 @@ const EXPOSURE_PILL: Record<"low" | "medium" | "high", string> = {
   high: "pill-red",
 };
 
-// The five sections a PM actually lives in day to day -- rendered as a pill
-// bar at the top of the project content area, instead of buried in the
-// sidebar alongside everything else. This bar is reserved for top-level
-// navigation only -- a page's own view switches (List/Board/Matrix, etc.)
-// use the visually lighter .view-toggle style so they never compete with
-// this row for attention.
-const PRIMARY_TABS: { id: Tab; label: string }[] = [
-  { id: "home", label: "Home" },
-  { id: "roadmap", label: "Roadmap" },
-  { id: "tasks", label: "Tasks" },
-  { id: "budget", label: "Budget" },
-  { id: "meetings", label: "Meetings" },
-];
-
-// Everything else stays in the sidebar, grouped into collapsible sections so
-// the list doesn't read as one long undifferentiated wall of links. Each
-// label names an actual category -- no "More"/"Misc" catch-alls. Issues &
-// risks used to render its own six-way pill row (Issues/Risks/Assumptions/
-// Dependencies/Quality/Compliance) directly in the page, stacked right
-// under the primary tabs above -- confusing, since it looked like a second
-// row of the same nav. Each category is now its own sidebar entry instead,
-// the same pattern already proven for People & decisions below.
-const SECONDARY_NAV_GROUPS: { label: string; tabs: { id: Tab; label: string }[] }[] = [
-  { label: "Goals", tabs: [
-    { id: "charter", label: "Charter" },
-    { id: "okrs", label: "OKRs" },
-  ] },
-  { label: "Issues & risks", tabs: [
-    { id: "issues", label: "Issues" },
-    { id: "risks", label: "Risks" },
-    { id: "assumptions", label: "Assumptions" },
-    { id: "dependencies", label: "Dependencies" },
-    { id: "quality", label: "Quality" },
-    { id: "compliance", label: "Compliance" },
-  ] },
-  { label: "People & decisions", tabs: [
-    { id: "stakeholders", label: "Stakeholders" },
-    { id: "raci", label: "RACI" },
-    { id: "decisions", label: "Decisions" },
-    { id: "team", label: "Team" },
-    { id: "procurement", label: "Vendors" },
-    { id: "comms", label: "Comms plan" },
-  ] },
-  { label: "Documents & output", tabs: [
-    { id: "documents", label: "Documents" },
-    { id: "report", label: "Weekly report" },
-    { id: "templates", label: "Templates" },
-    { id: "export", label: "Export" },
-    { id: "connections", label: "Connections" },
-    { id: "closure", label: "Closure" },
-  ] },
-];
+// Navigation lives in lib/projectNav.ts: six groups, each a row of section pills.
+// `?tab=<id>` still names the screen, so every old link keeps working.
 
 export default function ProjectHome() {
   const { id } = useParams<{ id: string }>();
@@ -265,9 +215,7 @@ export default function ProjectHome() {
   }, [location.state, id, user]);
 
   // Browser-tab title: "<view> | <project> | Tasketra" (just the project name on the Home view).
-  const titleTabLabel = tab === "trash"
-    ? "Trash"
-    : [...PRIMARY_TABS, ...SECONDARY_NAV_GROUPS.flatMap((g) => g.tabs)].find((t) => t.id === tab)?.label ?? null;
+  const titleTabLabel = sectionLabel(tab);
   useDocumentTitle(project?.name ? (titleTabLabel && tab !== "home" ? `${titleTabLabel} | ${project.name}` : project.name) : null);
 
   if (!id) return null;
@@ -277,21 +225,12 @@ export default function ProjectHome() {
   const size: ProjectSize = project?.size ?? "full";
   const approach: ProjectApproach = project?.approach ?? "hybrid";
   const showAll = (project?.show_all_tabs ?? false) || tour.active;
-  const primaryIds = primaryTabOrder(approach, size, showAll);
-  const primaryTabs = primaryIds
-    .map((pid) => PRIMARY_TABS.find((t) => t.id === pid))
-    .filter((t): t is { id: Tab; label: string } => !!t)
-    .concat(PRIMARY_TABS.filter((t) => t.id === tab && !primaryIds.includes(t.id)));
-  const visibleGroups = SECONDARY_NAV_GROUPS
-    .map((g) => ({ ...g, tabs: g.tabs.filter((t) => t.id === tab || !isTabHidden(t.id, size, showAll)) }))
-    .filter((g) => g.tabs.length > 0);
-  // Sidebar views (everything outside the tab strip) and Trash get a breadcrumb and
-  // use the view name as the page heading; strip views keep the project name.
-  const viewLabel: string | null = PRIMARY_TABS.some((t) => t.id === tab)
-    ? null
-    : tab === "trash"
-      ? "Trash"
-      : SECONDARY_NAV_GROUPS.flatMap((g) => g.tabs).find((t) => t.id === tab)?.label ?? null;
+  const navGroups = visibleGroups(tab, size, showAll);
+  const activeGroup = groupOf(tab);
+  const activeSections = navGroups.find((g) => g.group.id === activeGroup)?.sections ?? [];
+  // Strip views (the old top row) keep the project name as the heading; every other
+  // view gets a breadcrumb and uses the view name as the heading.
+  const viewLabel: string | null = STRIP_TABS.has(tab) ? null : sectionLabel(tab);
 
   return (
     <div className="project-shell">
@@ -299,27 +238,6 @@ export default function ProjectHome() {
         <div className="side-nav-group">
           <div className="side-nav-label">{project?.name || "Project"}</div>
         </div>
-        {visibleGroups.map((group) => (
-          <NavGroup
-            key={group.label}
-            label={group.label}
-            defaultCollapsed={!group.tabs.some((t) => t.id === tab)}
-            forceExpanded={tour.active && group.tabs.some((t) => t.id === tour.step.tab)}
-          >
-            {group.tabs.map((t) => (
-              <button
-                key={t.id}
-                className={tab === t.id ? "side-tab active" : "side-tab"}
-                onClick={() => setParams({ tab: t.id })}
-                type="button"
-                data-tour={`tab-${t.id}`}
-              >
-                <NavIcon name={t.id as NavIconName} active={tab === t.id} />
-                {t.label}
-              </button>
-            ))}
-          </NavGroup>
-        ))}
       </AppSidebar>
 
       <main id="main-content" className={`project-main${TABLE_TABS.has(tab) ? " project-main-tables" : ""}`}>
@@ -352,22 +270,38 @@ export default function ProjectHome() {
           )}
         </div>
 
-        {id && tab !== "home" && <HealthStrip projectId={id} onOpenTab={(t) => setParams({ tab: t })} />}
+        {id && <HealthStrip projectId={id} onOpenTab={(t) => setParams({ tab: t })} />}
 
         <nav className="project-tabs primary-tabs" aria-label="Project views">
-          {primaryTabs.map((t) => (
+          {navGroups.map(({ group, sections, opens }) => (
             <button
-              key={t.id}
+              key={group.id}
               type="button"
-              className={tab === t.id ? "project-tab is-active" : "project-tab"}
-              aria-current={tab === t.id ? "page" : undefined}
-              onClick={() => setParams({ tab: t.id })}
-              data-tour={`tab-${t.id}`}
+              className={activeGroup === group.id ? "project-tab is-active" : "project-tab"}
+              aria-current={activeGroup === group.id ? "page" : undefined}
+              onClick={() => setParams({ tab: opens })}
+              data-tour={sections.length === 1 ? `tab-${sections[0].id}` : `group-${group.id}`}
             >
-              {t.label}
+              {group.label}
             </button>
           ))}
         </nav>
+        {activeSections.length > 1 && (
+          <nav className="section-tabs" aria-label={`${NAV_GROUPS.find((g) => g.id === activeGroup)?.label} sections`}>
+            {activeSections.map((sec) => (
+              <button
+                key={sec.id}
+                type="button"
+                className={tab === sec.id ? "section-tab is-active" : "section-tab"}
+                aria-current={tab === sec.id ? "page" : undefined}
+                onClick={() => setParams({ tab: sec.id })}
+                data-tour={`tab-${sec.id}`}
+              >
+                {sec.label}
+              </button>
+            ))}
+          </nav>
+        )}
 
         {tab === "home" && (
           <HomeTab

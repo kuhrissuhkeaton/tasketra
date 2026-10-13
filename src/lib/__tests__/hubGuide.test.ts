@@ -1,7 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { GUIDE_STAGES, GUIDE_PRINCIPLE, guideTabNames } from "../hubGuide";
 // The app source as text, so the guide cannot drift from the real tab names.
-import projectHome from "../../pages/ProjectHome.tsx?raw";
+import projectHome0 from "../../pages/ProjectHome.tsx?raw";
+import projectNav from "../projectNav.ts?raw";
+const projectHome = projectHome0 + projectNav; // tab labels now live in projectNav.ts
 
 describe("Resource hub guide", () => {
   it("covers the four stages in order", () => {

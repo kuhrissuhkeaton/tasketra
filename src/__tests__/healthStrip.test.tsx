@@ -84,11 +84,11 @@ describe("projectReasonParts", () => {
 });
 
 describe("HealthStrip placement", () => {
-  it("sits under the project title on every tab except Home, which already shows the stage map's own verdict", async () => {
+  it("sits under the project title on every tab, Home included (one verdict, not two)", async () => {
     // @ts-ignore node builtin: the app tsconfig has no node types, vitest runs in node
     const { readFileSync } = await import("node:fs");
     const src: string = readFileSync("src/pages/ProjectHome.tsx", "utf8");
-    expect(src).toMatch(/\{id && tab !== "home" && <HealthStrip projectId=\{id\}/);
+    expect(src).toMatch(/\{id && <HealthStrip projectId=\{id\}/);
     expect(src.indexOf("<HealthStrip")).toBeLessThan(src.indexOf('className="project-tabs primary-tabs"'));
     expect(src.indexOf("<HealthStrip")).toBeGreaterThan(src.indexOf("project-page-head"));
   });

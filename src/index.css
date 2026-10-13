@@ -1513,7 +1513,7 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
   padding: 8px 14px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;
 }
 .stage-band-title { font-size: 13px; font-weight: 700; }
-.stage-band-msg { font-size: 13px; color: var(--slate); }
+.stage-band-msg { font-size: 13px; color: var(--slate-text); }
 .stage-band-attention { background: var(--tint); border-top-color: var(--success); }
 .stage-band-attention .stage-band-msg { color: var(--text-ok); font-weight: 600; }
 
@@ -2323,3 +2323,13 @@ a:hover { color: var(--navy); }
   .ar-date { justify-content: flex-start; }
 }
 .ui-narrow { max-width: 760px; }
+
+/* ---- Project sections (redesign: six tabs with section pills) ---------------
+   The six main tabs reuse .project-tabs. Under the active one, its sections show
+   as quiet pills, so there is one clear row of choices and one lighter row under it. */
+.section-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: -4px 0 16px; }
+.section-tab { font: inherit; font-size: 13px; font-weight: 600; padding: 5px 13px; border-radius: 999px; border: 1px solid var(--border); background: var(--panel); color: var(--slate-text); cursor: pointer; min-height: 32px; }
+.section-tab:hover { color: var(--navy); background: var(--surface-muted); }
+.section-tab.is-active { background: var(--navy); color: var(--panel); border-color: var(--navy); }
+@media (max-width: 600px) { .section-tabs { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 4px; scrollbar-width: thin; } .section-tab { flex: none; } }
+@media (max-width: 560px) { .primary-tabs { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); } }
