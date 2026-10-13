@@ -3982,64 +3982,58 @@ function CommsPlanTab({ projectId }: { projectId: string }) {
       />
       {error && <p className="form-error">{error}</p>}
 
-      <ResizableTable id="comms-plan">
-        <thead>
-          <tr><th>Audience</th><th>What they need</th><th>Frequency</th><th>Channel</th><th>Owner</th><th><span className="sr-only">Actions</span></th></tr>
-        </thead>
-        <tbody>
+      <RegisterSummary>
+        {items.length} {items.length === 1 ? "audience" : "audiences"}
+        {" \u00b7 "}{items.filter((i) => i.frequency === "weekly" || i.frequency === "daily").length} hear from you weekly or more
+      </RegisterSummary>
+      {items.length === 0 ? (
+        <RegisterEmpty>No communications plan yet. Add a row for who needs to hear what, and how often.</RegisterEmpty>
+      ) : (
+        <ul className="rg-list" aria-label="Communications plan">
           {items.map((item) => (
             editingId === item.id ? (
-              <tr key={item.id}>
-                <td><input aria-label="Audience" value={editAudience} onChange={(e) => setEditAudience(e.target.value)} /></td>
-                <td>
-                  <input aria-label="Topic" value={editTopic} onChange={(e) => setEditTopic(e.target.value)} style={{ marginBottom: 4 }} />
+              <li key={item.id} className="rg-edit">
+                <div className="rg-edit-fields">
+                  <input aria-label="Audience" value={editAudience} onChange={(e) => setEditAudience(e.target.value)} />
+                  <input aria-label="Topic" value={editTopic} onChange={(e) => setEditTopic(e.target.value)} />
                   <textarea aria-label="Notes" value={editNotes} onChange={(e) => setEditNotes(e.target.value)} rows={2} placeholder="Notes" />
-                </td>
-                <td>
                   <select aria-label="Frequency" value={editFrequency} onChange={(e) => setEditFrequency(e.target.value as CommPlanItem["frequency"])}>
                     {Object.entries(FREQUENCY_LABEL).map(([value, label]) => (
                       <option key={value} value={value}>{label}</option>
                     ))}
                   </select>
-                </td>
-                <td>
                   <select aria-label="Channel" value={editChannel} onChange={(e) => setEditChannel(e.target.value as CommPlanItem["channel"])}>
                     {Object.entries(CHANNEL_LABEL).map(([value, label]) => (
                       <option key={value} value={value}>{label}</option>
                     ))}
                   </select>
-                </td>
-                <td><input aria-label="Owner" value={editOwner} onChange={(e) => setEditOwner(e.target.value)} /></td>
-                <td className="row-actions">
+                  <input aria-label="Owner" value={editOwner} onChange={(e) => setEditOwner(e.target.value)} />
+                </div>
+                <div className="rg-edit-actions">
                   <button className="btn btn-primary" type="button" onClick={() => saveEdit(item.id)}>Save</button>
                   <button className="btn btn-ghost" type="button" onClick={() => setEditingId(null)}>Cancel</button>
-                </td>
-              </tr>
+                </div>
+              </li>
             ) : (
-              <tr key={item.id}>
-                <td>{item.audience}</td>
-                <td>
-                  {item.topic}
-                  {item.notes && <div className="muted">{item.notes}</div>}
-                </td>
-                <td><span className="pill pill-navy">{FREQUENCY_LABEL[item.frequency]}</span></td>
-                <td>{CHANNEL_LABEL[item.channel]}</td>
-                <td>{item.owner_name || "--"}</td>
-                <td className="row-actions">
-                  <button className="btn-link" type="button" onClick={() => startEdit(item)}>Edit</button>
-                  <RowActionsMenu
-                    label={`More actions for ${`${item.audience}: ${item.topic}`}`}
-                    items={[{ label: "Delete", danger: true, onSelect: () => removeItem(item.id, `${item.audience}: ${item.topic}`) }]}
-                  />
-                </td>
-              </tr>
+              <RegisterRow
+                key={item.id}
+                title={item.audience}
+                meta={<>{item.topic} {"\u00b7"} {CHANNEL_LABEL[item.channel]} {"\u00b7"} {item.owner_name || "No owner"}{item.notes ? ` \u00b7 ${item.notes}` : ""}</>}
+                pill={<span className="pill pill-navy">{FREQUENCY_LABEL[item.frequency]}</span>}
+                actions={
+                  <>
+                    <button className="btn-link" type="button" onClick={() => startEdit(item)}>Edit</button>
+                    <RowActionsMenu
+                      label={`More actions for ${`${item.audience}: ${item.topic}`}`}
+                      items={[{ label: "Delete", danger: true, onSelect: () => removeItem(item.id, `${item.audience}: ${item.topic}`) }]}
+                    />
+                  </>
+                }
+              />
             )
           ))}
-          {items.length === 0 && (
-            <tr><td colSpan={6} className="muted">No communications plan yet. Add a row for who needs to hear what, and how often.</td></tr>
-          )}
-        </tbody>
-      </ResizableTable>
+        </ul>
+      )}
     </div>
   );
 }
@@ -4290,58 +4284,62 @@ function ProcurementTab({ projectId }: { projectId: string }) {
           ))}
         </div>
       ) : (
-      <ResizableTable id="procurement-vendors">
-        <thead>
-          <tr><th>Vendor / contract</th><th>Type</th><th>Role</th><th>Category</th><th>Sub-category</th><th>Owner</th><th>Cost</th><th>Dates</th><th>Status</th><th><span className="sr-only">Actions</span></th></tr>
-        </thead>
-        <tbody>
+      <>
+      <RegisterSummary>
+        {items.filter((p) => p.status === "active" || p.status === "in_progress" || p.status === "requested").length} open
+        {" \u00b7 "}{items.filter((p) => p.status === "active").length} active
+        {" \u00b7 "}{items.filter((p) => p.status === "completed" || p.status === "cancelled").length} finished
+      </RegisterSummary>
+      {items.length === 0 ? (
+        <RegisterEmpty>No vendors or contracts logged yet. Add one above when you're sourcing or have an agreement in place.</RegisterEmpty>
+      ) : (
+        <ul className="rg-list" aria-label="Vendors and contracts">
           {items.map((p) => (
             editingId === p.id ? (
-              <tr key={p.id}>
-                <td>
-                  <input aria-label="Vendor name" value={editVendorName} onChange={(e) => setEditVendorName(e.target.value)} style={{ marginBottom: 4 }} />
+              <li key={p.id} className="rg-edit">
+                <div className="rg-edit-fields">
+                  <input aria-label="Vendor name" value={editVendorName} onChange={(e) => setEditVendorName(e.target.value)} />
                   <textarea aria-label="Description" value={editDescription} onChange={(e) => setEditDescription(e.target.value)} rows={2} placeholder="Description" />
-                </td>
-                <td>
                   <select aria-label="Category" value={editCategory} onChange={(e) => setEditCategory(e.target.value as ProcurementItem["category"])}>
                     {Object.entries(PROCUREMENT_CATEGORY_LABEL).map(([value, label]) => (
                       <option key={value} value={value}>{label}</option>
                     ))}
                   </select>
-                </td>
-                <td><input aria-label="Role" value={editRole} onChange={(e) => setEditRole(e.target.value)} placeholder="Role" /></td>
-                <td><input aria-label="Category" value={editVendorCategory} onChange={(e) => setEditVendorCategory(e.target.value)} placeholder="Category" /></td>
-                <td><input aria-label="Sub-category" value={editVendorSubcategory} onChange={(e) => setEditVendorSubcategory(e.target.value)} placeholder="Sub-category" /></td>
-                <td><input aria-label="Owner" value={editOwner} onChange={(e) => setEditOwner(e.target.value)} /></td>
-                <td><input aria-label="Cost" type="number" step="0.01" value={editCost} onChange={(e) => setEditCost(e.target.value)} style={{ maxWidth: 100 }} /></td>
-                <td>
-                  <input type="date" title="Start date" aria-label="Start date" value={editStartDate} onChange={(e) => setEditStartDate(e.target.value)} style={{ marginBottom: 4 }} />
+                  <input aria-label="Role" value={editRole} onChange={(e) => setEditRole(e.target.value)} placeholder="Role" />
+                  <input aria-label="Category" value={editVendorCategory} onChange={(e) => setEditVendorCategory(e.target.value)} placeholder="Category" />
+                  <input aria-label="Sub-category" value={editVendorSubcategory} onChange={(e) => setEditVendorSubcategory(e.target.value)} placeholder="Sub-category" />
+                  <input aria-label="Owner" value={editOwner} onChange={(e) => setEditOwner(e.target.value)} />
+                  <input aria-label="Cost" type="number" step="0.01" value={editCost} onChange={(e) => setEditCost(e.target.value)} />
+                  <input type="date" title="Start date" aria-label="Start date" value={editStartDate} onChange={(e) => setEditStartDate(e.target.value)} />
                   <input type="date" title="End date" aria-label="End date" value={editEndDate} onChange={(e) => setEditEndDate(e.target.value)} />
-                </td>
-                <td className="muted">{PROCUREMENT_STATUS_LABEL[p.status]}</td>
-                <td className="row-actions">
+                </div>
+                <div className="rg-edit-actions">
+                  <span className="muted">{PROCUREMENT_STATUS_LABEL[p.status]}</span>
                   <button className="btn btn-primary" type="button" onClick={() => saveEdit(p.id)}>Save</button>
                   <button className="btn btn-ghost" type="button" onClick={() => setEditingId(null)}>Cancel</button>
-                </td>
-              </tr>
+                </div>
+              </li>
             ) : (
-              <tr key={p.id}>
-                <td>
-                  {p.vendor_name}
-                  {p.description && <div className="muted">{p.description}</div>}
-                </td>
-                <td><span className="pill pill-navy">{PROCUREMENT_CATEGORY_LABEL[p.category]}</span></td>
-                <td>{p.role || "--"}</td>
-                <td>{p.vendor_category || "--"}</td>
-                <td>{p.vendor_subcategory || "--"}</td>
-                <td>{p.owner_name || "--"}</td>
-                <td>{p.cost !== null ? fmtMoney(p.cost) : "--"}</td>
-                <td className="muted">
-                  {p.start_date || p.end_date
-                    ? `${p.start_date ? fmtLocalDate(p.start_date) : "?"} -- ${p.end_date ? fmtLocalDate(p.end_date) : "?"}`
-                    : "--"}
-                </td>
-                <td>
+              <RegisterRow
+                key={p.id}
+                title={p.vendor_name}
+                meta={
+                  <>
+                    {[
+                      p.cost !== null ? fmtMoney(p.cost) : null,
+                      p.role,
+                      [p.vendor_category, p.vendor_subcategory].filter(Boolean).join(" \u203a ") || null,
+                      p.owner_name || "No owner",
+                      p.start_date ? `From ${fmtLocalDate(p.start_date)}` : null,
+                      p.description,
+                    ].filter(Boolean).join(" \u00b7 ")}
+                  </>
+                }
+                pill={<span className="pill pill-navy">{PROCUREMENT_CATEGORY_LABEL[p.category]}</span>}
+                flag={expiryFlag(p.end_date, p.status === "active" || p.status === "in_progress")}
+                date={p.end_date ? fmtLocalDate(p.end_date) : null}
+                dateLabel="Ends"
+                control={
                   <select aria-label="Status"
                     className={`status-select status-select-${p.status}`}
                     value={p.status}
@@ -4351,22 +4349,22 @@ function ProcurementTab({ projectId }: { projectId: string }) {
                       <option key={value} value={value}>{label}</option>
                     ))}
                   </select>
-                </td>
-                <td className="row-actions">
-                  <button className="btn-link" type="button" onClick={() => startEdit(p)}>Edit</button>
-                  <RowActionsMenu
-                    label={`More actions for ${p.vendor_name}`}
-                    items={[{ label: "Delete", danger: true, onSelect: () => removeItem(p.id, p.vendor_name) }]}
-                  />
-                </td>
-              </tr>
+                }
+                actions={
+                  <>
+                    <button className="btn-link" type="button" onClick={() => startEdit(p)}>Edit</button>
+                    <RowActionsMenu
+                      label={`More actions for ${p.vendor_name}`}
+                      items={[{ label: "Delete", danger: true, onSelect: () => removeItem(p.id, p.vendor_name) }]}
+                    />
+                  </>
+                }
+              />
             )
           ))}
-          {items.length === 0 && (
-            <tr><td colSpan={10} className="muted">No vendors or contracts logged yet. Add one above when you're sourcing or have an agreement in place.</td></tr>
-          )}
-        </tbody>
-      </ResizableTable>
+        </ul>
+      )}
+      </>
       )}
     </div>
   );
@@ -5549,46 +5547,49 @@ function StakeholdersTab({ projectId }: { projectId: string }) {
       {shView === "grid" && <StakeholderGrid stakeholders={stakeholders} />}
 
       {shView === "list" && (
-      <ResizableTable id="stakeholders">
-        <thead>
-          <tr><th>Name</th><th>Role</th><th>Power</th><th>Interest</th><th>Prefers</th><th>Contact</th><th>Decisions</th><th><span className="sr-only">Actions</span></th></tr>
-        </thead>
-        <tbody>
-          {stakeholders.map((s) => {
-            const mailto = mailtoHref(s.email);
-            const tel = telHref(s.phone);
-            return (
-              <tr key={s.id}>
-                <td>{s.name}</td>
-                <td>{s.role || "--"}</td>
-                <td>
-                  {s.power_level ? <span className="pill pill-navy">{INTEREST_LABEL[s.power_level]}</span> : "--"}
-                </td>
-                <td>
-                  {s.interest_level ? <span className="pill pill-navy">{INTEREST_LABEL[s.interest_level]}</span> : "--"}
-                </td>
-                <td>{s.preferred_contact ? CONTACT_METHOD_LABEL[s.preferred_contact] : "--"}</td>
-                <td>
-                  {!s.email && !s.phone && "--"}
-                  {s.email && (mailto ? <div><a className="contact-link" href={mailto}>{s.email}</a></div> : <div>{s.email}</div>)}
-                  {s.phone && (tel ? <div><a className="contact-link" href={tel}>{s.phone}</a></div> : <div>{s.phone}</div>)}
-                </td>
-                <td>{s.decisions_resolved ?? 0} / {s.decisions_sent ?? 0} resolved</td>
-                <td className="row-actions">
-                  <button className="btn-link" type="button" onClick={() => openDrawer(s)}>Details</button>
-                  <RowActionsMenu
-                    label={`More actions for ${s.name}`}
-                    items={[{ label: "Delete", danger: true, onSelect: () => removeStakeholder(s.id, s.name) }]}
-                  />
-                </td>
-              </tr>
-            );
-          })}
-          {stakeholders.length === 0 && (
-            <tr><td colSpan={8} className="muted">No stakeholders yet. Add one above to start your register.</td></tr>
-          )}
-        </tbody>
-      </ResizableTable>
+      <>
+        <RegisterSummary>
+          {stakeholders.length} {stakeholders.length === 1 ? "person" : "people"}
+          {" \u00b7 "}{stakeholders.filter((s) => s.power_level === "high").length} with high power
+          {" \u00b7 "}{(() => { const n = stakeholders.reduce((t, s) => t + (s.decisions_sent ?? 0) - (s.decisions_resolved ?? 0), 0); return `${n} ${n === 1 ? "decision" : "decisions"} waiting on them`; })()}
+        </RegisterSummary>
+        {stakeholders.length === 0 ? (
+          <RegisterEmpty>No stakeholders yet. Add one above to start your register.</RegisterEmpty>
+        ) : (
+          <ul className="rg-list" aria-label="Stakeholders">
+            {stakeholders.map((s) => {
+              const mailto = mailtoHref(s.email);
+              const tel = telHref(s.phone);
+              const waiting = (s.decisions_sent ?? 0) - (s.decisions_resolved ?? 0);
+              return (
+                <RegisterRow
+                  key={s.id}
+                  lead={<span className="member-avatar" style={{ background: avatarColor(s.name) }} aria-hidden="true">{initials(s.name)}</span>}
+                  title={s.name}
+                  meta={
+                    <>
+                      {[s.role, s.interest_level ? `${INTEREST_LABEL[s.interest_level]} interest` : null, s.preferred_contact ? `Prefers ${CONTACT_METHOD_LABEL[s.preferred_contact]}` : null, (s.decisions_sent ?? 0) > 0 ? `${s.decisions_resolved ?? 0} / ${s.decisions_sent} decisions resolved` : null].filter(Boolean).join(" \u00b7 ") || "No role yet"}
+                      {s.email && <>{" \u00b7 "}{mailto ? <a className="contact-link" href={mailto}>{s.email}</a> : s.email}</>}
+                      {s.phone && <>{" \u00b7 "}{tel ? <a className="contact-link" href={tel}>{s.phone}</a> : s.phone}</>}
+                    </>
+                  }
+                  pill={s.power_level ? <span className="pill pill-navy">{INTEREST_LABEL[s.power_level]} power</span> : null}
+                  flag={waiting > 0 ? { text: `${waiting} ${waiting === 1 ? "decision" : "decisions"} waiting`, bad: true } : null}
+                  actions={
+                    <>
+                      <button className="btn-link" type="button" onClick={() => openDrawer(s)}>Details</button>
+                      <RowActionsMenu
+                        label={`More actions for ${s.name}`}
+                        items={[{ label: "Delete", danger: true, onSelect: () => removeStakeholder(s.id, s.name) }]}
+                      />
+                    </>
+                  }
+                />
+              );
+            })}
+          </ul>
+        )}
+      </>
       )}
 
       <Drawer

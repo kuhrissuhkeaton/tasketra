@@ -216,7 +216,7 @@ describe("project page smoke test", () => {
     expect(host.querySelector(".sidebar-open")).toBeNull();
   });
 
-  it("Stakeholders tab with data: list shows Power, grid view places people", async () => {
+  it("Stakeholders tab with data: list shows each person's power, grid view places people", async () => {
     await mountProject("standard", "stakeholders", (url) =>
       /\/api\/stakeholders\?projectId=/.test(url)
         ? { stakeholders: [
@@ -225,7 +225,7 @@ describe("project page smoke test", () => {
           ] }
         : undefined);
     expect(host.textContent).toContain("Sponsor Sam");
-    expect([...host.querySelectorAll("th")].map((t) => t.textContent)).toContain("Power");
+    expect([...host.querySelectorAll("li.rg-row [data-slot=\"pill\"]")].map((t) => t.textContent)).toContain("High power");
     const gridBtn = [...host.querySelectorAll("button")].find((b) => b.textContent === "Power / interest grid")!;
     await act(async () => { gridBtn.click(); });
     expect(host.querySelector(".sh-quad-manage_closely")!.textContent).toContain("Sponsor Sam");

@@ -65,6 +65,12 @@ describe("the six registers, Tasks and the Overview use the shared rows", () => 
       expect(src).not.toContain(`ResizableTable id="${id}"`);
     }
     expect(src).not.toContain('ResizableTable id="tasks"');
+    for (const id of ["stakeholders", "procurement-vendors", "comms-plan"]) {
+      expect(src).not.toContain(`ResizableTable id="${id}"`);
+    }
+    for (const label of ["Stakeholders", "Vendors and contracts", "Communications plan"]) {
+      expect(src).toContain(`aria-label="${label}"`);
+    }
     for (const label of ["Issues", "Risks", "Assumptions", "Dependencies", "Quality items", "Compliance items"]) {
       expect(src).toContain(`aria-label="${label}"`);
     }
