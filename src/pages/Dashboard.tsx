@@ -215,9 +215,15 @@ function PortfolioOverview({ data, wide, onShowAttention }: { data: PortfolioDat
                   <td><Link to={`/app/projects/${p.id}`}>{p.name}</Link></td>
                   <td><StageChip stage={p.stage} small /></td>
                   <td>
-                    <span className={`pill ${HEALTH_PILL[p.health]}`}>{HEALTH_LABEL[p.health]}</span>
-                    {p.escalations.length > 0 && (
-                      <span className="pill pill-red escalate-pill" title={p.escalations.join(". ")}>Needs escalation</span>
+                    {p.closed_at ? (
+                      <span className="pill pill-neutral">Closed</span>
+                    ) : (
+                      <>
+                        <span className={`pill ${HEALTH_PILL[p.health]}`}>{HEALTH_LABEL[p.health]}</span>
+                        {p.escalations.length > 0 && (
+                          <span className="pill pill-red escalate-pill" title={p.escalations.join(". ")}>Needs escalation</span>
+                        )}
+                      </>
                     )}
                   </td>
                   <td className="muted">{p.doneTasks}/{p.totalTasks}</td>
@@ -241,7 +247,11 @@ function PortfolioOverview({ data, wide, onShowAttention }: { data: PortfolioDat
         defaultOpenNarrow={false}
       >
         {data.upcomingMilestones.length === 0 ? (
-          <p className="muted dash-empty">No upcoming milestones on any roadmap.</p>
+          <p className="muted dash-empty">
+            {data.undatedMilestones > 0
+              ? `No dated milestones coming up — ${data.undatedMilestones} milestone${data.undatedMilestones === 1 ? " has" : "s have"} no date set, so ${data.undatedMilestones === 1 ? "it can't" : "they can't"} appear here yet.`
+              : "No upcoming milestones on any roadmap."}
+          </p>
         ) : (
           <>
             <ul className="dash-ms-list">
@@ -257,6 +267,9 @@ function PortfolioOverview({ data, wide, onShowAttention }: { data: PortfolioDat
               <button type="button" className="btn-link dash-ms-more" onClick={() => setShowAllMs((v) => !v)}>
                 {showAllMs ? "Show fewer" : `Show all ${data.upcomingMilestones.length}`}
               </button>
+            )}
+            {data.undatedMilestones > 0 && (
+              <p className="muted">{data.undatedMilestones} more milestone{data.undatedMilestones === 1 ? " has" : "s have"} no date set and {data.undatedMilestones === 1 ? "isn't" : "aren't"} listed here.</p>
             )}
           </>
         )}
@@ -321,6 +334,7 @@ export default function Dashboard() {
     setSearchParams(next, { replace: true });
   }
   const [listFilter, setListFilter] = useState<"all" | "attention" | "on_track">("all");
+  const [listSearch, setListSearch] = useState("");
   const [listSummaries, setListSummaries] = useState<PortfolioProjectSummary[]>([]);
   // Per-browser convenience only: if storage is unavailable the tip simply
   // shows again, which is harmless.
@@ -359,6 +373,9 @@ export default function Dashboard() {
   const [showDeleted, setShowDeleted] = useState(false);
   const [upgradeNotice, setUpgradeNotice] = useState<string | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [renameBusy, setRenameBusy] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [firstRunBusy, setFirstRunBusy] = useState<FirstRunChoice | null>(null);
   const [firstRunError, setFirstRunError] = useState<{ message: string; upgrade: boolean } | null>(null);
@@ -420,6 +437,22 @@ export default function Dashboard() {
     await load();
     announce("Project restored.");
     setRestoringId(null);
+  }
+
+  async function renameProject(p: Project) {
+    const name = renameValue.trim();
+    if (!name || name === p.name) { setRenamingId(null); return; }
+    setRenameBusy(true);
+    try {
+      await api.updateProject(p.id, { name });
+      setRenamingId(null);
+      await load();
+      announce("Project renamed.");
+    } catch (err) {
+      setUpgradeNotice(err instanceof Error ? err.message : "Couldn't rename the project.");
+    } finally {
+      setRenameBusy(false);
+    }
   }
 
   async function deleteProject(p: Project) {
@@ -486,10 +519,12 @@ export default function Dashboard() {
     setShowNew(true);
   }
 
-  // From the first-run screen: one click makes the project and opens it.
-  async function startFirstProject(choice: FirstRunChoice) {
+  // From the first-run screen: one click makes the project and opens it. The
+  // screen now asks for a name first; the old starter names remain as the
+  // fallback when the field is left blank.
+  async function startFirstProject(choice: FirstRunChoice, givenName?: string) {
     const template = choice !== "example" && choice !== "blank" ? getTemplate(choice) : undefined;
-    const name = choice === "example" ? "Example project" : template ? template.name : "My first project";
+    const name = givenName?.trim() || (choice === "example" ? "Example project" : template ? template.name : "My first project");
     const isFirstProjectEver = projects.length === 0;
     setFirstRunBusy(choice);
     setFirstRunError(null);
@@ -541,11 +576,12 @@ export default function Dashboard() {
         total,
         done,
         pct: total > 0 ? Math.round((done / total) * 100) : 0,
-        reason: s2 ? projectReason(s2, p.open_decisions ?? 0) : "Loading details...",
+        reason: p.closed_at ? `Closed ${fmtDate(p.closed_at)}` : s2 ? projectReason(s2, p.open_decisions ?? 0) : "Loading details...",
       };
     }),
   );
-  const shownRows = rows.filter((r) => (listFilter === "all" ? true : listFilter === "attention" ? r.health !== "on_track" : r.health === "on_track"));
+  const shownRows = rows.filter((r) => (listFilter === "all" ? true : listFilter === "attention" ? r.health !== "on_track" : r.health === "on_track"))
+    .filter((r) => !listSearch.trim() || r.project.name.toLowerCase().includes(listSearch.trim().toLowerCase()));
   const summaryLine = loading
     ? "Loading your projects..."
     : projects.length === 0
@@ -731,6 +767,17 @@ export default function Dashboard() {
         {view === "list" && (
           <>
             {!loading && projects.length > 1 && (
+              <div className="pw-search">
+                <input
+                  type="search"
+                  value={listSearch}
+                  onChange={(e) => setListSearch(e.target.value)}
+                  placeholder="Search projects by name"
+                  aria-label="Search projects by name"
+                />
+              </div>
+            )}
+            {!loading && projects.length > 1 && (
               <div className="pw-filters" role="group" aria-label="Filter projects">
                 {([
                   ["all", "All", rows.length],
@@ -778,16 +825,36 @@ export default function Dashboard() {
                 {shownRows.map((r) => (
                   <li className="pw-row" key={r.project.id} style={{ opacity: deletingId === r.project.id ? 0.5 : 1 }}>
                     <div className="pw-main">
-                      <Link to={`/app/projects/${r.project.id}`} className="pw-name">{r.project.name}</Link>
+                      {renamingId === r.project.id ? (
+                        <form
+                          className="pw-rename"
+                          onSubmit={(e) => { e.preventDefault(); void renameProject(r.project); }}
+                        >
+                          <input
+                            type="text"
+                            value={renameValue}
+                            onChange={(e) => setRenameValue(e.target.value)}
+                            aria-label="Project name"
+                            autoFocus
+                            disabled={renameBusy}
+                          />
+                          <button type="submit" className="btn btn-small btn-primary" disabled={renameBusy || !renameValue.trim()}>Save</button>
+                          <button type="button" className="btn btn-small btn-ghost" disabled={renameBusy} onClick={() => setRenamingId(null)}>Cancel</button>
+                        </form>
+                      ) : (
+                        <Link to={`/app/projects/${r.project.id}`} className="pw-name">{r.project.name}</Link>
+                      )}
                       <span className="pw-reason muted">{r.reason}</span>
                       <span className="pw-activity muted">
                         {r.project.last_activity_at
                           ? `Last activity ${fmtDate(r.project.last_activity_at)}`
-                          : `Created ${fmtDate(r.project.created_at)} · Nothing added yet`}
+                          : (r.project.content_count ?? 0) > 0
+                            ? `Created ${fmtDate(r.project.created_at)}`
+                            : `Created ${fmtDate(r.project.created_at)} · Nothing added yet`}
                       </span>
                     </div>
                     <div className="pw-meta">
-                      <span className="pw-cell pw-cell-health"><span className={`pill ${HEALTH_PILL[r.health]}`}>{HEALTH_LABEL[r.health]}</span></span>
+                      <span className="pw-cell pw-cell-health">{r.project.closed_at ? <span className="pill pill-neutral">Closed</span> : <span className={`pill ${HEALTH_PILL[r.health]}`}>{HEALTH_LABEL[r.health]}</span>}</span>
                       <span className="pw-cell pw-cell-stage"><StageChip stage={r.project.stage ?? "initiate"} small /></span>
                       <span className="pw-progress" title={r.total > 0 ? `${r.done} of ${r.total} tasks done` : "No tasks yet"}>
                         <span className="progress-track" aria-hidden="true"><span className="progress-fill" style={{ width: `${r.pct}%` }} /></span>
@@ -809,6 +876,9 @@ export default function Dashboard() {
                           <>
                             <div className="project-card-menu-backdrop" onClick={() => setOpenMenuId(null)} />
                             <div className="project-card-menu">
+                              <button className="project-card-menu-item" type="button" onClick={() => { setOpenMenuId(null); setRenamingId(r.project.id); setRenameValue(r.project.name); }}>
+                                Rename project
+                              </button>
                               <button className="project-card-menu-item" type="button" onClick={() => deleteProject(r.project)}>
                                 Delete project
                               </button>

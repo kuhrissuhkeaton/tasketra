@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import type { Project } from "../lib/api";
 import { PROJECT_TEMPLATES, type TemplateId } from "../lib/projectTemplates";
@@ -27,13 +28,17 @@ export function FirstRunScreen({
   error,
   existingProject,
 }: {
-  onChoose: (choice: FirstRunChoice) => void;
+  onChoose: (choice: FirstRunChoice, name: string) => void;
   /** The choice being created right now, if any. */
   busy: FirstRunChoice | null;
   error: React.ReactNode;
   /** Their one (empty) project, if they already made one. */
   existingProject?: Project;
 }) {
+  // Asked up front, once: a first project named after its template ("My first
+  // project", "Construction / facilities") makes people hunt for a rename
+  // control before they have done any real work. Blank keeps the old defaults.
+  const [name, setName] = useState("");
   return (
     <div className="first-run">
       <p className="first-run-eyebrow">WELCOME TO TASKETRA</p>
@@ -41,6 +46,19 @@ export function FirstRunScreen({
       <p className="first-run-sub">
         Pick a starting point. WBS, RAID log, budget and roadmap are already set up. Change anything later.
       </p>
+
+      <div className="first-run-name">
+        <label htmlFor="first-run-project-name">Your project's name</label>
+        <input
+          id="first-run-project-name"
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="e.g. Website relaunch, Kitchen remodel, Q1 hiring"
+          disabled={busy !== null}
+        />
+        <p className="muted">Leave it blank and we'll use a starter name — you can rename it any time.</p>
+      </div>
 
       {error && <div className="form-error" role="alert">{error}</div>}
 
@@ -55,7 +73,7 @@ export function FirstRunScreen({
               className={c.badge ? "btn btn-primary" : "btn btn-ghost"}
               aria-label={`Use this template: ${c.title}`}
               disabled={busy !== null}
-              onClick={() => onChoose(c.choice)}
+              onClick={() => onChoose(c.choice, name)}
             >
               {busy === c.choice ? "Setting up..." : "Use this template"}
             </button>
@@ -64,7 +82,7 @@ export function FirstRunScreen({
       </ul>
 
       <p className="first-run-blank">
-        <button type="button" className="first-run-link" disabled={busy !== null} onClick={() => onChoose("blank")}>
+        <button type="button" className="first-run-link" disabled={busy !== null} onClick={() => onChoose("blank", name)}>
           {busy === "blank" ? "Setting up..." : "Start from a blank project"}
         </button>
         {existingProject && (

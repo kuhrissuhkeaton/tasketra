@@ -12,6 +12,7 @@
 //    can simply be run again.
 
 import { type ProjectTemplate } from "../../src/lib/projectTemplates.ts";
+import { logActivity } from "./activity.ts";
 import { resolveTemplate } from "./templateResolve.ts";
 import { EMPTY_WORK, planTemplate, summarizePlan, type ExistingWork, type PlanSummary, type TemplatePlan } from "./templatePlan.ts";
 
@@ -73,6 +74,18 @@ export async function applyProjectTemplate(database: any, projectId: string, use
   const t = await resolveTemplate(database, userId, templateId);
   if (!t) return false;
   await insertPlan(database, projectId, userId, planTemplate(t, EMPTY_WORK), true);
+  // Seeded content is real content: without an activity row the project reads
+  // as untouched ("Nothing added yet" on the Projects list) even though it is
+  // full of template work.
+  const [project] = await database.sql`SELECT name FROM projects WHERE id = ${projectId}`;
+  await logActivity(database, {
+    projectId,
+    entityType: "project",
+    entityId: projectId,
+    entityTitle: project?.name ?? null,
+    action: "created",
+    summary: `Started from the "${t.name}" template`,
+  });
   return true;
 }
 
@@ -99,6 +112,17 @@ export async function applyTemplateToExisting(
 ): Promise<PlanSummary> {
   const plan = planTemplate(template, await loadExistingWork(database, projectId));
   const summary = summarizePlan(plan);
-  if (!opts.preview && summary.totalToAdd > 0) await insertPlan(database, projectId, userId, plan, false);
+  if (!opts.preview && summary.totalToAdd > 0) {
+    await insertPlan(database, projectId, userId, plan, false);
+    const [project] = await database.sql`SELECT name FROM projects WHERE id = ${projectId}`;
+    await logActivity(database, {
+      projectId,
+      entityType: "project",
+      entityId: projectId,
+      entityTitle: project?.name ?? null,
+      action: "updated",
+      summary: `Added ${summary.totalToAdd} item${summary.totalToAdd === 1 ? "" : "s"} from the "${template.name}" template`,
+    });
+  }
   return summary;
 }

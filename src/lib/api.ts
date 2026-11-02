@@ -36,6 +36,9 @@ function noteUnauthorized(status: number, path: string) {
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     credentials: "include",
+    // API data changes with every save; never let the browser serve a
+    // just-fetched list from cache after a mutation (see http.ts json()).
+    cache: "no-store",
     headers: { "content-type": "application/json" },
     ...options,
   });
@@ -612,7 +615,7 @@ export type WeeklyReport = {
   rangeDays: number;
   generatedAt: string;
   tasksCompleted: { id: string; title: string; owner_name: string | null; updated_at: string }[];
-  tasksAdded: { id: string; title: string; owner_name: string | null; due_date: string | null; status: string; created_at: string }[];
+  tasksAdded: { id: string; title: string; owner_name: string | null; due_date: string | null; status: string; created_at: string; deleted_at: string | null }[];
   issuesOpened: { id: string; title: string; severity: string; owner_name: string | null; created_at: string }[];
   issuesResolved: { id: string; title: string; severity: string; resolution: string | null; resolved_at: string }[];
   risksOpened: { id: string; title: string; probability: string; impact: string; owner_name: string | null; created_at: string }[];
@@ -669,6 +672,8 @@ export type PortfolioProjectSummary = {
   id: string;
   name: string;
   stage: ProjectStage;
+  /** When the project was marked closed; null/absent while it is open. */
+  closed_at?: string | null;
   nextUp: string | null;
   escalations: string[];
   totalTasks: number;
@@ -705,6 +710,8 @@ export type PortfolioData = {
   issueSeverityBreakdown: { severity: Issue["severity"]; count: number }[];
   projects: PortfolioProjectSummary[];
   upcomingMilestones: { id: string; title: string; date: string; status: RoadmapItem["status"]; projectId: string; projectName: string }[];
+  /** Open milestones with no date set: they exist but can never be "upcoming". */
+  undatedMilestones: number;
 };
 
 export type MyTodayData = {

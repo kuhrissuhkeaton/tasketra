@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
+import { useAuth } from "../lib/auth-context";
 import type { Tab } from "../pages/ProjectHome";
 
 /**
@@ -82,14 +83,22 @@ export const TOUR_STEPS: TourStep[] = [
 export function useProductTour(onStepTab: (tab: Tab) => void) {
   const [active, setActive] = useState(false);
   const [stepIndex, setStepIndex] = useState(0);
+  const { refresh } = useAuth();
 
   const finish = useCallback(() => {
     setActive(false);
-    api.completeTour().catch(() => {
-      // Best-effort -- if this fails the tour just won't auto-suppress next
-      // time, which is a minor annoyance, not worth surfacing an error for.
-    });
-  }, []);
+    api.completeTour()
+      .then(() => refresh())
+      .catch(() => {
+        // Best-effort -- if this fails the tour just won't auto-suppress next
+        // time, which is a minor annoyance, not worth surfacing an error for.
+      });
+    // The refresh matters as much as the server write: the Dashboard and
+    // ProjectHome decide whether to auto-start the tour from the in-memory
+    // user's tour_completed_at, which is loaded once at sign-in. Without
+    // refreshing it, finishing the tour and then creating another project in
+    // the same session restarted the tour from step 1.
+  }, [refresh]);
 
   const start = useCallback(() => {
     setStepIndex(0);

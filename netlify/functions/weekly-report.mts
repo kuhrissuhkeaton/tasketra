@@ -39,8 +39,8 @@ export default withSentry(async (req: Request) => {
       ORDER BY updated_at DESC
     `,
     database.sql`
-      SELECT id, title, owner_name, due_date, status, created_at FROM tasks
-      WHERE project_id = ${projectId} AND deleted_at IS NULL AND created_at >= now() - interval '7 days'
+      SELECT id, title, owner_name, due_date, status, created_at, deleted_at FROM tasks
+      WHERE project_id = ${projectId} AND created_at >= now() - interval '7 days'
       ORDER BY created_at DESC
     `,
     database.sql`

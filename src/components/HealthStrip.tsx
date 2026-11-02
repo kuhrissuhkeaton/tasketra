@@ -10,12 +10,15 @@ const PILL: Record<PortfolioProjectSummary["health"], string> = { on_track: "pil
  * same portfolio rollup the Projects list uses (no new health logic). If the data cannot load,
  * it renders nothing and the page is unchanged.
  */
-export function HealthStrip({ projectId, onOpenTab }: { projectId: string; onOpenTab: (tab: string) => void }) {
+export function HealthStrip({ projectId, refreshKey, onOpenTab }: { projectId: string; refreshKey?: string; onOpenTab: (tab: string) => void }) {
   const [summary, setSummary] = useState<PortfolioProjectSummary | null>(null);
 
+  // Refetch when the tab changes as well as when the project does: work added
+  // in one tab (the first task, say) should update this strip when the person
+  // moves on, instead of still announcing the state from first load. The old
+  // summary stays on screen while refetching so the strip doesn't flicker.
   useEffect(() => {
     let live = true;
-    setSummary(null);
     try {
       Promise.resolve(api.getPortfolio(projectId))
         .then((d) => { if (live) setSummary(d?.projects?.find((x) => x.id === projectId) ?? null); })
@@ -24,9 +27,19 @@ export function HealthStrip({ projectId, onOpenTab }: { projectId: string; onOpe
       // Nothing to show: the strip is optional.
     }
     return () => { live = false; };
-  }, [projectId]);
+  }, [projectId, refreshKey]);
 
   if (!summary) return null;
+  // A closed project is done, not "off track": its leftover overdue counts
+  // are history, not a current health signal.
+  if (summary.closed_at) {
+    return (
+      <div className="hs-strip" role="status" aria-label="Project health">
+        <span className="pill pill-neutral">Closed</span>
+        <span className="hs-why">This project has been closed. Everything stays readable — reopen it from the Closure tab if work resumes.</span>
+      </div>
+    );
+  }
   const parts = projectReasonParts(summary);
   const isNew = summary.totalTasks === 0 && summary.health === "on_track";
   const nextUp = summary.nextUp && !parts.some((p) => p.text.startsWith("Next up")) ? summary.nextUp : null;

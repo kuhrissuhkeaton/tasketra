@@ -52,9 +52,17 @@ export default withSentry(async (req: Request) => {
   // the same address. The unique index on email_canonical backs this up if two
   // sign-ups race.
   const canonical = canonicalEmail(email);
-  const existing = await database.sql`SELECT id FROM users WHERE email = ${email} OR email_canonical = ${canonical}`;
+  const existing = await database.sql`SELECT email FROM users WHERE email = ${email} OR email_canonical = ${canonical}`;
   if (existing.length > 0) {
-    return json({ error: "An account with this email already exists." }, { status: 409 });
+    if (existing.some((u: any) => u.email === email)) {
+      return json({ error: "An account with this email already exists. Sign in instead." }, { status: 409 });
+    }
+    // The address itself was never registered, but it reaches the same inbox
+    // as an existing account (a +tag, or dots in a Gmail address). Say that
+    // plainly: a bare "already exists" leaves the person sure the address
+    // itself is taken, and then sign-in fails with the password they just
+    // picked, because that password belongs to no account at all.
+    return json({ error: "This address delivers to the same inbox as an existing Tasketra account — plus-tags (like name+tag@) and Gmail dots count as the same mailbox. Sign in with the address you first registered with, or use a different email for a separate account." }, { status: 409 });
   }
 
   const passwordHash = await hashPassword(password);

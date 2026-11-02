@@ -282,7 +282,7 @@ export default function ProjectHome() {
           </div>
         )}
 
-        {id && <HealthStrip projectId={id} onOpenTab={(t) => setParams({ tab: t })} />}
+        {id && <HealthStrip projectId={id} refreshKey={tab} onOpenTab={(t) => setParams({ tab: t })} />}
 
         <nav className="project-tabs primary-tabs" aria-label="Project views">
           {navGroups.map(({ group, sections, opens }) => (
@@ -1046,6 +1046,10 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
     try {
       await api.createTask(projectId, title.trim(), owner || undefined, due || undefined, undefined, start || undefined, newStatus, undefined, newPhase || undefined);
       noteProjectActivity(projectId, "task");
+      // Open the group the new task lands in, so it is on screen the moment
+      // the list refreshes -- a task added into a collapsed group (an undated
+      // one especially) reads as if the save never happened.
+      setGroupOpen(groupOfTask({ id: "", title: title.trim(), status: newStatus, owner_name: owner || null, due_date: due || null }), true);
       setTitle("");
       setOwner("");
       setStart("");
@@ -1249,7 +1253,7 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
         <>
           <div className="rg-toolbar">
             <RegisterSummary>
-              {tasks.length} {tasks.length === 1 ? "task" : "tasks"}
+              {`${tasks.length} ${tasks.length === 1 ? "task" : "tasks"}`}
               {" \u00b7 "}{tasks.filter((t) => groupOfTask(t) === "overdue").length} overdue
               {" \u00b7 "}{tasks.filter((t) => groupOfTask(t) === "week").length} due in the next 7 days
             </RegisterSummary>
@@ -4003,7 +4007,7 @@ function CommsPlanTab({ projectId }: { projectId: string }) {
       {error && <p className="form-error">{error}</p>}
 
       <RegisterSummary>
-        {items.length} {items.length === 1 ? "audience" : "audiences"}
+        {`${items.length} ${items.length === 1 ? "audience" : "audiences"}`}
         {" \u00b7 "}{items.filter((i) => i.frequency === "weekly" || i.frequency === "daily").length} hear from you weekly or more
       </RegisterSummary>
       {items.length === 0 ? (
@@ -5191,7 +5195,7 @@ function MeetingsTab({ projectId }: { projectId: string }) {
       {error && <p className="form-error">{error}</p>}
 
       <RegisterSummary>
-        {meetings.length} {meetings.length === 1 ? "meeting" : "meetings"}
+        {`${meetings.length} ${meetings.length === 1 ? "meeting" : "meetings"}`}
         {" \u00b7 "}{meetings.reduce((n, m) => n + (m.action_items || []).filter((it) => !it.done).length, 0)} open action items
       </RegisterSummary>
       {meetings.length === 0 ? (
@@ -5393,7 +5397,7 @@ function DocumentsTab({ projectId }: { projectId: string }) {
       )}
 
       <RegisterSummary>
-        {documents.length} {documents.length === 1 ? "document" : "documents"}
+        {`${documents.length} ${documents.length === 1 ? "document" : "documents"}`}
       </RegisterSummary>
       {documents.length === 0 ? (
         <RegisterEmpty>No documents uploaded yet. Add one above to start building a reference library.</RegisterEmpty>
@@ -5561,7 +5565,7 @@ function StakeholdersTab({ projectId }: { projectId: string }) {
       {shView === "list" && (
       <>
         <RegisterSummary>
-          {stakeholders.length} {stakeholders.length === 1 ? "person" : "people"}
+          {`${stakeholders.length} ${stakeholders.length === 1 ? "person" : "people"}`}
           {" \u00b7 "}{stakeholders.filter((s) => s.power_level === "high").length} with high power
           {" \u00b7 "}{(() => { const n = stakeholders.reduce((t, s) => t + (s.decisions_sent ?? 0) - (s.decisions_resolved ?? 0), 0); return `${n} ${n === 1 ? "decision" : "decisions"} waiting on them`; })()}
         </RegisterSummary>
@@ -6554,14 +6558,32 @@ function ClosureTab({ projectId }: { projectId: string }) {
   return (
     <div className="settings-max">
       {project?.closed_at ? (
-        <div className="settings-card" style={{ borderColor: "var(--success)" }}>
-          <p className="settings-card-label">Closed</p>
-          <p style={{ marginBottom: 12 }}>
-            This project was marked closed on {fmtDate(project.closed_at)}. Every tab, tool, and
-            record stays exactly as it was -- closing is just a status, not an archive or a lock.
-          </p>
-          <button className="btn btn-ghost" type="button" onClick={reopenProject}>Reopen project</button>
-        </div>
+        <>
+          <div className="settings-card" style={{ borderColor: "var(--success)" }}>
+            <p className="settings-card-label">Closed</p>
+            <p style={{ marginBottom: 12 }}>
+              This project was marked closed on {fmtDate(project.closed_at)}. Every tab, tool, and
+              record stays exactly as it was -- closing is just a status, not an archive or a lock.
+            </p>
+            <button className="btn btn-ghost" type="button" onClick={reopenProject}>Reopen project</button>
+          </div>
+
+          <div className="settings-card">
+            <p className="settings-card-label">Closure record ({checkedCount}/{CLOSURE_CHECKLIST_ITEMS.length})</p>
+            {CLOSURE_CHECKLIST_ITEMS.map((item) => (
+              <p key={item.key} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                <span aria-hidden="true">{checklist[item.key] ? "✓" : "—"}</span>
+                {item.label}
+              </p>
+            ))}
+            <p className="settings-card-label" style={{ marginTop: 16 }}>Closure notes</p>
+            {notes.trim() ? (
+              <p style={{ whiteSpace: "pre-wrap" }}>{notes}</p>
+            ) : (
+              <p className="muted">No closure notes were recorded.</p>
+            )}
+          </div>
+        </>
       ) : (
         <>
           <div className="settings-card">
@@ -6672,8 +6694,15 @@ function WeeklyReportView({ projectId, projectName }: { projectId: string; proje
     api.getWeeklyReport(projectId).then(setReport);
     api.listMeetings(projectId).then(({ meetings }) => {
       const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+      // A meeting with no date set still belongs in this week's report if it
+      // was logged this week. Filtering on meeting_date alone made a freshly
+      // logged, undated meeting vanish from the report without a word.
       setRecentMeetings(
-        meetings.filter((m) => m.meeting_date && toLocalDate(m.meeting_date).getTime() >= sevenDaysAgo)
+        meetings.filter((m) =>
+          m.meeting_date
+            ? toLocalDate(m.meeting_date).getTime() >= sevenDaysAgo
+            : new Date(m.created_at).getTime() >= sevenDaysAgo
+        )
       );
     });
   }, [projectId]);
@@ -6726,7 +6755,7 @@ function WeeklyReportView({ projectId, projectName }: { projectId: string; proje
           <ul className="today-list">
             {recentMeetings.map((m) => (
               <li key={m.id}>
-                {m.title} <span className="muted">-- {MEETING_TYPE_LABEL[m.meeting_type]}{m.meeting_date ? ` -- ${fmtLocalDate(m.meeting_date)}` : ""}</span>
+                {m.title} <span className="muted">-- {MEETING_TYPE_LABEL[m.meeting_type]}{m.meeting_date ? ` -- ${fmtLocalDate(m.meeting_date)}` : " -- no date set"}</span>
               </li>
             ))}
             {recentMeetings.length === 0 && <li className="muted">No meetings logged this week.</li>}
@@ -6748,7 +6777,7 @@ function WeeklyReportView({ projectId, projectName }: { projectId: string; proje
       <div className="today-section">
         <h4>New tasks added ({tasksAdded.length})</h4>
         <ul className="today-list">
-          {tasksAdded.map((t) => <li key={t.id}>{t.title} <span className="muted">-- {STATUS_LABEL[t.status as Task["status"]]}{t.due_date ? ` -- due ${fmtLocalDate(t.due_date)}` : ""}</span></li>)}
+          {tasksAdded.map((t) => <li key={t.id}>{t.title} <span className="muted">-- {STATUS_LABEL[t.status as Task["status"]]}{t.due_date ? ` -- due ${fmtLocalDate(t.due_date)}` : ""}{t.deleted_at ? " -- since moved to Trash" : ""}</span></li>)}
           {tasksAdded.length === 0 && <li className="muted">No new tasks this week.</li>}
         </ul>
       </div>

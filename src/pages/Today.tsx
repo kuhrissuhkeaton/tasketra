@@ -381,7 +381,11 @@ export default function Today() {
                 <div className="tw-card">
                   <h3>Coming up</h3>
                   {portfolio.upcomingMilestones.length === 0 ? (
-                    <p className="muted tw-hint">No upcoming milestones.</p>
+                    <p className="muted tw-hint">
+                      {portfolio.undatedMilestones > 0
+                        ? `No dated milestones coming up — ${portfolio.undatedMilestones} milestone${portfolio.undatedMilestones === 1 ? " has" : "s have"} no date set.`
+                        : "No upcoming milestones."}
+                    </p>
                   ) : (
                     <ul className="tw-list">
                       {portfolio.upcomingMilestones.slice(0, 4).map((m) => (

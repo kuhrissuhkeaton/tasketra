@@ -1905,6 +1905,10 @@ a:hover { color: var(--navy); }
 .first-run-eyebrow { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; color: var(--slate); margin: 0 0 8px; }
 .first-run-title { font-size: 34px; line-height: 1.15; margin: 0 0 10px; }
 .first-run-sub { color: var(--slate); font-size: 15px; line-height: 1.55; margin: 0 0 24px; }
+.first-run-name { margin: 0 0 24px; display: flex; flex-direction: column; gap: 6px; }
+.first-run-name label { font-size: 13px; font-weight: 600; }
+.first-run-name input { font: inherit; font-size: 15px; padding: 10px 12px; border: 1px solid var(--border, #cbd5e1); border-radius: 8px; max-width: 480px; }
+.first-run-name p { margin: 0; font-size: 12.5px; }
 .first-run-grid {
   list-style: none; margin: 0; padding: 0;
   display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px;
@@ -2249,6 +2253,10 @@ a:hover { color: var(--navy); }
 .pw-row:hover { background: var(--surface-muted); border-radius: 14px; }
 .pw-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .pw-name { font-weight: 600; font-size: 16px; color: var(--navy); text-decoration: none; overflow-wrap: anywhere; }
+.pw-search { margin: 0 0 12px; }
+.pw-search input { font: inherit; font-size: 14px; padding: 8px 10px; border: 1px solid var(--border, #cbd5e1); border-radius: 8px; width: min(360px, 100%); }
+.pw-rename { display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.pw-rename input { font: inherit; font-size: 15px; padding: 5px 8px; border: 1px solid var(--border, #cbd5e1); border-radius: 6px; min-width: 220px; }
 .pw-name:hover { text-decoration: underline; }
 .pw-reason { font-size: 13px; overflow-wrap: anywhere; }
 .pw-activity { font-size: 12px; }

@@ -10,6 +10,12 @@ export type ChangeEntry = { version: string; date: string; title: string; body: 
 // they can do.
 export const CHANGES: ChangeEntry[] = [
   {
+    version: "v136",
+    date: "November 2026",
+    title: "First projects start with your name on them, and lists keep up",
+    body: "The welcome screen now asks for your project's name before you pick a starting point, instead of naming it after the template — and there is a Rename option in the menu on the Projects page. Lists now refresh the moment you save (a new task also opens the group it lands in, so it is on screen straight away), closed projects wear a calm \"Closed\" badge instead of \"Off track\", and the weekly report counts meetings you logged this week even if you did not set a date, and says so. Signing up with a plus-address (name+tag@) of an address that already has an account now explains what is going on instead of just saying the email is taken.",
+  },
+  {
     version: "v135",
     date: "November 2026",
     title: "See at a glance whether a project has anything in it",

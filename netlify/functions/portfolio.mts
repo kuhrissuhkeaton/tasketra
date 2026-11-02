@@ -72,9 +72,10 @@ export default withSentry(async (req: Request) => {
     perProjectIssueRows,
     objectiveRows,
     milestoneRows,
+    undatedMilestoneRows,
   ] = await Promise.all([
     database.sql`
-      SELECT p.id, p.name, p.created_at, p.stage, p.tolerances
+      SELECT p.id, p.name, p.created_at, p.stage, p.tolerances, p.closed_at
       FROM projects p
       WHERE p.archived = false
         AND (p.owner_id = ${userId}
@@ -203,6 +204,19 @@ export default withSentry(async (req: Request) => {
       ORDER BY COALESCE(r.start_date, r.end_date) ASC
       LIMIT 5
     `,
+    // Milestones with no date can never be "upcoming", so they are invisible
+    // above. Count them so the UI can say they exist instead of implying
+    // there are no milestones at all.
+    database.sql`
+      SELECT count(*)::int AS count
+      FROM roadmap_items r
+      JOIN projects p ON p.id = r.project_id
+      WHERE r.type = 'milestone' AND r.status != 'done' AND r.deleted_at IS NULL
+        AND r.start_date IS NULL AND r.end_date IS NULL
+        AND p.archived = false
+        AND (p.owner_id = ${userId} OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = ${userId} AND pm.status = 'active'))
+        AND (${filterProjectId}::uuid IS NULL OR p.id = ${filterProjectId}::uuid) AND (${filterStage}::text IS NULL OR p.stage = ${filterStage}::text)
+    `,
   ]);
 
   const taskById = new Map(perProjectTaskRows.map((r: any) => [r.project_id, r]));
@@ -269,6 +283,7 @@ export default withSentry(async (req: Request) => {
       id: p.id,
       name: p.name,
       stage: p.stage,
+      closed_at: p.closed_at ?? null,
       nextUp: nextUpByProject.get(p.id) ?? null,
       escalations: evaluateTolerances(sanitizeTolerances(p.tolerances), {
         cpi: evm.cpi, spi: evm.spi, overdueTasks: Number(taskRow.overdue_tasks) || 0, highRisks: riskRow.high_count,
@@ -316,7 +331,7 @@ export default withSentry(async (req: Request) => {
     projectId: r.project_id, projectName: r.project_name,
   }));
 
-  return json({ kpis, taskStatusBreakdown, issueSeverityBreakdown, projects: projectSummaries, upcomingMilestones });
+  return json({ kpis, taskStatusBreakdown, issueSeverityBreakdown, projects: projectSummaries, upcomingMilestones, undatedMilestones: undatedMilestoneRows[0]?.count ?? 0 });
 });
 
 export const config: Config = { path: "/api/portfolio" };

@@ -30,10 +30,16 @@ export default withSentry(async (req: Request) => {
     }
 
     const projects = await database.sql`
-      SELECT p.id, p.name, p.description, p.created_at, p.stage, (p.owner_id = ${userId}) AS is_owner,
+      SELECT p.id, p.name, p.description, p.created_at, p.stage, p.closed_at, (p.owner_id = ${userId}) AS is_owner,
         (SELECT count(*)::int FROM decision_requests dr WHERE dr.project_id = p.id AND dr.status = 'open' AND dr.deleted_at IS NULL) AS open_decisions,
         (SELECT count(*)::int FROM tasks t WHERE t.project_id = p.id AND t.status != 'done' AND t.due_date IS NOT NULL AND t.due_date < now()::date AND t.deleted_at IS NULL) AS overdue_tasks,
-        (SELECT max(al.created_at) FROM activity_log al WHERE al.project_id = p.id) AS last_activity_at
+        (SELECT max(al.created_at) FROM activity_log al WHERE al.project_id = p.id) AS last_activity_at,
+        ((SELECT count(*)::int FROM tasks t WHERE t.project_id = p.id AND t.deleted_at IS NULL)
+          + (SELECT count(*)::int FROM stakeholders s WHERE s.project_id = p.id AND s.deleted_at IS NULL)
+          + (SELECT count(*)::int FROM risks r WHERE r.project_id = p.id AND r.deleted_at IS NULL)
+          + (SELECT count(*)::int FROM issues i WHERE i.project_id = p.id AND i.deleted_at IS NULL)
+          + (SELECT count(*)::int FROM decision_requests dr WHERE dr.project_id = p.id AND dr.deleted_at IS NULL)
+          + (SELECT count(*)::int FROM documents d WHERE d.project_id = p.id AND d.deleted_at IS NULL)) AS content_count
       FROM projects p
       WHERE p.archived = false
         AND (p.owner_id = ${userId}
