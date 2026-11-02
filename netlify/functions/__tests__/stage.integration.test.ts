@@ -38,8 +38,16 @@ describe("project stage", () => {
     res = await patch(owner, { id: project.id, stage: "plan" });
     expect((await jsonBody<{ project: any }>(res)).project.stage).toBe("plan");
 
+    // Jumping straight to Close skips Execute, and the log says so.
+    res = await patch(owner, { id: project.id, stage: "close" });
+    expect((await jsonBody<{ project: any }>(res)).project.stage).toBe("close");
+
     const rows = await db().sql`SELECT summary FROM activity_log WHERE project_id = ${project.id} ORDER BY created_at`;
-    expect(rows.map((r: any) => r.summary)).toEqual(expect.arrayContaining(["stage changed to Execute", "stage changed to Plan"]));
+    expect(rows.map((r: any) => r.summary)).toEqual(expect.arrayContaining([
+      "stage changed from Plan to Execute",
+      "stage changed from Execute to Plan",
+      "stage changed from Plan to Close (skipped Execute)",
+    ]));
   });
 
   it("rejects an unknown stage and leaves the project unchanged", async () => {
