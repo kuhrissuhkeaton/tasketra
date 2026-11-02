@@ -52,6 +52,13 @@ export default withSentry(async (req: Request) => {
 
     const trialEnd = sub.trial_end ? new Date(sub.trial_end * 1000).toISOString() : null;
     const pastDueNow = sub.status === "past_due" ? new Date().toISOString() : null;
+    // Stripe records a scheduled cancellation two ways: the classic
+    // cancel_at_period_end flag, and cancel_at (the timestamp the
+    // subscription ends) -- which is what the billing portal sets when a
+    // customer cancels during a trial. Mirror either as "canceling," or
+    // the Billing page keeps promising a charge that will never happen
+    // and the cancellation notification below never fires.
+    const canceling = sub.cancel_at_period_end || sub.cancel_at != null;
 
     if (userId) {
       // past_due_since keeps its original value while the status stays past_due
@@ -59,7 +66,7 @@ export default withSentry(async (req: Request) => {
       // status moves on, and so does the "we emailed about this failure" mark.
       await database.sql`
         INSERT INTO subscriptions (user_id, stripe_customer_id, stripe_subscription_id, status, billing_interval, current_period_end, cancel_at_period_end, past_due_since, trial_end, last_event_at)
-        VALUES (${userId}, ${customerId}, ${sub.id}, ${sub.status}, ${interval}, ${periodEnd}, ${sub.cancel_at_period_end}, ${pastDueNow}, ${trialEnd}, ${eventAt})
+        VALUES (${userId}, ${customerId}, ${sub.id}, ${sub.status}, ${interval}, ${periodEnd}, ${canceling}, ${pastDueNow}, ${trialEnd}, ${eventAt})
         ON CONFLICT (user_id) DO UPDATE SET
           stripe_customer_id = EXCLUDED.stripe_customer_id,
           stripe_subscription_id = EXCLUDED.stripe_subscription_id,
@@ -83,7 +90,7 @@ export default withSentry(async (req: Request) => {
       await database.sql`
         UPDATE subscriptions SET
           stripe_subscription_id = ${sub.id}, status = ${sub.status}, billing_interval = ${interval},
-          current_period_end = ${periodEnd}, cancel_at_period_end = ${sub.cancel_at_period_end},
+          current_period_end = ${periodEnd}, cancel_at_period_end = ${canceling},
           past_due_since = CASE WHEN ${sub.status} = 'past_due' THEN COALESCE(past_due_since, now()) ELSE NULL END,
           trial_end = ${trialEnd}, last_event_at = ${eventAt}, updated_at = now()
         WHERE stripe_customer_id = ${customerId} AND (last_event_at IS NULL OR last_event_at <= ${eventAt})
@@ -98,7 +105,9 @@ export default withSentry(async (req: Request) => {
   // reply-based) and notify the admin (so a cancellation isn't only visible
   // by noticing MRR dropped later).
   async function notifyOnNewCancellation(sub: Stripe.Subscription) {
-    if (!sub.cancel_at_period_end) return;
+    // Same two-shape rule as the mirror: a portal trial cancel arrives as
+    // cancel_at with the flag still false.
+    if (!sub.cancel_at_period_end && sub.cancel_at == null) return;
     const userId = sub.metadata?.userId;
     if (!userId) return;
 

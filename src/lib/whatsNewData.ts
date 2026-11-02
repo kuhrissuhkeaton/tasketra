@@ -10,6 +10,12 @@ export type ChangeEntry = { version: string; date: string; title: string; body: 
 // they can do.
 export const CHANGES: ChangeEntry[] = [
   {
+    version: "v141",
+    date: "November 2026",
+    title: "Billing keeps up when you cancel",
+    body: "If you cancel your Pro trial (or your subscription) in the billing portal, the Billing page now says so straight away — that you've canceled and won't be charged — instead of carrying on as if the next payment were still coming. Cancelling itself works exactly as before; the page just tells the truth about it now.",
+  },
+  {
     version: "v140",
     date: "November 2026",
     title: "Find every section, see your baseline",

@@ -14,7 +14,7 @@ import { db } from "../../lib/db.ts";
 
 const WEBHOOK_SECRET = "whsec_test_secret_for_integration_tests";
 
-function subscriptionUpdatedPayload(userId: string, status: string, cancelAtPeriodEnd = false) {
+function subscriptionUpdatedPayload(userId: string, status: string, cancelAtPeriodEnd = false, cancelAt: number | null = null) {
   return {
     id: "evt_test_1",
     object: "event",
@@ -26,6 +26,7 @@ function subscriptionUpdatedPayload(userId: string, status: string, cancelAtPeri
         customer: "cus_test_1",
         status,
         cancel_at_period_end: cancelAtPeriodEnd,
+        cancel_at: cancelAt,
         metadata: { userId },
         items: { data: [{ price: { recurring: { interval: "month" } }, current_period_end: Math.floor(Date.now() / 1000) + 2592000 }] },
       },
@@ -171,6 +172,73 @@ describe("stripe-webhook signature verification", () => {
 
     [row] = await database.sql`SELECT cancellation_notified_at FROM subscriptions WHERE user_id = ${user.id}`;
     expect(row.cancellation_notified_at).not.toBeNull();
+  });
+
+  it("mirrors a portal trial cancellation recorded via cancel_at (flag still false)", async () => {
+    const user = await createTestUser("portal-trial-cancel@example.com");
+    const cancelAt = Math.floor(Date.now() / 1000) + 14 * 86400;
+    const res = await webhookHandler(
+      signedRequest({
+        id: "evt_test_cancel_at",
+        object: "event",
+        type: "customer.subscription.updated",
+        data: { object: subscriptionUpdatedPayload(user.id, "trialing", false, cancelAt).data.object },
+      })
+    );
+    expect(res.status).toBe(200);
+
+    const database = db();
+    const [row] = await database.sql`SELECT status, cancel_at_period_end FROM subscriptions WHERE user_id = ${user.id}`;
+    expect(row.status).toBe("trialing");
+    expect(row.cancel_at_period_end).toBe(true);
+  });
+
+  it("marks cancellation_notified_at when cancellation arrives via cancel_at", async () => {
+    const user = await createTestUser("portal-trial-notify@example.com");
+    await webhookHandler(signedRequest(subscriptionUpdatedPayload(user.id, "trialing", false)));
+
+    const database = db();
+    let [row] = await database.sql`SELECT cancellation_notified_at FROM subscriptions WHERE user_id = ${user.id}`;
+    expect(row.cancellation_notified_at).toBeNull();
+
+    const cancelAt = Math.floor(Date.now() / 1000) + 14 * 86400;
+    const res = await webhookHandler(
+      signedRequest({
+        id: "evt_test_cancel_at_notify",
+        object: "event",
+        type: "customer.subscription.updated",
+        data: { object: subscriptionUpdatedPayload(user.id, "trialing", false, cancelAt).data.object },
+      })
+    );
+    expect(res.status).toBe(200);
+
+    [row] = await database.sql`SELECT cancellation_notified_at FROM subscriptions WHERE user_id = ${user.id}`;
+    expect(row.cancellation_notified_at).not.toBeNull();
+  });
+
+  it("clears the canceling flag when a scheduled cancellation is undone", async () => {
+    const user = await createTestUser("portal-uncancel@example.com");
+    const cancelAt = Math.floor(Date.now() / 1000) + 14 * 86400;
+    await webhookHandler(
+      signedRequest({
+        id: "evt_test_cancel_at_first",
+        object: "event",
+        type: "customer.subscription.updated",
+        data: { object: subscriptionUpdatedPayload(user.id, "trialing", false, cancelAt).data.object },
+      })
+    );
+    await webhookHandler(
+      signedRequest({
+        id: "evt_test_cancel_at_undone",
+        object: "event",
+        type: "customer.subscription.updated",
+        data: { object: subscriptionUpdatedPayload(user.id, "trialing", false, null).data.object },
+      })
+    );
+
+    const database = db();
+    const [row] = await database.sql`SELECT cancel_at_period_end FROM subscriptions WHERE user_id = ${user.id}`;
+    expect(row.cancel_at_period_end).toBe(false);
   });
 
   it("does not re-notify on a second webhook event while still canceling", async () => {
