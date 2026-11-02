@@ -22,10 +22,10 @@ function timeAgo(iso: string | null): string {
 
 /**
  * The bell in the sidebar header. Lists new What's new entries, answered
- * decisions, updates on the person's own feedback and (admin only) untriaged
- * feedback. Fetches on load, when the tab regains focus and when opened --
- * never on a timer, to keep function calls down. If the request fails it
- * quietly shows nothing.
+ * decisions, teammates' activity in the person's projects, updates on the
+ * person's own feedback and (admin only) untriaged feedback. Fetches on
+ * load, when the tab regains focus and when opened -- never on a timer, to
+ * keep function calls down. If the request fails it quietly shows nothing.
  */
 export function NotificationBell() {
   const { pathname } = useLocation();

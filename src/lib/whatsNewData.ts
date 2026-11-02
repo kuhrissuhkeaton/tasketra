@@ -10,6 +10,12 @@ export type ChangeEntry = { version: string; date: string; title: string; body: 
 // they can do.
 export const CHANGES: ChangeEntry[] = [
   {
+    version: "v139",
+    date: "November 2026",
+    title: "See what your team is doing",
+    body: "The notification bell now shows what teammates have been doing in your projects — tasks added, issues raised, stages moved — alongside answered decisions and feedback updates, so you can keep up without opening every project. Your own edits never notify you. Tasks also show their dependency links right in the list: \"Waits on 2\" or \"Blocks 1\", instead of the links only being visible inside a task's details.",
+  },
+  {
     version: "v138",
     date: "November 2026",
     title: "Reports a sponsor can use",

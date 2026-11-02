@@ -43,7 +43,9 @@ export default withSentry(async (req: Request) => {
     if (!(await hasProjectAccess(userId, projectId))) return json({ error: "Not found" }, { status: 404 });
 
     const tasks = await database.sql`
-      SELECT id, title, description, status, owner_name, start_date, due_date, stakeholder_id, parent_task_id, roadmap_item_id, priority, created_at, updated_at
+      SELECT id, title, description, status, owner_name, start_date, due_date, stakeholder_id, parent_task_id, roadmap_item_id, priority, created_at, updated_at,
+        (SELECT count(*)::int FROM task_task_links WHERE task_id = tasks.id) AS depends_on_count,
+        (SELECT count(*)::int FROM task_task_links WHERE depends_on_task_id = tasks.id) AS blocks_count
       FROM tasks WHERE project_id = ${projectId} AND deleted_at IS NULL
       ORDER BY
         CASE status WHEN 'blocked' THEN 0 WHEN 'in_progress' THEN 1 WHEN 'not_started' THEN 2 ELSE 3 END,

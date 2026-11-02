@@ -1302,7 +1302,7 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
                         <RegisterRow
                           rowRef={(el) => setRowRef(t.id, el)}
                           title={<button type="button" className="row-title-btn" onClick={() => openDrawer(t)}>{t.title}</button>}
-                          meta={<>{t.priority ? `${t.priority === "high" ? "High" : t.priority === "medium" ? "Medium" : "Low"} priority \u00b7 ` : ""}{t.owner_name || "No owner"}{parent ? ` \u00b7 Sub-task of ${parent.title}` : ""}</>}
+                          meta={<>{t.priority ? `${t.priority === "high" ? "High" : t.priority === "medium" ? "Medium" : "Low"} priority \u00b7 ` : ""}{t.owner_name || "No owner"}{parent ? ` \u00b7 Sub-task of ${parent.title}` : ""}{t.depends_on_count ? ` \u00b7 Waits on ${t.depends_on_count}` : ""}{t.blocks_count ? ` \u00b7 Blocks ${t.blocks_count}` : ""}</>}
                           pill={phase ? <span className="pill pill-navy task-phase-pill" title={`Roadmap phase: ${phase.title}`}>{phase.title}</span> : null}
                           flag={lateFlag(t.due_date, t.status !== "done")}
                           date={t.due_date ? fmtLocalDate(t.due_date) : null}

@@ -7,9 +7,10 @@ import { withSentry } from "../lib/sentry.ts";
 
 // The notification bell. Nothing here is a new record of "something happened":
 // every item is a read-only lens on data that already exists (decision
-// answers, feedback status, new feedback), judged unread by comparing it with
-// the signed-in person's own notifications_seen_at. The only things stored
-// are that timestamp and the last What's new version seen (users table).
+// answers, feedback status, new feedback, teammates' project activity),
+// judged unread by comparing it with the signed-in person's own
+// notifications_seen_at. The only things stored are that timestamp and the
+// last What's new version seen (users table).
 //
 // What's new entries live in the front end, so the client works out which
 // are new from whats_new_seen; this endpoint just remembers it.
@@ -18,7 +19,7 @@ const WINDOW = "30 days";
 
 type Item = {
   id: string;
-  type: "decision_response" | "feedback_update" | "feedback_inbox";
+  type: "decision_response" | "feedback_update" | "feedback_inbox" | "project_activity";
   text: string;
   at: string | null;
   unread: boolean;
@@ -88,6 +89,42 @@ export default withSentry(async (req: Request) => {
       at: d.responded_at ? new Date(d.responded_at).toISOString() : null,
       unread: !!d.unread,
       to: `/app/projects/${d.project_id}?tab=decisions`,
+    });
+  }
+
+  // What teammates did in projects this person owns or is an active member
+  // of: the shared activity log, other people's actions only (nobody needs a
+  // notification about their own edits). Same 30-day lens as everything else.
+  const activity = await database.sql`
+    SELECT a.id, a.summary, a.entity_type, a.entity_title, a.action, a.created_at,
+           p.id AS project_id, p.name AS project_name,
+           COALESCE(NULLIF(TRIM(u.display_name), ''), 'A teammate') AS actor_name,
+           a.created_at > (SELECT notifications_seen_at FROM users WHERE id = ${userId}) AS unread
+    FROM activity_log a
+    JOIN projects p ON p.id = a.project_id
+    LEFT JOIN users u ON u.id = a.actor_id
+    WHERE a.actor_id IS NOT NULL AND a.actor_id != ${userId}
+      AND a.created_at > now() - ${WINDOW}::interval
+      AND p.deleted_at IS NULL
+      AND (
+        p.owner_id = ${userId}
+        OR EXISTS (SELECT 1 FROM project_members m WHERE m.project_id = p.id AND m.user_id = ${userId} AND m.status = 'active')
+      )
+    ORDER BY a.created_at DESC
+    LIMIT 10
+  `;
+  const VERB: Record<string, string> = { created: "added", updated: "updated", deleted: "removed", restored: "restored" };
+  for (const a of activity) {
+    const what = a.summary
+      ? snippet(String(a.summary), 80)
+      : `${VERB[a.action as string] ?? "changed"} ${String(a.entity_type).replace(/_/g, " ")}${a.entity_title ? ` "${snippet(String(a.entity_title), 40)}"` : ""}`;
+    items.push({
+      id: `activity:${a.id}`,
+      type: "project_activity",
+      text: `${a.actor_name}: ${what} · ${snippet(String(a.project_name), 40)}`,
+      at: a.created_at ? new Date(a.created_at).toISOString() : null,
+      unread: !!a.unread,
+      to: `/app/projects/${a.project_id}?tab=home`,
     });
   }
 

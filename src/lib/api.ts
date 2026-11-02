@@ -258,6 +258,10 @@ export type Task = {
   roadmap_item_id: string | null;
   // Optional. null = not set.
   priority?: "low" | "medium" | "high" | null;
+  // Dependency links (from the tasks list): how many tasks this one waits
+  // on, and how many wait on it. Absent on older payloads.
+  depends_on_count?: number;
+  blocks_count?: number;
   created_at?: string;
 };
 
@@ -741,7 +745,7 @@ export type MyTodayData = {
 
 export type NotificationItem = {
   id: string;
-  type: "decision_response" | "feedback_update" | "feedback_inbox";
+  type: "decision_response" | "feedback_update" | "feedback_inbox" | "project_activity";
   text: string;
   at: string | null;
   unread: boolean;
