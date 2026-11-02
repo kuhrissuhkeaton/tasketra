@@ -26,7 +26,14 @@ export default withSentry(async (req: Request) => {
       SELECT p.id, p.name, p.description, p.created_at, p.owner_id, p.webhook_enabled,
         p.ccb_enabled, p.archived, p.deleted_at, p.roadmap_share_enabled, p.roadmap_share_token,
         p.closure_checklist, p.closure_notes, p.closed_at, p.stage, p.size, p.approach, p.show_all_tabs, p.charter, p.tolerances, p.stage_gates,
-        (p.owner_id = ${userId}) AS is_owner
+        (p.owner_id = ${userId}) AS is_owner,
+        (SELECT max(al.created_at) FROM activity_log al WHERE al.project_id = p.id) AS last_activity_at,
+        ((SELECT count(*)::int FROM tasks t WHERE t.project_id = p.id AND t.deleted_at IS NULL)
+          + (SELECT count(*)::int FROM stakeholders s WHERE s.project_id = p.id AND s.deleted_at IS NULL)
+          + (SELECT count(*)::int FROM risks r WHERE r.project_id = p.id AND r.deleted_at IS NULL)
+          + (SELECT count(*)::int FROM issues i WHERE i.project_id = p.id AND i.deleted_at IS NULL)
+          + (SELECT count(*)::int FROM decision_requests dr WHERE dr.project_id = p.id AND dr.deleted_at IS NULL)
+          + (SELECT count(*)::int FROM documents d WHERE d.project_id = p.id AND d.deleted_at IS NULL)) AS content_count
       FROM projects p
       WHERE p.id = ${id}
         AND (p.owner_id = ${userId}

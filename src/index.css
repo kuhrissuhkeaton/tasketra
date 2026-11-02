@@ -2251,6 +2251,7 @@ a:hover { color: var(--navy); }
 .pw-name { font-weight: 600; font-size: 16px; color: var(--navy); text-decoration: none; overflow-wrap: anywhere; }
 .pw-name:hover { text-decoration: underline; }
 .pw-reason { font-size: 13px; overflow-wrap: anywhere; }
+.pw-activity { font-size: 12px; }
 .pw-meta { display: flex; align-items: center; gap: 12px; flex: none; }
 .pw-progress { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; font-variant-numeric: tabular-nums; min-width: 120px; }
 .pw-progress .progress-track { width: 64px; flex: none; }

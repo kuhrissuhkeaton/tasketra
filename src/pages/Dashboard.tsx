@@ -15,7 +15,7 @@ import { localDateKey, addDays } from "../lib/today";
 import { buildNeedsAttention } from "../lib/needsAttention";
 import { ResizableTable } from "../components/ResizableTable";
 import { useAuth } from "../lib/auth-context";
-import { fmtDateTime, fmtLocalDate } from "../lib/format";
+import { fmtDate, fmtDateTime, fmtLocalDate } from "../lib/format";
 import { shouldShowHubTip, HUB_TIP_STORAGE_KEY } from "../lib/hubTip";
 import { FirstRunScreen, type FirstRunChoice } from "../components/FirstRun";
 import { isFirstRun, startChecklist } from "../lib/firstRun";
@@ -780,6 +780,11 @@ export default function Dashboard() {
                     <div className="pw-main">
                       <Link to={`/app/projects/${r.project.id}`} className="pw-name">{r.project.name}</Link>
                       <span className="pw-reason muted">{r.reason}</span>
+                      <span className="pw-activity muted">
+                        {r.project.last_activity_at
+                          ? `Last activity ${fmtDate(r.project.last_activity_at)}`
+                          : `Created ${fmtDate(r.project.created_at)} · Nothing added yet`}
+                      </span>
                     </div>
                     <div className="pw-meta">
                       <span className="pw-cell pw-cell-health"><span className={`pill ${HEALTH_PILL[r.health]}`}>{HEALTH_LABEL[r.health]}</span></span>

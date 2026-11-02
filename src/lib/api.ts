@@ -113,6 +113,8 @@ export type Project = {
   is_owner?: boolean;
   open_decisions?: number;
   overdue_tasks?: number;
+  last_activity_at?: string | null;
+  content_count?: number;
   webhook_enabled?: boolean;
   ccb_enabled?: boolean;
   roadmap_share_enabled?: boolean;

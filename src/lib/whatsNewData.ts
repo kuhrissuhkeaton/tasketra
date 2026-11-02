@@ -10,6 +10,12 @@ export type ChangeEntry = { version: string; date: string; title: string; body: 
 // they can do.
 export const CHANGES: ChangeEntry[] = [
   {
+    version: "v135",
+    date: "November 2026",
+    title: "See at a glance whether a project has anything in it",
+    body: "The Projects page now shows a short line under each project: \"Last activity\" with the date something last changed, or \"Created\" with the date and \"Nothing added yet\" for a project that is still empty. Opening an empty project says the same thing up front — it has not been deleted or emptied, nothing has been added to it yet. If you ever come back to a project and are not sure what happened to it, that line tells you.",
+  },
+  {
     version: "v133",
     date: "October 2026",
     title: "Task priority, and two new ways to sort tasks",

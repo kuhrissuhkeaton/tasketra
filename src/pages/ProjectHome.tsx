@@ -272,6 +272,16 @@ export default function ProjectHome() {
           )}
         </div>
 
+        {project && project.content_count === 0 && !project.last_activity_at && (
+          <div className="callout" role="note">
+            <strong>Nothing here yet.</strong> This project was created {fmtDate(project.created_at)} and
+            nothing has been added to it — it hasn&apos;t been deleted or emptied. When you add tasks,
+            risks, issues, decisions, or documents, they&apos;ll show up here. If you were expecting to
+            find work in this project, it was most likely never saved here; check your other projects
+            from the <Link to="/app/projects">Projects page</Link>.
+          </div>
+        )}
+
         {id && <HealthStrip projectId={id} onOpenTab={(t) => setParams({ tab: t })} />}
 
         <nav className="project-tabs primary-tabs" aria-label="Project views">
