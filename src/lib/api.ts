@@ -631,6 +631,16 @@ export type WeeklyReport = {
     open_decisions: number;
   };
   stage: ProjectStage | null;
+  budget: {
+    bac: number;
+    ac: number;
+    cpi: number | null;
+    spi: number | null;
+    eac: number | null;
+    percentComplete: number | null;
+    tasksDone: number;
+    tasksTotal: number;
+  } | null;
   charter: {
     purpose: string;
     sponsor: string | null;

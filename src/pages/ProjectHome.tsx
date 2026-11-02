@@ -325,6 +325,7 @@ export default function ProjectHome() {
             projectId={id}
             isOwner={project?.is_owner ?? false}
             purpose={project?.charter?.purpose}
+            stage={project?.stage ?? "initiate"}
             size={size}
             showAll={project?.show_all_tabs ?? false}
             onShowAllTabs={async () => {
@@ -387,10 +388,11 @@ export default function ProjectHome() {
   );
 }
 
-function HomeTab({ projectId, isOwner, purpose, size, showAll, onShowAllTabs, onStageChange, onOpenTab }: {
+function HomeTab({ projectId, isOwner, purpose, stage, size, showAll, onShowAllTabs, onStageChange, onOpenTab }: {
   projectId: string;
   isOwner: boolean;
   purpose?: string;
+  stage: ProjectStage;
   size: ProjectSize;
   showAll: boolean;
   onShowAllTabs: () => void;
@@ -406,6 +408,12 @@ function HomeTab({ projectId, isOwner, purpose, size, showAll, onShowAllTabs, on
           {isOwner && (
             <button type="button" className="view-banner-link" onClick={onShowAllTabs}>Show all sections</button>
           )}
+        </p>
+      )}
+      {!purpose && (stage === "plan" || stage === "execute") && (
+        <p className="view-banner">
+          This project is under way without a charter. A short one — why it exists, who it's for, what done looks like — settles the scope questions before they become arguments.{" "}
+          <button type="button" className="view-banner-link" onClick={() => onOpenTab("charter")}>Write the charter</button>
         </p>
       )}
       {purpose && (
@@ -4557,6 +4565,11 @@ function BudgetTab({ projectId, onOpenTab }: { projectId: string; onOpenTab: (ta
           <div className="evm-sub">Required efficiency</div>
         </div>
       </div>
+      {metrics.eac !== null && taskStats.doneTasks < 3 && (
+        <p className="muted" style={{ marginTop: 10 }}>
+          Early forecast: only {taskStats.doneTasks} of {taskStats.totalTasks} tasks {taskStats.doneTasks === 1 ? "is" : "are"} done, so EAC and the other forecasts will swing a lot as more work completes. Treat them as a rough guide for now.
+        </p>
+      )}
 
       <h2 className="heading-sm" style={{ marginTop: 28 }}>Log actual cost</h2>
       <AddForm className="inline-form inline-form-wide" onSubmit={addCost}>
@@ -5828,13 +5841,18 @@ function StakeholderDecisionsTab({ projectId }: { projectId: string }) {
         </AddForm>
       )}
 
+      {decisions.length > 0 && (
+        <p className="muted" style={{ marginBottom: 12 }}>
+          {decisions.filter((d) => d.status === "open").length} awaiting response · {decisions.filter((d) => d.status !== "open").length} decided
+        </p>
+      )}
       <div className="decision-list">
         {decisions.map((d) => (
           <div key={d.id} className={`decision-card ${d.status}`}>
             <div className="decision-card-head">
               <h4>{d.title}</h4>
               <span className={`pill ${d.status === "open" ? "pill-gold" : "pill-green"}`}>
-                {d.status === "open" ? "Awaiting response" : "Resolved"}
+                {d.status === "open" ? "Awaiting response" : "Decided"}
               </span>
             </div>
             {d.context && <p className="muted">{d.context}</p>}
@@ -5844,7 +5862,7 @@ function StakeholderDecisionsTab({ projectId }: { projectId: string }) {
               </div>
             ) : (
               <div className="decision-record">
-                <strong>{d.chosen_option}</strong> -- approved by <strong>{d.responder_name}</strong>
+                <strong>Decided:</strong> {d.chosen_option} · decided by <strong>{d.responder_name}</strong>
                 <br />
                 <span className="muted">{d.responded_at && fmtDateTime(d.responded_at)}</span>
               </div>
@@ -6754,6 +6772,22 @@ function WeeklyReportView({ projectId, projectName }: { projectId: string; proje
         <div className="stat"><strong>{snapshot.open_decisions}</strong> decisions awaiting response</div>
       </div>
 
+      {report.budget && (
+        <div className="today-section">
+          <h4>Budget</h4>
+          <p>
+            {fmtMoney(report.budget.ac)} spent of {fmtMoney(report.budget.bac)} budget
+            {report.budget.percentComplete !== null && <> · {fmtPct(report.budget.percentComplete)} of work complete ({report.budget.tasksDone} of {report.budget.tasksTotal} tasks)</>}
+            {report.budget.cpi !== null && <> · CPI {fmtRatio(report.budget.cpi)}</>}
+            {report.budget.spi !== null && <> · SPI {fmtRatio(report.budget.spi)}</>}
+            {report.budget.eac !== null && <> · forecast final cost {fmtMoney(report.budget.eac)}</>}
+          </p>
+          {report.budget.eac !== null && report.budget.tasksDone < 3 && (
+            <p className="muted">Early forecast — few tasks are done yet, so the forecast will move as more work completes.</p>
+          )}
+        </div>
+      )}
+
       {recentMeetings !== null && (
         <div className="today-section">
           <h4>Meetings this week ({recentMeetings.length})</h4>
@@ -7179,18 +7213,18 @@ function ExportTab({ projectId, projectName }: { projectId: string; projectName:
   return (
     <div className="export-view">
       <div className="export-header">
-        <h2>{projectName} -- Decision Audit Trail</h2>
+        <h2>{projectName} · Decision Audit Trail</h2>
         <button className="btn btn-ghost no-print" onClick={() => window.print()} type="button">Print / Save as PDF</button>
       </div>
       {decisions.map((d) => (
         <div key={d.id} className="decision-record-card">
           <h4>{d.title}</h4>
           {d.context && <p>{d.context}</p>}
-          <p><strong>{d.chosen_option}</strong> -- approved by <strong>{d.responder_name}</strong></p>
+          <p><strong>Decided:</strong> {d.chosen_option} · decided by <strong>{d.responder_name}</strong></p>
           <p className="muted">{d.responded_at && fmtDateTime(d.responded_at)}</p>
         </div>
       ))}
-      {decisions.length === 0 && <p className="muted">No resolved decisions yet.</p>}
+      {decisions.length === 0 && <p className="muted">No decisions recorded yet.</p>}
     </div>
   );
 }

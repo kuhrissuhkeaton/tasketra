@@ -139,6 +139,14 @@ export default withSentry(async (req: Request) => {
       if (!existing?.roadmap_share_token) newShareToken = crypto.randomBytes(24).toString("base64url");
     }
 
+    // Capture the stage before the update so the activity log can say where
+    // the project came FROM, and call out any stage that was skipped over.
+    let prevStage: string | null = null;
+    if (hasStage) {
+      const [prev] = await database.sql`SELECT stage FROM projects WHERE id = ${id}`;
+      prevStage = (prev?.stage as string | undefined) ?? null;
+    }
+
     const [project] = await database.sql`
       UPDATE projects SET
         name = COALESCE(${hasName ? body.name.trim() : null}, name),
@@ -163,7 +171,14 @@ export default withSentry(async (req: Request) => {
     `;
 
     if (hasStage) {
-      await logActivity(database, { projectId: id, entityType: "project", entityId: id, entityTitle: project.name, action: "updated", summary: `stage changed to ${STAGE_LABEL[body.stage as keyof typeof STAGE_LABEL]}` });
+      const order = ["initiate", "plan", "execute", "close"];
+      const from = prevStage ?? "initiate";
+      const to = body.stage as string;
+      const skipped = order.slice(order.indexOf(from) + 1, order.indexOf(to));
+      const skipNote = skipped.length > 0
+        ? ` (skipped ${skipped.map((s) => STAGE_LABEL[s as keyof typeof STAGE_LABEL]).join(", ")})`
+        : "";
+      await logActivity(database, { projectId: id, entityType: "project", entityId: id, entityTitle: project.name, action: "updated", summary: `stage changed from ${STAGE_LABEL[from as keyof typeof STAGE_LABEL]} to ${STAGE_LABEL[to as keyof typeof STAGE_LABEL]}${skipNote}` });
     }
 
     if (hasSize || hasApproach || hasShowAllTabs || hasStageGates) {

@@ -7,6 +7,7 @@ import { withSentry } from "../lib/sentry.ts";
 import { sanitizeCharter } from "../lib/charter.ts";
 import { approvalStatus } from "../lib/charterApproval.ts";
 import { isStage } from "../lib/stageChecklist.ts";
+import { computeEvmMetrics, round2 } from "../lib/evm.ts";
 
 // One-click weekly status report: everything that moved on a project in the
 // last 7 days, plus a current-state snapshot. Pure aggregation, no new
@@ -32,6 +33,9 @@ export default withSentry(async (req: Request) => {
     statusUpdates,
     snapshot,
     [projectRow],
+    [budgetRow],
+    costRows,
+    [evmTaskStats],
   ] = await Promise.all([
     database.sql`
       SELECT id, title, owner_name, updated_at FROM tasks
@@ -91,6 +95,17 @@ export default withSentry(async (req: Request) => {
       LEFT JOIN decision_records rec ON rec.decision_request_id = dr.id
       WHERE p.id = ${projectId}
     `,
+    database.sql`SELECT budget_at_completion FROM projects WHERE id = ${projectId}`,
+    database.sql`SELECT amount FROM cost_entries WHERE project_id = ${projectId}`,
+    database.sql`
+      SELECT
+        count(*)::int AS total_tasks,
+        count(*) FILTER (WHERE status = 'done')::int AS done_tasks,
+        count(*) FILTER (WHERE due_date IS NOT NULL AND due_date <= CURRENT_DATE)::int AS due_tasks
+      FROM tasks
+      WHERE project_id = ${projectId} AND deleted_at IS NULL
+        AND id NOT IN (SELECT DISTINCT parent_task_id FROM tasks WHERE parent_task_id IS NOT NULL AND deleted_at IS NULL)
+    `,
   ]);
 
   // The charter rides along so a stakeholder reading the report sees what the
@@ -110,9 +125,22 @@ export default withSentry(async (req: Request) => {
       }
     : null;
 
+  // Budget snapshot for sponsors: same earned-value math as the Budget tab,
+  // included only when the project has a budget at completion set.
+  const bac = budgetRow?.budget_at_completion !== null && budgetRow?.budget_at_completion !== undefined
+    ? Number(budgetRow.budget_at_completion) : null;
+  const ac = round2((costRows as any[]).reduce((sum, c) => sum + Number(c.amount), 0));
+  const evm = bac !== null
+    ? computeEvmMetrics({ bac, ac, totalTasks: evmTaskStats?.total_tasks || 0, doneTasks: evmTaskStats?.done_tasks || 0, dueTasks: evmTaskStats?.due_tasks || 0 })
+    : null;
+  const budgetBlock = evm
+    ? { bac, ac: evm.ac, cpi: evm.cpi, spi: evm.spi, eac: evm.eac, percentComplete: evm.evPercent, tasksDone: evmTaskStats?.done_tasks || 0, tasksTotal: evmTaskStats?.total_tasks || 0 }
+    : null;
+
   return json({
     rangeDays: 7,
     generatedAt: new Date().toISOString(),
+    budget: budgetBlock,
     tasksCompleted,
     tasksAdded,
     issuesOpened,

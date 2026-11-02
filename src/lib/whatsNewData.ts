@@ -10,6 +10,12 @@ export type ChangeEntry = { version: string; date: string; title: string; body: 
 // they can do.
 export const CHANGES: ChangeEntry[] = [
   {
+    version: "v138",
+    date: "November 2026",
+    title: "Reports a sponsor can use",
+    body: "The weekly report now includes a Budget section when the project has a budget — spend against budget, percent complete, CPI, SPI and the forecast final cost — so it can go to a sponsor as-is. Decisions read as a proper decision log: a resolved request shows \"Decided\", the choice, who decided and when, with counts at the top of the Decisions tab. Moving a project to a new stage now records in the activity feed where it came from, and calls out any stage that was skipped. A project that is under way without a charter gets a gentle nudge on its Overview to write one, and budget forecasts say so when they are based on only a task or two being done.",
+  },
+  {
     version: "v137",
     date: "November 2026",
     title: "Closed means closed, everywhere",
