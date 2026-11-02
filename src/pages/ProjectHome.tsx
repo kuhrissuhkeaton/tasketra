@@ -19,7 +19,7 @@ import { fmtDate, fmtDateTime, fmtLocalDate } from "../lib/format";
 import { capacityLevel, CAPACITY_LABEL, CAPACITY_PILL, type CapacityLevel } from "../lib/capacity";
 import { useAuth } from "../lib/auth-context";
 import { AppSidebar } from "../components/AppSidebar";
-import { NAV_GROUPS, STRIP_TABS, groupOf, sectionLabel, visibleGroups } from "../lib/projectNav";
+import { NAV_GROUPS, STRIP_TABS, groupOf, sectionLabel, visibleGroups, visibleSections } from "../lib/projectNav";
 import { useConfirm } from "../components/ConfirmDialog";
 import { RegisterRow, RegisterSummary, RegisterEmpty } from "../components/ui";
 import { daysUntil, lateFlag, expiryFlag } from "../lib/rowFlags";
@@ -400,6 +400,12 @@ function HomeTab({ projectId, isOwner, purpose, stage, size, showAll, onShowAllT
   onOpenTab: (tab: string) => void;
 }) {
   const [view, setView] = useState<"today" | "feed">("today");
+  const [baselineData, setBaselineData] = useState<BaselineData | null>(null);
+  useEffect(() => {
+    let live = true;
+    api.getBaseline(projectId).then((d) => { if (live) setBaselineData(d); }).catch(() => {});
+    return () => { live = false; };
+  }, [projectId]);
   return (
     <div>
       {size !== "full" && !showAll && (
@@ -423,6 +429,21 @@ function HomeTab({ projectId, isOwner, purpose, stage, size, showAll, onShowAllT
           <button type="button" className="view-banner-link" onClick={() => onOpenTab("charter")}>Charter</button>
         </p>
       )}
+      {baselineData?.baseline && (
+        <p className="view-banner">
+          Baseline locked {fmtDate(baselineData.baseline.lockedAt)} · {baselineData.baseline.taskCount} tasks
+          {baselineData.variance && (baselineData.variance.movedTasks.length > 0 || baselineData.variance.addedTasks > 0 || baselineData.variance.removedTasks > 0)
+            ? ` · since then: ${baselineData.variance.movedTasks.length} moved, ${baselineData.variance.addedTasks} added, ${baselineData.variance.removedTasks} removed`
+            : " · nothing has moved against it yet"}{" "}
+          <button type="button" className="view-banner-link" onClick={() => onOpenTab("roadmap")}>See it on the Roadmap</button>
+        </p>
+      )}
+      {baselineData && !baselineData.baseline && stage === "execute" && (
+        <p className="view-banner">
+          No baseline locked yet. Once the plan settles, locking one gives you a fixed point to measure slippage against.{" "}
+          <button type="button" className="view-banner-link" onClick={() => onOpenTab("roadmap")}>Go to the Roadmap</button>
+        </p>
+      )}
       <StageRail projectId={projectId} isOwner={isOwner} onStageChange={onStageChange} onOpenTab={onOpenTab} />
       <div className="view-toggle">
         <button
@@ -441,9 +462,63 @@ function HomeTab({ projectId, isOwner, purpose, stage, size, showAll, onShowAllT
         </button>
       </div>
       {view === "today" ? <TodayTab projectId={projectId} /> : <FeedTab projectId={projectId} />}
+
+      <div className="today-section" style={{ marginTop: 28 }}>
+        <h4>All sections</h4>
+        {NAV_GROUPS.map((g) => {
+          const sections = visibleSections(g, "home", size, showAll).filter((s) => s.id !== "home");
+          if (sections.length === 0) return null;
+          return (
+            <div key={g.id} style={{ marginTop: 12 }}>
+              <p className="muted" style={{ margin: "0 0 6px" }}><strong>{g.label}</strong></p>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(210px, 1fr))", gap: "6px 20px" }}>
+                {sections.map((s) => (
+                  <span key={s.id}>
+                    <button type="button" className="view-banner-link" onClick={() => onOpenTab(s.id)}>{s.label}</button>
+                    {SECTION_BLURB[s.id] && <span className="muted"> — {SECTION_BLURB[s.id]}</span>}
+                  </span>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+        {size !== "full" && !showAll && (
+          <p className="muted" style={{ marginTop: 12 }}>
+            {hiddenTabLabels(size).length} sections are hidden by the {SIZE_LABEL[size]} view.
+            {isOwner && <> <button type="button" className="view-banner-link" onClick={onShowAllTabs}>Show all sections</button></>}
+          </p>
+        )}
+      </div>
     </div>
   );
 }
+
+const SECTION_BLURB: Record<string, string> = {
+  tasks: "the work list",
+  roadmap: "phases, milestones, baseline",
+  budget: "costs and earned value",
+  meetings: "meeting notes",
+  charter: "purpose, sponsor, success",
+  okrs: "objectives and key results",
+  issues: "problems needing action",
+  risks: "what might go wrong",
+  assumptions: "taken for granted, checked",
+  dependencies: "what waits on what",
+  quality: "checks and acceptance",
+  compliance: "requirements and evidence",
+  decisions: "requests and the decision log",
+  stakeholders: "who cares, and how much",
+  team: "members and settings",
+  raci: "who does, approves, advises",
+  procurement: "vendors and purchases",
+  comms: "who hears what, when",
+  documents: "files and links",
+  report: "weekly status, ready to send",
+  closure: "close-out checklist and record",
+  templates: "save and reuse setups",
+  export: "audit trails and downloads",
+  connections: "webhooks and integrations",
+};
 
 function FeedTab({ projectId }: { projectId: string }) {
   const { user } = useAuth();

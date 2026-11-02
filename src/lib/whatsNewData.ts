@@ -10,6 +10,12 @@ export type ChangeEntry = { version: string; date: string; title: string; body: 
 // they can do.
 export const CHANGES: ChangeEntry[] = [
   {
+    version: "v140",
+    date: "November 2026",
+    title: "Find every section, see your baseline",
+    body: "The project Overview now ends with an index of every section in the project — what each one is for, with a jump straight to it — so nothing stays hidden behind the wrong menu. The Overview also shows your baseline: when it was locked, how many tasks it holds, and how much has moved, been added or removed since, with a link through to the Roadmap. A project in Execute with no baseline gets a nudge to lock one.",
+  },
+  {
     version: "v139",
     date: "November 2026",
     title: "See what your team is doing",
