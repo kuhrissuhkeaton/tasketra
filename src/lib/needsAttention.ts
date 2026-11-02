@@ -77,6 +77,10 @@ export function buildNeedsAttention(
 ): AttentionItem[] {
   const scored: { item: AttentionItem; rank: number[] }[] = [];
   for (const p of projects) {
+    // A closed project never needs attention: its leftover overdue tasks and
+    // open decisions are history. (It still appears in health views, wearing
+    // its Closed badge.)
+    if (p.closed_at) continue;
     const ctx: AttentionContext = { openDecisions: openDecisions[p.id] ?? 0 };
     const reasons: AttentionReason[] = [];
     const rank: number[] = [];

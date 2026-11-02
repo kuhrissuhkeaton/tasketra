@@ -403,7 +403,11 @@ export default function Today() {
                     {portfolio.projects.map((p) => (
                       <li key={p.id} className="tw-rail-row tw-rail-project">
                         <Link to={`/app/projects/${p.id}`}>{p.name}</Link>
-                        <span className={`pill ${HEALTH_PILL[p.health]}`}>{HEALTH_LABEL[p.health]}</span>
+                        {p.closed_at ? (
+                          <span className="pill pill-neutral">Closed</span>
+                        ) : (
+                          <span className={`pill ${HEALTH_PILL[p.health]}`}>{HEALTH_LABEL[p.health]}</span>
+                        )}
                       </li>
                     ))}
                   </ul>

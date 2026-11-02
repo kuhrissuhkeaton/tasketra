@@ -188,6 +188,11 @@ export default function ProjectHome() {
   const navigate = useNavigate();
   const tour = useProductTour((tourTab) => setParams({ tab: tourTab }));
 
+  // Refetch when the tab changes too, not just when the project does: the
+  // header reads this object for the stage chip and the "Nothing here yet"
+  // banner (content_count / last_activity_at), and work added in one tab must
+  // clear that banner when the person moves to another tab. Fetched once on
+  // mount, the banner outlived the emptiness it described.
   useEffect(() => {
     if (id) {
       api.getProject(id).then(({ project }) => setProject(project)).catch((e: unknown) => {
@@ -197,7 +202,7 @@ export default function ProjectHome() {
         else throw e;
       });
     }
-  }, [id]);
+  }, [id, tab]);
 
   // Started by Dashboard's first-project flow, or Resources' "Replay the
   // tour" link, both of which pass startTour via router state rather than
@@ -4448,7 +4453,7 @@ function BudgetTab({ projectId, onOpenTab }: { projectId: string; onOpenTab: (ta
     load();
   }
 
-  if (!data) return <p className="muted">Loading budget...</p>;
+  if (!data) return <div className="skel-loading-block"><div className="skel skel-text" style={{ width: "45%" }} /><div className="skel skel-text" style={{ width: "80%" }} /><div className="skel skel-text" style={{ width: "60%", marginBottom: 0 }} /></div>;
 
   const { metrics, taskStats, costEntries, budgetAtCompletion, contingencyReserve } = data;
   const favorable = (n: number | null, goodIsPositive = true) =>
@@ -6707,7 +6712,7 @@ function WeeklyReportView({ projectId, projectName }: { projectId: string; proje
     });
   }, [projectId]);
 
-  if (!report) return <p className="muted">Loading report...</p>;
+  if (!report) return <div className="skel-loading-block"><div className="skel skel-text" style={{ width: "45%" }} /><div className="skel skel-text" style={{ width: "80%" }} /><div className="skel skel-text" style={{ width: "60%", marginBottom: 0 }} /></div>;
 
   const {
     snapshot, tasksCompleted, tasksAdded, issuesOpened, issuesResolved,
@@ -6718,7 +6723,7 @@ function WeeklyReportView({ projectId, projectName }: { projectId: string; proje
     <div className="export-view">
       <div className="export-header">
         <div>
-          <h2>{projectName} -- Weekly Status Report</h2>
+          <h2>{projectName} · Weekly Status Report</h2>
           <p className="muted">Last 7 days, generated {fmtDateTime(report.generatedAt)}</p>
         </div>
         <button className="btn btn-ghost no-print" onClick={() => window.print()} type="button">Print / Save as PDF</button>
@@ -6726,7 +6731,7 @@ function WeeklyReportView({ projectId, projectName }: { projectId: string; proje
 
       {report.charter && (
         <div className="today-section report-charter">
-          <h4>Project charter{report.stage ? ` -- ${STAGE_LABEL[report.stage]} stage` : ""}</h4>
+          <h4>Project charter{report.stage ? ` · ${STAGE_LABEL[report.stage]} stage` : ""}</h4>
           <p>{report.charter.purpose}</p>
           {report.charter.sponsor && <p className="muted">Sponsor: {report.charter.sponsor}</p>}
           {report.charter.success && <p className="muted">Success looks like: {report.charter.success}</p>}
@@ -6750,17 +6755,17 @@ function WeeklyReportView({ projectId, projectName }: { projectId: string; proje
       </div>
 
       {recentMeetings !== null && (
-        <div className="today-section no-print">
+        <div className="today-section">
           <h4>Meetings this week ({recentMeetings.length})</h4>
           <ul className="today-list">
             {recentMeetings.map((m) => (
               <li key={m.id}>
-                {m.title} <span className="muted">-- {MEETING_TYPE_LABEL[m.meeting_type]}{m.meeting_date ? ` -- ${fmtLocalDate(m.meeting_date)}` : " -- no date set"}</span>
+                {m.title} <span className="muted">· {MEETING_TYPE_LABEL[m.meeting_type]}{m.meeting_date ? ` · ${fmtLocalDate(m.meeting_date)}` : " · no date set"}</span>
               </li>
             ))}
             {recentMeetings.length === 0 && <li className="muted">No meetings logged this week.</li>}
           </ul>
-          <button className="btn-link" type="button" onClick={() => setParams({ tab: "meetings" })}>
+          <button className="btn-link no-print" type="button" onClick={() => setParams({ tab: "meetings" })}>
             Go to Meetings -&gt;
           </button>
         </div>
@@ -6769,7 +6774,7 @@ function WeeklyReportView({ projectId, projectName }: { projectId: string; proje
       <div className="today-section">
         <h4>Completed this week ({tasksCompleted.length})</h4>
         <ul className="today-list">
-          {tasksCompleted.map((t) => <li key={t.id}>{t.title} <span className="muted">-- {t.owner_name || "unassigned"}</span></li>)}
+          {tasksCompleted.map((t) => <li key={t.id}>{t.title} <span className="muted">· {t.owner_name || "unassigned"}</span></li>)}
           {tasksCompleted.length === 0 && <li className="muted">Nothing marked done this week.</li>}
         </ul>
       </div>
@@ -6777,7 +6782,7 @@ function WeeklyReportView({ projectId, projectName }: { projectId: string; proje
       <div className="today-section">
         <h4>New tasks added ({tasksAdded.length})</h4>
         <ul className="today-list">
-          {tasksAdded.map((t) => <li key={t.id}>{t.title} <span className="muted">-- {STATUS_LABEL[t.status as Task["status"]]}{t.due_date ? ` -- due ${fmtLocalDate(t.due_date)}` : ""}{t.deleted_at ? " -- since moved to Trash" : ""}</span></li>)}
+          {tasksAdded.map((t) => <li key={t.id}>{t.title} <span className="muted">· {STATUS_LABEL[t.status as Task["status"]]}{t.due_date ? ` · due ${fmtLocalDate(t.due_date)}` : ""}{t.deleted_at ? " · since moved to Trash" : ""}</span></li>)}
           {tasksAdded.length === 0 && <li className="muted">No new tasks this week.</li>}
         </ul>
       </div>
@@ -6785,8 +6790,8 @@ function WeeklyReportView({ projectId, projectName }: { projectId: string; proje
       <div className="today-section">
         <h4>Issues opened ({issuesOpened.length}) / resolved ({issuesResolved.length})</h4>
         <ul className="today-list">
-          {issuesOpened.map((t) => <li key={t.id}>Opened: {t.title} <span className="muted">-- {SEVERITY_LABEL[t.severity as Issue["severity"]]}</span></li>)}
-          {issuesResolved.map((t) => <li key={t.id}>Resolved: {t.title}{t.resolution ? ` -- ${t.resolution}` : ""}</li>)}
+          {issuesOpened.map((t) => <li key={t.id}>Opened: {t.title} <span className="muted">· {SEVERITY_LABEL[t.severity as Issue["severity"]]}</span></li>)}
+          {issuesResolved.map((t) => <li key={t.id}>Resolved: {t.title}{t.resolution ? ` · ${t.resolution}` : ""}</li>)}
           {issuesOpened.length === 0 && issuesResolved.length === 0 && <li className="muted">No issue activity this week.</li>}
         </ul>
       </div>
@@ -6794,7 +6799,7 @@ function WeeklyReportView({ projectId, projectName }: { projectId: string; proje
       <div className="today-section">
         <h4>Risks opened ({risksOpened.length}) / resolved ({risksResolved.length})</h4>
         <ul className="today-list">
-          {risksOpened.map((t) => <li key={t.id}>Opened: {t.title} <span className="muted">-- {LEVEL_LABEL[t.probability as Risk["probability"]]} probability / {LEVEL_LABEL[t.impact as Risk["impact"]]} impact</span></li>)}
+          {risksOpened.map((t) => <li key={t.id}>Opened: {t.title} <span className="muted">· {LEVEL_LABEL[t.probability as Risk["probability"]]} probability / {LEVEL_LABEL[t.impact as Risk["impact"]]} impact</span></li>)}
           {risksResolved.map((t) => <li key={t.id}>Resolved: {t.title}</li>)}
           {risksOpened.length === 0 && risksResolved.length === 0 && <li className="muted">No risk activity this week.</li>}
         </ul>
@@ -6803,7 +6808,7 @@ function WeeklyReportView({ projectId, projectName }: { projectId: string; proje
       <div className="today-section">
         <h4>Decisions made ({decisionsMade.length})</h4>
         <ul className="today-list">
-          {decisionsMade.map((d) => <li key={d.id}>{d.title}: <strong>{d.chosen_option}</strong> -- approved by {d.responder_name}</li>)}
+          {decisionsMade.map((d) => <li key={d.id}>{d.title}: <strong>{d.chosen_option}</strong> · approved by {d.responder_name}</li>)}
           {decisionsMade.length === 0 && <li className="muted">No decisions resolved this week.</li>}
         </ul>
       </div>

@@ -10,6 +10,12 @@ export type ChangeEntry = { version: string; date: string; title: string; body: 
 // they can do.
 export const CHANGES: ChangeEntry[] = [
   {
+    version: "v137",
+    date: "November 2026",
+    title: "Closed means closed, everywhere",
+    body: "A project you have closed now reads as \"Closed\" in every view — the Projects list, the project header, Today, and the Dashboard — instead of still being flagged \"Off track\" or listed under \"Needs attention\" in some of them. The \"Nothing here yet\" notice on a new project also clears as soon as the project has anything in it, and the weekly report now prints in full (meetings included) when you use Print / Save as PDF.",
+  },
+  {
     version: "v136",
     date: "November 2026",
     title: "First projects start with your name on them, and lists keep up",

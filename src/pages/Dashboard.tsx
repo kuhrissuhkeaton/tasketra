@@ -369,6 +369,7 @@ export default function Dashboard() {
   const [setupSize, setSetupSize] = useState<ProjectSize>("standard");
   const [setupApproach, setSetupApproach] = useState<ProjectApproach>("hybrid");
   const [creating, setCreating] = useState(false);
+  const [nameError, setNameError] = useState("");
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const [showDeleted, setShowDeleted] = useState(false);
   const [upgradeNotice, setUpgradeNotice] = useState<string | null>(null);
@@ -472,7 +473,10 @@ export default function Dashboard() {
 
   async function createProject(e: React.FormEvent) {
     e.preventDefault();
-    if (!newName.trim()) return;
+    // Say so instead of silently doing nothing: a click on Create with an
+    // empty name used to look like a dead button.
+    if (!newName.trim()) { setNameError("Give the project a name first."); return; }
+    setNameError("");
     // Captured before the request, not after -- this create() call is what
     // would make it non-zero.
     const isFirstProjectEver = projects.length === 0;
@@ -560,7 +564,7 @@ export default function Dashboard() {
 
   const totalOpenDecisions = projects.reduce((sum, p) => sum + (p.open_decisions || 0), 0);
 
-  const attentionCount = listSummaries.filter((x) => x.health !== "on_track").length;
+  const attentionCount = listSummaries.filter((x) => x.health !== "on_track" && !x.closed_at).length;
   const byId = new Map(listSummaries.map((x) => [x.id, x]));
   const rows = sortByHealth(
     projects.map((p) => {
@@ -580,7 +584,7 @@ export default function Dashboard() {
       };
     }),
   );
-  const shownRows = rows.filter((r) => (listFilter === "all" ? true : listFilter === "attention" ? r.health !== "on_track" : r.health === "on_track"))
+  const shownRows = rows.filter((r) => (listFilter === "all" ? true : listFilter === "attention" ? r.health !== "on_track" && !r.project.closed_at : r.health === "on_track"))
     .filter((r) => !listSearch.trim() || r.project.name.toLowerCase().includes(listSearch.trim().toLowerCase()));
   const summaryLine = loading
     ? "Loading your projects..."
@@ -671,10 +675,11 @@ export default function Dashboard() {
                   aria-label="New project name"
                   placeholder="New project name"
                   value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
+                  onChange={(e) => { setNewName(e.target.value); if (nameError) setNameError(""); }}
                   data-autofocus
                 />
               </label>
+              {nameError && <p className="form-error" role="alert">{nameError}</p>}
               <label className="field">
                 Start from
                 <select
@@ -751,7 +756,7 @@ export default function Dashboard() {
               )}
               <div className="new-project-actions">
                 <button type="button" className="btn btn-ghost" onClick={() => setShowNew(false)}>Cancel</button>
-                <button className="btn btn-primary" disabled={creating}>Create project</button>
+                <button className="btn btn-primary" disabled={creating}>{creating ? "Creating..." : "Create project"}</button>
               </div>
             </form>
           </Modal>
@@ -781,7 +786,7 @@ export default function Dashboard() {
               <div className="pw-filters" role="group" aria-label="Filter projects">
                 {([
                   ["all", "All", rows.length],
-                  ["attention", "Needs attention", rows.filter((r) => r.health !== "on_track").length],
+                  ["attention", "Needs attention", rows.filter((r) => r.health !== "on_track" && !r.project.closed_at).length],
                   ["on_track", "On track", rows.filter((r) => r.health === "on_track").length],
                 ] as const).map(([key, label, n]) => (
                   <button
