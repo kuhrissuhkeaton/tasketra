@@ -10,6 +10,18 @@ export type ChangeEntry = { version: string; date: string; title: string; body: 
 // they can do.
 export const CHANGES: ChangeEntry[] = [
   {
+    version: "v143",
+    date: "November 2026",
+    title: "Say how the project is really doing",
+    body: "Posting an update on a project's Feed can now carry a status: On track, At risk or Off track. Tasketra suggests one from the evidence (tasks past due, work that is blocked, how long since the last update) and shows its reasons. Confirm the suggestion, pick a different status, or post a plain note exactly as before. The project header now shows the latest stated status next to the health Tasketra computes, with how long ago it was stated, and if nobody has stated one yet, it says so. Stated statuses also appear in the feed and at the top of the weekly report's notes.",
+  },
+  {
+    version: "v142",
+    date: "November 2026",
+    title: "Your month at a glance",
+    body: "The Dashboard now has a glance band under the headline numbers. On the left, \"Needs a look\" lists in plain sentences what wants your attention: a project that is off track, tasks past due, decisions waiting. On the right, a calendar of the current month carries dots on the days with tasks due, milestones and decisions waiting. Click any day to see what is on it, with links straight through to the project. It is the same information Tasketra already had, finally visible at a glance.",
+  },
+  {
     version: "v141",
     date: "November 2026",
     title: "Billing keeps up when you cancel",
