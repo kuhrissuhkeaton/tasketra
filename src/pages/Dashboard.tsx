@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { api, ApiError, type Project, type ProjectStage, type PortfolioData, type PortfolioProjectSummary, type Task, type Issue, type UserTemplate } from "../lib/api";
+import { api, ApiError, type Project, type ProjectStage, type PortfolioData, type PortfolioProjectSummary, type Task, type Issue, type UserTemplate, type MyTodayData, type CalendarItem } from "../lib/api";
 import { AppSidebar } from "../components/AppSidebar";
 import { StageChip, STAGES } from "../components/StageRail";
 import { ProjectSetupPicker } from "../components/ProjectSetup";
@@ -13,6 +13,9 @@ import { useIsWide } from "../lib/dashPrefs";
 import { projectReason, sortByHealth } from "../lib/projectReason";
 import { localDateKey, addDays } from "../lib/today";
 import { buildNeedsAttention } from "../lib/needsAttention";
+import { buildNeedsALook, type LookContext } from "../lib/needsALook";
+import { DashboardCalendar } from "../components/DashboardCalendar";
+import { monthRange, shiftMonth, daysBetween } from "../lib/calendarItems";
 import { ResizableTable } from "../components/ResizableTable";
 import { useAuth } from "../lib/auth-context";
 import { fmtDate, fmtDateTime, fmtLocalDate } from "../lib/format";
@@ -154,7 +157,7 @@ function jumpTo(sectionId: string) {
   document.getElementById(`dash-sec-${sectionId}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-function PortfolioOverview({ data, wide, onShowAttention }: { data: PortfolioData; wide: boolean; onShowAttention: () => void }) {
+function PortfolioOverview({ data, wide, onShowAttention, glance }: { data: PortfolioData; wide: boolean; onShowAttention: () => void; glance?: ReactNode }) {
   const { kpis } = data;
   const needAttention = kpis.atRiskProjects + kpis.offTrackProjects;
   const overdueProjects = data.projects.filter((x) => x.overdueTasks > 0).length;
@@ -193,6 +196,8 @@ function PortfolioOverview({ data, wide, onShowAttention }: { data: PortfolioDat
           <span className="kp-sub">{dueSoon === 0 ? "No milestones this week" : dueSoon === 1 ? "milestone" : "milestones"}</span>
         </button>
       </div>
+
+      {glance}
 
       <CollapsibleSection
         id="health"
@@ -336,6 +341,12 @@ export default function Dashboard() {
   const [listFilter, setListFilter] = useState<"all" | "attention" | "on_track">("all");
   const [listSearch, setListSearch] = useState("");
   const [listSummaries, setListSummaries] = useState<PortfolioProjectSummary[]>([]);
+  // v142 glance band inputs: the Today feed (for overdue ages) and the
+  // calendar items for the visible month (for the calendar and decision ages).
+  const [todayFeed, setTodayFeed] = useState<MyTodayData | null>(null);
+  const [calMonth, setCalMonth] = useState<string>(() => localDateKey(new Date()).slice(0, 7));
+  const [calItems, setCalItems] = useState<CalendarItem[]>([]);
+  const [calLoading, setCalLoading] = useState(false);
   // Per-browser convenience only: if storage is unavailable the tip simply
   // shows again, which is harmless.
   const [hubTipDismissed, setHubTipDismissed] = useState<boolean>(() => {
@@ -396,7 +407,20 @@ export default function Dashboard() {
     setPortfolio(portfolioData);
     setListSummaries(portfolioData.projects);
     setLoading(false);
+    // Not awaited: the glance band fills in when this lands, and a failure
+    // just leaves the ages unknown (the sentences fall back to counts).
+    api.getMyToday().then(setTodayFeed).catch(() => {});
   }
+
+  useEffect(() => {
+    const { from, to } = monthRange(calMonth);
+    setCalLoading(true);
+    api
+      .getMyCalendar(from, to)
+      .then((r) => setCalItems(r.items))
+      .catch(() => setCalItems([]))
+      .finally(() => setCalLoading(false));
+  }, [calMonth]);
 
   // Filter bar only re-fetches the portfolio rollup, not the whole page --
   // the project grid/deleted list below don't depend on this filter.
@@ -425,6 +449,85 @@ export default function Dashboard() {
         Object.fromEntries(projects.map((p) => [p.id, p.open_decisions ?? 0])),
       )
     : [];
+
+  // v142 "Needs a look" context: ages and quiet spells per project, each one
+  // only claimed when the data behind it is complete (see lib/needsALook.ts).
+  const todayKey = localDateKey(new Date());
+  const overdueAge: Record<string, number> = {};
+  if (todayFeed && !todayFeed.truncated) {
+    for (const t of todayFeed.tasks) {
+      if (!t.due_date || t.due_date >= todayKey) continue;
+      const age = daysBetween(t.due_date, todayKey);
+      if (overdueAge[t.project_id] === undefined || age > overdueAge[t.project_id]) {
+        overdueAge[t.project_id] = age;
+      }
+    }
+  }
+  const decisionItemsByProject = new Map<string, CalendarItem[]>();
+  for (const item of calItems) {
+    if (item.kind !== "decision") continue;
+    const list = decisionItemsByProject.get(item.project_id) ?? [];
+    list.push(item);
+    decisionItemsByProject.set(item.project_id, list);
+  }
+  const lookContext: Record<string, Partial<LookContext>> = {};
+  for (const p of projects) {
+    const open = p.open_decisions ?? 0;
+    const decItems = decisionItemsByProject.get(p.id) ?? [];
+    // The fetched range only holds some of a project's open decisions; the
+    // age is honest only when it accounts for every one of them.
+    const oldestDecisionDays =
+      open > 0 && decItems.length >= open
+        ? Math.max(...decItems.map((i) => daysBetween(i.created_date ?? i.date, todayKey)))
+        : null;
+    const lastRef = p.last_activity_at
+      ? localDateKey(new Date(p.last_activity_at))
+      : (p.content_count ?? 0) === 0
+        ? localDateKey(new Date(p.created_at))
+        : null;
+    lookContext[p.id] = {
+      openDecisions: open,
+      oldestOverdueDays: overdueAge[p.id] ?? null,
+      oldestDecisionDays: oldestDecisionDays !== null && oldestDecisionDays >= 0 ? oldestDecisionDays : null,
+      quietDays: lastRef ? Math.max(0, daysBetween(lastRef, todayKey)) : null,
+    };
+  }
+  const look = portfolio
+    ? buildNeedsALook(portfolio.projects.filter((x) => visibleIds.has(x.id)), lookContext)
+    : [];
+  const visibleCalItems = calItems.filter(
+    (i) => visibleIds.has(i.project_id) && (!selectedProjectId || i.project_id === selectedProjectId),
+  );
+  const glanceBand = (
+    <div className="dash-glance">
+      <section className="dash-look" aria-labelledby="dash-look-title">
+        <h3 className="dash-look-title" id="dash-look-title">Needs a look</h3>
+        {look.length === 0 ? (
+          <p className="muted dash-look-empty">Nothing needs a look right now.</p>
+        ) : (
+          <ul className="dash-look-list">
+            {look.map((s) => (
+              <li key={`${s.id}-${s.key}`} className="dash-look-row">
+                <Link className="dash-look-link" to={`/app/projects/${s.id}`}>
+                  <strong>{s.name}</strong>
+                  {s.rest}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+      <div className="dash-glance-cal">
+        <DashboardCalendar
+          items={visibleCalItems}
+          month={calMonth}
+          todayKey={todayKey}
+          loading={calLoading}
+          onShiftMonth={(d) => setCalMonth((m) => shiftMonth(m, d))}
+        />
+      </div>
+    </div>
+  );
   const visibleProjects = selectedStage ? projects.filter((p) => p.stage === selectedStage) : projects;
   const stageCount = (stage: ProjectStage) => projects.filter((p) => p.stage === stage).length;
 
@@ -976,7 +1079,7 @@ export default function Dashboard() {
           </div>
         ) : portfolio && projects.length > 0 ? (
           <div style={{ opacity: portfolioLoading ? 0.6 : 1, transition: "opacity 120ms ease" }}>
-            <PortfolioOverview data={portfolio} wide={wide} onShowAttention={() => { setListFilter("attention"); setView("list"); }} />
+            <PortfolioOverview data={portfolio} wide={wide} onShowAttention={() => { setListFilter("attention"); setView("list"); }} glance={glanceBand} />
           </div>
         ) : null}
 

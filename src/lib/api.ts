@@ -743,6 +743,29 @@ export type MyTodayData = {
   truncated: boolean;
 };
 
+export type CalendarItemKind = "task" | "milestone" | "decision";
+
+/** One dated thing on the Dashboard calendar, from /api/my-calendar. */
+export type CalendarItem = {
+  id: string;
+  kind: CalendarItemKind;
+  /** YYYY-MM-DD in the viewer's own timezone (decisions without a deadline use their UTC created date). */
+  date: string;
+  title: string;
+  /** Task/roadmap status; decisions are always "open" (resolved ones are not returned). */
+  status: string;
+  /** Decisions only: the YYYY-MM-DD the request was raised, for "waiting the oldest for N days". */
+  created_date?: string;
+  project_id: string;
+  project_name: string;
+};
+
+export type MyCalendarData = {
+  items: CalendarItem[];
+  from: string;
+  to: string;
+};
+
 export type NotificationItem = {
   id: string;
   type: "decision_response" | "feedback_update" | "feedback_inbox" | "project_activity";
@@ -1340,6 +1363,10 @@ export const api = {
 
   /** Read-only: open tasks across every project the user can see (Today screen). */
   getMyToday: () => request<MyTodayData>("/my-today"),
+
+  /** Read-only: dated tasks, milestones and waiting decisions in a range (Dashboard calendar). */
+  getMyCalendar: (from: string, to: string) =>
+    request<MyCalendarData>(`/my-calendar?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
 
   getPortfolio: (projectId?: string, stage?: ProjectStage) => {
     const qs = new URLSearchParams();
