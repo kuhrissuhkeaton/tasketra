@@ -93,7 +93,7 @@ export default withSentry(async (req: Request) => {
     if (!publishableKey) return json({ error: "Billing isn't configured yet." }, { status: 500 });
     const session = await client.checkout.sessions.create({
       ...shared,
-      ui_mode: "embedded",
+      ui_mode: "embedded_page",
       return_url: `${siteUrl}/app/billing?billing=success`,
     });
     return json({ clientSecret: session.client_secret, publishableKey });

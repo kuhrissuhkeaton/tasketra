@@ -47,7 +47,7 @@ describe("embedded checkout session", () => {
     expect(body.url).toBeUndefined();
 
     const args = stripeMock.checkout.sessions.create.mock.calls[0][0];
-    expect(args.ui_mode).toBe("embedded");
+    expect(args.ui_mode).toBe("embedded_page");
     expect(args.return_url).toContain("/app/billing?billing=success");
     expect(args.success_url).toBeUndefined();
     expect(args.cancel_url).toBeUndefined();
