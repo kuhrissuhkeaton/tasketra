@@ -179,6 +179,10 @@ export function AppSidebar({ children, menuLabel = "Menu" }: { children?: ReactN
             <NavIcon name="decisions" active={pathname === "/app/sync"} />
             Weekly sync
           </Link>
+          <Link to="/app/workload" className={pathname === "/app/workload" ? "side-tab active" : "side-tab"}>
+            <NavIcon name="team" active={pathname === "/app/workload"} />
+            Workload
+          </Link>
           <Link
             to="/app/resources"
             className={pathname === "/app/resources" ? "side-tab active" : "side-tab"}

@@ -2520,3 +2520,28 @@ a:hover { color: var(--navy); }
 .sync-context { display: block; margin-top: 2px; font-size: 13px; color: var(--slate-text); }
 .sync-recap-text { margin: 0 0 10px; padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-muted); font: inherit; font-size: 13.5px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: break-word; }
 .sync-recap-actions { display: flex; justify-content: flex-end; }
+
+/* Workload page (v147): owner x week grid, darker cells as the load grows. */
+.wl-scroll { overflow-x: auto; }
+.wl-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.wl-table th { text-align: center; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--slate); padding: 6px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.wl-table th.wl-owner-head { text-align: left; }
+.wl-table td { padding: 7px 8px; border-bottom: 1px solid var(--border); }
+.wl-table tbody tr:last-child td { border-bottom: none; }
+.wl-this-week { display: block; font-size: 10px; font-weight: 600; text-transform: none; letter-spacing: 0; color: var(--success); }
+.wl-owner { min-width: 150px; }
+.wl-owner-name { font-weight: 600; color: var(--navy); }
+.wl-tag { display: inline-block; margin-left: 8px; padding: 1px 7px; border-radius: 999px; background: var(--tint); color: var(--navy); font-size: 12px; font-weight: 600; white-space: nowrap; }
+.wl-cell { text-align: center; font-variant-numeric: tabular-nums; color: var(--navy); }
+.wl-cell-0 { color: var(--slate-2); }
+.wl-cell-1 { background: var(--tint); }
+.wl-cell-2 { background: var(--tint-strong); font-weight: 600; }
+.wl-cell-3 { background: var(--success); color: #fff; font-weight: 700; }
+.wl-overdue-hot { color: var(--red); font-weight: 700; }
+.wl-open { font-weight: 600; }
+.wl-note { margin: 10px 0 0; font-size: 13px; color: var(--slate-text); }
+.wl-ms-list { list-style: none; margin: 0; padding: 0; }
+.wl-ms-row { padding: 5px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
+.wl-ms-row:last-child { border-bottom: none; }
+.wl-ms-week { font-weight: 600; color: var(--navy); }
+.wl-ms-items { color: var(--navy); }

@@ -10,6 +10,12 @@ export type ChangeEntry = { version: string; date: string; title: string; body: 
 // they can do.
 export const CHANGES: ChangeEntry[] = [
   {
+    version: "v147",
+    date: "November 2026",
+    title: "See who is carrying the next four weeks",
+    body: "A new page, Workload in the sidebar, counts open work by owner across the next four weeks: what is already overdue, what lands in each of the coming weeks, and how much each person is carrying in total. An owner whose projects are at risk or off track is flagged right on their row, and the milestones falling in the window sit underneath the grid, so a heavy week is visible before it lands. The owners are the names already written on your tasks, so there is nothing new to keep up to date.",
+  },
+  {
     version: "v146",
     date: "November 2026",
     title: "A weekly sync across all your projects",

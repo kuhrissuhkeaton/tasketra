@@ -812,6 +812,34 @@ export type WeeklySyncData = {
   asks: WeeklySyncAsk[];
 };
 
+/** One open leaf task in the Workload grid, from /api/workload. */
+export type WorkloadTask = {
+  /** The task's owner: its trimmed owner_name, else the linked stakeholder's
+   *  name, else "Unassigned" (resolved server-side, in that order). */
+  owner: string;
+  /** YYYY-MM-DD, or null when the task has no due date. */
+  dueDate: string | null;
+  projectId: string;
+  projectName: string;
+  /** The project's computed health, identical to the portfolio's verdict. */
+  projectHealth: "on_track" | "at_risk" | "off_track";
+};
+
+/** One roadmap milestone inside the Workload grid's four-week window. */
+export type WorkloadMilestone = {
+  /** YYYY-MM-DD. */
+  date: string;
+  title: string;
+  projectName: string;
+};
+
+export type WorkloadData = {
+  tasks: WorkloadTask[];
+  milestones: WorkloadMilestone[];
+  /** YYYY-MM-DD: the Sunday the grid's four weeks start from (server-anchored). */
+  windowStart: string;
+};
+
 export type NotificationItem = {
   id: string;
   type: "decision_response" | "feedback_update" | "feedback_inbox" | "project_activity";
@@ -1419,6 +1447,7 @@ export const api = {
 
   /** Read-only: per-project status lines and the open-decisions queue across every visible project (Weekly sync). */
   getWeeklySync: () => request<WeeklySyncData>("/weekly-sync"),
+  getWorkload: () => request<WorkloadData>("/workload"),
 
   getPortfolio: (projectId?: string, stage?: ProjectStage) => {
     const qs = new URLSearchParams();
