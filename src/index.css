@@ -2507,3 +2507,16 @@ a:hover { color: var(--navy); }
 .rg-accounts .rg-row > .rg-actions { flex-direction: column; align-items: flex-end; gap: 2px; }
 .rg-accounts .rg-row > .rg-pill .muted { font-size: 12px; }
 @media (max-width: 760px) { .rg-accounts .rg-row > .rg-actions { flex-direction: row; flex-wrap: wrap; } }
+
+/* Weekly sync page (v146): status lines, asks queue and the recap block. */
+.sync-list { list-style: none; margin: 0; padding: 0; }
+.sync-row { border-bottom: 1px solid var(--border); }
+.sync-row:last-child { border-bottom: none; }
+.sync-link { display: block; padding: 8px 0; color: var(--navy); text-decoration: none; font-size: 14px; }
+.sync-link:hover .sync-name { text-decoration: underline; text-underline-offset: 3px; }
+.sync-name { display: block; font-weight: 600; }
+.sync-line { display: block; margin-top: 1px; }
+.sync-meta { display: block; margin-top: 1px; font-size: 13px; color: var(--slate-text); }
+.sync-context { display: block; margin-top: 2px; font-size: 13px; color: var(--slate-text); }
+.sync-recap-text { margin: 0 0 10px; padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-muted); font: inherit; font-size: 13.5px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: break-word; }
+.sync-recap-actions { display: flex; justify-content: flex-end; }

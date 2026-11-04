@@ -773,6 +773,45 @@ export type MyCalendarData = {
   to: string;
 };
 
+/** One project's line on the Weekly sync page, from /api/weekly-sync. */
+export type WeeklySyncProject = {
+  id: string;
+  name: string;
+  /** Computed health, identical to the portfolio's verdict for the project. */
+  health: "on_track" | "at_risk" | "off_track";
+  /** The human-stated status (v143): health of the project's most recent
+   *  status update that carried one, and when it was stated. Null when
+   *  nobody has stated one yet. */
+  statedHealth: "on_track" | "at_risk" | "off_track" | null;
+  statedAt: string | null;
+  /** Most recent activity_log timestamp for the project, or null when the
+   *  project has no recorded activity. */
+  lastActivityAt: string | null;
+  /** Open leaf tasks past their due date. */
+  overdueTasks: number;
+  /** Open decision requests. */
+  openDecisions: number;
+};
+
+/** One open decision request in the sync page's "Asks to sort" queue. */
+export type WeeklySyncAsk = {
+  id: string;
+  projectId: string;
+  projectName: string;
+  title: string;
+  context: string | null;
+  /** YYYY-MM-DD, or null when no date was set. */
+  deadline: string | null;
+  createdAt: string;
+  /** Names of the stakeholders the decision is waiting on; empty when none recorded. */
+  recipients: string[];
+};
+
+export type WeeklySyncData = {
+  projects: WeeklySyncProject[];
+  asks: WeeklySyncAsk[];
+};
+
 export type NotificationItem = {
   id: string;
   type: "decision_response" | "feedback_update" | "feedback_inbox" | "project_activity";
@@ -1377,6 +1416,9 @@ export const api = {
   /** Read-only: dated tasks, milestones and waiting decisions in a range (Dashboard calendar). */
   getMyCalendar: (from: string, to: string) =>
     request<MyCalendarData>(`/my-calendar?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
+
+  /** Read-only: per-project status lines and the open-decisions queue across every visible project (Weekly sync). */
+  getWeeklySync: () => request<WeeklySyncData>("/weekly-sync"),
 
   getPortfolio: (projectId?: string, stage?: ProjectStage) => {
     const qs = new URLSearchParams();

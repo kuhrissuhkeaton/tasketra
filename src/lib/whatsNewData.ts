@@ -10,6 +10,12 @@ export type ChangeEntry = { version: string; date: string; title: string; body: 
 // they can do.
 export const CHANGES: ChangeEntry[] = [
   {
+    version: "v146",
+    date: "November 2026",
+    title: "A weekly sync across all your projects",
+    body: "A new page, Weekly sync in the sidebar, pulls every project you can see into one place: a plain status line for each (including when a stated status and the evidence disagree, and how long a project has gone quiet), the decisions still waiting on answers as an \"asks to sort\" list with who they are waiting on and when they are needed by, and a Recap button that copies the whole thing as plain text you can paste into Slack or email. Nothing new to keep up to date: it reads the same projects, tasks and decisions you already have.",
+  },
+  {
     version: "v145",
     date: "November 2026",
     title: "When the stated status and the evidence disagree",
