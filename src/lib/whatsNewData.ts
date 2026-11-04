@@ -10,6 +10,12 @@ export type ChangeEntry = { version: string; date: string; title: string; body: 
 // they can do.
 export const CHANGES: ChangeEntry[] = [
   {
+    version: "v145",
+    date: "November 2026",
+    title: "When the stated status and the evidence disagree",
+    body: "A project's stated status and the health Tasketra computes from the evidence do not always agree, and the disagreement itself is worth seeing. The Dashboard's \"Needs a look\" list now flags it in plain words, in either direction: a project stated on track whose evidence suggests it is at risk, or one stated off track though the numbers suggest it is on track. When the two match, nothing new appears. The sentence only shows up when they genuinely point different ways, so you can decide which one is right.",
+  },
+  {
     version: "v143",
     date: "November 2026",
     title: "Say how the project is really doing",

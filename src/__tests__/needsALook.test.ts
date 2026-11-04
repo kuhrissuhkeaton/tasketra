@@ -100,6 +100,51 @@ describe("buildNeedsALook", () => {
     expect(out.every((s) => s.key === "escalation")).toBe(true);
   });
 
+  it("flags a stated status that is rosier than the evidence, and stands the plain sentence down", () => {
+    const out = buildNeedsALook([P({ id: "a", name: "Atlas", health: "at_risk", statedHealth: "on_track" })], {});
+    expect(texts(out)).toEqual(["Atlas: stated on track, but evidence suggests at risk."]);
+    expect(out[0].key).toBe("divergence");
+    expect(texts(out)).not.toContain("Atlas is at risk.");
+  });
+
+  it("flags a stated status that is gloomier than the numbers", () => {
+    const out = buildNeedsALook([P({ id: "a", name: "Atlas", health: "on_track", statedHealth: "off_track" })], {});
+    expect(texts(out)).toEqual(["Atlas: stated off track, though the numbers suggest on track."]);
+    expect(out[0].key).toBe("divergence");
+  });
+
+  it("suppresses the plain off track sentence when the stated status diverges", () => {
+    const out = buildNeedsALook([P({ id: "a", name: "Atlas", health: "off_track", statedHealth: "at_risk" })], {});
+    expect(texts(out)).toEqual(["Atlas: stated at risk, but evidence suggests off track."]);
+  });
+
+  it("ranks a two-step divergence above a one-step one", () => {
+    const out = buildNeedsALook(
+      [
+        P({ id: "one", name: "One", health: "at_risk", statedHealth: "on_track" }),
+        P({ id: "two", name: "Two", health: "off_track", statedHealth: "on_track" }),
+      ],
+      {},
+    );
+    expect(out.map((s) => s.id)).toEqual(["two", "one"]);
+  });
+
+  it("keeps the plain health sentences when the stated status matches the computed health", () => {
+    expect(texts(buildNeedsALook([P({ id: "a", name: "Atlas", health: "off_track", statedHealth: "off_track" })], {}))).toEqual([
+      "Atlas is off track: a critical issue, an off-track objective, or a badly overrun score.",
+    ]);
+    expect(texts(buildNeedsALook([P({ id: "a", name: "Atlas", health: "at_risk", statedHealth: "at_risk" })], {}))).toEqual([
+      "Atlas is at risk.",
+    ]);
+  });
+
+  it("says nothing new when no status has been stated", () => {
+    expect(texts(buildNeedsALook([P({ id: "a", name: "Atlas", health: "at_risk", statedHealth: null })], {}))).toEqual([
+      "Atlas is at risk.",
+    ]);
+    expect(buildNeedsALook([P({ id: "a", name: "Atlas", health: "on_track", statedHealth: null })], {})).toEqual([]);
+  });
+
   it("can be re-ranked or extended by editing the rule list only", () => {
     const custom: LookRule[] = [
       { key: "big", match: (p) => (p.openRisks > 5 ? { rest: ": more than five open risks." } : null) },

@@ -37,6 +37,14 @@ export const LOOK_CAP = 5;
 const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
 const days = (n: number) => `${n} ${plural(n, "day", "days")}`;
 
+type Health = PortfolioProjectSummary["health"];
+
+const HEALTH_LABEL: Record<Health, string> = { on_track: "on track", at_risk: "at risk", off_track: "off track" };
+const SEVERITY: Record<Health, number> = { on_track: 0, at_risk: 1, off_track: 2 };
+
+/** The status stated in the latest check-in (v143) disagrees with the computed health. */
+const diverges = (p: PortfolioProjectSummary) => p.statedHealth != null && p.statedHealth !== p.health;
+
 export const LOOK_RULES: LookRule[] = [
   {
     key: "escalation",
@@ -46,9 +54,24 @@ export const LOOK_RULES: LookRule[] = [
         : null,
   },
   {
+    // The stated status and the evidence point different ways (v145). The
+    // sentence carries both halves, so the plain health rules below stand
+    // down for the same project.
+    key: "divergence",
+    match: (p) => {
+      if (!diverges(p)) return null;
+      const stated = p.statedHealth as Health;
+      const weight = Math.abs(SEVERITY[stated] - SEVERITY[p.health]);
+      return SEVERITY[stated] < SEVERITY[p.health]
+        ? { rest: `: stated ${HEALTH_LABEL[stated]}, but evidence suggests ${HEALTH_LABEL[p.health]}.`, weight }
+        : { rest: `: stated ${HEALTH_LABEL[stated]}, though the numbers suggest ${HEALTH_LABEL[p.health]}.`, weight };
+    },
+  },
+  {
     key: "off_track",
     match: (p, ctx) => {
       if (p.health !== "off_track") return null;
+      if (diverges(p)) return null;
       // projectReasonParts only surfaces its plain health explanation when
       // nothing more specific is flagged; those specifics get their own
       // sentences below, so borrow the explanation when it is there.
@@ -86,7 +109,7 @@ export const LOOK_RULES: LookRule[] = [
   },
   {
     key: "at_risk",
-    match: (p) => (p.health === "at_risk" ? { rest: " is at risk." } : null),
+    match: (p) => (p.health === "at_risk" && !diverges(p) ? { rest: " is at risk." } : null),
   },
   {
     key: "quiet",
