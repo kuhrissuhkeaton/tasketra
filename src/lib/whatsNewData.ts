@@ -10,6 +10,12 @@ export type ChangeEntry = { version: string; date: string; title: string; body: 
 // they can do.
 export const CHANGES: ChangeEntry[] = [
   {
+    version: "v148",
+    date: "November 2026",
+    title: "Checkout that stays on Tasketra",
+    body: "Going Pro now keeps you on app.tasketra.com: the payment form appears right here instead of sending you off to a separate Stripe page. Everything else is as before: the same prices, the same free trial if you have not had one, the same receipts, and canceling still happens from Billing whenever you like.",
+  },
+  {
     version: "v147",
     date: "November 2026",
     title: "See who is carrying the next four weeks",

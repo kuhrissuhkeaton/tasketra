@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 //
 // The Billing page: payment-problem banner, trial and renewal dates, and the
-// 409 "you already subscribed" redirect to the portal.
+// upgrade hand-off to the checkout page (v148; the already-subscribed 409
+// handling lives there now and is covered by checkout.test.tsx).
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
 import { createRoot, type Root } from "react-dom/client";
 import { act } from "react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 
 let plan = "past_due";
 vi.mock("../lib/auth-context", () => ({
@@ -22,7 +23,6 @@ vi.mock("../lib/api", async (importOriginal) => {
 });
 
 import Billing from "../pages/Billing";
-import { ApiError } from "../lib/api";
 
 let container: HTMLDivElement;
 let root: Root;
@@ -64,15 +64,25 @@ describe("Billing page", () => {
     expect(container.textContent).not.toContain("14 days free");
   });
 
-  it("opens the portal when checkout says a subscription already exists", async () => {
+  it("sends upgrades to the checkout page instead of starting a hosted session", async () => {
     plan = "free";
     calls.status.mockResolvedValue({ plan: "free", canStartTrial: true, hasBillingAccount: false, cancelAtPeriodEnd: false });
-    calls.checkout.mockRejectedValue(new ApiError("You already have a subscription.", 409));
-    calls.portal.mockRejectedValue(new Error("portal stub"));
-    await render();
-    await act(async () => { button("Upgrade -- $29/month").click(); });
+    await act(async () => {
+      root.render(
+        <MemoryRouter initialEntries={["/app/billing"]}>
+          <Routes>
+            <Route path="/app/billing" element={<Billing />} />
+            <Route path="/app/billing/checkout" element={<p>CHECKOUT PAGE</p>} />
+          </Routes>
+        </MemoryRouter>
+      );
+    });
     await flush();
-    expect(calls.portal).toHaveBeenCalled();
+    await act(async () => { button("Upgrade -- $290/year").click(); });
+    await flush();
+    expect(container.textContent).toContain("CHECKOUT PAGE");
+    expect(calls.checkout).not.toHaveBeenCalled();
+    expect(calls.portal).not.toHaveBeenCalled();
   });
 });
 

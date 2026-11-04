@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { AppSidebar } from "../components/AppSidebar";
 import { useAuth } from "../lib/auth-context";
-import { api, ApiError, type BillingStatus } from "../lib/api";
+import { api, type BillingStatus } from "../lib/api";
 import { fmtDate } from "../lib/format";
 import { useDocumentTitle } from "../lib/documentTitle";
 import { PageHeader, SoftCard, StatusPill } from "../components/ui";
@@ -72,7 +72,7 @@ export default function Billing() {
   useDocumentTitle("Billing");
   const { user, refresh } = useAuth();
   const [params] = useSearchParams();
-  const [loadingInterval, setLoadingInterval] = useState<"month" | "year" | null>(null);
+  const navigate = useNavigate();
   const [loadingPortal, setLoadingPortal] = useState(false);
   const [error, setError] = useState("");
   const [details, setDetails] = useState<BillingStatus | null>(null);
@@ -115,23 +115,12 @@ export default function Billing() {
     }
   }
 
-  async function upgrade(interval: "month" | "year") {
+  // Checkout happens on its own page now (the payment form renders inside
+  // Tasketra). The already-subscribed 409 is handled there, the same way it
+  // was handled here: by sending them to the portal instead.
+  function upgrade(interval: "month" | "year") {
     setError("");
-    setLoadingInterval(interval);
-    try {
-      const { url } = await api.createCheckoutSession(interval);
-      window.location.href = url;
-    } catch (err: any) {
-      // They already have a subscription (for example one with a failed
-      // payment): the portal is where it gets fixed, not a second checkout.
-      if (err instanceof ApiError && err.status === 409) {
-        setLoadingInterval(null);
-        await manageBilling();
-        return;
-      }
-      setError(err.message || "Couldn't start checkout.");
-      setLoadingInterval(null);
-    }
+    navigate(`/app/billing/checkout?interval=${interval}`);
   }
 
   const trialOffer = details ? details.canStartTrial : true;
@@ -232,18 +221,16 @@ export default function Billing() {
                 <button
                   className="btn btn-primary"
                   type="button"
-                  disabled={loadingInterval !== null}
                   onClick={() => upgrade("month")}
                 >
-                  {loadingInterval === "month" ? "Redirecting..." : "Upgrade -- $29/month"}
+                  Upgrade -- $29/month
                 </button>
                 <button
                   className="btn btn-ghost"
                   type="button"
-                  disabled={loadingInterval !== null}
                   onClick={() => upgrade("year")}
                 >
-                  {loadingInterval === "year" ? "Redirecting..." : "Upgrade -- $290/year (2 months free)"}
+                  Upgrade -- $290/year (2 months free)
                 </button>
               </div>
             </>

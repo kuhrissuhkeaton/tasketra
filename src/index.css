@@ -2465,6 +2465,11 @@ a:hover { color: var(--navy); }
 .billing-card.tw-card { padding: 16px 18px; box-shadow: none; background: var(--panel); }
 .billing-addons.tw-card { padding: 16px 18px; }
 .billing-addons .ui-card-title { margin: 0 0 6px; }
+
+/* Embedded checkout (v148): room for Stripe's form while it loads. */
+.checkout-frame { min-height: 380px; }
+.checkout-note { margin: 12px 0 0; }
+.checkout-card.tw-card { padding: 16px 18px; box-shadow: none; background: var(--panel); }
 .rg-detail { list-style: none; border-bottom: 1px solid var(--border); }
 .rg-detail::before { content: none; }
 .rg-amount { font-variant-numeric: tabular-nums; color: var(--navy); }

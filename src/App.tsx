@@ -27,6 +27,7 @@ const RiskPrint = lazy(() => import("./pages/RiskPrint"));
 const Resources = lazy(() => import("./pages/Resources"));
 const WhatsNew = lazy(() => import("./pages/WhatsNew"));
 const Billing = lazy(() => import("./pages/Billing"));
+const Checkout = lazy(() => import("./pages/Checkout"));
 const Account = lazy(() => import("./pages/Account"));
 const Founding = lazy(() => import("./pages/Founding"));
 const MyActivity = lazy(() => import("./pages/MyActivity"));
@@ -91,6 +92,7 @@ export default function App() {
             <Route path="/app/resources" element={<Protected><Resources /></Protected>} />
             <Route path="/app/whats-new" element={<Protected><WhatsNew /></Protected>} />
             <Route path="/app/billing" element={<Protected><Billing /></Protected>} />
+            <Route path="/app/billing/checkout" element={<Protected><Checkout /></Protected>} />
             <Route path="/app/account" element={<Protected><Account /></Protected>} />
             <Route path="/app/founding" element={<Protected><Founding /></Protected>} />
             <Route path="/app/activity" element={<Protected><MyActivity /></Protected>} />

@@ -1092,6 +1092,8 @@ export const api = {
 
   createCheckoutSession: (interval: "month" | "year") =>
     request<{ url: string }>("/create-checkout-session", { method: "POST", body: JSON.stringify({ interval }) }),
+  createCheckoutSessionEmbedded: (interval: "month" | "year") =>
+    request<{ clientSecret: string; publishableKey: string }>("/create-checkout-session", { method: "POST", body: JSON.stringify({ interval, ui: "embedded" }) }),
   billingStatus: () =>
     request<BillingStatus>("/billing-status"),
   createPortalSession: () => request<{ url: string }>("/create-portal-session", { method: "POST" }),

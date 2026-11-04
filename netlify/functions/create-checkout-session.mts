@@ -23,6 +23,11 @@ export default withSentry(async (req: Request) => {
 
   const body = await req.json().catch(() => null) as any;
   const interval = body?.interval === "year" ? "year" : "month";
+  // Embedded checkout (v148): the payment form renders inside
+  // app.tasketra.com instead of redirecting to a hosted Stripe page. Every
+  // guard below runs identically for both modes; only session creation
+  // branches, at the very end.
+  const embedded = body?.ui === "embedded";
 
   const priceId = interval === "year" ? getEnv("STRIPE_PRICE_ANNUAL") : getEnv("STRIPE_PRICE_MONTHLY");
   if (!priceId) return json({ error: "Billing isn't configured yet." }, { status: 500 });
@@ -63,13 +68,11 @@ export default withSentry(async (req: Request) => {
   const price = interval === "year" ? "$290 per year" : "$29 per month";
 
   const siteUrl = getSiteUrl();
-  const session = await client.checkout.sessions.create({
+  const shared = {
     customer: customerId,
-    mode: "subscription",
+    mode: "subscription" as const,
     line_items: [{ price: priceId, quantity: 1 }],
     subscription_data: { ...(hadSubscriptionBefore ? {} : { trial_period_days: 14 }), metadata: { userId } },
-    success_url: `${siteUrl}/app/billing?billing=success`,
-    cancel_url: `${siteUrl}/app/billing?billing=canceled`,
     allow_promotion_codes: true,
     custom_text: {
       submit: {
@@ -80,6 +83,26 @@ export default withSentry(async (req: Request) => {
           ` Cancel any time from Billing in Tasketra. By subscribing you agree to the [Terms](${siteUrl}/legal/terms).`,
       },
     },
+  };
+
+  if (embedded) {
+    // The publishable key is handed to the browser so it can mount the
+    // embedded form; without it there is nothing to render, so fail the
+    // same way an unconfigured price does (the page offers hosted instead).
+    const publishableKey = getEnv("STRIPE_PUBLISHABLE_KEY");
+    if (!publishableKey) return json({ error: "Billing isn't configured yet." }, { status: 500 });
+    const session = await client.checkout.sessions.create({
+      ...shared,
+      ui_mode: "embedded",
+      return_url: `${siteUrl}/app/billing?billing=success`,
+    });
+    return json({ clientSecret: session.client_secret, publishableKey });
+  }
+
+  const session = await client.checkout.sessions.create({
+    ...shared,
+    success_url: `${siteUrl}/app/billing?billing=success`,
+    cancel_url: `${siteUrl}/app/billing?billing=canceled`,
   });
 
   return json({ url: session.url });
