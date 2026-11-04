@@ -5,6 +5,15 @@ import { projectReasonParts } from "../lib/projectReason";
 const LABEL: Record<PortfolioProjectSummary["health"], string> = { on_track: "On track", at_risk: "At risk", off_track: "Off track" };
 const PILL: Record<PortfolioProjectSummary["health"], string> = { on_track: "pill-green", at_risk: "pill-gold", off_track: "pill-red" };
 
+/** Age of a stated status: "today", "yesterday", "3 days ago". */
+function statedAge(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+  if (days <= 0) return "today";
+  if (days === 1) return "yesterday";
+  return `${days} days ago`;
+}
+
 /**
  * One calm line under a project's title: how it is doing and why. Read-only, built from the
  * same portfolio rollup the Projects list uses (no new health logic). If the data cannot load,
@@ -58,6 +67,20 @@ export function HealthStrip({ projectId, refreshKey, onOpenTab }: { projectId: s
             )}
           </span>
         ))}
+      </span>
+      <span className="hs-stated">
+        {summary.statedHealth ? (
+          <>
+            <span className="hs-stated-label">Stated</span>
+            <span className={`pill ${PILL[summary.statedHealth]}`}>{LABEL[summary.statedHealth]}</span>
+            {summary.statedAt && <span className="muted">· {statedAge(summary.statedAt)}</span>}
+            {summary.statedHealth !== summary.health && (
+              <span className="muted">· Evidence suggests {LABEL[summary.health]}</span>
+            )}
+          </>
+        ) : (
+          <span className="muted">No status stated yet</span>
+        )}
       </span>
       {nextUp && <span className="hs-next muted" title={nextUp}><span>Next up:</span> {nextUp}</span>}
     </div>

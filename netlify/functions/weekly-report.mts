@@ -75,7 +75,7 @@ export default withSentry(async (req: Request) => {
       ORDER BY rec.responded_at DESC
     `,
     database.sql`
-      SELECT id, body, created_at FROM status_updates
+      SELECT id, body, health, created_at FROM status_updates
       WHERE project_id = ${projectId} AND created_at >= now() - interval '7 days'
       ORDER BY created_at DESC
     `,
@@ -137,6 +137,16 @@ export default withSentry(async (req: Request) => {
     ? { bac, ac: evm.ac, cpi: evm.cpi, spi: evm.spi, eac: evm.eac, percentComplete: evm.evPercent, tasksDone: evmTaskStats?.done_tasks || 0, tasksTotal: evmTaskStats?.total_tasks || 0 }
     : null;
 
+  // A note that carried a stated status (v143) is prefixed with it in the
+  // "Notes posted" list ("At risk — <body>"); plain notes read as before.
+  // The raw health rides along on the row for anything that wants it.
+  const HEALTH_LABEL: Record<string, string> = { on_track: "On track", at_risk: "At risk", off_track: "Off track" };
+  const reportStatusUpdates = (statusUpdates as any[]).map((s) => {
+    const label = s.health ? HEALTH_LABEL[s.health] : null;
+    if (!label) return s;
+    return { ...s, body: s.body ? `${label} — ${s.body}` : label };
+  });
+
   return json({
     rangeDays: 7,
     generatedAt: new Date().toISOString(),
@@ -148,7 +158,7 @@ export default withSentry(async (req: Request) => {
     risksOpened,
     risksResolved,
     decisionsMade,
-    statusUpdates,
+    statusUpdates: reportStatusUpdates,
     snapshot: snapshot[0],
     stage: isStage(projectRow?.stage) ? projectRow.stage : null,
     charter: charterBlock,

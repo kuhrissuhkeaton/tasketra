@@ -422,6 +422,8 @@ export type FeedItem = {
   body: string | null;
   ts: string;
   meta: Record<string, unknown>;
+  /** Stated status on a status update (v143); null for plain notes and every other item kind. */
+  health: "on_track" | "at_risk" | "off_track" | null;
 };
 
 export type TrashItem = {
@@ -625,7 +627,7 @@ export type WeeklyReport = {
   risksOpened: { id: string; title: string; probability: string; impact: string; owner_name: string | null; created_at: string }[];
   risksResolved: { id: string; title: string; probability: string; impact: string; resolved_at: string }[];
   decisionsMade: { id: string; title: string; chosen_option: string; responder_name: string; responded_at: string }[];
-  statusUpdates: { id: string; body: string; created_at: string }[];
+  statusUpdates: { id: string; body: string; health: "on_track" | "at_risk" | "off_track" | null; created_at: string }[];
   snapshot: {
     open_tasks: number;
     blocked_tasks: number;
@@ -702,6 +704,11 @@ export type PortfolioProjectSummary = {
   objectivesCount: number;
   avgObjectiveProgress: number | null;
   health: "on_track" | "at_risk" | "off_track";
+  /** The human-stated status (v143): health of the project's most recent
+   *  status update that carried one, and when it was stated. Null when
+   *  nobody has stated one yet. Absent on older payloads. */
+  statedHealth?: "on_track" | "at_risk" | "off_track" | null;
+  statedAt?: string | null;
 };
 
 export type PortfolioData = {
@@ -925,8 +932,11 @@ export const api = {
   removeTaskDependency: (id: string) =>
     request<{ ok: true }>(`/task-dependencies?id=${id}`, { method: "DELETE" }),
 
-  createStatusUpdate: (projectId: string, body: string) =>
-    request<{ statusUpdate: unknown }>("/status-updates", { method: "POST", body: JSON.stringify({ projectId, body }) }),
+  createStatusUpdate: (projectId: string, body: string, health?: "on_track" | "at_risk" | "off_track") =>
+    request<{ statusUpdate: unknown }>("/status-updates", {
+      method: "POST",
+      body: JSON.stringify(health ? { projectId, body, health } : { projectId, body }),
+    }),
 
   listDecisions: (projectId: string) => request<{ decisions: Decision[] }>(`/decisions?projectId=${projectId}`),
   createDecision: (

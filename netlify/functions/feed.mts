@@ -17,26 +17,26 @@ export default withSentry(async (req: Request) => {
   const database = db();
   const feed = await database.sql`
     SELECT 'status_update' AS type, NULL AS title, body, created_at AS ts,
-      '{}'::jsonb AS meta
+      '{}'::jsonb AS meta, health
     FROM status_updates WHERE project_id = ${projectId}
 
     UNION ALL
 
     SELECT 'task' AS type, title, status AS body, updated_at AS ts,
-      jsonb_build_object('status', status, 'dueDate', due_date) AS meta
+      jsonb_build_object('status', status, 'dueDate', due_date) AS meta, NULL AS health
     FROM tasks WHERE project_id = ${projectId} AND deleted_at IS NULL
 
     UNION ALL
 
     SELECT 'decision_request' AS type, title, context AS body, created_at AS ts,
-      jsonb_build_object('status', status, 'token', public_token) AS meta
+      jsonb_build_object('status', status, 'token', public_token) AS meta, NULL AS health
     FROM decision_requests WHERE project_id = ${projectId} AND deleted_at IS NULL
 
     UNION ALL
 
     SELECT 'decision_record' AS type, dr.title AS title,
       (rec.chosen_option || ' -- ' || rec.responder_name) AS body, rec.responded_at AS ts,
-      jsonb_build_object('chosenOption', rec.chosen_option, 'responderName', rec.responder_name) AS meta
+      jsonb_build_object('chosenOption', rec.chosen_option, 'responderName', rec.responder_name) AS meta, NULL AS health
     FROM decision_records rec
     JOIN decision_requests dr ON dr.id = rec.decision_request_id
     WHERE dr.project_id = ${projectId} AND dr.deleted_at IS NULL
@@ -44,13 +44,13 @@ export default withSentry(async (req: Request) => {
     UNION ALL
 
     SELECT 'issue' AS type, title, status AS body, updated_at AS ts,
-      jsonb_build_object('severity', severity, 'status', status) AS meta
+      jsonb_build_object('severity', severity, 'status', status) AS meta, NULL AS health
     FROM issues WHERE project_id = ${projectId} AND deleted_at IS NULL
 
     UNION ALL
 
     SELECT 'risk' AS type, title, status AS body, updated_at AS ts,
-      jsonb_build_object('probability', probability, 'impact', impact, 'status', status) AS meta
+      jsonb_build_object('probability', probability, 'impact', impact, 'status', status) AS meta, NULL AS health
     FROM risks WHERE project_id = ${projectId} AND deleted_at IS NULL
 
     UNION ALL
@@ -58,7 +58,7 @@ export default withSentry(async (req: Request) => {
     SELECT 'activity' AS type, a.entity_title AS title, a.summary AS body, a.created_at AS ts,
       jsonb_build_object('entityType', a.entity_type, 'action', a.action, 'actorId', a.actor_id,
         'actorName', CASE WHEN a.actor_id IS NULL THEN NULL
-          ELSE COALESCE(NULLIF(TRIM(u.display_name), ''), 'a teammate') END) AS meta
+          ELSE COALESCE(NULLIF(TRIM(u.display_name), ''), 'a teammate') END) AS meta, NULL AS health
     FROM activity_log a LEFT JOIN users u ON u.id = a.actor_id
     WHERE a.project_id = ${projectId}
 

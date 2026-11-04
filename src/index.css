@@ -1198,6 +1198,21 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
 .feed-title { font-weight: 600; margin-bottom: 2px; }
 .feed-body { font-size: 14px; color: var(--slate); }
 
+/* Feed composer stated status (v143): the pill row above the note input.
+   Unselected pills sit quiet; the selected one is outlined. The suggested
+   pill carries a small tag so the pre-selection never looks like a verdict
+   the person already made. */
+.feed-composer { margin-bottom: 24px; }
+.feed-composer-form { margin-bottom: 0; }
+.status-pill-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.status-pill { border: 2px solid transparent; cursor: pointer; font-family: inherit; opacity: 0.55; }
+.status-pill:hover { opacity: 0.85; }
+.status-pill-on { opacity: 1; border-color: var(--navy); }
+.status-pill-on:hover { opacity: 1; }
+.status-pill-suggested { margin-left: 6px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; opacity: 0.75; }
+.status-evidence { margin: 0 0 10px; font-size: 13px; }
+.feed-status-pill { margin-right: 8px; }
+
 /* --- Decisions --- */
 .callout { background: var(--tint); border: 1px solid var(--gold); border-radius: var(--radius-sm); padding: 12px 14px; margin: 16px 0; font-size: 14px; }
 .checkbox-list { display: flex; flex-direction: column; gap: 6px; margin: 6px 0 12px; }
@@ -2346,6 +2361,8 @@ a:hover { color: var(--navy); }
 .hs-link:hover { text-decoration-color: var(--navy); }
 .hs-next { font-size: 13px; min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hs-new { background: var(--border); color: var(--slate-text); }
+.hs-stated { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; font-size: 13px; min-width: 0; }
+.hs-stated-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--slate); }
 @media (max-width: 600px) { .hs-next { white-space: normal; } }
 
 /* ---- Shared "Today look" pieces (redesign foundation batch) ----------------

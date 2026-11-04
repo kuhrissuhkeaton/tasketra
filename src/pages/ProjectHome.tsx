@@ -23,6 +23,7 @@ import { NAV_GROUPS, STRIP_TABS, groupOf, sectionLabel, visibleGroups, visibleSe
 import { useConfirm } from "../components/ConfirmDialog";
 import { RegisterRow, RegisterSummary, RegisterEmpty } from "../components/ui";
 import { daysUntil, lateFlag, expiryFlag } from "../lib/rowFlags";
+import { statusEvidence, STATED_HEALTH_LABEL, STATED_HEALTH_PILL, STATED_HEALTH_VALUES, type StatedHealth, type StatusEvidenceInput } from "../lib/statusEvidence";
 import { groupTasks, groupOfTask, isTaskSort, TASK_SORT_LABEL, TASK_GROUPS_OPEN_BY_DEFAULT, type TaskSort, type TaskGroupId } from "../lib/taskGroups";
 import { avatarColor, initials } from "../lib/avatar";
 import { TourOverlay, useProductTour } from "../components/ProductTour";
@@ -525,6 +526,14 @@ function FeedTab({ projectId }: { projectId: string }) {
   const [feed, setFeed] = useState<FeedItem[]>([]);
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(true);
+  // Stated status (v143): the composer pre-selects the project's computed
+  // health as a suggestion (the same rollup HealthStrip shows, via the same
+  // portfolio call). Picking another pill overrides it; clicking the
+  // selected pill again clears it, and the post is a plain note as before.
+  const [suggested, setSuggested] = useState<StatedHealth | null>(null);
+  const [selected, setSelected] = useState<StatedHealth | null>(null);
+  const pickedRef = useRef(false);
+  const [evidenceInput, setEvidenceInput] = useState<StatusEvidenceInput | null>(null);
 
   async function load() {
     const { feed } = await api.getFeed(projectId);
@@ -537,19 +546,104 @@ function FeedTab({ projectId }: { projectId: string }) {
     load();
   }, [projectId]);
 
+  useEffect(() => {
+    let live = true;
+    api.getPortfolio(projectId)
+      .then((d) => {
+        if (!live) return;
+        const health = d?.projects?.find((x) => x.id === projectId)?.health ?? null;
+        setSuggested(health);
+        if (health && !pickedRef.current) setSelected(health);
+      })
+      .catch(() => {});
+    return () => { live = false; };
+  }, [projectId]);
+
+  // Evidence counts from the project's own lists. Each list that fails to
+  // load leaves its count unknown (null) rather than claiming zero, and the
+  // days-since count comes from the newest status update in the feed.
+  useEffect(() => {
+    let live = true;
+    (async () => {
+      const [tasksR, linksR, issuesR, risksR] = await Promise.all([
+        api.listTasks(projectId).catch(() => null),
+        api.listTaskDependencies(projectId).catch(() => null),
+        api.listIssues(projectId).catch(() => null),
+        api.listRisks(projectId).catch(() => null),
+      ]);
+      if (!live) return;
+      const todayStr = new Date().toISOString().slice(0, 10);
+      let overdueTasks: number | null = null;
+      let blockedTasks: number | null = null;
+      if (tasksR) {
+        const open = tasksR.tasks.filter((t) => t.status !== "done");
+        overdueTasks = open.filter((t) => t.due_date && t.due_date.slice(0, 10) < todayStr).length;
+        if (linksR) {
+          const doneIds = new Set(tasksR.tasks.filter((t) => t.status === "done").map((t) => t.id));
+          const waitingOn = new Set(
+            linksR.links.filter((l) => !doneIds.has(l.depends_on_task_id)).map((l) => l.task_id),
+          );
+          blockedTasks = open.filter((t) => waitingOn.has(t.id)).length;
+        }
+      }
+      const openHighIssues = issuesR
+        ? issuesR.issues.filter((i) => i.status !== "resolved" && (i.severity === "high" || i.severity === "critical")).length
+        : null;
+      const openHighRisks = risksR
+        ? risksR.risks.filter((r) => r.status === "open" && (r.probability === "high" || r.impact === "high")).length
+        : null;
+      const lastUpdate = feed.find((i) => i.type === "status_update");
+      const daysSinceLastUpdate = lastUpdate
+        ? Math.max(0, Math.floor((Date.now() - new Date(lastUpdate.ts).getTime()) / 86400000))
+        : null;
+      setEvidenceInput({ overdueTasks, blockedTasks, openHighIssues, openHighRisks, daysSinceLastUpdate });
+    })();
+    return () => { live = false; };
+  }, [projectId, feed]);
+
+  const evidence = evidenceInput ? statusEvidence(evidenceInput) : [];
+
+  function pickPill(h: StatedHealth) {
+    pickedRef.current = true;
+    setSelected((cur) => (cur === h ? null : h));
+  }
+
   async function postNote(e: React.FormEvent) {
     e.preventDefault();
-    if (!note.trim()) return;
-    await api.createStatusUpdate(projectId, note.trim());
+    if (!note.trim() && !selected) return;
+    await api.createStatusUpdate(projectId, note.trim(), selected ?? undefined);
     setNote("");
+    pickedRef.current = false;
+    setSelected(suggested);
     load();
   }
 
   return (
     <div>
-      <form className="inline-form" onSubmit={postNote}>
-        <input aria-label="Status update" placeholder="Post a status update to the feed..." value={note} onChange={(e) => setNote(e.target.value)} />
-        <button className="btn btn-primary">Post</button>
+      <form className="feed-composer" onSubmit={postNote}>
+        <div className="status-pill-row" role="group" aria-label="Project status">
+          {STATED_HEALTH_VALUES.map((h) => (
+            <button
+              key={h}
+              type="button"
+              className={`pill status-pill ${STATED_HEALTH_PILL[h]}${selected === h ? " status-pill-on" : ""}`}
+              aria-pressed={selected === h}
+              onClick={() => pickPill(h)}
+            >
+              {STATED_HEALTH_LABEL[h]}
+              {suggested === h && <span className="status-pill-suggested">suggested</span>}
+            </button>
+          ))}
+        </div>
+        {suggested && evidence.length > 0 && (
+          <p className="status-evidence muted">
+            Evidence suggests {STATED_HEALTH_LABEL[suggested]}: {evidence.join(" · ")}
+          </p>
+        )}
+        <div className="inline-form feed-composer-form">
+          <input aria-label="Status update" placeholder="Post a status update to the feed..." value={note} onChange={(e) => setNote(e.target.value)} />
+          <button className="btn btn-primary" disabled={!note.trim() && !selected}>Post</button>
+        </div>
       </form>
 
       {loading ? (
@@ -565,7 +659,12 @@ function FeedTab({ projectId }: { projectId: string }) {
                 <span className="feed-ts">{fmtDateTime(item.ts)}</span>
               </div>
               {item.title && <div className="feed-title">{item.title}</div>}
-              <div className="feed-body">{item.body}</div>
+              <div className="feed-body">
+                {item.type === "status_update" && item.health && (
+                  <span className={`pill ${STATED_HEALTH_PILL[item.health]} feed-status-pill`}>{STATED_HEALTH_LABEL[item.health]}</span>
+                )}
+                {item.body}
+              </div>
             </li>
           ))}
         </ul>

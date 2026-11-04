@@ -73,6 +73,7 @@ export default withSentry(async (req: Request) => {
     objectiveRows,
     milestoneRows,
     undatedMilestoneRows,
+    statedRows,
   ] = await Promise.all([
     database.sql`
       SELECT p.id, p.name, p.created_at, p.stage, p.tolerances, p.closed_at
@@ -217,8 +218,24 @@ export default withSentry(async (req: Request) => {
         AND (p.owner_id = ${userId} OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = ${userId} AND pm.status = 'active'))
         AND (${filterProjectId}::uuid IS NULL OR p.id = ${filterProjectId}::uuid) AND (${filterStage}::text IS NULL OR p.stage = ${filterStage}::text)
     `,
+    // The stated status (v143): each project's most recent status update
+    // that carries a health. Plain notes (health NULL) never count, and one
+    // DISTINCT ON query covers every project -- no per-project fan-out.
+    database.sql`
+      SELECT DISTINCT ON (su.project_id) su.project_id, su.health AS stated_health, su.created_at AS stated_at
+      FROM status_updates su
+      WHERE su.health IS NOT NULL
+        AND su.project_id IN (
+          SELECT p.id FROM projects p
+          WHERE p.archived = false
+            AND (p.owner_id = ${userId} OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = ${userId} AND pm.status = 'active'))
+            AND (${filterProjectId}::uuid IS NULL OR p.id = ${filterProjectId}::uuid) AND (${filterStage}::text IS NULL OR p.stage = ${filterStage}::text)
+        )
+      ORDER BY su.project_id, su.created_at DESC
+    `,
   ]);
 
+  const statedById = new Map((statedRows as any[]).map((r) => [r.project_id, r]));
   const taskById = new Map(perProjectTaskRows.map((r: any) => [r.project_id, r]));
   const budgetById = new Map(perProjectBudgetRows.map((r: any) => [r.project_id, r]));
   const riskById = new Map(perProjectRiskRows.map((r: any) => [r.project_id, r]));
@@ -300,6 +317,8 @@ export default withSentry(async (req: Request) => {
       objectivesCount: objectives.length,
       avgObjectiveProgress,
       health,
+      statedHealth: statedById.get(p.id)?.stated_health ?? null,
+      statedAt: statedById.get(p.id)?.stated_at ?? null,
     };
   });
 
