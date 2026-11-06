@@ -4,6 +4,7 @@ import { api, ApiError, type Project, type Task, type Stakeholder, type Decision
 import { RowActionsMenu } from "../components/RowActionsMenu";
 import { QuickAddForm } from "../components/QuickAddForm";
 import { RoadmapTimeline, ROADMAP_TYPE_LABEL, ROADMAP_STATUS_LABEL } from "../components/RoadmapTimeline";
+import { DateField } from "../components/DateField";
 import { fmtRoadmapRange } from "../lib/roadmapDates";
 import { phaseProgress } from "../lib/phaseProgress";
 import { mailtoHref, telHref } from "../lib/contactLinks";
@@ -25,10 +26,11 @@ import { RegisterRow, RegisterSummary, RegisterEmpty } from "../components/ui";
 import { daysUntil, lateFlag, expiryFlag } from "../lib/rowFlags";
 import { statusEvidence, STATED_HEALTH_LABEL, STATED_HEALTH_PILL, STATED_HEALTH_VALUES, type StatedHealth, type StatusEvidenceInput } from "../lib/statusEvidence";
 import { groupTasks, groupOfTask, isTaskSort, TASK_SORT_LABEL, TASK_GROUPS_OPEN_BY_DEFAULT, type TaskSort, type TaskGroupId } from "../lib/taskGroups";
+import { computeNextStep } from "../lib/nextStep";
 import { avatarColor, initials } from "../lib/avatar";
 import { TourOverlay, useProductTour } from "../components/ProductTour";
 import { FirstRunChecklist } from "../components/FirstRunChecklist";
-import { noteProjectActivity } from "../lib/firstRun";
+import { noteProjectActivity, noteProjectChanged, PROJECT_CHANGED_EVENT } from "../lib/firstRun";
 import { StageRail, StageChip, STAGE_LABEL } from "../components/StageRail";
 import { ProjectSetupPicker } from "../components/ProjectSetup";
 import { useIsScrollable } from "../lib/scrollRegion";
@@ -184,6 +186,17 @@ export default function ProjectHome() {
   const tab = (params.get("tab") as Tab) || "home";
   const highlightId = params.get("highlight");
   const [project, setProject] = useState<Project | null>(null);
+  // v150: bumped whenever a tab reports a change on this project, so the
+  // health strip refetches in place instead of waiting for a tab switch.
+  const [healthNonce, setHealthNonce] = useState(0);
+  useEffect(() => {
+    if (!id) return;
+    const onChanged = (e: Event) => {
+      if ((e as CustomEvent).detail?.projectId === id) setHealthNonce((n) => n + 1);
+    };
+    window.addEventListener(PROJECT_CHANGED_EVENT, onChanged);
+    return () => window.removeEventListener(PROJECT_CHANGED_EVENT, onChanged);
+  }, [id]);
   const { user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
@@ -267,6 +280,14 @@ export default function ProjectHome() {
               items={[{ label: "Trash", onSelect: () => setParams({ tab: "trash" }) }]}
             />
           </div>
+          {/* v150: strip views keep the project name as the heading, so name
+              the section too — the page you land on says what the menu said
+              (e.g. "Plan · Roadmap" instead of an unnamed roadmap). */}
+          {!viewLabel && tab !== "home" && sectionLabel(tab) && (
+            <p className="project-section-line muted" style={{ flexBasis: "100%" }}>
+              {NAV_GROUPS.find((g) => g.id === activeGroup)?.label} · {sectionLabel(tab)}
+            </p>
+          )}
           {user && (
             <FirstRunChecklist
               userId={user.id}
@@ -288,7 +309,7 @@ export default function ProjectHome() {
           </div>
         )}
 
-        {id && <HealthStrip projectId={id} refreshKey={tab} onOpenTab={(t) => setParams({ tab: t })} />}
+        {id && <HealthStrip projectId={id} refreshKey={`${tab}:${healthNonce}`} onOpenTab={(t) => setParams({ tab: t })} />}
 
         <nav className="project-tabs primary-tabs" aria-label="Project views">
           {navGroups.map(({ group, sections, opens }) => (
@@ -401,6 +422,12 @@ function HomeTab({ projectId, isOwner, purpose, stage, size, showAll, onShowAllT
   onOpenTab: (tab: string) => void;
 }) {
   const [view, setView] = useState<"today" | "feed">("today");
+  // v150: the Next Step card's "Write a check-in" jumps to the Feed composer.
+  const [feedFocusNonce, setFeedFocusNonce] = useState(0);
+  function goToCheckIn() {
+    setView("feed");
+    setFeedFocusNonce((n) => n + 1);
+  }
   const [baselineData, setBaselineData] = useState<BaselineData | null>(null);
   useEffect(() => {
     let live = true;
@@ -445,7 +472,6 @@ function HomeTab({ projectId, isOwner, purpose, stage, size, showAll, onShowAllT
           <button type="button" className="view-banner-link" onClick={() => onOpenTab("roadmap")}>Go to the Roadmap</button>
         </p>
       )}
-      <StageRail projectId={projectId} isOwner={isOwner} onStageChange={onStageChange} onOpenTab={onOpenTab} />
       <div className="view-toggle">
         <button
           className={view === "today" ? "btn btn-primary" : "btn btn-ghost"}
@@ -462,7 +488,14 @@ function HomeTab({ projectId, isOwner, purpose, stage, size, showAll, onShowAllT
           Feed
         </button>
       </div>
-      {view === "today" ? <TodayTab projectId={projectId} /> : <FeedTab projectId={projectId} />}
+      {view === "today" ? <TodayTab projectId={projectId} onPostCheckIn={goToCheckIn} /> : <FeedTab projectId={projectId} focusComposerNonce={feedFocusNonce} />}
+
+      {/* v150: the stage rail moved below the Today/Feed content so the page
+          leads with the Next Step card (or the check-in composer), and the
+          stage checklist reads as reference rather than a competing lead. */}
+      <div style={{ marginTop: 28 }}>
+        <StageRail projectId={projectId} isOwner={isOwner} onStageChange={onStageChange} onOpenTab={onOpenTab} />
+      </div>
 
       <div className="today-section" style={{ marginTop: 28 }}>
         <h4>All sections</h4>
@@ -521,7 +554,7 @@ const SECTION_BLURB: Record<string, string> = {
   connections: "webhooks and integrations",
 };
 
-function FeedTab({ projectId }: { projectId: string }) {
+function FeedTab({ projectId, focusComposerNonce = 0 }: { projectId: string; focusComposerNonce?: number }) {
   const { user } = useAuth();
   const [feed, setFeed] = useState<FeedItem[]>([]);
   const [note, setNote] = useState("");
@@ -533,7 +566,14 @@ function FeedTab({ projectId }: { projectId: string }) {
   const [suggested, setSuggested] = useState<StatedHealth | null>(null);
   const [selected, setSelected] = useState<StatedHealth | null>(null);
   const pickedRef = useRef(false);
+  const composerRef = useRef<HTMLInputElement>(null);
   const [evidenceInput, setEvidenceInput] = useState<StatusEvidenceInput | null>(null);
+
+  // Arriving via the Next Step card's "Write a check-in" lands with the
+  // composer focused, ready to type.
+  useEffect(() => {
+    if (focusComposerNonce > 0) composerRef.current?.focus();
+  }, [focusComposerNonce]);
 
   async function load() {
     const { feed } = await api.getFeed(projectId);
@@ -610,8 +650,20 @@ function FeedTab({ projectId }: { projectId: string }) {
 
   async function postNote(e: React.FormEvent) {
     e.preventDefault();
-    if (!note.trim() && !selected) return;
-    await api.createStatusUpdate(projectId, note.trim(), selected ?? undefined);
+    const text = note.trim();
+    if (!text && !selected) return;
+    const health = selected;
+    // v150: show the check-in the moment it saves (the returned row is the
+    // feed item), and refresh the header's stated status in place. The
+    // background load() still reconciles with the server's full feed. On a
+    // failed save nothing below runs, so the text stays in the composer.
+    const { statusUpdate } = await api.createStatusUpdate(projectId, text, health ?? undefined);
+    const u = statusUpdate as { body: string; health: "on_track" | "at_risk" | "off_track" | null; created_at: string };
+    setFeed((cur) => [
+      { type: "status_update" as const, title: null, body: u.body, ts: u.created_at, meta: {}, health: u.health },
+      ...cur,
+    ]);
+    noteProjectChanged(projectId);
     setNote("");
     pickedRef.current = false;
     setSelected(suggested);
@@ -621,6 +673,8 @@ function FeedTab({ projectId }: { projectId: string }) {
   return (
     <div>
       <form className="feed-composer" onSubmit={postNote}>
+        <h3 className="feed-composer-title">Post a check-in</h3>
+        <p className="muted feed-composer-help">A short status update for this project. Pick how it&apos;s going, say a line or two, and post.</p>
         <div className="status-pill-row" role="group" aria-label="Project status">
           {STATED_HEALTH_VALUES.map((h) => (
             <button
@@ -641,7 +695,7 @@ function FeedTab({ projectId }: { projectId: string }) {
           </p>
         )}
         <div className="inline-form feed-composer-form">
-          <input aria-label="Status update" placeholder="Post a status update to the feed..." value={note} onChange={(e) => setNote(e.target.value)} />
+          <input ref={composerRef} aria-label="Status update" placeholder="How is the project going?" value={note} onChange={(e) => setNote(e.target.value)} />
           <button className="btn btn-primary" disabled={!note.trim() && !selected}>Post</button>
         </div>
       </form>
@@ -673,7 +727,7 @@ function FeedTab({ projectId }: { projectId: string }) {
   );
 }
 
-function TodayTab({ projectId }: { projectId: string }) {
+function TodayTab({ projectId, onPostCheckIn }: { projectId: string; onPostCheckIn: () => void }) {
   const [data, setData] = useState<TodayData | null>(null);
   const [, setParams] = useSearchParams();
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -752,59 +806,60 @@ function TodayTab({ projectId }: { projectId: string }) {
 
   if (!data) return <div className="skel-loading-block"><div className="skel skel-text" style={{ width: "45%" }} /><div className="skel skel-text" style={{ width: "80%" }} /><div className="skel skel-text" style={{ width: "60%", marginBottom: 0 }} /></div>;
 
-  const nothingToShow =
-    data.blockedTasks.length === 0 &&
-    data.staleTasks.length === 0 &&
-    data.awaitingDecisions.length === 0 &&
-    data.urgentIssues.length === 0 &&
-    data.urgentRisks.length === 0;
-
-  // "Start here": the single most useful next click, taken from what is already on this page.
-  const focus: { title: string; meta: string; tab: string; id: string } | null =
-    data.blockedTasks[0]
-      ? { title: data.blockedTasks[0].title, meta: `Blocked ${daysAgo(data.blockedTasks[0].updated_at)} days \u00b7 can you unblock it?`, tab: "tasks", id: data.blockedTasks[0].id }
-      : data.awaitingDecisions[0]
-        ? { title: data.awaitingDecisions[0].title, meta: `Waiting on a stakeholder ${daysAgo(data.awaitingDecisions[0].created_at)} days`, tab: "decisions", id: data.awaitingDecisions[0].id }
-        : data.urgentIssues[0]
-          ? { title: data.urgentIssues[0].title, meta: "High-severity issue still open", tab: "issues", id: data.urgentIssues[0].id }
-          : data.urgentRisks[0]
-            ? { title: data.urgentRisks[0].title, meta: "High-exposure risk", tab: "risks", id: data.urgentRisks[0].id }
-            : data.staleTasks[0]
-              ? { title: data.staleTasks[0].title, meta: `No movement in ${daysAgo(data.staleTasks[0].updated_at)} days`, tab: "tasks", id: data.staleTasks[0].id }
-              : null;
+  // v150: ONE Next Step card leads the page. computeNextStep (src/lib/nextStep.ts)
+  // ranks problems first (blocked, overdue, waiting, urgent), then the setup
+  // path for a young project (first task, first date, first stakeholder,
+  // check-in), then staleness, then a quiet all-set state. It replaces the old
+  // problem-only "Start here" card and the muted brand-new / clean-board lines,
+  // so the page has exactly one recommendation voice.
+  const daysSinceCheckIn = data.lastCheckInAt
+    ? Math.max(0, Math.floor((Date.now() - new Date(data.lastCheckInAt).getTime()) / 86_400_000))
+    : null;
+  const nextStep = computeNextStep({
+    blockedTasks: data.blockedTasks,
+    overdueTasks: data.overdueTasks ?? [],
+    awaitingDecisions: data.awaitingDecisions,
+    urgentIssues: data.urgentIssues,
+    urgentRisks: data.urgentRisks,
+    staleTasks: data.staleTasks,
+    taskCount: data.taskCount,
+    datedTaskCount: data.datedTaskCount ?? 0,
+    stakeholderCount: data.stakeholderCount ?? 0,
+    daysSinceCheckIn,
+  });
+  const stepAction = nextStep.action;
 
   return (
     <div>
-      {focus && (
-        <section className="tw-focus overview-focus" aria-label="Start here">
+      {nextStep.quiet ? (
+        <section className="tw-clear overview-focus" aria-label="Next step">
+          <h2>{nextStep.title}</h2>
+          <p className="muted">{nextStep.meta}</p>
+        </section>
+      ) : (
+        <section className="tw-focus overview-focus" aria-label="Next step">
           <div>
-            <span className="tw-focus-label">Start here</span>
-            <h2>{focus.title}</h2>
-            <span className="tw-focus-meta">{focus.meta}</span>
+            <span className="tw-focus-label">Next step</span>
+            <h2>{nextStep.title}</h2>
+            <span className="tw-focus-meta">{nextStep.meta}</span>
           </div>
           <div className="tw-focus-actions">
-            <button type="button" className="btn btn-primary" onClick={() => setParams({ tab: focus.tab, highlight: focus.id })}>Open</button>
+            {stepAction?.type === "tab" && (
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => setParams({ tab: stepAction.tab, ...(stepAction.highlightId ? { highlight: stepAction.highlightId } : {}) })}
+              >
+                {stepAction.button}
+              </button>
+            )}
+            {stepAction?.type === "checkin" && (
+              <button type="button" className="btn btn-primary" onClick={onPostCheckIn}>
+                {stepAction.button}
+              </button>
+            )}
           </div>
         </section>
-      )}
-      {nothingToShow && data.taskCount === 0 && (
-        <div className="today-section">
-          <p className="muted">
-            Nothing here yet because this project is brand new. Head to the Tasks section to add your
-            first task, or Stakeholders to start your register.
-          </p>
-          <button
-            className="btn btn-ghost"
-            type="button"
-            style={{ marginTop: 8 }}
-            onClick={() => setParams({ tab: "tasks" })}
-          >
-            Go to Tasks
-          </button>
-        </div>
-      )}
-      {nothingToShow && data.taskCount > 0 && (
-        <p className="muted">Nothing needs you right now. Clean board.</p>
       )}
 
       {data.blockedTasks.length > 0 && (
@@ -1231,8 +1286,12 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
     if (!title.trim()) return;
     setError("");
     try {
-      await api.createTask(projectId, title.trim(), owner || undefined, due || undefined, undefined, start || undefined, newStatus, undefined, newPhase || undefined);
+      const { task } = await api.createTask(projectId, title.trim(), owner || undefined, due || undefined, undefined, start || undefined, newStatus, undefined, newPhase || undefined);
       noteProjectActivity(projectId, "task");
+      noteProjectChanged(projectId);
+      // v150: the new task joins the list the moment it saves, instead of
+      // waiting on the four-endpoint reload below (which still reconciles).
+      setTasks((cur) => (cur.some((t) => t.id === task.id) ? cur : [...cur, task]));
       // Open the group the new task lands in, so it is on screen the moment
       // the list refreshes -- a task added into a collapsed group (an undated
       // one especially) reads as if the save never happened.
@@ -1253,8 +1312,10 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
   async function addSubtask(e: React.FormEvent, parentId: string) {
     e.preventDefault();
     if (!subTitle.trim()) return;
-    await api.createTask(projectId, subTitle.trim(), subOwner || undefined, subDue || undefined, parentId, subStart || undefined);
+    const { task } = await api.createTask(projectId, subTitle.trim(), subOwner || undefined, subDue || undefined, parentId, subStart || undefined);
     noteProjectActivity(projectId, "task");
+    noteProjectChanged(projectId);
+    setTasks((cur) => (cur.some((t) => t.id === task.id) ? cur : [...cur, task]));
     setSubTitle("");
     setSubOwner("");
     setSubStart("");
@@ -1379,11 +1440,11 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
         <input aria-label="Owner (optional)" placeholder="Owner (optional)" value={owner} onChange={(e) => setOwner(e.target.value)} />
         <span className="datefield">
           <span className="datefield-label" aria-hidden="true">Start</span>
-          <input type="date" title="Start date (optional)" aria-label="Start date (optional)" value={start} onChange={(e) => setStart(e.target.value)} />
+          <DateField title="Start date (optional)" ariaLabel="Start date (optional)" value={start} onChange={setStart} />
         </span>
         <span className="datefield">
           <span className="datefield-label" aria-hidden="true">Due</span>
-          <input type="date" title="Due date" aria-label="Due date" value={due} onChange={(e) => setDue(e.target.value)} />
+          <DateField title="Due date" ariaLabel="Due date" value={due} onChange={setDue} />
         </span>
         <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as Task["status"])} title="Status" aria-label="Status">
           {Object.entries(STATUS_LABEL).map(([value, label]) => (
@@ -1516,11 +1577,11 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
                               <input aria-label="Owner (optional)" placeholder="Owner (optional)" value={subOwner} onChange={(e) => setSubOwner(e.target.value)} />
                               <span className="datefield">
                                 <span className="datefield-label" aria-hidden="true">Start</span>
-                                <input type="date" title="Start date (optional)" aria-label="Start date (optional)" value={subStart} onChange={(e) => setSubStart(e.target.value)} />
+                                <DateField title="Start date (optional)" ariaLabel="Start date (optional)" value={subStart} onChange={setSubStart} />
                               </span>
                               <span className="datefield">
                                 <span className="datefield-label" aria-hidden="true">Due</span>
-                                <input type="date" title="Due date" aria-label="Due date" value={subDue} onChange={(e) => setSubDue(e.target.value)} />
+                                <DateField title="Due date" ariaLabel="Due date" value={subDue} onChange={setSubDue} />
                               </span>
                               <button className="btn btn-primary">Add</button>
                               <button className="btn btn-ghost" type="button" onClick={() => setAddingSubtaskFor(null)}>Cancel</button>
@@ -1613,11 +1674,11 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
             <div className="drawer-field-row">
               <div className="drawer-field">
                 <label htmlFor="f-projecthome-1299">Start date</label>
-                <input id="f-projecthome-1299" type="date" value={editStart} onChange={(e) => setEditStart(e.target.value)} />
+                <DateField id="f-projecthome-1299" value={editStart} onChange={setEditStart} />
               </div>
               <div className="drawer-field">
                 <label htmlFor="f-projecthome-1303">Due date</label>
-                <input id="f-projecthome-1303" type="date" value={editDue} onChange={(e) => setEditDue(e.target.value)} />
+                <DateField id="f-projecthome-1303" value={editDue} onChange={setEditDue} />
               </div>
             </div>
             <div className="drawer-field">
@@ -5942,10 +6003,21 @@ function StakeholderDecisionsTab({ projectId }: { projectId: string }) {
     }
     setError("");
     try {
-      const { shareUrl } = await api.createDecision(
+      const { decision, shareUrl } = await api.createDecision(
         projectId, title.trim(), context.trim(), opts, deadline || undefined, selectedStakeholders
       );
       setLastShareUrl(shareUrl);
+      // v150: the new decision appears at the top of the list (newest first)
+      // the moment it saves. The create response has no recipients join, so
+      // fill it from the stakeholders just picked; load() reconciles after.
+      const withRecipients: Decision = {
+        ...decision,
+        recipients: decision.recipients?.length
+          ? decision.recipients
+          : stakeholders.filter((s) => selectedStakeholders.includes(s.id)).map((s) => ({ id: s.id, name: s.name })),
+      };
+      setDecisions((cur) => (cur.some((d) => d.id === withRecipients.id) ? cur : [withRecipients, ...cur]));
+      noteProjectChanged(projectId);
       setTitle("");
       setContext("");
       setOptions("Approve, Reject");
@@ -6030,10 +6102,24 @@ function StakeholderDecisionsTab({ projectId }: { projectId: string }) {
               </span>
             </div>
             {d.context && <p className="muted">{d.context}</p>}
-            {d.status === "open" ? (
-              <div className="share-row">
-                <code>{window.location.origin}/d/{d.public_token}</code>
+            {d.options?.length > 0 && (
+              <div className="decision-options" aria-label="Options">
+                {d.options.map((o) => (
+                  <span key={o} className="pill pill-neutral">{o}</span>
+                ))}
               </div>
+            )}
+            {d.status === "open" ? (
+              <>
+                <p className="muted decision-asked">
+                  {d.recipients?.length
+                    ? <>Asked: {d.recipients.map((r) => r.name).join(", ")} · waiting {daysAgo(d.created_at)}d</>
+                    : "Not sent to anyone yet. Share the link below to ask."}
+                </p>
+                <div className="share-row">
+                  <code>{window.location.origin}/d/{d.public_token}</code>
+                </div>
+              </>
             ) : (
               <div className="decision-record">
                 <strong>Decided:</strong> {d.chosen_option} · decided by <strong>{d.responder_name}</strong>

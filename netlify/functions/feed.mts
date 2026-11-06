@@ -61,6 +61,10 @@ export default withSentry(async (req: Request) => {
           ELSE COALESCE(NULLIF(TRIM(u.display_name), ''), 'a teammate') END) AS meta, NULL AS health
     FROM activity_log a LEFT JOIN users u ON u.id = a.actor_id
     WHERE a.project_id = ${projectId}
+      -- v150: a decision's creation already arrives via the decision_request
+      -- branch above; the activity copy of the same event showed every new
+      -- decision twice ("DECISION REQUESTED" + "DECISION CREATED").
+      AND NOT (a.entity_type = 'decision' AND a.action = 'created')
 
     ORDER BY ts DESC
     LIMIT 200

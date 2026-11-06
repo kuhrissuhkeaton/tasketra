@@ -149,13 +149,13 @@ export function StageRail({
     commit(stage);
   }
 
-  // Checklist groups. Recommended next = the first unfinished item (the one lime button);
-  // Outstanding = the other unfinished items; Completed = done items (collapsed).
+  // Checklist groups. v150: the rail no longer crowns a "Recommended next"
+  // item with the page's one primary button — the project home's Next Step
+  // card owns the single recommendation now, and this checklist is the
+  // reference list behind it. All open items render alike (ghost buttons).
   // Blocked only appears when a sponsor sign-off is actually pending or has asked for changes.
   const openList = data.checklist.items.filter((it) => it.status !== "done");
   const doneList = data.checklist.items.filter((it) => it.status === "done");
-  const recommended = openList[0] ?? null;
-  const outstanding = openList.slice(1);
   const blockedByGate = !!gate && !gateOffer && (gate.status === "pending" || gate.status === "changes_requested");
 
   function renderItem(item: StageData["checklist"]["items"][number], kind: "primary" | "ghost" | "link") {
@@ -278,10 +278,10 @@ export function StageRail({
         >
           <div className="stage-progress-fill" style={{ width: `${data.checklist.total ? (data.checklist.done / data.checklist.total) * 100 : 0}%` }} />
         </div>
-        {recommended && (
+        {openList.length > 0 && (
           <>
-            <h3 className="stage-group-label">Recommended next</h3>
-            <ul className="stage-list">{renderItem(recommended, "primary")}</ul>
+            <h3 className="stage-group-label">Still to do</h3>
+            <ul className="stage-list">{openList.map((it) => renderItem(it, "ghost"))}</ul>
           </>
         )}
         {blockedByGate && gate && (
@@ -298,12 +298,6 @@ export function StageRail({
                 <button type="button" className="btn btn-ghost" onClick={() => copyGateLink(gate.publicToken)}>{copied ? "Copied" : "Copy link"}</button>
               )}
             </div>
-          </>
-        )}
-        {outstanding.length > 0 && (
-          <>
-            <h3 className="stage-group-label">Outstanding</h3>
-            <ul className="stage-list">{outstanding.map((it) => renderItem(it, "ghost"))}</ul>
           </>
         )}
         {doneList.length > 0 && (

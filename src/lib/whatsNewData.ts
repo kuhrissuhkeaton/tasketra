@@ -10,6 +10,12 @@ export type ChangeEntry = { version: string; date: string; title: string; body: 
 // they can do.
 export const CHANGES: ChangeEntry[] = [
   {
+    version: "v150",
+    date: "November 2026",
+    title: "One clear next step on every project",
+    body: "A project's home now leads with a single Next step: the one thing worth doing next, whether that is unblocking a task, answering a decision, or simply adding your first task on a brand-new project. The stage checklist is still there underneath as the full picture. A few things also just work the way you would expect now: anything you add, a task, a decision or a check-in (the status update on the Feed now goes by that name), appears the moment it saves instead of after a reload; decision cards show the options and who they were sent to; and due dates on tasks can be typed the way you would write them, like 11/20/2026.",
+  },
+  {
     version: "v148",
     date: "November 2026",
     title: "Checkout that stays on Tasketra",

@@ -676,6 +676,11 @@ export type TodayData = {
   urgentIssues: { id: string; title: string; severity: string; owner_name: string | null; status: Issue["status"] }[];
   urgentRisks: { id: string; title: string; probability: string; impact: string; owner_name: string | null; status: Risk["status"] }[];
   taskCount: number;
+  // v150: Next Step card inputs (see src/lib/nextStep.ts).
+  overdueTasks: { id: string; title: string; due_date: string | null }[];
+  datedTaskCount: number;
+  stakeholderCount: number;
+  lastCheckInAt: string | null;
 };
 
 export type WeeklyReport = {

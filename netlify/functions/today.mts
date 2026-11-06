@@ -19,7 +19,7 @@ export default withSentry(async (req: Request) => {
   if (!projectId) return json({ error: "projectId required" }, { status: 400 });
   if (!(await hasProjectAccess(userId, projectId))) return json({ error: "Not found" }, { status: 404 });
 
-  const [blockedTasks, staleTasks, awaitingDecisions, urgentIssues, urgentRisks, taskCountRows] = await Promise.all([
+  const [blockedTasks, staleTasks, awaitingDecisions, urgentIssues, urgentRisks, taskCountRows, overdueTasks, datedTaskCountRows, stakeholderCountRows, lastCheckInRows] = await Promise.all([
     database.sql`
       SELECT id, title, owner_name, due_date, updated_at
       FROM tasks WHERE project_id = ${projectId} AND status = 'blocked' AND deleted_at IS NULL
@@ -58,11 +58,34 @@ export default withSentry(async (req: Request) => {
       SELECT count(*)::int AS count
       FROM tasks WHERE project_id = ${projectId} AND deleted_at IS NULL
     `,
+    // v150: the fields the project home's Next Step card reasons over.
+    database.sql`
+      SELECT id, title, due_date
+      FROM tasks
+      WHERE project_id = ${projectId} AND status != 'done' AND deleted_at IS NULL
+        AND due_date IS NOT NULL AND due_date < CURRENT_DATE
+      ORDER BY due_date ASC
+    `,
+    database.sql`
+      SELECT count(*)::int AS count
+      FROM tasks WHERE project_id = ${projectId} AND deleted_at IS NULL AND due_date IS NOT NULL
+    `,
+    database.sql`
+      SELECT count(*)::int AS count
+      FROM stakeholders WHERE project_id = ${projectId} AND deleted_at IS NULL
+    `,
+    database.sql`
+      SELECT max(created_at) AS last_check_in_at
+      FROM status_updates WHERE project_id = ${projectId}
+    `,
   ]);
 
   const taskCount = taskCountRows[0]?.count ?? 0;
+  const datedTaskCount = datedTaskCountRows[0]?.count ?? 0;
+  const stakeholderCount = stakeholderCountRows[0]?.count ?? 0;
+  const lastCheckInAt = lastCheckInRows[0]?.last_check_in_at ?? null;
 
-  return json({ blockedTasks, staleTasks, awaitingDecisions, urgentIssues, urgentRisks, taskCount });
+  return json({ blockedTasks, staleTasks, awaitingDecisions, urgentIssues, urgentRisks, taskCount, overdueTasks, datedTaskCount, stakeholderCount, lastCheckInAt });
 });
 
 export const config: Config = { path: "/api/today" };

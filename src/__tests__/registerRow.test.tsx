@@ -75,7 +75,7 @@ describe("the six registers, Tasks and the Overview use the shared rows", () => 
       expect(src).toContain(`aria-label="${label}"`);
     }
     expect(src).toContain('aria-label="Sort tasks by"');
-    expect(src).toContain('aria-label="Start here"');
+    expect(src).toContain('aria-label="Next step"');
   });
 
   it("the RACI legend sits above the grid and keeps all four letters", async () => {

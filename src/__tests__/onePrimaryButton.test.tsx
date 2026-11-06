@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 //
-// B1 one-primary-button rule: the stage checklist shows exactly one lime
-// (btn-primary) button, on the first unfinished item; the rest are outlined.
+// v150 one-primary-button rule: the stage rail no longer carries a primary
+// (lime) CTA at all — the project home's Next Step card owns the page's one
+// recommendation. Every open checklist item is outlined alike.
 import { describe, it, expect, beforeAll, afterEach, vi } from "vitest";
 import { createRoot } from "react-dom/client";
 import { act } from "react";
@@ -34,7 +35,7 @@ let cleanup: (() => void) | null = null;
 afterEach(() => { cleanup?.(); cleanup = null; });
 
 describe("one primary button per checklist", () => {
-  it("only the first unfinished item is lime; later unfinished items are outlined", async () => {
+  it("the rail has no lime CTA; open items are outlined, done items are links", async () => {
     const el = document.createElement("div");
     document.body.appendChild(el);
     const root = createRoot(el);
@@ -44,10 +45,11 @@ describe("one primary button per checklist", () => {
     });
     await act(async () => { await Promise.resolve(); });
     const cta = (label: string) => Array.from(el.querySelectorAll("button")).find((b) => b.textContent === label)!;
-    expect(cta("Add tasks").className).toContain("btn-primary");
+    expect(cta("Add tasks").className).toContain("btn-ghost");
     expect(cta("Log risks").className).toContain("btn-ghost");
     expect(cta("Set budget").className).toContain("btn-ghost");
-    expect(cta("View").className).toContain("stage-item-link");
-    expect(el.querySelectorAll(".stage-item-cta.btn-primary").length).toBe(1);
+    expect(el.querySelectorAll(".stage-item-cta.btn-primary").length).toBe(0);
+    expect(el.textContent).toContain("Still to do");
+    expect(el.textContent).not.toContain("Recommended next");
   });
 });

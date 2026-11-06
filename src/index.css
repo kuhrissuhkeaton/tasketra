@@ -1203,6 +1203,9 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
    pill carries a small tag so the pre-selection never looks like a verdict
    the person already made. */
 .feed-composer { margin-bottom: 24px; }
+.feed-composer-title { margin: 0 0 2px; font-size: 1.05rem; }
+.feed-composer-help { margin: 0 0 10px; }
+.project-section-line { margin: 2px 0 0; font-size: 0.9rem; }
 .feed-composer-form { margin-bottom: 0; }
 .status-pill-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
 .status-pill { border: 2px solid transparent; cursor: pointer; font-family: inherit; opacity: 0.55; }
@@ -1218,6 +1221,12 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
 .checkbox-list { display: flex; flex-direction: column; gap: 6px; margin: 6px 0 12px; }
 .checkbox-row, .option-row { display: flex; align-items: center; gap: 8px; font-weight: 400; font-size: 14px; margin: 4px 0; }
 .decision-list { margin-top: 24px; display: flex; flex-direction: column; gap: 12px; }
+.decision-options { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0; }
+.date-field { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.date-field-native { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.date-field-picker { font-size: 15px; line-height: 1; padding: 2px; }
+.date-field-error { color: var(--red, #b3261e); font-size: 13px; flex-basis: 100%; }
+.decision-asked { margin: 4px 0 6px; }
 .decision-card {
   background: var(--cream); border-radius: var(--radius); padding: 16px;
   box-shadow: var(--shadow-sm); transition: box-shadow var(--ease);

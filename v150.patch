@@ -1,0 +1,1226 @@
+diff --git a/netlify/functions/__tests__/feed-dedupe.integration.test.ts b/netlify/functions/__tests__/feed-dedupe.integration.test.ts
+new file mode 100644
+index 0000000..e6885ba
+--- /dev/null
++++ b/netlify/functions/__tests__/feed-dedupe.integration.test.ts
+@@ -0,0 +1,51 @@
++import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
++import { setupTestDb, teardownTestDb, resetTestDb } from "../../lib/__tests__/testDb.ts";
++import { createTestUser, createTestProject, asUser, jsonBody } from "./fixtures.ts";
++import { db } from "../../lib/db.ts";
++import feedHandler from "../feed.mts";
++import decisionsHandler from "../decisions.mts";
++
++// v150: a newly created decision used to appear in the feed twice — once as
++// the derived decision_request row and once as the activity_log
++// decision/created row. The feed now drops the activity copy.
++describe("feed decision de-duplication", () => {
++  beforeAll(async () => { await setupTestDb(); }, 30000);
++  afterAll(async () => { await teardownTestDb(); });
++  beforeEach(async () => { await resetTestDb(); });
++
++  it("shows a created decision once, not twice", async () => {
++    const owner = await createTestUser("owner@example.com");
++    await createTestProject(owner.id);
++    const [project] = await db().sql`SELECT id FROM projects LIMIT 1`;
++    const projectId = project.id as string;
++
++    const res = await decisionsHandler(asUser(owner, {
++      method: "POST",
++      url: "https://app.tasketra.com/api/decisions",
++      body: { projectId, title: "Pick a date", context: "", options: ["Nov 20", "Nov 27"], stakeholderIds: [] },
++    }));
++    expect(res.status).toBe(201);
++
++    const feedRes = await feedHandler(asUser(owner, { method: "GET", url: `https://app.tasketra.com/api/feed?projectId=${projectId}` }));
++    expect(feedRes.status).toBe(200);
++    const body = await jsonBody(feedRes);
++    const aboutDecision = body.feed.filter((f: any) => f.title === "Pick a date");
++    expect(aboutDecision).toHaveLength(1);
++    expect(aboutDecision[0].type).toBe("decision_request");
++  });
++
++  it("still shows other activity entries (a decision deletion is not hidden)", async () => {
++    const owner = await createTestUser("owner@example.com");
++    await createTestProject(owner.id);
++    const [project] = await db().sql`SELECT id FROM projects LIMIT 1`;
++    const projectId = project.id as string;
++    await db().sql`
++      INSERT INTO activity_log (project_id, entity_type, entity_id, entity_title, action, actor_id)
++      VALUES (${projectId}, 'decision', gen_random_uuid(), 'Old question', 'deleted', ${owner.id})
++    `;
++    const feedRes = await feedHandler(asUser(owner, { method: "GET", url: `https://app.tasketra.com/api/feed?projectId=${projectId}` }));
++    const body = await jsonBody(feedRes);
++    const item = body.feed.find((f: any) => f.type === "activity" && f.title === "Old question");
++    expect(item).toBeTruthy();
++  });
++});
+diff --git a/netlify/functions/__tests__/today-next-step.integration.test.ts b/netlify/functions/__tests__/today-next-step.integration.test.ts
+new file mode 100644
+index 0000000..8386822
+--- /dev/null
++++ b/netlify/functions/__tests__/today-next-step.integration.test.ts
+@@ -0,0 +1,53 @@
++import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
++import { setupTestDb, teardownTestDb, resetTestDb } from "../../lib/__tests__/testDb.ts";
++import { createTestUser, createTestProject, asUser, jsonBody } from "./fixtures.ts";
++import { db } from "../../lib/db.ts";
++import handler from "../today.mts";
++
++// v150: /api/today carries the fields the project home's Next Step card
++// reasons over (overdue tasks, dated-task count, stakeholder count, and the
++// newest check-in time).
++describe("today next-step fields", () => {
++  beforeAll(async () => { await setupTestDb(); }, 30000);
++  afterAll(async () => { await teardownTestDb(); });
++  beforeEach(async () => { await resetTestDb(); });
++
++  async function setup() {
++    const owner = await createTestUser("owner@example.com");
++    const project = await createTestProject(owner.id);
++    return { owner, projectId: project.id };
++  }
++
++  it("reports zeros and a null check-in for a brand-new project", async () => {
++    const { owner, projectId } = await setup();
++    const res = await handler(asUser(owner, { method: "GET", url: `https://app.tasketra.com/api/today?projectId=${projectId}` }));
++    expect(res.status).toBe(200);
++    const body = await jsonBody(res);
++    expect(body.taskCount).toBe(0);
++    expect(body.datedTaskCount).toBe(0);
++    expect(body.stakeholderCount).toBe(0);
++    expect(body.lastCheckInAt).toBeNull();
++    expect(body.overdueTasks).toEqual([]);
++  });
++
++  it("counts dated tasks and stakeholders, lists overdue, and timestamps the last check-in", async () => {
++    const { owner, projectId } = await setup();
++    await db().sql`
++      INSERT INTO tasks (project_id, title, status, due_date) VALUES
++        (${projectId}, 'Overdue one', 'not_started', CURRENT_DATE - 3),
++        (${projectId}, 'Future one', 'not_started', CURRENT_DATE + 10),
++        (${projectId}, 'Undated one', 'not_started', NULL),
++        (${projectId}, 'Done overdue', 'done', CURRENT_DATE - 5)
++    `;
++    await db().sql`INSERT INTO stakeholders (project_id, name) VALUES (${projectId}, 'Sponsor Sam')`;
++    await db().sql`INSERT INTO status_updates (project_id, body) VALUES (${projectId}, 'Kickoff done')`;
++
++    const res = await handler(asUser(owner, { method: "GET", url: `https://app.tasketra.com/api/today?projectId=${projectId}` }));
++    const body = await jsonBody(res);
++    expect(body.taskCount).toBe(4);
++    expect(body.datedTaskCount).toBe(3);
++    expect(body.stakeholderCount).toBe(1);
++    expect(body.overdueTasks.map((t: any) => t.title)).toEqual(["Overdue one"]);
++    expect(body.lastCheckInAt).toBeTruthy();
++  });
++});
+diff --git a/netlify/functions/feed.mts b/netlify/functions/feed.mts
+index 86a3bd9..144517f 100644
+--- a/netlify/functions/feed.mts
++++ b/netlify/functions/feed.mts
+@@ -61,6 +61,10 @@ export default withSentry(async (req: Request) => {
+           ELSE COALESCE(NULLIF(TRIM(u.display_name), ''), 'a teammate') END) AS meta, NULL AS health
+     FROM activity_log a LEFT JOIN users u ON u.id = a.actor_id
+     WHERE a.project_id = ${projectId}
++      -- v150: a decision's creation already arrives via the decision_request
++      -- branch above; the activity copy of the same event showed every new
++      -- decision twice ("DECISION REQUESTED" + "DECISION CREATED").
++      AND NOT (a.entity_type = 'decision' AND a.action = 'created')
+ 
+     ORDER BY ts DESC
+     LIMIT 200
+diff --git a/netlify/functions/today.mts b/netlify/functions/today.mts
+index 5dd30b7..094d570 100644
+--- a/netlify/functions/today.mts
++++ b/netlify/functions/today.mts
+@@ -19,7 +19,7 @@ export default withSentry(async (req: Request) => {
+   if (!projectId) return json({ error: "projectId required" }, { status: 400 });
+   if (!(await hasProjectAccess(userId, projectId))) return json({ error: "Not found" }, { status: 404 });
+ 
+-  const [blockedTasks, staleTasks, awaitingDecisions, urgentIssues, urgentRisks, taskCountRows] = await Promise.all([
++  const [blockedTasks, staleTasks, awaitingDecisions, urgentIssues, urgentRisks, taskCountRows, overdueTasks, datedTaskCountRows, stakeholderCountRows, lastCheckInRows] = await Promise.all([
+     database.sql`
+       SELECT id, title, owner_name, due_date, updated_at
+       FROM tasks WHERE project_id = ${projectId} AND status = 'blocked' AND deleted_at IS NULL
+@@ -58,11 +58,34 @@ export default withSentry(async (req: Request) => {
+       SELECT count(*)::int AS count
+       FROM tasks WHERE project_id = ${projectId} AND deleted_at IS NULL
+     `,
++    // v150: the fields the project home's Next Step card reasons over.
++    database.sql`
++      SELECT id, title, due_date
++      FROM tasks
++      WHERE project_id = ${projectId} AND status != 'done' AND deleted_at IS NULL
++        AND due_date IS NOT NULL AND due_date < CURRENT_DATE
++      ORDER BY due_date ASC
++    `,
++    database.sql`
++      SELECT count(*)::int AS count
++      FROM tasks WHERE project_id = ${projectId} AND deleted_at IS NULL AND due_date IS NOT NULL
++    `,
++    database.sql`
++      SELECT count(*)::int AS count
++      FROM stakeholders WHERE project_id = ${projectId} AND deleted_at IS NULL
++    `,
++    database.sql`
++      SELECT max(created_at) AS last_check_in_at
++      FROM status_updates WHERE project_id = ${projectId}
++    `,
+   ]);
+ 
+   const taskCount = taskCountRows[0]?.count ?? 0;
++  const datedTaskCount = datedTaskCountRows[0]?.count ?? 0;
++  const stakeholderCount = stakeholderCountRows[0]?.count ?? 0;
++  const lastCheckInAt = lastCheckInRows[0]?.last_check_in_at ?? null;
+ 
+-  return json({ blockedTasks, staleTasks, awaitingDecisions, urgentIssues, urgentRisks, taskCount });
++  return json({ blockedTasks, staleTasks, awaitingDecisions, urgentIssues, urgentRisks, taskCount, overdueTasks, datedTaskCount, stakeholderCount, lastCheckInAt });
+ });
+ 
+ export const config: Config = { path: "/api/today" };
+diff --git a/src/__tests__/dateField.test.ts b/src/__tests__/dateField.test.ts
+new file mode 100644
+index 0000000..203602c
+--- /dev/null
++++ b/src/__tests__/dateField.test.ts
+@@ -0,0 +1,36 @@
++import { describe, expect, it } from "vitest";
++import { parseDateInput, formatDateForDisplay } from "../components/DateField";
++
++describe("parseDateInput", () => {
++  it("accepts M/D/YYYY as people type it", () => {
++    expect(parseDateInput("11/20/2026")).toBe("2026-11-20");
++    expect(parseDateInput("1/5/2027")).toBe("2027-01-05");
++    expect(parseDateInput(" 11/20/2026 ")).toBe("2026-11-20");
++  });
++
++  it("accepts ISO dates unchanged", () => {
++    expect(parseDateInput("2026-11-20")).toBe("2026-11-20");
++  });
++
++  it("rejects impossible and malformed dates", () => {
++    expect(parseDateInput("13/01/2026")).toBeNull();
++    expect(parseDateInput("2/30/2026")).toBeNull();
++    expect(parseDateInput("2026-02-30")).toBeNull();
++    expect(parseDateInput("202026")).toBeNull();
++    expect(parseDateInput("next Friday")).toBeNull();
++    expect(parseDateInput("")).toBeNull();
++    expect(parseDateInput("11/20/26")).toBeNull();
++  });
++});
++
++describe("formatDateForDisplay", () => {
++  it("renders ISO as M/D/YYYY", () => {
++    expect(formatDateForDisplay("2026-11-20")).toBe("11/20/2026");
++    expect(formatDateForDisplay("2027-01-05")).toBe("1/5/2027");
++  });
++
++  it("passes through anything unrecognized", () => {
++    expect(formatDateForDisplay("")).toBe("");
++    expect(formatDateForDisplay("junk")).toBe("junk");
++  });
++});
+diff --git a/src/__tests__/nextStep.test.ts b/src/__tests__/nextStep.test.ts
+new file mode 100644
+index 0000000..2bb2666
+--- /dev/null
++++ b/src/__tests__/nextStep.test.ts
+@@ -0,0 +1,93 @@
++import { describe, expect, it } from "vitest";
++import { computeNextStep, type NextStepInput } from "../lib/nextStep";
++
++const NOW = new Date("2026-11-06T12:00:00");
++
++function input(overrides: Partial<NextStepInput> = {}): NextStepInput {
++  return {
++    blockedTasks: [],
++    overdueTasks: [],
++    awaitingDecisions: [],
++    urgentIssues: [],
++    urgentRisks: [],
++    staleTasks: [],
++    taskCount: 3,
++    datedTaskCount: 1,
++    stakeholderCount: 1,
++    daysSinceCheckIn: 2,
++    ...overrides,
++  };
++}
++
++describe("computeNextStep", () => {
++  it("leads a brand-new project to its first task", () => {
++    const step = computeNextStep(input({ taskCount: 0, datedTaskCount: 0, stakeholderCount: 0, daysSinceCheckIn: null }), NOW);
++    expect(step.kind).toBe("first-task");
++    expect(step.action).toMatchObject({ type: "tab", tab: "tasks" });
++  });
++
++  it("asks for a due date once tasks exist but none are dated", () => {
++    const step = computeNextStep(input({ datedTaskCount: 0 }), NOW);
++    expect(step.kind).toBe("first-date");
++  });
++
++  it("asks for a stakeholder once tasks are dated", () => {
++    const step = computeNextStep(input({ stakeholderCount: 0 }), NOW);
++    expect(step.kind).toBe("first-stakeholder");
++    expect(step.action).toMatchObject({ tab: "stakeholders" });
++  });
++
++  it("asks for a first check-in when there has never been one", () => {
++    const step = computeNextStep(input({ daysSinceCheckIn: null }), NOW);
++    expect(step.kind).toBe("checkin");
++    expect(step.title).toContain("first check-in");
++    expect(step.action).toMatchObject({ type: "checkin" });
++  });
++
++  it("asks for a weekly check-in at 7+ days", () => {
++    const step = computeNextStep(input({ daysSinceCheckIn: 9 }), NOW);
++    expect(step.kind).toBe("checkin");
++    expect(step.meta).toContain("9 days ago");
++  });
++
++  it("puts a blocked task ahead of setup steps", () => {
++    const step = computeNextStep(input({
++      taskCount: 0, datedTaskCount: 0, stakeholderCount: 0, daysSinceCheckIn: null,
++      blockedTasks: [{ id: "t1", title: "Venue contract", updated_at: "2026-11-03T12:00:00Z" }],
++    }), NOW);
++    expect(step.kind).toBe("blocked");
++    expect(step.meta).toContain("3 days");
++    expect(step.action).toMatchObject({ tab: "tasks", highlightId: "t1" });
++  });
++
++  it("puts an overdue task ahead of a waiting decision", () => {
++    const step = computeNextStep(input({
++      overdueTasks: [{ id: "t2", title: "Send invites", due_date: "2026-11-04" }],
++      awaitingDecisions: [{ id: "d1", title: "Pick a date", created_at: "2026-11-01T12:00:00Z", recipients: ["Sam"] }],
++    }), NOW);
++    expect(step.kind).toBe("overdue");
++    expect(step.meta).toContain("2 days");
++  });
++
++  it("names who a decision is waiting on", () => {
++    const step = computeNextStep(input({
++      awaitingDecisions: [{ id: "d1", title: "Pick a date", created_at: "2026-11-05T12:00:00Z", recipients: ["Test Stakeholder"] }],
++    }), NOW);
++    expect(step.kind).toBe("awaiting");
++    expect(step.meta).toContain("Test Stakeholder");
++  });
++
++  it("surfaces staleness only after the check-in is current", () => {
++    const stale = [{ id: "t3", title: "Old task", updated_at: "2026-11-01T12:00:00Z" }];
++    expect(computeNextStep(input({ staleTasks: stale, daysSinceCheckIn: 8 }), NOW).kind).toBe("checkin");
++    expect(computeNextStep(input({ staleTasks: stale, daysSinceCheckIn: 1 }), NOW).kind).toBe("stale");
++  });
++
++  it("goes quiet when everything is done and the check-in is fresh", () => {
++    const step = computeNextStep(input({ daysSinceCheckIn: 2 }), NOW);
++    expect(step.kind).toBe("quiet");
++    expect(step.quiet).toBe(true);
++    expect(step.action).toBeNull();
++    expect(step.meta).toContain("5 days");
++  });
++});
+diff --git a/src/__tests__/onePrimaryButton.test.tsx b/src/__tests__/onePrimaryButton.test.tsx
+index 3865c78..b8f8b67 100644
+--- a/src/__tests__/onePrimaryButton.test.tsx
++++ b/src/__tests__/onePrimaryButton.test.tsx
+@@ -1,7 +1,8 @@
+ // @vitest-environment jsdom
+ //
+-// B1 one-primary-button rule: the stage checklist shows exactly one lime
+-// (btn-primary) button, on the first unfinished item; the rest are outlined.
++// v150 one-primary-button rule: the stage rail no longer carries a primary
++// (lime) CTA at all — the project home's Next Step card owns the page's one
++// recommendation. Every open checklist item is outlined alike.
+ import { describe, it, expect, beforeAll, afterEach, vi } from "vitest";
+ import { createRoot } from "react-dom/client";
+ import { act } from "react";
+@@ -34,7 +35,7 @@ let cleanup: (() => void) | null = null;
+ afterEach(() => { cleanup?.(); cleanup = null; });
+ 
+ describe("one primary button per checklist", () => {
+-  it("only the first unfinished item is lime; later unfinished items are outlined", async () => {
++  it("the rail has no lime CTA; open items are outlined, done items are links", async () => {
+     const el = document.createElement("div");
+     document.body.appendChild(el);
+     const root = createRoot(el);
+@@ -44,10 +45,11 @@ describe("one primary button per checklist", () => {
+     });
+     await act(async () => { await Promise.resolve(); });
+     const cta = (label: string) => Array.from(el.querySelectorAll("button")).find((b) => b.textContent === label)!;
+-    expect(cta("Add tasks").className).toContain("btn-primary");
++    expect(cta("Add tasks").className).toContain("btn-ghost");
+     expect(cta("Log risks").className).toContain("btn-ghost");
+     expect(cta("Set budget").className).toContain("btn-ghost");
+-    expect(cta("View").className).toContain("stage-item-link");
+-    expect(el.querySelectorAll(".stage-item-cta.btn-primary").length).toBe(1);
++    expect(el.querySelectorAll(".stage-item-cta.btn-primary").length).toBe(0);
++    expect(el.textContent).toContain("Still to do");
++    expect(el.textContent).not.toContain("Recommended next");
+   });
+ });
+diff --git a/src/__tests__/registerRow.test.tsx b/src/__tests__/registerRow.test.tsx
+index 1ee9842..08c29b9 100644
+--- a/src/__tests__/registerRow.test.tsx
++++ b/src/__tests__/registerRow.test.tsx
+@@ -75,7 +75,7 @@ describe("the six registers, Tasks and the Overview use the shared rows", () =>
+       expect(src).toContain(`aria-label="${label}"`);
+     }
+     expect(src).toContain('aria-label="Sort tasks by"');
+-    expect(src).toContain('aria-label="Start here"');
++    expect(src).toContain('aria-label="Next step"');
+   });
+ 
+   it("the RACI legend sits above the grid and keeps all four letters", async () => {
+diff --git a/src/components/DateField.tsx b/src/components/DateField.tsx
+new file mode 100644
+index 0000000..44d96ed
+--- /dev/null
++++ b/src/components/DateField.tsx
+@@ -0,0 +1,132 @@
++import { useEffect, useRef, useState } from "react";
++
++// A friendlier date field (v150, task forms first): type a date the way
++// people write it — 11/20/2026 — or pick from the calendar button. The value
++// in and out is the same YYYY-MM-DD string the native input used, so nothing
++// downstream changes. The bare native input this replaces trapped people:
++// typing landed in whichever segment had focus and corrupted the year, with
++// no explanation.
++
++const pad = (n: number) => String(n).padStart(2, "0");
++
++/** Parse typed text into YYYY-MM-DD, or null when it isn't a real date.
++ *  Accepts M/D/YYYY (single digits fine) and YYYY-MM-DD. */
++export function parseDateInput(text: string): string | null {
++  const t = text.trim();
++  let y: number, m: number, d: number;
++  const slash = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(t);
++  const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(t);
++  if (slash) {
++    m = Number(slash[1]); d = Number(slash[2]); y = Number(slash[3]);
++  } else if (iso) {
++    y = Number(iso[1]); m = Number(iso[2]); d = Number(iso[3]);
++  } else {
++    return null;
++  }
++  if (m < 1 || m > 12 || d < 1 || d > 31) return null;
++  const dt = new Date(y, m - 1, d);
++  if (dt.getFullYear() !== y || dt.getMonth() !== m - 1 || dt.getDate() !== d) return null;
++  return `${y}-${pad(m)}-${pad(d)}`;
++}
++
++/** YYYY-MM-DD -> M/D/YYYY for display in the text box. */
++export function formatDateForDisplay(iso: string): string {
++  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
++  if (!m) return iso;
++  return `${Number(m[2])}/${Number(m[3])}/${m[1]}`;
++}
++
++export function DateField({
++  value,
++  onChange,
++  ariaLabel,
++  title,
++  id,
++}: {
++  /** YYYY-MM-DD, or "" when unset. */
++  value: string;
++  onChange: (iso: string) => void;
++  ariaLabel?: string;
++  title?: string;
++  id?: string;
++}) {
++  const [text, setText] = useState(() => (value ? formatDateForDisplay(value) : ""));
++  const [error, setError] = useState("");
++  const pickerRef = useRef<HTMLInputElement>(null);
++  const errorId = id ? `${id}-error` : undefined;
++
++  // Keep the box in step when the value changes from outside (the edit
++  // drawer opening on a different task, the form clearing after a save).
++  useEffect(() => {
++    setText(value ? formatDateForDisplay(value) : "");
++    setError("");
++  }, [value]);
++
++  function handleText(next: string) {
++    setText(next);
++    if (next.trim() === "") {
++      setError("");
++      onChange("");
++      return;
++    }
++    const parsed = parseDateInput(next);
++    if (parsed) {
++      setError("");
++      onChange(parsed);
++    }
++  }
++
++  function handleBlur() {
++    if (text.trim() === "") return;
++    if (!parseDateInput(text)) {
++      setError("That date doesn't look right. Try 11/20/2026.");
++    }
++  }
++
++  function openPicker() {
++    const el = pickerRef.current;
++    if (!el) return;
++    if (typeof el.showPicker === "function") {
++      try { el.showPicker(); return; } catch { /* fall through to focus */ }
++    }
++    el.focus();
++    el.click();
++  }
++
++  return (
++    <span className="date-field">
++      <input
++        id={id}
++        type="text"
++        inputMode="numeric"
++        placeholder="mm/dd/yyyy"
++        title={title}
++        aria-label={ariaLabel}
++        aria-invalid={error ? true : undefined}
++        aria-describedby={error && errorId ? errorId : undefined}
++        value={text}
++        onChange={(e) => handleText(e.target.value)}
++        onBlur={handleBlur}
++      />
++      <button type="button" className="btn-link date-field-picker" aria-label="Open calendar" onClick={openPicker}>
++        📅
++      </button>
++      <input
++        ref={pickerRef}
++        type="date"
++        className="date-field-native"
++        tabIndex={-1}
++        aria-hidden="true"
++        aria-label="Calendar date"
++        value={value}
++        onChange={(e) => {
++          setError("");
++          onChange(e.target.value);
++        }}
++      />
++      {error && (
++        <span id={errorId} className="date-field-error" role="alert">{error}</span>
++      )}
++    </span>
++  );
++}
+diff --git a/src/components/StageRail.tsx b/src/components/StageRail.tsx
+index d9c8626..e1e84b5 100644
+--- a/src/components/StageRail.tsx
++++ b/src/components/StageRail.tsx
+@@ -149,13 +149,13 @@ export function StageRail({
+     commit(stage);
+   }
+ 
+-  // Checklist groups. Recommended next = the first unfinished item (the one lime button);
+-  // Outstanding = the other unfinished items; Completed = done items (collapsed).
++  // Checklist groups. v150: the rail no longer crowns a "Recommended next"
++  // item with the page's one primary button — the project home's Next Step
++  // card owns the single recommendation now, and this checklist is the
++  // reference list behind it. All open items render alike (ghost buttons).
+   // Blocked only appears when a sponsor sign-off is actually pending or has asked for changes.
+   const openList = data.checklist.items.filter((it) => it.status !== "done");
+   const doneList = data.checklist.items.filter((it) => it.status === "done");
+-  const recommended = openList[0] ?? null;
+-  const outstanding = openList.slice(1);
+   const blockedByGate = !!gate && !gateOffer && (gate.status === "pending" || gate.status === "changes_requested");
+ 
+   function renderItem(item: StageData["checklist"]["items"][number], kind: "primary" | "ghost" | "link") {
+@@ -278,10 +278,10 @@ export function StageRail({
+         >
+           <div className="stage-progress-fill" style={{ width: `${data.checklist.total ? (data.checklist.done / data.checklist.total) * 100 : 0}%` }} />
+         </div>
+-        {recommended && (
++        {openList.length > 0 && (
+           <>
+-            <h3 className="stage-group-label">Recommended next</h3>
+-            <ul className="stage-list">{renderItem(recommended, "primary")}</ul>
++            <h3 className="stage-group-label">Still to do</h3>
++            <ul className="stage-list">{openList.map((it) => renderItem(it, "ghost"))}</ul>
+           </>
+         )}
+         {blockedByGate && gate && (
+@@ -300,12 +300,6 @@ export function StageRail({
+             </div>
+           </>
+         )}
+-        {outstanding.length > 0 && (
+-          <>
+-            <h3 className="stage-group-label">Outstanding</h3>
+-            <ul className="stage-list">{outstanding.map((it) => renderItem(it, "ghost"))}</ul>
+-          </>
+-        )}
+         {doneList.length > 0 && (
+           <>
+             <button
+diff --git a/src/index.css b/src/index.css
+index a7dcb9c..fda00f4 100644
+--- a/src/index.css
++++ b/src/index.css
+@@ -1203,6 +1203,9 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
+    pill carries a small tag so the pre-selection never looks like a verdict
+    the person already made. */
+ .feed-composer { margin-bottom: 24px; }
++.feed-composer-title { margin: 0 0 2px; font-size: 1.05rem; }
++.feed-composer-help { margin: 0 0 10px; }
++.project-section-line { margin: 2px 0 0; font-size: 0.9rem; }
+ .feed-composer-form { margin-bottom: 0; }
+ .status-pill-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+ .status-pill { border: 2px solid transparent; cursor: pointer; font-family: inherit; opacity: 0.55; }
+@@ -1218,6 +1221,12 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
+ .checkbox-list { display: flex; flex-direction: column; gap: 6px; margin: 6px 0 12px; }
+ .checkbox-row, .option-row { display: flex; align-items: center; gap: 8px; font-weight: 400; font-size: 14px; margin: 4px 0; }
+ .decision-list { margin-top: 24px; display: flex; flex-direction: column; gap: 12px; }
++.decision-options { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0; }
++.date-field { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
++.date-field-native { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
++.date-field-picker { font-size: 15px; line-height: 1; padding: 2px; }
++.date-field-error { color: var(--red, #b3261e); font-size: 13px; flex-basis: 100%; }
++.decision-asked { margin: 4px 0 6px; }
+ .decision-card {
+   background: var(--cream); border-radius: var(--radius); padding: 16px;
+   box-shadow: var(--shadow-sm); transition: box-shadow var(--ease);
+diff --git a/src/lib/api.ts b/src/lib/api.ts
+index eeacf80..679d291 100644
+--- a/src/lib/api.ts
++++ b/src/lib/api.ts
+@@ -676,6 +676,11 @@ export type TodayData = {
+   urgentIssues: { id: string; title: string; severity: string; owner_name: string | null; status: Issue["status"] }[];
+   urgentRisks: { id: string; title: string; probability: string; impact: string; owner_name: string | null; status: Risk["status"] }[];
+   taskCount: number;
++  // v150: Next Step card inputs (see src/lib/nextStep.ts).
++  overdueTasks: { id: string; title: string; due_date: string | null }[];
++  datedTaskCount: number;
++  stakeholderCount: number;
++  lastCheckInAt: string | null;
+ };
+ 
+ export type WeeklyReport = {
+diff --git a/src/lib/firstRun.ts b/src/lib/firstRun.ts
+index 719b56b..4a55c3d 100644
+--- a/src/lib/firstRun.ts
++++ b/src/lib/firstRun.ts
+@@ -79,3 +79,17 @@ export function noteProjectActivity(projectId: string, kind: ProjectActivity): v
+     // ignore
+   }
+ }
++
++// v150: a sibling signal for "something on this project changed" that page
++// chrome (the health strip) listens to, so what a person just added shows up
++// in the header without a reload. Separate from the checklist event above:
++// this one carries no first-run meaning.
++export const PROJECT_CHANGED_EVENT = "tasketra:project-changed";
++
++export function noteProjectChanged(projectId: string): void {
++  try {
++    window.dispatchEvent(new CustomEvent(PROJECT_CHANGED_EVENT, { detail: { projectId } }));
++  } catch {
++    // ignore
++  }
++}
+diff --git a/src/lib/nextStep.ts b/src/lib/nextStep.ts
+new file mode 100644
+index 0000000..1880267
+--- /dev/null
++++ b/src/lib/nextStep.ts
+@@ -0,0 +1,173 @@
++// The ONE next step for a project, computed from its Today data. The project
++// home leads with this and nothing else competes with it: problems first
++// (blocked, overdue, waiting, urgent), then the setup path for a young
++// project (first task, first date, first stakeholder, first check-in), then
++// staleness, then a quiet all-set state. Pure: the caller passes `now`.
++
++export type NextStepAction =
++  | { type: "tab"; tab: string; highlightId?: string; button: string }
++  | { type: "checkin"; button: string }
++  | null;
++
++export type NextStep = {
++  kind: "blocked" | "overdue" | "awaiting" | "issue" | "risk" | "first-task" | "first-date" | "first-stakeholder" | "checkin" | "stale" | "quiet";
++  title: string;
++  meta: string;
++  action: NextStepAction;
++  quiet: boolean;
++};
++
++export type NextStepInput = {
++  blockedTasks: { id: string; title: string; updated_at: string }[];
++  overdueTasks: { id: string; title: string; due_date: string | null }[];
++  awaitingDecisions: { id: string; title: string; created_at: string; recipients: string[] }[];
++  urgentIssues: { id: string; title: string }[];
++  urgentRisks: { id: string; title: string }[];
++  staleTasks: { id: string; title: string; updated_at: string }[];
++  taskCount: number;
++  datedTaskCount: number;
++  stakeholderCount: number;
++  /** Whole days since the newest status update, or null when there has never been one. */
++  daysSinceCheckIn: number | null;
++};
++
++function daysBetween(iso: string, now: Date): number {
++  const then = new Date(iso).getTime();
++  if (Number.isNaN(then)) return 0;
++  return Math.max(0, Math.floor((now.getTime() - then) / 86_400_000));
++}
++
++function daysLate(dueDate: string | null, now: Date): number {
++  if (!dueDate) return 0;
++  const due = new Date(`${dueDate.slice(0, 10)}T00:00:00`);
++  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
++  return Math.max(0, Math.round((startOfToday.getTime() - due.getTime()) / 86_400_000));
++}
++
++const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
++
++export function computeNextStep(input: NextStepInput, now: Date = new Date()): NextStep {
++  const blocked = input.blockedTasks[0];
++  if (blocked) {
++    const days = daysBetween(blocked.updated_at, now);
++    return {
++      kind: "blocked",
++      title: blocked.title,
++      meta: `Blocked ${plural(days, "day")} · can you unblock it?`,
++      action: { type: "tab", tab: "tasks", highlightId: blocked.id, button: "Open" },
++      quiet: false,
++    };
++  }
++
++  const overdue = input.overdueTasks[0];
++  if (overdue) {
++    const late = daysLate(overdue.due_date, now);
++    return {
++      kind: "overdue",
++      title: overdue.title,
++      meta: late > 0 ? `Overdue by ${plural(late, "day")}` : "Due today",
++      action: { type: "tab", tab: "tasks", highlightId: overdue.id, button: "Open" },
++      quiet: false,
++    };
++  }
++
++  const awaiting = input.awaitingDecisions[0];
++  if (awaiting) {
++    const days = daysBetween(awaiting.created_at, now);
++    const who = awaiting.recipients.length > 0 ? awaiting.recipients.join(", ") : "a stakeholder";
++    return {
++      kind: "awaiting",
++      title: awaiting.title,
++      meta: `Waiting on ${who} · ${plural(days, "day")}`,
++      action: { type: "tab", tab: "decisions", highlightId: awaiting.id, button: "Open" },
++      quiet: false,
++    };
++  }
++
++  const issue = input.urgentIssues[0];
++  if (issue) {
++    return {
++      kind: "issue",
++      title: issue.title,
++      meta: "High-severity issue still open",
++      action: { type: "tab", tab: "issues", highlightId: issue.id, button: "Open" },
++      quiet: false,
++    };
++  }
++
++  const risk = input.urgentRisks[0];
++  if (risk) {
++    return {
++      kind: "risk",
++      title: risk.title,
++      meta: "High-exposure risk",
++      action: { type: "tab", tab: "risks", highlightId: risk.id, button: "Open" },
++      quiet: false,
++    };
++  }
++
++  if (input.taskCount === 0) {
++    return {
++      kind: "first-task",
++      title: "Add your first task",
++      meta: "A project starts with one concrete thing to do.",
++      action: { type: "tab", tab: "tasks", button: "Add a task" },
++      quiet: false,
++    };
++  }
++
++  if (input.datedTaskCount === 0) {
++    return {
++      kind: "first-date",
++      title: "Put a due date on a task",
++      meta: "Dates turn a list into a plan. One is enough to start.",
++      action: { type: "tab", tab: "tasks", button: "Open tasks" },
++      quiet: false,
++    };
++  }
++
++  if (input.stakeholderCount === 0) {
++    return {
++      kind: "first-stakeholder",
++      title: "Add who this project answers to",
++      meta: "One name is enough. Decisions and updates need somewhere to go.",
++      action: { type: "tab", tab: "stakeholders", button: "Add a stakeholder" },
++      quiet: false,
++    };
++  }
++
++  if (input.daysSinceCheckIn === null || input.daysSinceCheckIn >= 7) {
++    return {
++      kind: "checkin",
++      title: input.daysSinceCheckIn === null ? "Post your first check-in" : "Post this week's check-in",
++      meta: input.daysSinceCheckIn === null
++        ? "A line or two on how it's going. It takes a minute."
++        : `Last check-in was ${plural(input.daysSinceCheckIn, "day")} ago.`,
++      action: { type: "checkin", button: "Write a check-in" },
++      quiet: false,
++    };
++  }
++
++  const stale = input.staleTasks[0];
++  if (stale) {
++    const days = daysBetween(stale.updated_at, now);
++    return {
++      kind: "stale",
++      title: stale.title,
++      meta: `No movement in ${plural(days, "day")}`,
++      action: { type: "tab", tab: "tasks", highlightId: stale.id, button: "Open" },
++      quiet: false,
++    };
++  }
++
++  const daysUntilNext = 7 - (input.daysSinceCheckIn ?? 0);
++  return {
++    kind: "quiet",
++    title: "You're all set",
++    meta: input.daysSinceCheckIn === 0
++      ? "You checked in today. Nothing else needs you right now."
++      : `Nothing needs you right now. Next check-in due in ${plural(daysUntilNext, "day")}.`,
++    action: null,
++    quiet: true,
++  };
++}
+diff --git a/src/lib/whatsNewData.ts b/src/lib/whatsNewData.ts
+index dac3298..6cb0f16 100644
+--- a/src/lib/whatsNewData.ts
++++ b/src/lib/whatsNewData.ts
+@@ -9,6 +9,12 @@ export type ChangeEntry = { version: string; date: string; title: string; body:
+ // about; skip pure bug fixes and internal refactors that don't change what
+ // they can do.
+ export const CHANGES: ChangeEntry[] = [
++  {
++    version: "v150",
++    date: "November 2026",
++    title: "One clear next step on every project",
++    body: "A project's home now leads with a single Next step: the one thing worth doing next, whether that is unblocking a task, answering a decision, or simply adding your first task on a brand-new project. The stage checklist is still there underneath as the full picture. A few things also just work the way you would expect now: anything you add, a task, a decision or a check-in (the status update on the Feed now goes by that name), appears the moment it saves instead of after a reload; decision cards show the options and who they were sent to; and due dates on tasks can be typed the way you would write them, like 11/20/2026.",
++  },
+   {
+     version: "v148",
+     date: "November 2026",
+diff --git a/src/pages/ProjectHome.tsx b/src/pages/ProjectHome.tsx
+index 6b4b711..75663a3 100644
+--- a/src/pages/ProjectHome.tsx
++++ b/src/pages/ProjectHome.tsx
+@@ -4,6 +4,7 @@ import { api, ApiError, type Project, type Task, type Stakeholder, type Decision
+ import { RowActionsMenu } from "../components/RowActionsMenu";
+ import { QuickAddForm } from "../components/QuickAddForm";
+ import { RoadmapTimeline, ROADMAP_TYPE_LABEL, ROADMAP_STATUS_LABEL } from "../components/RoadmapTimeline";
++import { DateField } from "../components/DateField";
+ import { fmtRoadmapRange } from "../lib/roadmapDates";
+ import { phaseProgress } from "../lib/phaseProgress";
+ import { mailtoHref, telHref } from "../lib/contactLinks";
+@@ -25,10 +26,11 @@ import { RegisterRow, RegisterSummary, RegisterEmpty } from "../components/ui";
+ import { daysUntil, lateFlag, expiryFlag } from "../lib/rowFlags";
+ import { statusEvidence, STATED_HEALTH_LABEL, STATED_HEALTH_PILL, STATED_HEALTH_VALUES, type StatedHealth, type StatusEvidenceInput } from "../lib/statusEvidence";
+ import { groupTasks, groupOfTask, isTaskSort, TASK_SORT_LABEL, TASK_GROUPS_OPEN_BY_DEFAULT, type TaskSort, type TaskGroupId } from "../lib/taskGroups";
++import { computeNextStep } from "../lib/nextStep";
+ import { avatarColor, initials } from "../lib/avatar";
+ import { TourOverlay, useProductTour } from "../components/ProductTour";
+ import { FirstRunChecklist } from "../components/FirstRunChecklist";
+-import { noteProjectActivity } from "../lib/firstRun";
++import { noteProjectActivity, noteProjectChanged, PROJECT_CHANGED_EVENT } from "../lib/firstRun";
+ import { StageRail, StageChip, STAGE_LABEL } from "../components/StageRail";
+ import { ProjectSetupPicker } from "../components/ProjectSetup";
+ import { useIsScrollable } from "../lib/scrollRegion";
+@@ -184,6 +186,17 @@ export default function ProjectHome() {
+   const tab = (params.get("tab") as Tab) || "home";
+   const highlightId = params.get("highlight");
+   const [project, setProject] = useState<Project | null>(null);
++  // v150: bumped whenever a tab reports a change on this project, so the
++  // health strip refetches in place instead of waiting for a tab switch.
++  const [healthNonce, setHealthNonce] = useState(0);
++  useEffect(() => {
++    if (!id) return;
++    const onChanged = (e: Event) => {
++      if ((e as CustomEvent).detail?.projectId === id) setHealthNonce((n) => n + 1);
++    };
++    window.addEventListener(PROJECT_CHANGED_EVENT, onChanged);
++    return () => window.removeEventListener(PROJECT_CHANGED_EVENT, onChanged);
++  }, [id]);
+   const { user } = useAuth();
+   const location = useLocation();
+   const navigate = useNavigate();
+@@ -267,6 +280,14 @@ export default function ProjectHome() {
+               items={[{ label: "Trash", onSelect: () => setParams({ tab: "trash" }) }]}
+             />
+           </div>
++          {/* v150: strip views keep the project name as the heading, so name
++              the section too — the page you land on says what the menu said
++              (e.g. "Plan · Roadmap" instead of an unnamed roadmap). */}
++          {!viewLabel && tab !== "home" && sectionLabel(tab) && (
++            <p className="project-section-line muted" style={{ flexBasis: "100%" }}>
++              {NAV_GROUPS.find((g) => g.id === activeGroup)?.label} · {sectionLabel(tab)}
++            </p>
++          )}
+           {user && (
+             <FirstRunChecklist
+               userId={user.id}
+@@ -288,7 +309,7 @@ export default function ProjectHome() {
+           </div>
+         )}
+ 
+-        {id && <HealthStrip projectId={id} refreshKey={tab} onOpenTab={(t) => setParams({ tab: t })} />}
++        {id && <HealthStrip projectId={id} refreshKey={`${tab}:${healthNonce}`} onOpenTab={(t) => setParams({ tab: t })} />}
+ 
+         <nav className="project-tabs primary-tabs" aria-label="Project views">
+           {navGroups.map(({ group, sections, opens }) => (
+@@ -401,6 +422,12 @@ function HomeTab({ projectId, isOwner, purpose, stage, size, showAll, onShowAllT
+   onOpenTab: (tab: string) => void;
+ }) {
+   const [view, setView] = useState<"today" | "feed">("today");
++  // v150: the Next Step card's "Write a check-in" jumps to the Feed composer.
++  const [feedFocusNonce, setFeedFocusNonce] = useState(0);
++  function goToCheckIn() {
++    setView("feed");
++    setFeedFocusNonce((n) => n + 1);
++  }
+   const [baselineData, setBaselineData] = useState<BaselineData | null>(null);
+   useEffect(() => {
+     let live = true;
+@@ -445,7 +472,6 @@ function HomeTab({ projectId, isOwner, purpose, stage, size, showAll, onShowAllT
+           <button type="button" className="view-banner-link" onClick={() => onOpenTab("roadmap")}>Go to the Roadmap</button>
+         </p>
+       )}
+-      <StageRail projectId={projectId} isOwner={isOwner} onStageChange={onStageChange} onOpenTab={onOpenTab} />
+       <div className="view-toggle">
+         <button
+           className={view === "today" ? "btn btn-primary" : "btn btn-ghost"}
+@@ -462,7 +488,14 @@ function HomeTab({ projectId, isOwner, purpose, stage, size, showAll, onShowAllT
+           Feed
+         </button>
+       </div>
+-      {view === "today" ? <TodayTab projectId={projectId} /> : <FeedTab projectId={projectId} />}
++      {view === "today" ? <TodayTab projectId={projectId} onPostCheckIn={goToCheckIn} /> : <FeedTab projectId={projectId} focusComposerNonce={feedFocusNonce} />}
++
++      {/* v150: the stage rail moved below the Today/Feed content so the page
++          leads with the Next Step card (or the check-in composer), and the
++          stage checklist reads as reference rather than a competing lead. */}
++      <div style={{ marginTop: 28 }}>
++        <StageRail projectId={projectId} isOwner={isOwner} onStageChange={onStageChange} onOpenTab={onOpenTab} />
++      </div>
+ 
+       <div className="today-section" style={{ marginTop: 28 }}>
+         <h4>All sections</h4>
+@@ -521,7 +554,7 @@ const SECTION_BLURB: Record<string, string> = {
+   connections: "webhooks and integrations",
+ };
+ 
+-function FeedTab({ projectId }: { projectId: string }) {
++function FeedTab({ projectId, focusComposerNonce = 0 }: { projectId: string; focusComposerNonce?: number }) {
+   const { user } = useAuth();
+   const [feed, setFeed] = useState<FeedItem[]>([]);
+   const [note, setNote] = useState("");
+@@ -533,8 +566,15 @@ function FeedTab({ projectId }: { projectId: string }) {
+   const [suggested, setSuggested] = useState<StatedHealth | null>(null);
+   const [selected, setSelected] = useState<StatedHealth | null>(null);
+   const pickedRef = useRef(false);
++  const composerRef = useRef<HTMLInputElement>(null);
+   const [evidenceInput, setEvidenceInput] = useState<StatusEvidenceInput | null>(null);
+ 
++  // Arriving via the Next Step card's "Write a check-in" lands with the
++  // composer focused, ready to type.
++  useEffect(() => {
++    if (focusComposerNonce > 0) composerRef.current?.focus();
++  }, [focusComposerNonce]);
++
+   async function load() {
+     const { feed } = await api.getFeed(projectId);
+     setFeed(feed);
+@@ -610,8 +650,20 @@ function FeedTab({ projectId }: { projectId: string }) {
+ 
+   async function postNote(e: React.FormEvent) {
+     e.preventDefault();
+-    if (!note.trim() && !selected) return;
+-    await api.createStatusUpdate(projectId, note.trim(), selected ?? undefined);
++    const text = note.trim();
++    if (!text && !selected) return;
++    const health = selected;
++    // v150: show the check-in the moment it saves (the returned row is the
++    // feed item), and refresh the header's stated status in place. The
++    // background load() still reconciles with the server's full feed. On a
++    // failed save nothing below runs, so the text stays in the composer.
++    const { statusUpdate } = await api.createStatusUpdate(projectId, text, health ?? undefined);
++    const u = statusUpdate as { body: string; health: "on_track" | "at_risk" | "off_track" | null; created_at: string };
++    setFeed((cur) => [
++      { type: "status_update" as const, title: null, body: u.body, ts: u.created_at, meta: {}, health: u.health },
++      ...cur,
++    ]);
++    noteProjectChanged(projectId);
+     setNote("");
+     pickedRef.current = false;
+     setSelected(suggested);
+@@ -621,6 +673,8 @@ function FeedTab({ projectId }: { projectId: string }) {
+   return (
+     <div>
+       <form className="feed-composer" onSubmit={postNote}>
++        <h3 className="feed-composer-title">Post a check-in</h3>
++        <p className="muted feed-composer-help">A short status update for this project. Pick how it&apos;s going, say a line or two, and post.</p>
+         <div className="status-pill-row" role="group" aria-label="Project status">
+           {STATED_HEALTH_VALUES.map((h) => (
+             <button
+@@ -641,7 +695,7 @@ function FeedTab({ projectId }: { projectId: string }) {
+           </p>
+         )}
+         <div className="inline-form feed-composer-form">
+-          <input aria-label="Status update" placeholder="Post a status update to the feed..." value={note} onChange={(e) => setNote(e.target.value)} />
++          <input ref={composerRef} aria-label="Status update" placeholder="How is the project going?" value={note} onChange={(e) => setNote(e.target.value)} />
+           <button className="btn btn-primary" disabled={!note.trim() && !selected}>Post</button>
+         </div>
+       </form>
+@@ -673,7 +727,7 @@ function FeedTab({ projectId }: { projectId: string }) {
+   );
+ }
+ 
+-function TodayTab({ projectId }: { projectId: string }) {
++function TodayTab({ projectId, onPostCheckIn }: { projectId: string; onPostCheckIn: () => void }) {
+   const [data, setData] = useState<TodayData | null>(null);
+   const [, setParams] = useSearchParams();
+   const [busyId, setBusyId] = useState<string | null>(null);
+@@ -752,60 +806,61 @@ function TodayTab({ projectId }: { projectId: string }) {
+ 
+   if (!data) return <div className="skel-loading-block"><div className="skel skel-text" style={{ width: "45%" }} /><div className="skel skel-text" style={{ width: "80%" }} /><div className="skel skel-text" style={{ width: "60%", marginBottom: 0 }} /></div>;
+ 
+-  const nothingToShow =
+-    data.blockedTasks.length === 0 &&
+-    data.staleTasks.length === 0 &&
+-    data.awaitingDecisions.length === 0 &&
+-    data.urgentIssues.length === 0 &&
+-    data.urgentRisks.length === 0;
+-
+-  // "Start here": the single most useful next click, taken from what is already on this page.
+-  const focus: { title: string; meta: string; tab: string; id: string } | null =
+-    data.blockedTasks[0]
+-      ? { title: data.blockedTasks[0].title, meta: `Blocked ${daysAgo(data.blockedTasks[0].updated_at)} days \u00b7 can you unblock it?`, tab: "tasks", id: data.blockedTasks[0].id }
+-      : data.awaitingDecisions[0]
+-        ? { title: data.awaitingDecisions[0].title, meta: `Waiting on a stakeholder ${daysAgo(data.awaitingDecisions[0].created_at)} days`, tab: "decisions", id: data.awaitingDecisions[0].id }
+-        : data.urgentIssues[0]
+-          ? { title: data.urgentIssues[0].title, meta: "High-severity issue still open", tab: "issues", id: data.urgentIssues[0].id }
+-          : data.urgentRisks[0]
+-            ? { title: data.urgentRisks[0].title, meta: "High-exposure risk", tab: "risks", id: data.urgentRisks[0].id }
+-            : data.staleTasks[0]
+-              ? { title: data.staleTasks[0].title, meta: `No movement in ${daysAgo(data.staleTasks[0].updated_at)} days`, tab: "tasks", id: data.staleTasks[0].id }
+-              : null;
++  // v150: ONE Next Step card leads the page. computeNextStep (src/lib/nextStep.ts)
++  // ranks problems first (blocked, overdue, waiting, urgent), then the setup
++  // path for a young project (first task, first date, first stakeholder,
++  // check-in), then staleness, then a quiet all-set state. It replaces the old
++  // problem-only "Start here" card and the muted brand-new / clean-board lines,
++  // so the page has exactly one recommendation voice.
++  const daysSinceCheckIn = data.lastCheckInAt
++    ? Math.max(0, Math.floor((Date.now() - new Date(data.lastCheckInAt).getTime()) / 86_400_000))
++    : null;
++  const nextStep = computeNextStep({
++    blockedTasks: data.blockedTasks,
++    overdueTasks: data.overdueTasks ?? [],
++    awaitingDecisions: data.awaitingDecisions,
++    urgentIssues: data.urgentIssues,
++    urgentRisks: data.urgentRisks,
++    staleTasks: data.staleTasks,
++    taskCount: data.taskCount,
++    datedTaskCount: data.datedTaskCount ?? 0,
++    stakeholderCount: data.stakeholderCount ?? 0,
++    daysSinceCheckIn,
++  });
++  const stepAction = nextStep.action;
+ 
+   return (
+     <div>
+-      {focus && (
+-        <section className="tw-focus overview-focus" aria-label="Start here">
++      {nextStep.quiet ? (
++        <section className="tw-clear overview-focus" aria-label="Next step">
++          <h2>{nextStep.title}</h2>
++          <p className="muted">{nextStep.meta}</p>
++        </section>
++      ) : (
++        <section className="tw-focus overview-focus" aria-label="Next step">
+           <div>
+-            <span className="tw-focus-label">Start here</span>
+-            <h2>{focus.title}</h2>
+-            <span className="tw-focus-meta">{focus.meta}</span>
++            <span className="tw-focus-label">Next step</span>
++            <h2>{nextStep.title}</h2>
++            <span className="tw-focus-meta">{nextStep.meta}</span>
+           </div>
+           <div className="tw-focus-actions">
+-            <button type="button" className="btn btn-primary" onClick={() => setParams({ tab: focus.tab, highlight: focus.id })}>Open</button>
++            {stepAction?.type === "tab" && (
++              <button
++                type="button"
++                className="btn btn-primary"
++                onClick={() => setParams({ tab: stepAction.tab, ...(stepAction.highlightId ? { highlight: stepAction.highlightId } : {}) })}
++              >
++                {stepAction.button}
++              </button>
++            )}
++            {stepAction?.type === "checkin" && (
++              <button type="button" className="btn btn-primary" onClick={onPostCheckIn}>
++                {stepAction.button}
++              </button>
++            )}
+           </div>
+         </section>
+       )}
+-      {nothingToShow && data.taskCount === 0 && (
+-        <div className="today-section">
+-          <p className="muted">
+-            Nothing here yet because this project is brand new. Head to the Tasks section to add your
+-            first task, or Stakeholders to start your register.
+-          </p>
+-          <button
+-            className="btn btn-ghost"
+-            type="button"
+-            style={{ marginTop: 8 }}
+-            onClick={() => setParams({ tab: "tasks" })}
+-          >
+-            Go to Tasks
+-          </button>
+-        </div>
+-      )}
+-      {nothingToShow && data.taskCount > 0 && (
+-        <p className="muted">Nothing needs you right now. Clean board.</p>
+-      )}
+ 
+       {data.blockedTasks.length > 0 && (
+         <div className="today-section">
+@@ -1231,8 +1286,12 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
+     if (!title.trim()) return;
+     setError("");
+     try {
+-      await api.createTask(projectId, title.trim(), owner || undefined, due || undefined, undefined, start || undefined, newStatus, undefined, newPhase || undefined);
++      const { task } = await api.createTask(projectId, title.trim(), owner || undefined, due || undefined, undefined, start || undefined, newStatus, undefined, newPhase || undefined);
+       noteProjectActivity(projectId, "task");
++      noteProjectChanged(projectId);
++      // v150: the new task joins the list the moment it saves, instead of
++      // waiting on the four-endpoint reload below (which still reconciles).
++      setTasks((cur) => (cur.some((t) => t.id === task.id) ? cur : [...cur, task]));
+       // Open the group the new task lands in, so it is on screen the moment
+       // the list refreshes -- a task added into a collapsed group (an undated
+       // one especially) reads as if the save never happened.
+@@ -1253,8 +1312,10 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
+   async function addSubtask(e: React.FormEvent, parentId: string) {
+     e.preventDefault();
+     if (!subTitle.trim()) return;
+-    await api.createTask(projectId, subTitle.trim(), subOwner || undefined, subDue || undefined, parentId, subStart || undefined);
++    const { task } = await api.createTask(projectId, subTitle.trim(), subOwner || undefined, subDue || undefined, parentId, subStart || undefined);
+     noteProjectActivity(projectId, "task");
++    noteProjectChanged(projectId);
++    setTasks((cur) => (cur.some((t) => t.id === task.id) ? cur : [...cur, task]));
+     setSubTitle("");
+     setSubOwner("");
+     setSubStart("");
+@@ -1379,11 +1440,11 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
+         <input aria-label="Owner (optional)" placeholder="Owner (optional)" value={owner} onChange={(e) => setOwner(e.target.value)} />
+         <span className="datefield">
+           <span className="datefield-label" aria-hidden="true">Start</span>
+-          <input type="date" title="Start date (optional)" aria-label="Start date (optional)" value={start} onChange={(e) => setStart(e.target.value)} />
++          <DateField title="Start date (optional)" ariaLabel="Start date (optional)" value={start} onChange={setStart} />
+         </span>
+         <span className="datefield">
+           <span className="datefield-label" aria-hidden="true">Due</span>
+-          <input type="date" title="Due date" aria-label="Due date" value={due} onChange={(e) => setDue(e.target.value)} />
++          <DateField title="Due date" ariaLabel="Due date" value={due} onChange={setDue} />
+         </span>
+         <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as Task["status"])} title="Status" aria-label="Status">
+           {Object.entries(STATUS_LABEL).map(([value, label]) => (
+@@ -1516,11 +1577,11 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
+                               <input aria-label="Owner (optional)" placeholder="Owner (optional)" value={subOwner} onChange={(e) => setSubOwner(e.target.value)} />
+                               <span className="datefield">
+                                 <span className="datefield-label" aria-hidden="true">Start</span>
+-                                <input type="date" title="Start date (optional)" aria-label="Start date (optional)" value={subStart} onChange={(e) => setSubStart(e.target.value)} />
++                                <DateField title="Start date (optional)" ariaLabel="Start date (optional)" value={subStart} onChange={setSubStart} />
+                               </span>
+                               <span className="datefield">
+                                 <span className="datefield-label" aria-hidden="true">Due</span>
+-                                <input type="date" title="Due date" aria-label="Due date" value={subDue} onChange={(e) => setSubDue(e.target.value)} />
++                                <DateField title="Due date" ariaLabel="Due date" value={subDue} onChange={setSubDue} />
+                               </span>
+                               <button className="btn btn-primary">Add</button>
+                               <button className="btn btn-ghost" type="button" onClick={() => setAddingSubtaskFor(null)}>Cancel</button>
+@@ -1613,11 +1674,11 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
+             <div className="drawer-field-row">
+               <div className="drawer-field">
+                 <label htmlFor="f-projecthome-1299">Start date</label>
+-                <input id="f-projecthome-1299" type="date" value={editStart} onChange={(e) => setEditStart(e.target.value)} />
++                <DateField id="f-projecthome-1299" value={editStart} onChange={setEditStart} />
+               </div>
+               <div className="drawer-field">
+                 <label htmlFor="f-projecthome-1303">Due date</label>
+-                <input id="f-projecthome-1303" type="date" value={editDue} onChange={(e) => setEditDue(e.target.value)} />
++                <DateField id="f-projecthome-1303" value={editDue} onChange={setEditDue} />
+               </div>
+             </div>
+             <div className="drawer-field">
+@@ -5942,10 +6003,21 @@ function StakeholderDecisionsTab({ projectId }: { projectId: string }) {
+     }
+     setError("");
+     try {
+-      const { shareUrl } = await api.createDecision(
++      const { decision, shareUrl } = await api.createDecision(
+         projectId, title.trim(), context.trim(), opts, deadline || undefined, selectedStakeholders
+       );
+       setLastShareUrl(shareUrl);
++      // v150: the new decision appears at the top of the list (newest first)
++      // the moment it saves. The create response has no recipients join, so
++      // fill it from the stakeholders just picked; load() reconciles after.
++      const withRecipients: Decision = {
++        ...decision,
++        recipients: decision.recipients?.length
++          ? decision.recipients
++          : stakeholders.filter((s) => selectedStakeholders.includes(s.id)).map((s) => ({ id: s.id, name: s.name })),
++      };
++      setDecisions((cur) => (cur.some((d) => d.id === withRecipients.id) ? cur : [withRecipients, ...cur]));
++      noteProjectChanged(projectId);
+       setTitle("");
+       setContext("");
+       setOptions("Approve, Reject");
+@@ -6030,10 +6102,24 @@ function StakeholderDecisionsTab({ projectId }: { projectId: string }) {
+               </span>
+             </div>
+             {d.context && <p className="muted">{d.context}</p>}
+-            {d.status === "open" ? (
+-              <div className="share-row">
+-                <code>{window.location.origin}/d/{d.public_token}</code>
++            {d.options?.length > 0 && (
++              <div className="decision-options" aria-label="Options">
++                {d.options.map((o) => (
++                  <span key={o} className="pill pill-neutral">{o}</span>
++                ))}
+               </div>
++            )}
++            {d.status === "open" ? (
++              <>
++                <p className="muted decision-asked">
++                  {d.recipients?.length
++                    ? <>Asked: {d.recipients.map((r) => r.name).join(", ")} · waiting {daysAgo(d.created_at)}d</>
++                    : "Not sent to anyone yet. Share the link below to ask."}
++                </p>
++                <div className="share-row">
++                  <code>{window.location.origin}/d/{d.public_token}</code>
++                </div>
++              </>
+             ) : (
+               <div className="decision-record">
+                 <strong>Decided:</strong> {d.chosen_option} · decided by <strong>{d.responder_name}</strong>

@@ -79,3 +79,17 @@ export function noteProjectActivity(projectId: string, kind: ProjectActivity): v
     // ignore
   }
 }
+
+// v150: a sibling signal for "something on this project changed" that page
+// chrome (the health strip) listens to, so what a person just added shows up
+// in the header without a reload. Separate from the checklist event above:
+// this one carries no first-run meaning.
+export const PROJECT_CHANGED_EVENT = "tasketra:project-changed";
+
+export function noteProjectChanged(projectId: string): void {
+  try {
+    window.dispatchEvent(new CustomEvent(PROJECT_CHANGED_EVENT, { detail: { projectId } }));
+  } catch {
+    // ignore
+  }
+}
