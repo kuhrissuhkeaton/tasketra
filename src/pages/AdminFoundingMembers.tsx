@@ -95,20 +95,25 @@ export default function AdminFoundingMembers() {
                 date={fmtDate(a.created_at)}
                 dateLabel="Joined"
                 actions={
-                  a.is_you ? (
-                    <span className="muted">Your account</span>
-                  ) : (
-                    <>
-                      {a.founding_member && (
-                        <button type="button" className="btn-link" onClick={() => { setNotice(null); setRemoval({ account: a, mode: "founding" }); }}>
-                          Remove founding status
+                  <>
+                    <Link className="btn-link" to={`/admin/support/${a.id}`}>
+                      View projects
+                    </Link>
+                    {a.is_you ? (
+                      <span className="muted">Your account</span>
+                    ) : (
+                      <>
+                        {a.founding_member && (
+                          <button type="button" className="btn-link" onClick={() => { setNotice(null); setRemoval({ account: a, mode: "founding" }); }}>
+                            Remove founding status
+                          </button>
+                        )}
+                        <button type="button" className="btn-link btn-link-danger" onClick={() => { setNotice(null); setRemoval({ account: a, mode: "delete" }); }}>
+                          Delete account
                         </button>
-                      )}
-                      <button type="button" className="btn-link btn-link-danger" onClick={() => { setNotice(null); setRemoval({ account: a, mode: "delete" }); }}>
-                        Delete account
-                      </button>
-                    </>
-                  )
+                      </>
+                    )}
+                  </>
                 }
               />
             ))}

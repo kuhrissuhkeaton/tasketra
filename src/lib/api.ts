@@ -396,6 +396,67 @@ export type BroadcastProgress = { id: string; subject: string; created_at: strin
 
 export type AdminAccountsSummary = { foundingClaimed: number; cap: number; totalAccounts: number };
 
+// Admin support view (v149): read-only snapshot of another user's project.
+export type AdminUserProject = {
+  id: string;
+  name: string;
+  description: string | null;
+  stage: string | null;
+  archived: boolean;
+  created_at: string;
+  last_activity_at: string | null;
+  task_count: number;
+  open_decisions: number;
+  document_count: number;
+};
+
+export type AdminSnapshotProject = {
+  id: string;
+  name: string;
+  description: string | null;
+  created_at: string;
+  owner_id: string;
+  archived: boolean;
+  stage: string | null;
+  size: string | null;
+  approach: string | null;
+  closed_at: string | null;
+  owner_email: string;
+  owner_display_name: string | null;
+  last_activity_at: string | null;
+};
+
+export type AdminTaskLink = { task_id: string; depends_on_task_id: string; task_title: string; depends_on_title: string };
+
+export type AdminAssumption = {
+  id: string; statement: string; notes: string | null; status: string; owner_name: string | null;
+  check_by: string | null; created_at: string; updated_at: string; validated_at: string | null;
+};
+
+export type AdminStatusUpdate = { id: string; body: string; health: string | null; created_at: string };
+
+export type AdminActivityItem = {
+  id: string; entity_type: string; entity_id: string; entity_title: string | null;
+  action: string; summary: string | null; actor_id: string | null; created_at: string;
+};
+
+export type AdminProjectSnapshot = {
+  readOnly: true;
+  project: AdminSnapshotProject;
+  members: ProjectMember[];
+  stakeholders: Stakeholder[];
+  tasks: Task[];
+  taskLinks: AdminTaskLink[];
+  roadmapItems: RoadmapItem[];
+  decisions: Omit<Decision, "public_token">[];
+  risks: Risk[];
+  issues: Issue[];
+  assumptions: AdminAssumption[];
+  statusUpdates: AdminStatusUpdate[];
+  documents: ProjectDocument[];
+  activity: AdminActivityItem[];
+};
+
 export type AccountRemovalPreview = {
   user: { id: string; email: string; display_name: string | null; founding_member: boolean };
   projects: number;
@@ -895,6 +956,12 @@ export const api = {
     request<{ ok: true }>("/admin-accounts", { method: "POST", body: JSON.stringify({ userId, action: "remove-founding" }) }),
   adminDeleteAccount: (userId: string, confirmEmail: string) =>
     request<{ ok: true }>("/admin-accounts", { method: "POST", body: JSON.stringify({ userId, action: "delete", confirmEmail }) }),
+  adminListUserProjects: (userId: string) =>
+    request<{ owner: { id: string; email: string; display_name: string | null }; projects: AdminUserProject[] }>(`/admin-project-view?userId=${encodeURIComponent(userId)}`),
+  adminGetProjectSnapshot: (projectId: string) =>
+    request<AdminProjectSnapshot>(`/admin-project-view?projectId=${encodeURIComponent(projectId)}`),
+  adminDocumentDownloadUrl: (projectId: string, documentId: string) =>
+    `${BASE}/admin-project-view?projectId=${encodeURIComponent(projectId)}&documentId=${encodeURIComponent(documentId)}`,
 
   listProjects: () => request<{ projects: Project[] }>("/projects"),
   listDeletedProjects: () => request<{ projects: Project[] }>("/projects?deleted=true"),

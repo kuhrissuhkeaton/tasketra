@@ -1,0 +1,1005 @@
+diff --git a/netlify/database/migrations/20261106000000_add_admin_project_views/migration.sql b/netlify/database/migrations/20261106000000_add_admin_project_views/migration.sql
+new file mode 100644
+index 0000000..1c83360
+--- /dev/null
++++ b/netlify/database/migrations/20261106000000_add_admin_project_views/migration.sql
+@@ -0,0 +1,14 @@
++-- Admin support view audit trail (v149): one row each time the admin opens a
++-- user's project snapshot or downloads one of its documents, so there is a
++-- permanent answer to "who looked at my project, and when".
++-- Additive only: one new table, no existing table touched, no data rewritten.
++CREATE TABLE IF NOT EXISTS admin_project_views (
++  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
++  admin_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
++  owner_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
++  project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
++  viewed_at TIMESTAMPTZ NOT NULL DEFAULT now()
++);
++
++CREATE INDEX IF NOT EXISTS idx_admin_project_views_project
++  ON admin_project_views (project_id, viewed_at DESC);
+diff --git a/netlify/functions/__tests__/admin-project-view.integration.test.ts b/netlify/functions/__tests__/admin-project-view.integration.test.ts
+new file mode 100644
+index 0000000..a9a9522
+--- /dev/null
++++ b/netlify/functions/__tests__/admin-project-view.integration.test.ts
+@@ -0,0 +1,158 @@
++import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from "vitest";
++import { setupTestDb, teardownTestDb, resetTestDb } from "../../lib/__tests__/testDb.ts";
++import { createTestUser, createTestProject, createTestDocument, asUser, jsonBody, rawQuery } from "./fixtures.ts";
++import handler from "../admin-project-view.mts";
++import { db } from "../../lib/db.ts";
++
++// Admin support view (v149): strict-admin, GET-only, read-only look at a
++// user's projects, with an audit row per snapshot/download.
++
++const URL = "https://app.tasketra.com/api/admin-project-view";
++const ADMIN = "admin@example.com";
++
++async function setup() {
++  process.env.ADMIN_EMAIL = ADMIN;
++  const admin = await createTestUser(ADMIN, { foundingMember: true });
++  return { admin };
++}
++
++const get = (user: { cookie: string }, query = "") => handler(asUser(user, { method: "GET", url: URL + query }));
++
++async function auditCount(projectId: string): Promise<number> {
++  const { rows } = await rawQuery(`SELECT count(*)::int AS count FROM admin_project_views WHERE project_id = '${projectId}'`);
++  return rows[0].count;
++}
++
++describe("admin-project-view", () => {
++  beforeAll(async () => {
++    await setupTestDb();
++  }, 30000);
++  afterAll(async () => {
++    await teardownTestDb();
++  });
++  beforeEach(async () => {
++    await resetTestDb();
++    delete process.env.ADMIN_EMAIL;
++  });
++  afterEach(() => {
++    delete process.env.ADMIN_EMAIL;
++  });
++
++  describe("who may use it", () => {
++    it("rejects an unauthenticated request", async () => {
++      expect((await handler(new Request(URL))).status).toBe(401);
++    });
++
++    it("fails closed when ADMIN_EMAIL is not set", async () => {
++      const someone = await createTestUser("someone@example.com", { foundingMember: true });
++      expect((await get(someone, `?userId=${someone.id}`)).status).toBe(403);
++    });
++
++    it("rejects a signed-in user who is not the admin", async () => {
++      await setup();
++      const other = await createTestUser("other@example.com");
++      expect((await get(other, `?userId=${other.id}`)).status).toBe(403);
++    });
++
++    it("rejects writes: every non-GET method is a 405, even for the admin", async () => {
++      const { admin } = await setup();
++      for (const method of ["POST", "PUT", "PATCH", "DELETE"]) {
++        expect((await handler(asUser(admin, { method, url: URL, body: {} }))).status).toBe(405);
++      }
++    });
++
++    it("requires a userId or projectId", async () => {
++      const { admin } = await setup();
++      expect((await get(admin)).status).toBe(400);
++    });
++  });
++
++  describe("project list", () => {
++    it("lists the target user's owned projects with counts", async () => {
++      const { admin } = await setup();
++      const owner = await createTestUser("owner@example.com");
++      const p = await createTestProject(owner.id, "Kitchen Reno");
++      await createTestProject(owner.id, "Second");
++      await createTestProject(admin.id, "Admin's own — must not appear");
++      const database = db();
++      await database.sql`INSERT INTO tasks (project_id, title, status) VALUES (${p.id}, 'Hang cabinets', 'in_progress')`;
++      await database.sql`INSERT INTO decision_requests (project_id, title, status, options, public_token) VALUES (${p.id}, 'Countertop material', 'open', '["Wood", "Stone"]'::jsonb, 'tok-list')`;
++      await createTestDocument(p.id, owner.id, 2048);
++
++      const body = await jsonBody<{ owner: any; projects: any[] }>(await get(admin, `?userId=${owner.id}`));
++      expect(body.owner.email).toBe("owner@example.com");
++      expect(body.projects.map((x) => x.name).sort()).toEqual(["Kitchen Reno", "Second"]);
++      expect(body.projects.find((x) => x.name === "Kitchen Reno")).toMatchObject({ task_count: 1, open_decisions: 1, document_count: 1 });
++    });
++
++    it("404s for an unknown user", async () => {
++      const { admin } = await setup();
++      expect((await get(admin, `?userId=${crypto.randomUUID()}`)).status).toBe(404);
++    });
++  });
++
++  describe("snapshot", () => {
++    it("returns the project's contents and writes one audit row", async () => {
++      const { admin } = await setup();
++      const owner = await createTestUser("owner@example.com");
++      const p = await createTestProject(owner.id, "Marcus-Style Project");
++      const database = db();
++      await database.sql`INSERT INTO tasks (project_id, title, status, owner_name) VALUES (${p.id}, 'Only task', 'not_started', 'Sam')`;
++      await database.sql`INSERT INTO decision_requests (project_id, title, status, options, public_token) VALUES (${p.id}, 'Pick a date', 'open', '["Fri", "Sat"]'::jsonb, 'secret-token')`;
++      await database.sql`INSERT INTO risks (project_id, title, status, probability, impact) VALUES (${p.id}, 'Permit delay', 'open', 'high', 'medium')`;
++      await database.sql`INSERT INTO status_updates (project_id, body, health) VALUES (${p.id}, 'Kicked off', 'on_track')`;
++      await createTestDocument(p.id, owner.id, 1024, { filename: "plan.pdf" });
++
++      const res = await get(admin, `?projectId=${p.id}`);
++      expect(res.status).toBe(200);
++      const body = await jsonBody<any>(res);
++      expect(body.readOnly).toBe(true);
++      expect(body.project).toMatchObject({ name: "Marcus-Style Project", owner_email: "owner@example.com" });
++      expect(body.project.roadmap_share_token).toBeUndefined();
++      expect(body.tasks.map((t: any) => t.title)).toEqual(["Only task"]);
++      expect(body.decisions[0]).toMatchObject({ title: "Pick a date", status: "open" });
++      expect(body.decisions[0].public_token).toBeUndefined();
++      expect(body.risks.map((r: any) => r.title)).toEqual(["Permit delay"]);
++      expect(body.statusUpdates[0]).toMatchObject({ body: "Kicked off", health: "on_track" });
++      expect(body.documents.map((d: any) => d.filename)).toEqual(["plan.pdf"]);
++      expect(await auditCount(p.id)).toBe(1);
++    });
++
++    it("shows an empty project as empty (the support case this exists for)", async () => {
++      const { admin } = await setup();
++      const owner = await createTestUser("owner@example.com");
++      const p = await createTestProject(owner.id, "Empty Project");
++      const body = await jsonBody<any>(await get(admin, `?projectId=${p.id}`));
++      expect(body.tasks).toEqual([]);
++      expect(body.decisions).toEqual([]);
++      expect(body.documents).toEqual([]);
++      expect(body.activity).toEqual([]);
++    });
++
++    it("404s for an unknown project", async () => {
++      const { admin } = await setup();
++      expect((await get(admin, `?projectId=${crypto.randomUUID()}`)).status).toBe(404);
++    });
++  });
++
++  describe("document download", () => {
++    it("404s when the document belongs to a different project", async () => {
++      const { admin } = await setup();
++      const owner = await createTestUser("owner@example.com");
++      const p1 = await createTestProject(owner.id, "One");
++      const p2 = await createTestProject(owner.id, "Two");
++      const doc = await createTestDocument(p2.id, owner.id, 100);
++      expect((await get(admin, `?projectId=${p1.id}&documentId=${doc.id}`)).status).toBe(404);
++    });
++
++    it("reaches the blob lookup for an in-project document (404 only because the fixture writes no blob)", async () => {
++      const { admin } = await setup();
++      const owner = await createTestUser("owner@example.com");
++      const p = await createTestProject(owner.id, "Docs");
++      const doc = await createTestDocument(p.id, owner.id, 100);
++      const res = await get(admin, `?projectId=${p.id}&documentId=${doc.id}`);
++      expect(res.status).toBe(404);
++      expect((await jsonBody<any>(res)).error).toBe("File data missing");
++    });
++  });
++});
+diff --git a/netlify/functions/admin-project-view.mts b/netlify/functions/admin-project-view.mts
+new file mode 100644
+index 0000000..16ef7b9
+--- /dev/null
++++ b/netlify/functions/admin-project-view.mts
+@@ -0,0 +1,212 @@
++import type { Config } from "@netlify/functions";
++import { db } from "../lib/db.ts";
++import { getUserIdFromRequest } from "../lib/auth.ts";
++import { json } from "../lib/http.ts";
++import { withSentry } from "../lib/sentry.ts";
++import { getStrictAdmin } from "../lib/adminGate.ts";
++import { documentsStore } from "../lib/blobs.ts";
++
++// Admin support view (v149): the admin (ADMIN_EMAIL, strict gate, fails
++// closed) can look at any user's projects to help them with an issue —
++// strictly read-only. There is no write path in this file at all: GET only,
++// every other method is a 405, and no query below mutates user data.
++//
++//   GET ?userId=<id>                        the projects that user owns, with counts
++//   GET ?projectId=<id>                     a full read-only snapshot of one project
++//   GET ?projectId=<id>&documentId=<id>     download one of that project's documents
++//
++// Snapshot and download access is written to admin_project_views (the v149
++// audit table) so there is a permanent record of who viewed what, when.
++// Share secrets are deliberately excluded from the payload: no
++// roadmap_share_token on the project, no public_token on decisions.
++
++const PREVIEWABLE_EXTS = new Set(["pdf", "txt", "md", "png", "jpg", "jpeg", "gif", "webp"]);
++
++function extOf(filename: string): string {
++  const dot = filename.lastIndexOf(".");
++  return dot === -1 ? "" : filename.slice(dot + 1).toLowerCase();
++}
++
++// Same rule as documents.mts: keep the display name, strip anything unsafe
++// for a Content-Disposition header.
++function sanitizeFilename(filename: string): string {
++  const base = filename.split(/[/\\]/).pop() || "file";
++  return base.replace(/[^\w.\- ]/g, "_").slice(0, 200) || "file";
++}
++
++export default withSentry(async (req: Request) => {
++  const userId = getUserIdFromRequest(req);
++  if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
++  if (req.method !== "GET") return json({ error: "Method not allowed" }, { status: 405 });
++  const database = db();
++  const admin = await getStrictAdmin(database, userId);
++  if (!admin) return json({ error: "Not authorized" }, { status: 403 });
++
++  const url = new URL(req.url);
++  const projectId = url.searchParams.get("projectId");
++  const documentId = url.searchParams.get("documentId");
++  const targetUserId = url.searchParams.get("userId");
++
++  // --- One user's owned projects -------------------------------------------
++  if (!projectId && targetUserId) {
++    const [owner] = await database.sql`
++      SELECT id, email, display_name FROM users WHERE id = ${targetUserId}
++    `;
++    if (!owner) return json({ error: "Account not found." }, { status: 404 });
++    const projects = await database.sql`
++      SELECT p.id, p.name, p.description, p.stage, p.archived, p.created_at,
++        (SELECT max(al.created_at) FROM activity_log al WHERE al.project_id = p.id) AS last_activity_at,
++        (SELECT count(*)::int FROM tasks t WHERE t.project_id = p.id AND t.deleted_at IS NULL) AS task_count,
++        (SELECT count(*)::int FROM decision_requests dr WHERE dr.project_id = p.id AND dr.status = 'open' AND dr.deleted_at IS NULL) AS open_decisions,
++        (SELECT count(*)::int FROM documents d WHERE d.project_id = p.id AND d.deleted_at IS NULL) AS document_count
++      FROM projects p
++      WHERE p.owner_id = ${targetUserId} AND p.deleted_at IS NULL
++      ORDER BY p.created_at DESC
++    `;
++    return json({ owner, projects });
++  }
++
++  if (!projectId) {
++    return json({ error: "userId or projectId is required." }, { status: 400 });
++  }
++
++  const [project] = await database.sql`
++    SELECT p.id, p.name, p.description, p.created_at, p.owner_id, p.archived,
++      p.stage, p.size, p.approach, p.closed_at,
++      u.email AS owner_email, u.display_name AS owner_display_name,
++      (SELECT max(al.created_at) FROM activity_log al WHERE al.project_id = p.id) AS last_activity_at
++    FROM projects p
++    JOIN users u ON u.id = p.owner_id
++    WHERE p.id = ${projectId} AND p.deleted_at IS NULL
++  `;
++  if (!project) return json({ error: "Project not found." }, { status: 404 });
++
++  const recordView = () =>
++    database.sql`
++      INSERT INTO admin_project_views (admin_user_id, owner_user_id, project_id)
++      VALUES (${admin.id}, ${project.owner_id}, ${project.id})
++    `;
++
++  // --- Download one document from the project ------------------------------
++  if (documentId) {
++    const [doc] = await database.sql`
++      SELECT id, project_id, filename, mime_type, size_bytes, blob_key
++      FROM documents WHERE id = ${documentId} AND project_id = ${projectId} AND deleted_at IS NULL
++    `;
++    if (!doc) return json({ error: "Document not found." }, { status: 404 });
++    // A store that cannot be reached at all (e.g. no blob context) degrades
++    // to the same answer as a missing file rather than a 500.
++    let blob: ArrayBuffer | null = null;
++    try {
++      blob = await documentsStore().get(doc.blob_key, { type: "arrayBuffer" });
++    } catch {
++      blob = null;
++    }
++    if (!blob) return json({ error: "File data missing" }, { status: 404 });
++    await recordView();
++    const previewable = PREVIEWABLE_EXTS.has(extOf(doc.filename));
++    return new Response(blob, {
++      status: 200,
++      headers: {
++        "content-type": doc.mime_type,
++        "content-disposition": `${previewable ? "inline" : "attachment"}; filename="${sanitizeFilename(doc.filename)}"`,
++        "content-length": String(doc.size_bytes),
++        "cache-control": "private, max-age=0, must-revalidate",
++      },
++    });
++  }
++
++  // --- Full project snapshot -------------------------------------------------
++  const [members, stakeholders, tasks, taskLinks, roadmapItems, decisions, risks, issues, assumptions, statusUpdates, documents, activity] =
++    await Promise.all([
++      database.sql`
++        SELECT pm.id, pm.invited_email AS email, pm.status, pm.invited_at, pm.joined_at, pm.is_ccb_reviewer
++        FROM project_members pm WHERE pm.project_id = ${projectId} ORDER BY pm.invited_at ASC
++      `,
++      database.sql`
++        SELECT id, name, email, role, phone, power_level, interest_level, preferred_contact, notes
++        FROM stakeholders WHERE project_id = ${projectId} AND deleted_at IS NULL ORDER BY name ASC
++      `,
++      database.sql`
++        SELECT id, title, description, status, owner_name, start_date, due_date, stakeholder_id, parent_task_id, roadmap_item_id, priority, created_at, updated_at
++        FROM tasks WHERE project_id = ${projectId} AND deleted_at IS NULL
++        ORDER BY CASE status WHEN 'blocked' THEN 0 WHEN 'in_progress' THEN 1 WHEN 'not_started' THEN 2 ELSE 3 END, due_date NULLS LAST
++      `,
++      database.sql`
++        SELECT l.task_id, l.depends_on_task_id, t1.title AS task_title, t2.title AS depends_on_title
++        FROM task_task_links l
++        JOIN tasks t1 ON t1.id = l.task_id
++        JOIN tasks t2 ON t2.id = l.depends_on_task_id
++        WHERE t1.project_id = ${projectId} AND t1.deleted_at IS NULL AND t2.deleted_at IS NULL
++      `,
++      database.sql`
++        SELECT r.id, r.type, r.title, r.description, r.swimlane, r.start_date, r.end_date, r.status, r.created_at, r.updated_at,
++          (SELECT count(*)::int FROM tasks t WHERE t.roadmap_item_id = r.id AND t.deleted_at IS NULL) AS task_total,
++          (SELECT count(*)::int FROM tasks t WHERE t.roadmap_item_id = r.id AND t.deleted_at IS NULL AND t.status = 'done') AS task_done
++        FROM roadmap_items r WHERE r.project_id = ${projectId} AND r.deleted_at IS NULL
++        ORDER BY r.swimlane ASC, r.start_date ASC NULLS LAST, r.created_at ASC
++      `,
++      database.sql`
++        SELECT dr.id, dr.title, dr.context, dr.options, dr.deadline, dr.status, dr.created_at,
++          rec.chosen_option, rec.responder_name, rec.responded_at,
++          COALESCE(
++            (SELECT json_agg(json_build_object('id', s.id, 'name', s.name))
++               FROM decision_request_recipients rr
++               JOIN stakeholders s ON s.id = rr.stakeholder_id
++               WHERE rr.decision_request_id = dr.id),
++            '[]'
++          ) AS recipients
++        FROM decision_requests dr
++        LEFT JOIN decision_records rec ON rec.decision_request_id = dr.id
++        WHERE dr.project_id = ${projectId} AND dr.deleted_at IS NULL
++        ORDER BY dr.created_at DESC
++      `,
++      database.sql`
++        SELECT id, title, description, probability, impact, mitigation, owner_name, status, created_at, updated_at, resolved_at
++        FROM risks WHERE project_id = ${projectId} AND deleted_at IS NULL ORDER BY created_at DESC
++      `,
++      database.sql`
++        SELECT id, title, description, severity, status, owner_name, resolution, created_at, updated_at, resolved_at
++        FROM issues WHERE project_id = ${projectId} AND deleted_at IS NULL ORDER BY created_at DESC
++      `,
++      database.sql`
++        SELECT id, statement, notes, status, owner_name, check_by, created_at, updated_at, validated_at
++        FROM assumptions WHERE project_id = ${projectId} AND deleted_at IS NULL ORDER BY created_at DESC
++      `,
++      database.sql`
++        SELECT id, body, health, created_at FROM status_updates
++        WHERE project_id = ${projectId} ORDER BY created_at DESC LIMIT 50
++      `,
++      database.sql`
++        SELECT d.id, d.filename, d.mime_type, d.size_bytes, d.created_at, u.email AS uploaded_by_email
++        FROM documents d JOIN users u ON u.id = d.uploaded_by
++        WHERE d.project_id = ${projectId} AND d.deleted_at IS NULL
++        ORDER BY d.created_at DESC
++      `,
++      database.sql`
++        SELECT id, entity_type, entity_id, entity_title, action, summary, actor_id, created_at
++        FROM activity_log WHERE project_id = ${projectId} ORDER BY created_at DESC LIMIT 50
++      `,
++    ]);
++
++  await recordView();
++
++  return json({
++    readOnly: true,
++    project,
++    members,
++    stakeholders,
++    tasks,
++    taskLinks,
++    roadmapItems,
++    decisions,
++    risks,
++    issues,
++    assumptions,
++    statusUpdates,
++    documents,
++    activity,
++  });
++});
++
++export const config: Config = { path: "/api/admin-project-view" };
+diff --git a/src/App.tsx b/src/App.tsx
+index 7bcd5b3..8adddd1 100644
+--- a/src/App.tsx
++++ b/src/App.tsx
+@@ -35,6 +35,8 @@ const AdminWaitlist = lazy(() => import("./pages/AdminWaitlist"));
+ const AdminFeedback = lazy(() => import("./pages/AdminFeedback"));
+ const AdminFoundingMembers = lazy(() => import("./pages/AdminFoundingMembers"));
+ const AdminBroadcast = lazy(() => import("./pages/AdminBroadcast"));
++const AdminUserProjects = lazy(() => import("./pages/AdminProjectView").then((m) => ({ default: m.AdminUserProjects })));
++const AdminProjectView = lazy(() => import("./pages/AdminProjectView").then((m) => ({ default: m.AdminProjectView })));
+ const LegalHub = lazy(() => import("./pages/legal/LegalHub"));
+ const Terms = lazy(() => import("./pages/legal/Terms"));
+ const Privacy = lazy(() => import("./pages/legal/Privacy"));
+@@ -100,6 +102,8 @@ export default function App() {
+             <Route path="/admin/feedback" element={<AdminProtected><AdminFeedback /></AdminProtected>} />
+             <Route path="/admin/founding-members" element={<AdminProtected><AdminFoundingMembers /></AdminProtected>} />
+             <Route path="/admin/email-founding-members" element={<AdminProtected><AdminBroadcast /></AdminProtected>} />
++            <Route path="/admin/support/:userId" element={<AdminProtected><AdminUserProjects /></AdminProtected>} />
++            <Route path="/admin/support/project/:projectId" element={<AdminProtected><AdminProjectView /></AdminProtected>} />
+             <Route path="/app/projects/:id" element={<Protected><ProjectHome /></Protected>} />
+             <Route path="/app/projects/:id/print/risks" element={<Protected><RiskPrint /></Protected>} />
+             <Route path="/app/projects/:id/print/raci" element={<Protected><RaciPrint /></Protected>} />
+diff --git a/src/__tests__/adminProjectView.page.test.tsx b/src/__tests__/adminProjectView.page.test.tsx
+new file mode 100644
+index 0000000..0117cbf
+--- /dev/null
++++ b/src/__tests__/adminProjectView.page.test.tsx
+@@ -0,0 +1,148 @@
++// @vitest-environment jsdom
++//
++// The admin support-view pages (v149): the per-user project list and the
++// read-only project snapshot. Mounts the real pages with the api answered
++// by stubs.
++import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
++import { createRoot, type Root } from "react-dom/client";
++import { act } from "react";
++import { MemoryRouter, Routes, Route } from "react-router-dom";
++
++vi.mock("../lib/auth-context", () => ({
++  useAuth: () => ({
++    user: { id: "u-admin", email: "admin@example.com", isAdmin: true, tour_completed_at: "2026-01-01T00:00:00Z" },
++    loading: false,
++    refresh: async () => {},
++    logout: async () => {},
++  }),
++  AuthProvider: ({ children }: { children: unknown }) => children,
++}));
++
++const calls = {
++  listProjects: vi.fn(),
++  snapshot: vi.fn(),
++};
++
++vi.mock("../lib/api", async (importOriginal) => {
++  const actual = await importOriginal<typeof import("../lib/api")>();
++  return {
++    ...actual,
++    api: {
++      ...actual.api,
++      adminListUserProjects: (userId: string) => calls.listProjects(userId),
++      adminGetProjectSnapshot: (projectId: string) => calls.snapshot(projectId),
++    },
++  };
++});
++
++import { AdminUserProjects, AdminProjectView } from "../pages/AdminProjectView";
++
++const SNAPSHOT = {
++  readOnly: true,
++  project: {
++    id: "p-1", name: "Kitchen Reno", description: "Redo the kitchen", created_at: "2026-10-01T00:00:00Z",
++    owner_id: "u-owner", archived: false, stage: "execute", size: null, approach: null, closed_at: null,
++    owner_email: "owner@example.com", owner_display_name: "Olivia Owner", last_activity_at: "2026-11-01T00:00:00Z",
++  },
++  members: [{ id: "m-1", email: "helper@example.com", status: "active", invited_at: "2026-10-02T00:00:00Z", joined_at: "2026-10-02T00:00:00Z", is_ccb_reviewer: false }],
++  stakeholders: [{ id: "s-1", name: "Sam Stakeholder", email: null, role: "Sponsor", phone: null, power_level: "high", interest_level: "high", preferred_contact: null, notes: null }],
++  tasks: [{ id: "t-1", title: "Hang cabinets", description: null, status: "in_progress", owner_name: "Sam", start_date: null, due_date: "2026-11-10", stakeholder_id: null, parent_task_id: null, roadmap_item_id: null, priority: "high", created_at: "2026-10-03T00:00:00Z", updated_at: "2026-10-04T00:00:00Z" }],
++  taskLinks: [],
++  roadmapItems: [],
++  decisions: [{ id: "d-1", title: "Countertop material", context: null, options: ["Wood", "Stone"], deadline: null, status: "open", created_at: "2026-10-05T00:00:00Z", chosen_option: null, responder_name: null, responded_at: null, recipients: [{ id: "s-1", name: "Sam Stakeholder" }] }],
++  risks: [],
++  issues: [],
++  assumptions: [],
++  statusUpdates: [{ id: "u-1", body: "Kicked off", health: "on_track", created_at: "2026-10-06T00:00:00Z" }],
++  documents: [{ id: "doc-1", filename: "plan.pdf", mime_type: "application/pdf", size_bytes: 2048, created_at: "2026-10-07T00:00:00Z", uploaded_by_email: "owner@example.com", previewable: true }],
++  activity: [{ id: "a-1", entity_type: "task", entity_id: "t-1", entity_title: "Hang cabinets", action: "created", summary: "Created task Hang cabinets", actor_id: "u-owner", created_at: "2026-10-03T00:00:00Z" }],
++};
++
++const EMPTY_SNAPSHOT = {
++  ...SNAPSHOT,
++  project: { ...SNAPSHOT.project, id: "p-2", name: "My first project", last_activity_at: null },
++  members: [], stakeholders: [], tasks: [], decisions: [], statusUpdates: [], documents: [], activity: [],
++};
++
++let host: HTMLDivElement;
++let root: Root;
++
++beforeAll(() => {
++  (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
++  (globalThis as any).ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
++  const zero = { width: 0, height: 0, top: 0, left: 0, right: 0, bottom: 0, x: 0, y: 0, toJSON() {} };
++  (Range.prototype as any).getBoundingClientRect = () => zero;
++  (Range.prototype as any).getClientRects = () => [];
++  window.matchMedia = window.matchMedia || ((q: string) => ({ matches: false, media: q, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, onchange: null, dispatchEvent: () => false }) as any);
++  Element.prototype.scrollIntoView = () => {};
++});
++
++beforeEach(() => {
++  calls.listProjects.mockReset();
++  calls.snapshot.mockReset();
++  host = document.createElement("div");
++  document.body.appendChild(host);
++  root = createRoot(host);
++});
++
++afterEach(async () => {
++  await act(async () => { root.unmount(); });
++  host.remove();
++});
++
++async function render(path: string) {
++  await act(async () => {
++    root.render(
++      <MemoryRouter initialEntries={[path]}>
++        <Routes>
++          <Route path="/admin/support/:userId" element={<AdminUserProjects />} />
++          <Route path="/admin/support/project/:projectId" element={<AdminProjectView />} />
++        </Routes>
++      </MemoryRouter>
++    );
++  });
++  await act(async () => {});
++}
++
++describe("Admin support view", () => {
++  it("lists the user's projects with counts and links into the viewer", async () => {
++    calls.listProjects.mockResolvedValue({
++      owner: { id: "u-owner", email: "owner@example.com", display_name: "Olivia Owner" },
++      projects: [{ id: "p-1", name: "Kitchen Reno", description: null, stage: "execute", archived: false, created_at: "2026-10-01T00:00:00Z", last_activity_at: "2026-11-01T00:00:00Z", task_count: 4, open_decisions: 1, document_count: 2 }],
++    });
++    await render("/admin/support/u-owner");
++    expect(calls.listProjects).toHaveBeenCalledWith("u-owner");
++    expect(host.textContent).toContain("owner@example.com");
++    expect(host.textContent).toContain("Kitchen Reno");
++    expect(host.textContent).toContain("4 tasks");
++    const link = Array.from(host.querySelectorAll("a")).find((a) => a.textContent === "Kitchen Reno");
++    expect(link?.getAttribute("href")).toBe("/admin/support/project/p-1");
++  });
++
++  it("renders the snapshot with the read-only banner naming the owner", async () => {
++    calls.snapshot.mockResolvedValue(SNAPSHOT);
++    await render("/admin/support/project/p-1");
++    expect(calls.snapshot).toHaveBeenCalledWith("p-1");
++    expect(host.textContent).toContain("Support view");
++    expect(host.textContent).toContain("Olivia Owner (owner@example.com)");
++    expect(host.textContent).toContain("read-only. This view is logged.");
++    expect(host.textContent).toContain("Hang cabinets");
++    expect(host.textContent).toContain("Countertop material");
++    expect(host.textContent).toContain("Kicked off");
++    expect(host.textContent).toContain("Created task Hang cabinets");
++    const docLink = Array.from(host.querySelectorAll("a")).find((a) => a.textContent === "plan.pdf");
++    expect(docLink?.getAttribute("href")).toContain("/admin-project-view?projectId=p-1&documentId=doc-1");
++    // No mutation controls anywhere in the page's main content (the sidebar
++    // has its own navigation buttons; the support view itself has none).
++    const main = host.querySelector("main")!;
++    expect(main.querySelectorAll("button").length).toBe(0);
++    expect(main.querySelectorAll("input, textarea, select").length).toBe(0);
++  });
++
++  it("makes an empty project obviously empty", async () => {
++    calls.snapshot.mockResolvedValue(EMPTY_SNAPSHOT);
++    await render("/admin/support/project/p-2");
++    expect(host.textContent).toContain("This project is empty");
++    expect(host.textContent).toContain("No tasks yet.");
++  });
++});
+diff --git a/src/lib/api.ts b/src/lib/api.ts
+index 1f9dfdd..eeacf80 100644
+--- a/src/lib/api.ts
++++ b/src/lib/api.ts
+@@ -396,6 +396,67 @@ export type BroadcastProgress = { id: string; subject: string; created_at: strin
+ 
+ export type AdminAccountsSummary = { foundingClaimed: number; cap: number; totalAccounts: number };
+ 
++// Admin support view (v149): read-only snapshot of another user's project.
++export type AdminUserProject = {
++  id: string;
++  name: string;
++  description: string | null;
++  stage: string | null;
++  archived: boolean;
++  created_at: string;
++  last_activity_at: string | null;
++  task_count: number;
++  open_decisions: number;
++  document_count: number;
++};
++
++export type AdminSnapshotProject = {
++  id: string;
++  name: string;
++  description: string | null;
++  created_at: string;
++  owner_id: string;
++  archived: boolean;
++  stage: string | null;
++  size: string | null;
++  approach: string | null;
++  closed_at: string | null;
++  owner_email: string;
++  owner_display_name: string | null;
++  last_activity_at: string | null;
++};
++
++export type AdminTaskLink = { task_id: string; depends_on_task_id: string; task_title: string; depends_on_title: string };
++
++export type AdminAssumption = {
++  id: string; statement: string; notes: string | null; status: string; owner_name: string | null;
++  check_by: string | null; created_at: string; updated_at: string; validated_at: string | null;
++};
++
++export type AdminStatusUpdate = { id: string; body: string; health: string | null; created_at: string };
++
++export type AdminActivityItem = {
++  id: string; entity_type: string; entity_id: string; entity_title: string | null;
++  action: string; summary: string | null; actor_id: string | null; created_at: string;
++};
++
++export type AdminProjectSnapshot = {
++  readOnly: true;
++  project: AdminSnapshotProject;
++  members: ProjectMember[];
++  stakeholders: Stakeholder[];
++  tasks: Task[];
++  taskLinks: AdminTaskLink[];
++  roadmapItems: RoadmapItem[];
++  decisions: Omit<Decision, "public_token">[];
++  risks: Risk[];
++  issues: Issue[];
++  assumptions: AdminAssumption[];
++  statusUpdates: AdminStatusUpdate[];
++  documents: ProjectDocument[];
++  activity: AdminActivityItem[];
++};
++
+ export type AccountRemovalPreview = {
+   user: { id: string; email: string; display_name: string | null; founding_member: boolean };
+   projects: number;
+@@ -895,6 +956,12 @@ export const api = {
+     request<{ ok: true }>("/admin-accounts", { method: "POST", body: JSON.stringify({ userId, action: "remove-founding" }) }),
+   adminDeleteAccount: (userId: string, confirmEmail: string) =>
+     request<{ ok: true }>("/admin-accounts", { method: "POST", body: JSON.stringify({ userId, action: "delete", confirmEmail }) }),
++  adminListUserProjects: (userId: string) =>
++    request<{ owner: { id: string; email: string; display_name: string | null }; projects: AdminUserProject[] }>(`/admin-project-view?userId=${encodeURIComponent(userId)}`),
++  adminGetProjectSnapshot: (projectId: string) =>
++    request<AdminProjectSnapshot>(`/admin-project-view?projectId=${encodeURIComponent(projectId)}`),
++  adminDocumentDownloadUrl: (projectId: string, documentId: string) =>
++    `${BASE}/admin-project-view?projectId=${encodeURIComponent(projectId)}&documentId=${encodeURIComponent(documentId)}`,
+ 
+   listProjects: () => request<{ projects: Project[] }>("/projects"),
+   listDeletedProjects: () => request<{ projects: Project[] }>("/projects?deleted=true"),
+diff --git a/src/pages/AdminFoundingMembers.tsx b/src/pages/AdminFoundingMembers.tsx
+index 84f9e31..4b38e22 100644
+--- a/src/pages/AdminFoundingMembers.tsx
++++ b/src/pages/AdminFoundingMembers.tsx
+@@ -95,20 +95,25 @@ export default function AdminFoundingMembers() {
+                 date={fmtDate(a.created_at)}
+                 dateLabel="Joined"
+                 actions={
+-                  a.is_you ? (
+-                    <span className="muted">Your account</span>
+-                  ) : (
+-                    <>
+-                      {a.founding_member && (
+-                        <button type="button" className="btn-link" onClick={() => { setNotice(null); setRemoval({ account: a, mode: "founding" }); }}>
+-                          Remove founding status
++                  <>
++                    <Link className="btn-link" to={`/admin/support/${a.id}`}>
++                      View projects
++                    </Link>
++                    {a.is_you ? (
++                      <span className="muted">Your account</span>
++                    ) : (
++                      <>
++                        {a.founding_member && (
++                          <button type="button" className="btn-link" onClick={() => { setNotice(null); setRemoval({ account: a, mode: "founding" }); }}>
++                            Remove founding status
++                          </button>
++                        )}
++                        <button type="button" className="btn-link btn-link-danger" onClick={() => { setNotice(null); setRemoval({ account: a, mode: "delete" }); }}>
++                          Delete account
+                         </button>
+-                      )}
+-                      <button type="button" className="btn-link btn-link-danger" onClick={() => { setNotice(null); setRemoval({ account: a, mode: "delete" }); }}>
+-                        Delete account
+-                      </button>
+-                    </>
+-                  )
++                      </>
++                    )}
++                  </>
+                 }
+               />
+             ))}
+diff --git a/src/pages/AdminProjectView.tsx b/src/pages/AdminProjectView.tsx
+new file mode 100644
+index 0000000..21eb4e0
+--- /dev/null
++++ b/src/pages/AdminProjectView.tsx
+@@ -0,0 +1,293 @@
++import { useEffect, useState } from "react";
++import { Link, useParams } from "react-router-dom";
++import { api, type AdminProjectSnapshot, type AdminUserProject } from "../lib/api";
++import { AppSidebar } from "../components/AppSidebar";
++import { PageHeader, SoftCard } from "../components/ui";
++import { fmtDate } from "../lib/format";
++import { useDocumentTitle } from "../lib/documentTitle";
++
++// Admin support view (v149): read-only look at another user's projects, so
++// Kk can help from the same facts the user sees. Nothing on these pages can
++// change anything — the API behind them is GET-only.
++
++function plural(n: number, word: string) {
++  return `${n} ${word}${n === 1 ? "" : "s"}`;
++}
++
++function fmtBytes(bytes: number): string {
++  if (bytes < 1024) return `${bytes} B`;
++  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
++  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
++}
++
++function label(s: string | null | undefined): string {
++  return s ? s.replace(/_/g, " ") : "—";
++}
++
++export function AdminUserProjects() {
++  useDocumentTitle("Support view");
++  const { userId } = useParams<{ userId: string }>();
++  const [owner, setOwner] = useState<{ id: string; email: string; display_name: string | null } | null>(null);
++  const [projects, setProjects] = useState<AdminUserProject[]>([]);
++  const [loading, setLoading] = useState(true);
++  const [error, setError] = useState<string | null>(null);
++
++  useEffect(() => {
++    let live = true;
++    (async () => {
++      try {
++        const data = await api.adminListUserProjects(userId!);
++        if (!live) return;
++        setOwner(data.owner);
++        setProjects(data.projects);
++      } catch (err) {
++        if (live) setError(err instanceof Error ? err.message : "Could not load this account's projects.");
++      } finally {
++        if (live) setLoading(false);
++      }
++    })();
++    return () => { live = false; };
++  }, [userId]);
++
++  return (
++    <div className="project-shell">
++      <AppSidebar />
++      <main id="main-content" className="project-main">
++        <PageHeader
++          title="Support view"
++          subtitle={owner ? `Projects owned by ${owner.display_name ? `${owner.display_name} (${owner.email})` : owner.email} — read-only.` : undefined}
++        />
++        <p><Link className="btn btn-ghost" to="/admin/founding-members">Back to accounts</Link></p>
++        {error && <p className="form-error" role="alert">{error}</p>}
++        {loading ? (
++          <p className="muted">Loading projects…</p>
++        ) : projects.length === 0 ? (
++          <p className="muted">This account owns no projects.</p>
++        ) : (
++          <ul className="rg-list" aria-label="Projects">
++            {projects.map((p) => (
++              <li key={p.id} style={{ padding: "10px 0", borderBottom: "1px solid var(--border, #ddd)" }}>
++                <Link to={`/admin/support/project/${p.id}`}>{p.name}</Link>
++                <span className="muted">
++                  {" · "}{label(p.stage)}{p.archived ? " · archived" : ""}
++                  {" · "}{plural(p.task_count, "task")}
++                  {" · "}{plural(p.open_decisions, "open decision")}
++                  {" · "}{plural(p.document_count, "document")}
++                  {" · created "}{fmtDate(p.created_at)}
++                  {p.last_activity_at ? ` · last activity ${fmtDate(p.last_activity_at)}` : " · no activity yet"}
++                </span>
++                {p.description && <div className="muted">{p.description}</div>}
++              </li>
++            ))}
++          </ul>
++        )}
++      </main>
++    </div>
++  );
++}
++
++export function AdminProjectView() {
++  useDocumentTitle("Support view — project");
++  const { projectId } = useParams<{ projectId: string }>();
++  const [snap, setSnap] = useState<AdminProjectSnapshot | null>(null);
++  const [loading, setLoading] = useState(true);
++  const [error, setError] = useState<string | null>(null);
++
++  useEffect(() => {
++    let live = true;
++    (async () => {
++      try {
++        const data = await api.adminGetProjectSnapshot(projectId!);
++        if (live) setSnap(data);
++      } catch (err) {
++        if (live) setError(err instanceof Error ? err.message : "Could not load this project.");
++      } finally {
++        if (live) setLoading(false);
++      }
++    })();
++    return () => { live = false; };
++  }, [projectId]);
++
++  const p = snap?.project;
++
++  return (
++    <div className="project-shell">
++      <AppSidebar />
++      <main id="main-content" className="project-main">
++        <PageHeader title={p ? p.name : "Support view"} subtitle="Admin support view" />
++        {p && (
++          <p className="pill pill-gold" role="status">
++            Support view — you are looking at {p.owner_display_name ? `${p.owner_display_name} (${p.owner_email})` : p.owner_email}&rsquo;s project, read-only. This view is logged.
++          </p>
++        )}
++        <p><Link className="btn btn-ghost" to={p ? `/admin/support/${p.owner_id}` : "/admin/founding-members"}>Back to their projects</Link></p>
++
++        {error && <p className="form-error" role="alert">{error}</p>}
++        {loading && <p className="muted">Loading project…</p>}
++
++        {snap && p && (
++          <>
++            <SoftCard title="At a glance">
++              <p>
++                {plural(snap.tasks.length, "task")} · {plural(snap.decisions.filter((d) => d.status === "open").length, "open decision")} ·{" "}
++                {plural(snap.risks.length, "risk")} · {plural(snap.issues.length, "issue")} · {plural(snap.documents.length, "document")} ·{" "}
++                {plural(snap.stakeholders.length, "stakeholder")} · {plural(snap.members.length, "invited member")}
++              </p>
++              <p className="muted">
++                Stage: {label(p.stage)} · Created {fmtDate(p.created_at)} ·{" "}
++                {p.last_activity_at ? `Last activity ${fmtDate(p.last_activity_at)}` : "No activity recorded"}
++                {p.archived ? " · Archived" : ""}{p.closed_at ? ` · Closed ${fmtDate(p.closed_at)}` : ""}
++              </p>
++              {p.description && <p>{p.description}</p>}
++              {snap.tasks.length === 0 && snap.documents.length === 0 && snap.decisions.length === 0 && (
++                <p className="muted">This project is empty: no tasks, decisions, or documents have been saved to it.</p>
++              )}
++            </SoftCard>
++
++            <SoftCard title="Check-ins">
++              {snap.statusUpdates.length === 0 ? <p className="muted">No check-ins yet.</p> : (
++                <ul>
++                  {snap.statusUpdates.map((u) => (
++                    <li key={u.id}>
++                      <span className="muted">{fmtDate(u.created_at)}</span>
++                      {u.health ? <> · <span className="pill">{label(u.health)}</span></> : null}
++                      {u.body ? <> — {u.body}</> : null}
++                    </li>
++                  ))}
++                </ul>
++              )}
++            </SoftCard>
++
++            <SoftCard title="Tasks">
++              {snap.tasks.length === 0 ? <p className="muted">No tasks yet.</p> : (
++                <ul>
++                  {snap.tasks.map((t) => (
++                    <li key={t.id}>
++                      {t.title} <span className="muted">· {label(t.status)}{t.owner_name ? ` · ${t.owner_name}` : ""}{t.due_date ? ` · due ${fmtDate(t.due_date)}` : ""}{t.priority ? ` · ${label(t.priority)}` : ""}</span>
++                    </li>
++                  ))}
++                </ul>
++              )}
++              {snap.taskLinks.length > 0 && (
++                <>
++                  <p className="muted" style={{ marginTop: 8 }}>Dependencies:</p>
++                  <ul>
++                    {snap.taskLinks.map((l) => (
++                      <li key={`${l.task_id}-${l.depends_on_task_id}`}>{l.task_title} <span className="muted">depends on</span> {l.depends_on_title}</li>
++                    ))}
++                  </ul>
++                </>
++              )}
++            </SoftCard>
++
++            <SoftCard title="Roadmap">
++              {snap.roadmapItems.length === 0 ? <p className="muted">No roadmap items yet.</p> : (
++                <ul>
++                  {snap.roadmapItems.map((r) => (
++                    <li key={r.id}>
++                      {r.title} <span className="muted">· {label(r.type)} · {label(r.status)}{r.start_date ? ` · ${fmtDate(r.start_date)}` : ""}{r.end_date ? ` – ${fmtDate(r.end_date)}` : ""}{r.task_total ? ` · ${r.task_done}/${r.task_total} tasks done` : ""}</span>
++                    </li>
++                  ))}
++                </ul>
++              )}
++            </SoftCard>
++
++            <SoftCard title="Decisions">
++              {snap.decisions.length === 0 ? <p className="muted">No decisions yet.</p> : (
++                <ul>
++                  {snap.decisions.map((d) => (
++                    <li key={d.id}>
++                      {d.title} <span className="muted">· {label(d.status)}{d.deadline ? ` · deadline ${fmtDate(d.deadline)}` : ""}</span>
++                      {d.chosen_option && <div className="muted">Decided: {d.chosen_option}{d.responder_name ? ` (${d.responder_name})` : ""}</div>}
++                      {d.recipients.length > 0 && <div className="muted">Asked: {d.recipients.map((r) => r.name).join(", ")}</div>}
++                      {d.context && <div className="muted">{d.context}</div>}
++                    </li>
++                  ))}
++                </ul>
++              )}
++            </SoftCard>
++
++            <SoftCard title="Risks">
++              {snap.risks.length === 0 ? <p className="muted">No risks yet.</p> : (
++                <ul>
++                  {snap.risks.map((r) => (
++                    <li key={r.id}>{r.title} <span className="muted">· {label(r.status)}{r.owner_name ? ` · ${r.owner_name}` : ""}{r.probability ? ` · probability ${label(r.probability)}` : ""}{r.impact ? ` · impact ${label(r.impact)}` : ""}</span></li>
++                  ))}
++                </ul>
++              )}
++            </SoftCard>
++
++            <SoftCard title="Issues">
++              {snap.issues.length === 0 ? <p className="muted">No issues yet.</p> : (
++                <ul>
++                  {snap.issues.map((i) => (
++                    <li key={i.id}>{i.title} <span className="muted">· {label(i.status)}{i.severity ? ` · ${label(i.severity)}` : ""}{i.owner_name ? ` · ${i.owner_name}` : ""}</span></li>
++                  ))}
++                </ul>
++              )}
++            </SoftCard>
++
++            <SoftCard title="Assumptions">
++              {snap.assumptions.length === 0 ? <p className="muted">No assumptions yet.</p> : (
++                <ul>
++                  {snap.assumptions.map((a) => (
++                    <li key={a.id}>{a.statement} <span className="muted">· {label(a.status)}{a.owner_name ? ` · ${a.owner_name}` : ""}</span></li>
++                  ))}
++                </ul>
++              )}
++            </SoftCard>
++
++            <SoftCard title="People">
++              <p className="muted">Owner: {p.owner_display_name ? `${p.owner_display_name} (${p.owner_email})` : p.owner_email}</p>
++              {snap.members.length > 0 && (
++                <>
++                  <p className="muted" style={{ marginTop: 8 }}>Members:</p>
++                  <ul>
++                    {snap.members.map((m) => (
++                      <li key={m.id}>{m.email} <span className="muted">· {label(m.status)}</span></li>
++                    ))}
++                  </ul>
++                </>
++              )}
++              {snap.stakeholders.length > 0 && (
++                <>
++                  <p className="muted" style={{ marginTop: 8 }}>Stakeholders:</p>
++                  <ul>
++                    {snap.stakeholders.map((s) => (
++                      <li key={s.id}>{s.name} <span className="muted">{s.role ? `· ${s.role}` : ""}{s.email ? ` · ${s.email}` : ""}</span></li>
++                    ))}
++                  </ul>
++                </>
++              )}
++            </SoftCard>
++
++            <SoftCard title="Documents">
++              {snap.documents.length === 0 ? <p className="muted">No documents yet.</p> : (
++                <ul>
++                  {snap.documents.map((d) => (
++                    <li key={d.id}>
++                      <a href={api.adminDocumentDownloadUrl(p.id, d.id)} target="_blank" rel="noreferrer">{d.filename}</a>
++                      <span className="muted"> · {fmtBytes(d.size_bytes)} · uploaded {fmtDate(d.created_at)}{d.uploaded_by_email ? ` by ${d.uploaded_by_email}` : ""}</span>
++                    </li>
++                  ))}
++                </ul>
++              )}
++            </SoftCard>
++
++            <SoftCard title="Recent activity">
++              {snap.activity.length === 0 ? <p className="muted">No activity recorded.</p> : (
++                <ul>
++                  {snap.activity.map((a) => (
++                    <li key={a.id}>
++                      <span className="muted">{fmtDate(a.created_at)}</span> — {a.summary || `${a.action} ${a.entity_title ?? a.entity_type}`}
++                    </li>
++                  ))}
++                </ul>
++              )}
++            </SoftCard>
++          </>
++        )}
++      </main>
++    </div>
++  );
++}
