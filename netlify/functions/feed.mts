@@ -22,7 +22,9 @@ export default withSentry(async (req: Request) => {
 
     UNION ALL
 
-    SELECT 'task' AS type, title, status AS body, updated_at AS ts,
+    SELECT 'task' AS type, title,
+      CASE status WHEN 'not_started' THEN 'Not started' WHEN 'in_progress' THEN 'In progress'
+        WHEN 'blocked' THEN 'Blocked' WHEN 'done' THEN 'Done' ELSE status END AS body, updated_at AS ts,
       jsonb_build_object('status', status, 'dueDate', due_date) AS meta, NULL AS health
     FROM tasks WHERE project_id = ${projectId} AND deleted_at IS NULL
 
@@ -43,13 +45,17 @@ export default withSentry(async (req: Request) => {
 
     UNION ALL
 
-    SELECT 'issue' AS type, title, status AS body, updated_at AS ts,
+    SELECT 'issue' AS type, title,
+      CASE status WHEN 'open' THEN 'Open' WHEN 'in_progress' THEN 'In progress'
+        WHEN 'resolved' THEN 'Resolved' ELSE status END AS body, updated_at AS ts,
       jsonb_build_object('severity', severity, 'status', status) AS meta, NULL AS health
     FROM issues WHERE project_id = ${projectId} AND deleted_at IS NULL
 
     UNION ALL
 
-    SELECT 'risk' AS type, title, status AS body, updated_at AS ts,
+    SELECT 'risk' AS type, title,
+      CASE status WHEN 'open' THEN 'Open' WHEN 'monitoring' THEN 'Monitoring'
+        WHEN 'resolved' THEN 'Resolved' ELSE status END AS body, updated_at AS ts,
       jsonb_build_object('probability', probability, 'impact', impact, 'status', status) AS meta, NULL AS health
     FROM risks WHERE project_id = ${projectId} AND deleted_at IS NULL
 
@@ -61,10 +67,14 @@ export default withSentry(async (req: Request) => {
           ELSE COALESCE(NULLIF(TRIM(u.display_name), ''), 'a teammate') END) AS meta, NULL AS health
     FROM activity_log a LEFT JOIN users u ON u.id = a.actor_id
     WHERE a.project_id = ${projectId}
-      -- v150: a decision's creation already arrives via the decision_request
-      -- branch above; the activity copy of the same event showed every new
-      -- decision twice ("DECISION REQUESTED" + "DECISION CREATED").
-      AND NOT (a.entity_type = 'decision' AND a.action = 'created')
+      -- v150/v150.1: creations of the entities that have their own derived
+      -- branch above (decisions, tasks, issues, risks) already arrive via
+      -- that branch; the activity copy of the same event showed every new
+      -- decision twice ("DECISION REQUESTED" + "DECISION CREATED"), and the
+      -- same for tasks, issues and risks. Creations of everything else
+      -- (stakeholders, roadmap items, documents...) have no derived branch
+      -- and keep their activity row.
+      AND NOT (a.action = 'created' AND a.entity_type IN ('decision', 'task', 'issue', 'risk'))
 
     ORDER BY ts DESC
     LIMIT 200

@@ -5,9 +5,12 @@ import { db } from "../../lib/db.ts";
 import handler from "../feed.mts";
 
 async function addEntry(projectId: string, actorId: string | null, title: string) {
+  // 'updated', not 'created': creations of tasks (and decisions, issues,
+  // risks) are de-duplicated out of the feed's activity branch since v150.1
+  // because those entities have their own derived feed rows.
   await db().sql`
     INSERT INTO activity_log (project_id, entity_type, entity_id, entity_title, action, actor_id)
-    VALUES (${projectId}, 'task', gen_random_uuid(), ${title}, 'created', ${actorId})
+    VALUES (${projectId}, 'task', gen_random_uuid(), ${title}, 'updated', ${actorId})
   `;
 }
 
