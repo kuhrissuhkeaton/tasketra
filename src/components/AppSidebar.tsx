@@ -246,6 +246,13 @@ export function AppSidebar({ children, menuLabel = "Menu" }: { children?: ReactN
               <NavIcon name="founding" active={pathname === "/admin/founding-members"} />
               Founding members
             </Link>
+            <Link
+              to="/admin/founder-hub"
+              className={pathname === "/admin/founder-hub" ? "side-tab active" : "side-tab"}
+            >
+              <NavIcon name="founding" active={pathname === "/admin/founder-hub"} />
+              Founder hub
+            </Link>
           </NavGroup>
         )}
       </nav>

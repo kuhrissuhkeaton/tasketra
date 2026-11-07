@@ -409,6 +409,56 @@ export type BroadcastProgress = { id: string; subject: string; created_at: strin
 
 export type AdminAccountsSummary = { foundingClaimed: number; cap: number; totalAccounts: number };
 
+// Founder Hub (v152): aggregate admin monitoring, from /api/admin-founder-hub.
+export type FounderHubMilestoneRung = {
+  id: string;
+  label: string;
+  state: "achieved" | "not_measurable" | "pending";
+  current: number | null;
+  target: number | null;
+};
+
+export type FounderHubData = {
+  milestones: {
+    rungs: FounderHubMilestoneRung[];
+    nextMilestone: { id: string; label: string; current: number | null; target: number | null } | null;
+  };
+  revenue: {
+    gaMrr: number;
+    gaPayers: number;
+    gaPayersActive: number;
+    gaPayersTrialing: number;
+    payersByPlan: { payingMonthly: number; payingYearly: number; trialingMonthly: number; trialingYearly: number };
+    trials: { count: number; trialEnds: string[] };
+    pastDue: { count: number; mrrAtRisk: number };
+    foundingSubscribers: { active: number; trialing: number; pastDue: number; mrr: number };
+  };
+  users: {
+    total: number;
+    cohorts: { freeForever: number; inTrial: number; payingMonthly: number; payingYearly: number; freeRegular: number };
+    gaPayers: number;
+    signupsPerWeek: { week: string; count: number }[];
+    funnel: { key: string; label: string; count: number; pctFromPrevious: number | null }[];
+  };
+  usage: {
+    sections: { section: string; entityTypes: string[]; actions30d: number; actionsAllTime: number; distinctProjects: number; distinctUsers: number }[];
+    rarelyUsed: string[];
+    unloggedSections: string[];
+    depth: { medianActionsPerProject: number | null; medianSectionsPerProject: number | null; activeProjects30d: number };
+  };
+  friction: {
+    feedback: {
+      byStatus: { new: number; planned: number; shipped: number; dismissed: number };
+      newLast7d: number;
+      newLast30d: number;
+      oldestNewAt: string | null;
+      oldestNewAgeDays: number | null;
+    };
+    pulseSent30d: number;
+    cancellations30d: number;
+  };
+};
+
 // Admin support view (v149): read-only snapshot of another user's project.
 export type AdminUserProject = {
   id: string;
@@ -984,6 +1034,8 @@ export const api = {
     request<AdminProjectSnapshot>(`/admin-project-view?projectId=${encodeURIComponent(projectId)}`),
   adminDocumentDownloadUrl: (projectId: string, documentId: string) =>
     `${BASE}/admin-project-view?projectId=${encodeURIComponent(projectId)}&documentId=${encodeURIComponent(documentId)}`,
+  adminGetFounderHub: () =>
+    request<FounderHubData>("/admin-founder-hub"),
 
   listProjects: () => request<{ projects: Project[] }>("/projects"),
   listDeletedProjects: () => request<{ projects: Project[] }>("/projects?deleted=true"),

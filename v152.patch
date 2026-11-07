@@ -1,0 +1,1125 @@
+diff --git a/netlify/functions/__tests__/admin-founder-hub.integration.test.ts b/netlify/functions/__tests__/admin-founder-hub.integration.test.ts
+new file mode 100644
+index 0000000..c03dc52
+--- /dev/null
++++ b/netlify/functions/__tests__/admin-founder-hub.integration.test.ts
+@@ -0,0 +1,242 @@
++import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from "vitest";
++import { setupTestDb, teardownTestDb, resetTestDb } from "../../lib/__tests__/testDb.ts";
++import { createTestUser, createTestProject, asUser, jsonBody } from "./fixtures.ts";
++import handler from "../admin-founder-hub.mts";
++import { db } from "../../lib/db.ts";
++
++// Founder Hub (v152): strict-admin, GET-only, read-only aggregates —
++// milestones, revenue from the subscriptions mirror, cohort breakdown,
++// activation funnel, feature usage, and friction.
++
++const URL = "https://app.tasketra.com/api/admin-founder-hub";
++const ADMIN = "admin@example.com";
++
++async function setup() {
++  process.env.ADMIN_EMAIL = ADMIN;
++  const admin = await createTestUser(ADMIN, { foundingMember: true });
++  return { admin };
++}
++
++const get = (user: { cookie: string }) => handler(asUser(user, { method: "GET", url: URL }));
++
++async function addSubscription(userId: string, status: string, interval: string | null, opts: { trialEnd?: string; updatedDaysAgo?: number } = {}) {
++  const database = db();
++  const updated = new Date(Date.now() - (opts.updatedDaysAgo ?? 0) * 24 * 60 * 60 * 1000).toISOString();
++  await database.sql`
++    INSERT INTO subscriptions (user_id, stripe_customer_id, status, billing_interval, trial_end, updated_at)
++    VALUES (${userId}, ${"cus_" + crypto.randomUUID().slice(0, 8)}, ${status}, ${interval}, ${opts.trialEnd ?? null}, ${updated})
++  `;
++}
++
++describe("admin-founder-hub", () => {
++  beforeAll(async () => {
++    await setupTestDb();
++  }, 30000);
++  afterAll(async () => {
++    await teardownTestDb();
++  });
++  beforeEach(async () => {
++    await resetTestDb();
++    delete process.env.ADMIN_EMAIL;
++  });
++  afterEach(() => {
++    delete process.env.ADMIN_EMAIL;
++  });
++
++  describe("who may use it", () => {
++    it("rejects an unauthenticated request", async () => {
++      expect((await handler(new Request(URL))).status).toBe(401);
++    });
++
++    it("fails closed when ADMIN_EMAIL is not set", async () => {
++      const someone = await createTestUser("someone@example.com", { foundingMember: true });
++      expect((await get(someone)).status).toBe(403);
++    });
++
++    it("rejects a signed-in user who is not the admin", async () => {
++      await setup();
++      const other = await createTestUser("other@example.com");
++      expect((await get(other)).status).toBe(403);
++    });
++
++    it("rejects writes: every non-GET method is a 405, even for the admin", async () => {
++      const { admin } = await setup();
++      for (const method of ["POST", "PUT", "PATCH", "DELETE"]) {
++        expect((await handler(asUser(admin, { method, url: URL, body: {} }))).status).toBe(405);
++      }
++    });
++  });
++
++  describe("the seeded world", () => {
++    it("computes cohorts, revenue, milestones, funnel, usage, and friction exactly", async () => {
++      const { admin } = await setup();
++      const database = db();
++
++      // Founding: one subscriber (money must show as founding, never GA),
++      // one plain member. With the founding admin, freeForever = 3.
++      const foundingSub = await createTestUser("founding-sub@example.com", { foundingMember: true });
++      await createTestUser("founding-plain@example.com", { foundingMember: true });
++      await addSubscription(foundingSub.id, "active", "month");
++
++      // The beta test account with an active subscription: the trap. It
++      // must not count anywhere in GA.
++      const beta = await createTestUser("beta@tasketra.com");
++      await addSubscription(beta.id, "active", "month");
++
++      // GA users.
++      const gaAnnual = await createTestUser("ga-annual@example.com");
++      await addSubscription(gaAnnual.id, "active", "year");
++      const gaTrial = await createTestUser("ga-trial@example.com");
++      await addSubscription(gaTrial.id, "trialing", "month", { trialEnd: "2026-11-20T00:00:00.000Z" });
++      const gaPastDue = await createTestUser("ga-pastdue@example.com");
++      await addSubscription(gaPastDue.id, "past_due", "month");
++      const gaFree = await createTestUser("ga-free@example.com", { verified: false });
++      const gaCanceled = await createTestUser("ga-canceled@example.com");
++      await addSubscription(gaCanceled.id, "canceled", "month", { updatedDaysAgo: 2 });
++
++      // Activation for gaAnnual: project + task + check-in + decision.
++      const p = await createTestProject(gaAnnual.id, "GA Project");
++      await database.sql`INSERT INTO tasks (project_id, title, status) VALUES (${p.id}, 'First task', 'not_started')`;
++      await database.sql`INSERT INTO status_updates (project_id, body) VALUES (${p.id}, 'Kicked off')`;
++      await database.sql`INSERT INTO decision_requests (project_id, title, status, options, public_token) VALUES (${p.id}, 'Pick a date', 'open', '["Fri", "Sat"]'::jsonb, 'tok-fh')`;
++      // gaTrial has a project only.
++      await createTestProject(gaTrial.id, "Trial Project");
++
++      // Usage: 3 task, 1 roadmap_item, 2 decision, 1 status_update rows.
++      for (let i = 0; i < 3; i++) {
++        await database.sql`INSERT INTO activity_log (project_id, entity_type, entity_id, entity_title, action, actor_id) VALUES (${p.id}, 'task', gen_random_uuid(), 'T', 'created', ${gaAnnual.id})`;
++      }
++      for (let i = 0; i < 2; i++) {
++        await database.sql`INSERT INTO activity_log (project_id, entity_type, entity_id, entity_title, action, actor_id) VALUES (${p.id}, 'decision', gen_random_uuid(), 'D', 'created', ${gaAnnual.id})`;
++      }
++      await database.sql`INSERT INTO activity_log (project_id, entity_type, entity_id, entity_title, action, actor_id) VALUES (${p.id}, 'roadmap_item', gen_random_uuid(), 'R', 'created', ${gaAnnual.id})`;
++      await database.sql`INSERT INTO activity_log (project_id, entity_type, entity_id, entity_title, action, actor_id) VALUES (${p.id}, 'status_update', gen_random_uuid(), 'S', 'created', ${gaAnnual.id})`;
++
++      // Friction: feedback across statuses and ages, one pulse send.
++      await database.sql`INSERT INTO feedback (user_id, message, status, created_at) VALUES (${gaAnnual.id}, 'fresh', 'new', now())`;
++      await database.sql`INSERT INTO feedback (user_id, message, status, created_at) VALUES (${gaAnnual.id}, 'old', 'new', now() - interval '40 days')`;
++      await database.sql`INSERT INTO feedback (user_id, message, status) VALUES (${gaAnnual.id}, 'p', 'planned')`;
++      await database.sql`INSERT INTO feedback (user_id, message, status) VALUES (${gaAnnual.id}, 's', 'shipped')`;
++      await database.sql`INSERT INTO feedback (user_id, message, status) VALUES (${gaAnnual.id}, 'd', 'dismissed')`;
++      await database.sql`UPDATE users SET last_pulse_sent_at = now() WHERE id = ${gaAnnual.id}`;
++
++      const body = await jsonBody<any>(await get(admin));
++
++      // Cohorts: every account in exactly one bucket, summing to total.
++      expect(body.users.total).toBe(9);
++      expect(body.users.cohorts).toEqual({ freeForever: 3, inTrial: 1, payingMonthly: 2, payingYearly: 1, freeRegular: 2 });
++      const cohortSum = Object.values(body.users.cohorts as Record<string, number>).reduce((a, b) => a + b, 0);
++      expect(cohortSum).toBe(body.users.total);
++
++      // Revenue: GA payers = annual active + monthly trialing + monthly
++      // past_due (founding and beta excluded). MRR includes past_due,
++      // excludes trialing.
++      expect(body.revenue.gaPayers).toBe(3);
++      expect(body.revenue.gaMrr).toBeCloseTo(290 / 12 + 29, 2);
++      expect(body.revenue.payersByPlan).toEqual({ payingMonthly: 0, payingYearly: 1, trialingMonthly: 1, trialingYearly: 0 });
++      expect(body.revenue.trials.count).toBe(1);
++      expect(body.revenue.trials.trialEnds).toHaveLength(1);
++      expect(body.revenue.pastDue).toEqual({ count: 1, mrrAtRisk: 29 });
++      expect(body.revenue.foundingSubscribers).toMatchObject({ active: 1, trialing: 0, pastDue: 0 });
++      expect(body.revenue.foundingSubscribers.mrr).toBe(29);
++
++      // Milestones: rungs 1-2 achieved, 3 is next, churn unmeasurable.
++      const byId = Object.fromEntries(body.milestones.rungs.map((r: any) => [r.id, r]));
++      expect(byId["first-ga-paying"].state).toBe("achieved");
++      expect(byId["first-annual-payer"].state).toBe("achieved");
++      expect(byId["ten-ga-payers"].state).toBe("pending");
++      expect(byId["churn-under-5"].state).toBe("not_measurable");
++      expect(byId["churn-under-5"].current).toBeNull();
++      expect(body.milestones.nextMilestone).toMatchObject({ label: "10 GA payers", current: 3, target: 10 });
++
++      // Funnel over the 5 GA users.
++      const funnel = Object.fromEntries(body.users.funnel.map((s: any) => [s.key, s.count]));
++      expect(funnel).toEqual({ signed_up: 5, verified: 4, created_project: 2, added_task: 1, posted_checkin: 1, created_decision: 1 });
++
++      // Signups per week covers the trailing 12 weeks and sums to total.
++      expect(body.users.signupsPerWeek).toHaveLength(12);
++      expect(body.users.signupsPerWeek.reduce((a: number, w: any) => a + w.count, 0)).toBe(9);
++
++      // Usage ranking, distinct counts, rarely-used, and depth.
++      expect(body.usage.sections[0]).toMatchObject({ section: "Tasks", actions30d: 3, distinctProjects: 1, distinctUsers: 1 });
++      const usageBySection = Object.fromEntries(body.usage.sections.map((s: any) => [s.section, s.actions30d]));
++      expect(usageBySection["Decisions"]).toBe(2);
++      expect(usageBySection["Roadmap"]).toBe(1);
++      expect(usageBySection["Overview (check-ins / feed)"]).toBe(1);
++      expect(body.usage.rarelyUsed).toContain("Issues");
++      expect(body.usage.rarelyUsed).toContain("Budget*");
++      expect(body.usage.depth).toMatchObject({ medianActionsPerProject: 7, medianSectionsPerProject: 4, activeProjects30d: 1 });
++
++      // Friction.
++      expect(body.friction.feedback.byStatus).toEqual({ new: 2, planned: 1, shipped: 1, dismissed: 1 });
++      expect(body.friction.feedback.newLast7d).toBe(1);
++      expect(body.friction.feedback.newLast30d).toBe(1);
++      expect(body.friction.feedback.oldestNewAgeDays).toBeGreaterThanOrEqual(39);
++      expect(body.friction.pulseSent30d).toBe(1);
++      expect(body.friction.cancellations30d).toBe(1);
++    });
++  });
++
++  describe("milestone edge cases", () => {
++    it("a trialing-only GA cohort does not trip rung 1, and trial MRR is $0", async () => {
++      const { admin } = await setup();
++      const ga = await createTestUser("only-trial@example.com");
++      await addSubscription(ga.id, "trialing", "month", { trialEnd: "2026-11-21T00:00:00.000Z" });
++      const body = await jsonBody<any>(await get(admin));
++      const rung1 = body.milestones.rungs.find((r: any) => r.id === "first-ga-paying");
++      expect(rung1.state).toBe("pending");
++      expect(rung1.current).toBe(0);
++      expect(body.milestones.nextMilestone).toMatchObject({ label: "First GA paying customer", current: 0, target: 1 });
++      expect(body.revenue.gaMrr).toBe(0);
++      expect(body.revenue.trials.count).toBe(1);
++      expect(body.users.cohorts.inTrial).toBe(1);
++    });
++
++    it("founding and beta subscribers do not trip rung 1", async () => {
++      const { admin } = await setup();
++      const founding = await createTestUser("founder-pays@example.com", { foundingMember: true });
++      await addSubscription(founding.id, "active", "month");
++      const beta = await createTestUser("beta@tasketra.com");
++      await addSubscription(beta.id, "active", "month");
++      const body = await jsonBody<any>(await get(admin));
++      expect(body.revenue.gaPayers).toBe(0);
++      expect(body.revenue.gaMrr).toBe(0);
++      expect(body.milestones.rungs.find((r: any) => r.id === "first-ga-paying").state).toBe("pending");
++      expect(body.revenue.foundingSubscribers.active).toBe(1);
++      // ...and both still land somewhere in the cohort breakdown.
++      expect(body.users.cohorts.freeForever).toBe(2); // admin + founding
++      expect(body.users.cohorts.payingMonthly).toBe(1); // beta (all-accounts view)
++    });
++
++    it("the admin's own subscription does not count as GA (Flag D3)", async () => {
++      // Deliberately NOT founding: only the admin exclusion (not the
++      // founding exclusion) can keep this account out of GA.
++      process.env.ADMIN_EMAIL = ADMIN;
++      const admin = await createTestUser(ADMIN);
++      await addSubscription(admin.id, "active", "year");
++      const body = await jsonBody<any>(await get(admin));
++      expect(body.revenue.gaPayers).toBe(0);
++      expect(body.revenue.gaMrr).toBe(0);
++      expect(body.users.funnel[0].count).toBe(0); // GA set is empty
++    });
++
++    it("a canceled-only GA user trips nothing", async () => {
++      const { admin } = await setup();
++      const ga = await createTestUser("canceled@example.com");
++      await addSubscription(ga.id, "canceled", "month");
++      const body = await jsonBody<any>(await get(admin));
++      expect(body.revenue.gaPayers).toBe(0);
++      expect(body.users.cohorts.freeRegular).toBe(1);
++      expect(body.milestones.rungs.find((r: any) => r.id === "first-ga-paying").state).toBe("pending");
++    });
++
++    it("MRR with only annual payers uses 290/12, not 290", async () => {
++      const { admin } = await setup();
++      const ga = await createTestUser("annual@example.com");
++      await addSubscription(ga.id, "active", "year");
++      const body = await jsonBody<any>(await get(admin));
++      expect(body.revenue.gaMrr).toBeCloseTo(290 / 12, 2);
++      expect(body.revenue.gaMrr).not.toBe(290);
++    });
++  });
++});
+diff --git a/netlify/functions/admin-founder-hub.mts b/netlify/functions/admin-founder-hub.mts
+new file mode 100644
+index 0000000..d57d0bb
+--- /dev/null
++++ b/netlify/functions/admin-founder-hub.mts
+@@ -0,0 +1,320 @@
++import type { Config } from "@netlify/functions";
++import { db } from "../lib/db.ts";
++import { getUserIdFromRequest } from "../lib/auth.ts";
++import { json } from "../lib/http.ts";
++import { withSentry } from "../lib/sentry.ts";
++import { getStrictAdmin } from "../lib/adminGate.ts";
++import { mrrContributionUsd } from "../lib/billingPrices.ts";
++
++// Founder Hub (v152): one admin-only, read-only page's data — milestones,
++// revenue, users & activation, feature usage, and friction, all computed
++// at request time from what the app already stores (users, subscriptions,
++// projects, tasks, status_updates, decision_requests, activity_log,
++// feedback). There is no write path in this file at all: GET only, every
++// other method is a 405, and no query below mutates data. No migration,
++// no stored rollups.
++//
++// Shared definitions (V152_SPEC.md; defined once, used by every panel):
++//   GA user — not a founding member, not the beta test account, and not
++//     the admin's own account (Flag D3, adopted at approval). The beta
++//     account is identifiable only by its email — there is no is_test
++//     flag on users; the email literal below is the same one the
++//     20261102000000_remove_beta_founding_member migration uses. The
++//     admin is excluded by id (getStrictAdmin has already matched
++//     ADMIN_EMAIL for us).
++//   GA payer — a GA user whose subscriptions row (one per user, kept
++//     current by stripe-webhook.mts) is 'active', 'trialing', or
++//     'past_due'. Past_due is still a paying relationship inside its
++//     grace period; the spec's own Panel 2 assertions count it as a
++//     payer and include it in MRR. Milestone rung 1 is stricter —
++//     active only (Flag D1): a trial can never trip it.
++//   MRR — derived from the plan mix via lib/billingPrices.ts, because
++//     the mirror stores no amounts. Trialing contributes $0.
++
++const BETA_EMAIL = "beta@tasketra.com";
++const DAY_MS = 24 * 60 * 60 * 1000;
++
++type UserSubRow = {
++  id: string;
++  email: string;
++  founding_member: boolean;
++  created_at: string;
++  email_verified_at: string | null;
++  last_pulse_sent_at: string | null;
++  sub_status: string | null;
++  sub_interval: string | null;
++  sub_trial_end: string | null;
++  sub_updated_at: string | null;
++};
++
++function round2(n: number): number {
++  return Math.round(n * 100) / 100;
++}
++
++function median(values: number[]): number | null {
++  if (values.length === 0) return null;
++  const sorted = [...values].sort((a, b) => a - b);
++  const mid = Math.floor(sorted.length / 2);
++  return sorted.length % 2 === 1 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
++}
++
++// Usage Panel mapping: app section -> activity_log entity types
++// (src/lib/projectNav.ts labels; V152_SPEC.md Panel 4).
++const USAGE_SECTIONS: { section: string; entityTypes: string[] }[] = [
++  { section: "Overview (check-ins / feed)", entityTypes: ["status_update"] },
++  { section: "Tasks", entityTypes: ["task"] },
++  { section: "Roadmap", entityTypes: ["roadmap_item"] },
++  { section: "Meetings", entityTypes: ["meeting"] },
++  { section: "OKRs", entityTypes: ["objective", "key_result"] },
++  { section: "Issues", entityTypes: ["issue"] },
++  { section: "Risks", entityTypes: ["risk"] },
++  { section: "Assumptions", entityTypes: ["assumption"] },
++  { section: "Dependencies", entityTypes: ["dependency"] },
++  { section: "Quality", entityTypes: ["quality_item"] },
++  { section: "Compliance", entityTypes: ["compliance_item"] },
++  { section: "Decisions", entityTypes: ["decision"] },
++  { section: "Stakeholders", entityTypes: ["stakeholder"] },
++  { section: "Team", entityTypes: ["member"] },
++  { section: "Vendors", entityTypes: ["procurement_item"] },
++  { section: "Comms plan", entityTypes: ["comm_plan_item"] },
++  { section: "Documents", entityTypes: ["document"] },
++  { section: "Closure (lessons)", entityTypes: ["lesson"] },
++  { section: "Project scaffolding", entityTypes: ["project", "change_request"] },
++];
++
++// Sections no function ever writes an activity_log row for. They can never
++// show usage in Panel 4; the page marks them with an asterisk so a zero is
++// never misread as "nobody uses this".
++const UNLOGGED_SECTIONS = ["Budget", "Charter", "RACI", "Weekly report", "Templates", "Export", "Connections", "Trash"];
++
++export default withSentry(async (req: Request) => {
++  const userId = getUserIdFromRequest(req);
++  if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
++  if (req.method !== "GET") return json({ error: "Method not allowed" }, { status: 405 });
++  const database = db();
++  const admin = await getStrictAdmin(database, userId);
++  if (!admin) return json({ error: "Not authorized" }, { status: 403 });
++
++  const now = Date.now();
++  const since30d = new Date(now - 30 * DAY_MS).toISOString();
++
++  const rows = (await database.sql`
++    SELECT u.id, u.email, u.founding_member, u.created_at, u.email_verified_at, u.last_pulse_sent_at,
++           s.status AS sub_status, s.billing_interval AS sub_interval, s.trial_end AS sub_trial_end,
++           s.updated_at AS sub_updated_at
++    FROM users u
++    LEFT JOIN subscriptions s ON s.user_id = u.id
++    ORDER BY u.created_at ASC
++  `) as unknown as UserSubRow[];
++
++  const isGa = (r: UserSubRow) =>
++    !r.founding_member && r.email.toLowerCase() !== BETA_EMAIL && r.id !== admin.id;
++  const gaRows = rows.filter(isGa);
++  const isPayerStatus = (s: string | null) => s === "active" || s === "trialing" || s === "past_due";
++
++  // --- Panel 3 cohorts (over ALL accounts; buckets sum to total) --------
++  const cohorts = { freeForever: 0, inTrial: 0, payingMonthly: 0, payingYearly: 0, freeRegular: 0 };
++  for (const r of rows) {
++    if (r.founding_member) cohorts.freeForever += 1;
++    else if (r.sub_status === "trialing") cohorts.inTrial += 1;
++    else if (r.sub_status === "active" || r.sub_status === "past_due") {
++      if (r.sub_interval === "year") cohorts.payingYearly += 1;
++      else cohorts.payingMonthly += 1;
++    } else cohorts.freeRegular += 1;
++  }
++
++  // --- Panel 2 revenue (GA only, from the local mirror) ------------------
++  const gaSubs = gaRows.filter((r) => r.sub_status !== null);
++  const gaActive = gaSubs.filter((r) => r.sub_status === "active");
++  const gaTrialing = gaSubs.filter((r) => r.sub_status === "trialing");
++  const gaPastDue = gaSubs.filter((r) => r.sub_status === "past_due");
++  const gaPayers = gaSubs.filter((r) => isPayerStatus(r.sub_status));
++  const gaMrr = round2(gaSubs.reduce((sum, r) => sum + mrrContributionUsd(r.sub_status, r.sub_interval), 0));
++  const pastDueMrr = round2(gaPastDue.reduce((sum, r) => sum + mrrContributionUsd(r.sub_status, r.sub_interval), 0));
++  const byPlan = {
++    payingMonthly: gaActive.filter((r) => r.sub_interval !== "year").length,
++    payingYearly: gaActive.filter((r) => r.sub_interval === "year").length,
++    trialingMonthly: gaTrialing.filter((r) => r.sub_interval !== "year").length,
++    trialingYearly: gaTrialing.filter((r) => r.sub_interval === "year").length,
++  };
++  const trialEnds = gaTrialing
++    .map((r) => r.sub_trial_end)
++    .filter((d): d is string => !!d)
++    .sort()
++    .slice(0, 5);
++  const foundingSubs = rows.filter((r) => r.founding_member && r.sub_status !== null);
++  const foundingSubscribers = {
++    active: foundingSubs.filter((r) => r.sub_status === "active").length,
++    trialing: foundingSubs.filter((r) => r.sub_status === "trialing").length,
++    pastDue: foundingSubs.filter((r) => r.sub_status === "past_due").length,
++    mrr: round2(foundingSubs.reduce((sum, r) => sum + mrrContributionUsd(r.sub_status, r.sub_interval), 0)),
++  };
++
++  // --- Panel 1 milestone ladder (computed, never stored) -----------------
++  const gaActiveYearly = gaActive.filter((r) => r.sub_interval === "year").length;
++  type Rung = {
++    id: string; label: string;
++    state: "achieved" | "not_measurable" | "pending";
++    current: number | null; target: number | null;
++  };
++  const rungs: Rung[] = [
++    { id: "first-ga-paying", label: "First GA paying customer", state: gaActive.length >= 1 ? "achieved" : "pending", current: gaActive.length, target: 1 },
++    { id: "first-annual-payer", label: "First annual-plan payer", state: gaActiveYearly >= 1 ? "achieved" : "pending", current: gaActiveYearly, target: 1 },
++    { id: "ten-ga-payers", label: "10 GA payers", state: gaPayers.length >= 10 ? "achieved" : "pending", current: gaPayers.length, target: 10 },
++    { id: "mrr-1k", label: "$1K MRR", state: gaMrr >= 1000 ? "achieved" : "pending", current: gaMrr, target: 1000 },
++    { id: "fifty-ga-payers", label: "50 GA payers", state: gaPayers.length >= 50 ? "achieved" : "pending", current: gaPayers.length, target: 50 },
++    { id: "mrr-5k", label: "$5K MRR", state: gaMrr >= 5000 ? "achieved" : "pending", current: gaMrr, target: 5000 },
++    // Flag D2: churn cannot be reconstructed from current-state-only
++    // subscription rows, so this rung ships honestly unmeasurable.
++    { id: "churn-under-5", label: "Monthly churn under 5%", state: "not_measurable", current: null, target: 5 },
++  ];
++  const nextRung = rungs.find((r) => r.state === "pending") ?? null;
++  const milestones = {
++    rungs,
++    nextMilestone: nextRung ? { id: nextRung.id, label: nextRung.label, current: nextRung.current, target: nextRung.target } : null,
++  };
++
++  // --- Panel 3 signups per week (trailing 12 weeks, zeros filled) --------
++  const weekStartOf = (d: Date) => {
++    const day = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
++    const dow = (day.getUTCDay() + 6) % 7; // Monday = 0
++    day.setUTCDate(day.getUTCDate() - dow);
++    return day;
++  };
++  const currentWeek = weekStartOf(new Date(now));
++  const signupsPerWeek: { week: string; count: number }[] = [];
++  for (let i = 11; i >= 0; i--) {
++    const start = new Date(currentWeek.getTime() - i * 7 * DAY_MS);
++    const end = start.getTime() + 7 * DAY_MS;
++    signupsPerWeek.push({
++      week: start.toISOString().slice(0, 10),
++      count: rows.filter((r) => {
++        const t = new Date(r.created_at).getTime();
++        return t >= start.getTime() && t < end;
++      }).length,
++    });
++  }
++
++  // --- Panel 3 activation funnel (GA users, as project owners) -----------
++  const [funnelRow] = await database.sql`
++    SELECT
++      count(*)::int AS signed_up,
++      count(*) FILTER (WHERE u.email_verified_at IS NOT NULL)::int AS verified,
++      count(*) FILTER (WHERE EXISTS (SELECT 1 FROM projects p WHERE p.owner_id = u.id AND p.deleted_at IS NULL))::int AS created_project,
++      count(*) FILTER (WHERE EXISTS (SELECT 1 FROM projects p JOIN tasks t ON t.project_id = p.id WHERE p.owner_id = u.id AND p.deleted_at IS NULL AND t.deleted_at IS NULL))::int AS added_task,
++      count(*) FILTER (WHERE EXISTS (SELECT 1 FROM projects p JOIN status_updates su ON su.project_id = p.id WHERE p.owner_id = u.id AND p.deleted_at IS NULL))::int AS posted_checkin,
++      count(*) FILTER (WHERE EXISTS (SELECT 1 FROM projects p JOIN decision_requests dr ON dr.project_id = p.id WHERE p.owner_id = u.id AND p.deleted_at IS NULL AND dr.deleted_at IS NULL))::int AS created_decision
++    FROM users u
++    WHERE u.founding_member = false AND lower(u.email) <> ${BETA_EMAIL} AND u.id <> ${admin.id}
++  `;
++  const funnelSteps = [
++    { key: "signed_up", label: "Signed up", count: funnelRow.signed_up },
++    { key: "verified", label: "Verified email", count: funnelRow.verified },
++    { key: "created_project", label: "Created a project", count: funnelRow.created_project },
++    { key: "added_task", label: "Added a task", count: funnelRow.added_task },
++    { key: "posted_checkin", label: "Posted a check-in", count: funnelRow.posted_checkin },
++    { key: "created_decision", label: "Created a decision request", count: funnelRow.created_decision },
++  ].map((step, i, all) => ({
++    ...step,
++    pctFromPrevious: i === 0 || all[i - 1].count === 0 ? null : Math.round((step.count / all[i - 1].count) * 1000) / 10,
++  }));
++
++  // --- Panel 4 feature usage (activity_log, trailing 30 days) ------------
++  const usageRows = (await database.sql`
++    SELECT entity_type,
++           count(*) FILTER (WHERE created_at >= ${since30d})::int AS actions_30d,
++           count(*)::int AS actions_all_time,
++           count(DISTINCT project_id) FILTER (WHERE created_at >= ${since30d})::int AS distinct_projects,
++           count(DISTINCT actor_id) FILTER (WHERE created_at >= ${since30d})::int AS distinct_users
++    FROM activity_log
++    GROUP BY entity_type
++  `) as unknown as { entity_type: string; actions_30d: number; actions_all_time: number; distinct_projects: number; distinct_users: number }[];
++  const byEntity = new Map(usageRows.map((r) => [r.entity_type, r]));
++  const sections = USAGE_SECTIONS.map(({ section, entityTypes }) => {
++    const parts = entityTypes.map((t) => byEntity.get(t)).filter((r) => !!r);
++    return {
++      section,
++      entityTypes,
++      actions30d: parts.reduce((s, r) => s + r.actions_30d, 0),
++      actionsAllTime: parts.reduce((s, r) => s + r.actions_all_time, 0),
++      // Distinct counts are summed across a section's entity types — an
++      // upper bound when a project/user touched two types in one section
++      // (only OKRs and scaffolding have two). Fine at this scale; noted
++      // in V152_FIXES.md.
++      distinctProjects: parts.reduce((s, r) => s + r.distinct_projects, 0),
++      distinctUsers: parts.reduce((s, r) => s + r.distinct_users, 0),
++    };
++  }).sort((a, b) => b.actions30d - a.actions30d);
++  const rarelyUsed = [
++    ...sections.filter((s) => s.actions30d === 0).map((s) => s.section),
++    ...UNLOGGED_SECTIONS.map((s) => `${s}*`),
++  ];
++  const depthRows = (await database.sql`
++    SELECT count(*)::int AS actions, count(DISTINCT entity_type)::int AS types
++    FROM activity_log
++    WHERE created_at >= ${since30d}
++    GROUP BY project_id
++  `) as unknown as { actions: number; types: number }[];
++  const usage = {
++    sections,
++    rarelyUsed,
++    unloggedSections: UNLOGGED_SECTIONS,
++    depth: {
++      medianActionsPerProject: median(depthRows.map((r) => r.actions)),
++      medianSectionsPerProject: median(depthRows.map((r) => r.types)),
++      activeProjects30d: depthRows.length,
++    },
++  };
++
++  // --- Panel 5 friction ---------------------------------------------------
++  const [feedbackRow] = await database.sql`
++    SELECT
++      count(*) FILTER (WHERE status = 'new')::int AS new_count,
++      count(*) FILTER (WHERE status = 'planned')::int AS planned_count,
++      count(*) FILTER (WHERE status = 'shipped')::int AS shipped_count,
++      count(*) FILTER (WHERE status = 'dismissed')::int AS dismissed_count,
++      count(*) FILTER (WHERE status = 'new' AND created_at >= now() - interval '7 days')::int AS new_7d,
++      count(*) FILTER (WHERE status = 'new' AND created_at >= now() - interval '30 days')::int AS new_30d,
++      min(created_at) FILTER (WHERE status = 'new') AS oldest_new_at
++    FROM feedback
++  `;
++  const oldestNewAt = feedbackRow.oldest_new_at ? String(feedbackRow.oldest_new_at) : null;
++  const friction = {
++    feedback: {
++      byStatus: { new: feedbackRow.new_count, planned: feedbackRow.planned_count, shipped: feedbackRow.shipped_count, dismissed: feedbackRow.dismissed_count },
++      newLast7d: feedbackRow.new_7d,
++      newLast30d: feedbackRow.new_30d,
++      oldestNewAt,
++      oldestNewAgeDays: oldestNewAt ? Math.floor((now - new Date(oldestNewAt).getTime()) / DAY_MS) : null,
++    },
++    pulseSent30d: rows.filter((r) => r.last_pulse_sent_at && new Date(r.last_pulse_sent_at).getTime() >= now - 30 * DAY_MS).length,
++    cancellations30d: gaSubs.filter(
++      (r) => r.sub_status === "canceled" && r.sub_updated_at && new Date(r.sub_updated_at).getTime() >= now - 30 * DAY_MS
++    ).length,
++  };
++
++  return json({
++    milestones,
++    revenue: {
++      gaMrr,
++      gaPayers: gaPayers.length,
++      gaPayersActive: gaActive.length,
++      gaPayersTrialing: gaTrialing.length,
++      payersByPlan: byPlan,
++      trials: { count: gaTrialing.length, trialEnds },
++      pastDue: { count: gaPastDue.length, mrrAtRisk: pastDueMrr },
++      foundingSubscribers,
++    },
++    users: {
++      total: rows.length,
++      cohorts,
++      gaPayers: gaPayers.length,
++      signupsPerWeek,
++      funnel: funnelSteps,
++    },
++    usage,
++    friction,
++  });
++});
++
++export const config: Config = { path: "/api/admin-founder-hub" };
+diff --git a/netlify/lib/billingPrices.ts b/netlify/lib/billingPrices.ts
+new file mode 100644
+index 0000000..d7b840d
+--- /dev/null
++++ b/netlify/lib/billingPrices.ts
+@@ -0,0 +1,18 @@
++// Pro plan prices in USD — the single source the Founder Hub (v152) uses
++// to derive MRR from the local subscriptions mirror, which stores plan
++// interval but no amounts. These match the live Stripe prices behind
++// STRIPE_PRICE_MONTHLY / STRIPE_PRICE_ANNUAL and the display strings in
++// create-checkout-session.mts ("$29 per month" / "$290 per year").
++// If pricing ever changes (or a coupon/grandfathered rate appears), this
++// is the second place that has to change — see V152_SPEC.md Flag D4.
++export const PRO_MONTHLY_USD = 29;
++export const PRO_ANNUAL_USD = 290;
++
++/** Monthly-recurring-revenue contribution of one subscription. */
++export function mrrContributionUsd(status: string | null, billingInterval: string | null): number {
++  // Trialing counts $0 (no money has moved); past_due counts in full (the
++  // relationship is still paying, inside its grace period) and is broken
++  // out separately wherever "at risk" matters.
++  if (status !== "active" && status !== "past_due") return 0;
++  return billingInterval === "year" ? PRO_ANNUAL_USD / 12 : PRO_MONTHLY_USD;
++}
+diff --git a/src/App.tsx b/src/App.tsx
+index 8adddd1..756913f 100644
+--- a/src/App.tsx
++++ b/src/App.tsx
+@@ -35,6 +35,7 @@ const AdminWaitlist = lazy(() => import("./pages/AdminWaitlist"));
+ const AdminFeedback = lazy(() => import("./pages/AdminFeedback"));
+ const AdminFoundingMembers = lazy(() => import("./pages/AdminFoundingMembers"));
+ const AdminBroadcast = lazy(() => import("./pages/AdminBroadcast"));
++const AdminFounderHub = lazy(() => import("./pages/AdminFounderHub"));
+ const AdminUserProjects = lazy(() => import("./pages/AdminProjectView").then((m) => ({ default: m.AdminUserProjects })));
+ const AdminProjectView = lazy(() => import("./pages/AdminProjectView").then((m) => ({ default: m.AdminProjectView })));
+ const LegalHub = lazy(() => import("./pages/legal/LegalHub"));
+@@ -101,6 +102,7 @@ export default function App() {
+             <Route path="/admin/waitlist" element={<AdminProtected><AdminWaitlist /></AdminProtected>} />
+             <Route path="/admin/feedback" element={<AdminProtected><AdminFeedback /></AdminProtected>} />
+             <Route path="/admin/founding-members" element={<AdminProtected><AdminFoundingMembers /></AdminProtected>} />
++            <Route path="/admin/founder-hub" element={<AdminProtected><AdminFounderHub /></AdminProtected>} />
+             <Route path="/admin/email-founding-members" element={<AdminProtected><AdminBroadcast /></AdminProtected>} />
+             <Route path="/admin/support/:userId" element={<AdminProtected><AdminUserProjects /></AdminProtected>} />
+             <Route path="/admin/support/project/:projectId" element={<AdminProtected><AdminProjectView /></AdminProtected>} />
+diff --git a/src/__tests__/adminFounderHub.page.test.tsx b/src/__tests__/adminFounderHub.page.test.tsx
+new file mode 100644
+index 0000000..ee6f5b8
+--- /dev/null
++++ b/src/__tests__/adminFounderHub.page.test.tsx
+@@ -0,0 +1,198 @@
++// @vitest-environment jsdom
++//
++// The admin Founder Hub page (v152): renders all five panels from a fixture
++// response — milestone ladder, revenue, users & activation, feature usage,
++// friction — including the honesty notes (churn not measurable, verified
++// backfill, check-in ownership attribution, unlogged sections).
++import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
++import { createRoot, type Root } from "react-dom/client";
++import { act } from "react";
++import { MemoryRouter } from "react-router-dom";
++
++vi.mock("../lib/auth-context", () => ({
++  useAuth: () => ({
++    user: { id: "u-admin", email: "admin@example.com", isAdmin: true, tour_completed_at: "2026-01-01T00:00:00Z" },
++    loading: false,
++    refresh: async () => {},
++    logout: async () => {},
++  }),
++  AuthProvider: ({ children }: { children: unknown }) => children,
++}));
++
++const calls = { hub: vi.fn() };
++
++vi.mock("../lib/api", async (importOriginal) => {
++  const actual = await importOriginal<typeof import("../lib/api")>();
++  return {
++    ...actual,
++    api: { ...actual.api, adminGetFounderHub: () => calls.hub() },
++  };
++});
++
++import AdminFounderHub from "../pages/AdminFounderHub";
++
++const FIXTURE = {
++  milestones: {
++    rungs: [
++      { id: "first-ga-paying", label: "First GA paying customer", state: "pending", current: 0, target: 1 },
++      { id: "first-annual-payer", label: "First annual-plan payer", state: "pending", current: 0, target: 1 },
++      { id: "ten-ga-payers", label: "10 GA payers", state: "pending", current: 0, target: 10 },
++      { id: "mrr-1k", label: "$1K MRR", state: "pending", current: 0, target: 1000 },
++      { id: "fifty-ga-payers", label: "50 GA payers", state: "pending", current: 0, target: 50 },
++      { id: "mrr-5k", label: "$5K MRR", state: "pending", current: 0, target: 5000 },
++      { id: "churn-under-5", label: "Monthly churn under 5%", state: "not_measurable", current: null, target: 5 },
++    ],
++    nextMilestone: { id: "first-ga-paying", label: "First GA paying customer", current: 0, target: 1 },
++  },
++  revenue: {
++    gaMrr: 0, gaPayers: 0, gaPayersActive: 0, gaPayersTrialing: 0,
++    payersByPlan: { payingMonthly: 0, payingYearly: 0, trialingMonthly: 0, trialingYearly: 0 },
++    trials: { count: 0, trialEnds: [] },
++    pastDue: { count: 0, mrrAtRisk: 0 },
++    foundingSubscribers: { active: 0, trialing: 0, pastDue: 0, mrr: 0 },
++  },
++  users: {
++    total: 103,
++    cohorts: { freeForever: 100, inTrial: 0, payingMonthly: 0, payingYearly: 0, freeRegular: 3 },
++    gaPayers: 0,
++    signupsPerWeek: [{ week: "2026-11-02", count: 2 }],
++    funnel: [
++      { key: "signed_up", label: "Signed up", count: 3, pctFromPrevious: null },
++      { key: "verified", label: "Verified email", count: 3, pctFromPrevious: 100 },
++      { key: "created_project", label: "Created a project", count: 1, pctFromPrevious: 33.3 },
++      { key: "added_task", label: "Added a task", count: 1, pctFromPrevious: 100 },
++      { key: "posted_checkin", label: "Posted a check-in", count: 0, pctFromPrevious: 0 },
++      { key: "created_decision", label: "Created a decision request", count: 0, pctFromPrevious: null },
++    ],
++  },
++  usage: {
++    sections: [
++      { section: "Tasks", entityTypes: ["task"], actions30d: 12, actionsAllTime: 40, distinctProjects: 4, distinctUsers: 3 },
++      { section: "Issues", entityTypes: ["issue"], actions30d: 0, actionsAllTime: 0, distinctProjects: 0, distinctUsers: 0 },
++    ],
++    rarelyUsed: ["Issues", "Budget*", "Charter*"],
++    unloggedSections: ["Budget", "Charter"],
++    depth: { medianActionsPerProject: 5, medianSectionsPerProject: 2, activeProjects30d: 4 },
++  },
++  friction: {
++    feedback: { byStatus: { new: 2, planned: 1, shipped: 5, dismissed: 0 }, newLast7d: 1, newLast30d: 2, oldestNewAt: "2026-10-20T00:00:00.000Z", oldestNewAgeDays: 18 },
++    pulseSent30d: 100,
++    cancellations30d: 1,
++  },
++};
++
++let host: HTMLDivElement;
++let root: Root;
++
++beforeAll(() => {
++  (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
++  (globalThis as any).ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
++  const zero = { width: 0, height: 0, top: 0, left: 0, right: 0, bottom: 0, x: 0, y: 0, toJSON() {} };
++  (Range.prototype as any).getBoundingClientRect = () => zero;
++  (Range.prototype as any).getClientRects = () => [];
++  window.matchMedia = window.matchMedia || ((q: string) => ({ matches: false, media: q, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, onchange: null, dispatchEvent: () => false }) as any);
++  Element.prototype.scrollIntoView = () => {};
++});
++
++beforeEach(async () => {
++  calls.hub.mockReset().mockResolvedValue(FIXTURE);
++  host = document.createElement("div");
++  document.body.appendChild(host);
++  root = createRoot(host);
++  await act(async () => {
++    root.render(<MemoryRouter><AdminFounderHub /></MemoryRouter>);
++  });
++  await act(async () => {});
++});
++
++afterEach(async () => {
++  await act(async () => { root.unmount(); });
++  host.remove();
++});
++
++describe("Founder Hub admin page", () => {
++  it("renders all five panels", () => {
++    const text = host.textContent ?? "";
++    expect(text).toContain("Milestones");
++    expect(text).toContain("Revenue");
++    expect(text).toContain("Users and activation");
++    expect(text).toContain("Feature usage (last 30 days)");
++    expect(text).toContain("Friction");
++    expect(calls.hub).toHaveBeenCalledTimes(1);
++  });
++
++  it("shows the next milestone and the ladder states, with churn honestly unmeasurable", () => {
++    const text = host.textContent ?? "";
++    expect(text).toContain("Next milestone:");
++    expect(text).toContain("First GA paying customer — 0 of 1");
++    expect(text).toContain("Monthly churn under 5%");
++    expect(text).toContain("Not measurable yet");
++    expect(text).toContain("Monthly churn is not measurable yet");
++    // No measured churn value is ever presented: cancellations are
++    // explicitly described as a count, not a rate.
++    expect(text).toContain("Cancellations are a count, not a churn rate");
++  });
++
++  it("shows an achieved rung distinctly when one is achieved", async () => {
++    const achieved = {
++      ...FIXTURE,
++      milestones: {
++        ...FIXTURE.milestones,
++        rungs: FIXTURE.milestones.rungs.map((r) => (r.id === "first-ga-paying" ? { ...r, state: "achieved" as const, current: 1 } : r)),
++        nextMilestone: { id: "first-annual-payer", label: "First annual-plan payer", current: 0, target: 1 },
++      },
++    };
++    calls.hub.mockResolvedValue(achieved);
++    await act(async () => { root.unmount(); });
++    root = createRoot(host);
++    await act(async () => {
++      root.render(<MemoryRouter><AdminFounderHub /></MemoryRouter>);
++    });
++    await act(async () => {});
++    expect(host.textContent).toContain("Achieved");
++    expect(host.textContent).toContain("Next milestone:");
++    expect(host.textContent).toContain("First annual-plan payer — 0 of 1");
++  });
++
++  it("shows the cohort breakdown with the groups Kk named", () => {
++    const text = host.textContent ?? "";
++    expect(text).toContain("Total users");
++    expect(text).toContain("Free forever (beta/founding)");
++    expect(text).toContain("In trial");
++    expect(text).toContain("Paying monthly");
++    expect(text).toContain("Paying yearly");
++    expect(text).toContain("100"); // free forever count
++    expect(text).toContain("MRR (from plan mix)");
++  });
++
++  it("shows the rarely-used line and both attribution footnotes", () => {
++    const text = host.textContent ?? "";
++    expect(text).toContain("No activity in 30 days: Issues, Budget*, Charter*");
++    expect(text).toContain("every existing account was marked verified"); // verified-backfill footnote
++    expect(text).toContain("counted through the projects a person owns"); // check-in ownership footnote
++    expect(text).toContain("never write an activity record"); // unlogged-sections footnote
++  });
++
++  it("shows friction counts, the feedback link, and the Sentry/Plausible link-outs", () => {
++    const text = host.textContent ?? "";
++    expect(text).toContain("Cancellations (30 days)");
++    expect(text).toContain("Pulse emails sent (30 days)");
++    expect(text).toContain("replies go to your inbox and aren't tracked here");
++    expect(host.querySelector('a[href="/admin/feedback"]')).not.toBeNull();
++    const hrefs = Array.from(host.querySelectorAll("a")).map((a) => a.getAttribute("href"));
++    expect(hrefs).toContain("https://sentry.io");
++    expect(hrefs).toContain("https://plausible.io");
++    expect(hrefs).toContain("https://dashboard.stripe.com");
++  });
++
++  it("shows the server error when the hub fails to load", async () => {
++    calls.hub.mockRejectedValue(new Error("Not authorized"));
++    await act(async () => { root.unmount(); });
++    root = createRoot(host);
++    await act(async () => {
++      root.render(<MemoryRouter><AdminFounderHub /></MemoryRouter>);
++    });
++    await act(async () => {});
++    expect(host.textContent).toContain("Not authorized");
++  });
++});
+diff --git a/src/components/AppSidebar.tsx b/src/components/AppSidebar.tsx
+index 654cf28..e87950e 100644
+--- a/src/components/AppSidebar.tsx
++++ b/src/components/AppSidebar.tsx
+@@ -246,6 +246,13 @@ export function AppSidebar({ children, menuLabel = "Menu" }: { children?: ReactN
+               <NavIcon name="founding" active={pathname === "/admin/founding-members"} />
+               Founding members
+             </Link>
++            <Link
++              to="/admin/founder-hub"
++              className={pathname === "/admin/founder-hub" ? "side-tab active" : "side-tab"}
++            >
++              <NavIcon name="founding" active={pathname === "/admin/founder-hub"} />
++              Founder hub
++            </Link>
+           </NavGroup>
+         )}
+       </nav>
+diff --git a/src/lib/api.ts b/src/lib/api.ts
+index 7e97476..ade3444 100644
+--- a/src/lib/api.ts
++++ b/src/lib/api.ts
+@@ -409,6 +409,56 @@ export type BroadcastProgress = { id: string; subject: string; created_at: strin
+ 
+ export type AdminAccountsSummary = { foundingClaimed: number; cap: number; totalAccounts: number };
+ 
++// Founder Hub (v152): aggregate admin monitoring, from /api/admin-founder-hub.
++export type FounderHubMilestoneRung = {
++  id: string;
++  label: string;
++  state: "achieved" | "not_measurable" | "pending";
++  current: number | null;
++  target: number | null;
++};
++
++export type FounderHubData = {
++  milestones: {
++    rungs: FounderHubMilestoneRung[];
++    nextMilestone: { id: string; label: string; current: number | null; target: number | null } | null;
++  };
++  revenue: {
++    gaMrr: number;
++    gaPayers: number;
++    gaPayersActive: number;
++    gaPayersTrialing: number;
++    payersByPlan: { payingMonthly: number; payingYearly: number; trialingMonthly: number; trialingYearly: number };
++    trials: { count: number; trialEnds: string[] };
++    pastDue: { count: number; mrrAtRisk: number };
++    foundingSubscribers: { active: number; trialing: number; pastDue: number; mrr: number };
++  };
++  users: {
++    total: number;
++    cohorts: { freeForever: number; inTrial: number; payingMonthly: number; payingYearly: number; freeRegular: number };
++    gaPayers: number;
++    signupsPerWeek: { week: string; count: number }[];
++    funnel: { key: string; label: string; count: number; pctFromPrevious: number | null }[];
++  };
++  usage: {
++    sections: { section: string; entityTypes: string[]; actions30d: number; actionsAllTime: number; distinctProjects: number; distinctUsers: number }[];
++    rarelyUsed: string[];
++    unloggedSections: string[];
++    depth: { medianActionsPerProject: number | null; medianSectionsPerProject: number | null; activeProjects30d: number };
++  };
++  friction: {
++    feedback: {
++      byStatus: { new: number; planned: number; shipped: number; dismissed: number };
++      newLast7d: number;
++      newLast30d: number;
++      oldestNewAt: string | null;
++      oldestNewAgeDays: number | null;
++    };
++    pulseSent30d: number;
++    cancellations30d: number;
++  };
++};
++
+ // Admin support view (v149): read-only snapshot of another user's project.
+ export type AdminUserProject = {
+   id: string;
+@@ -984,6 +1034,8 @@ export const api = {
+     request<AdminProjectSnapshot>(`/admin-project-view?projectId=${encodeURIComponent(projectId)}`),
+   adminDocumentDownloadUrl: (projectId: string, documentId: string) =>
+     `${BASE}/admin-project-view?projectId=${encodeURIComponent(projectId)}&documentId=${encodeURIComponent(documentId)}`,
++  adminGetFounderHub: () =>
++    request<FounderHubData>("/admin-founder-hub"),
+ 
+   listProjects: () => request<{ projects: Project[] }>("/projects"),
+   listDeletedProjects: () => request<{ projects: Project[] }>("/projects?deleted=true"),
+diff --git a/src/pages/AdminFounderHub.tsx b/src/pages/AdminFounderHub.tsx
+new file mode 100644
+index 0000000..b05232c
+--- /dev/null
++++ b/src/pages/AdminFounderHub.tsx
+@@ -0,0 +1,209 @@
++import { useEffect, useState } from "react";
++import { Link } from "react-router-dom";
++import { api, type FounderHubData } from "../lib/api";
++import { AppSidebar } from "../components/AppSidebar";
++import { PageHeader, SoftCard } from "../components/ui";
++import { fmtDate } from "../lib/format";
++import { useDocumentTitle } from "../lib/documentTitle";
++
++// Founder Hub (v152): the admin-only monitoring page. Everything here is
++// an aggregate computed by /api/admin-founder-hub from data the app
++// already stores; Sentry and Plausible are link-outs because neither has
++// a read API wired into the app. Numbers are stated plainly, including
++// the ones that are zero and the one (churn) that cannot be measured yet.
++
++function money(n: number): string {
++  return `$${n.toLocaleString("en-US", { minimumFractionDigits: n % 1 === 0 ? 0 : 2, maximumFractionDigits: 2 })}`;
++}
++
++function Stat({ label, value }: { label: string; value: string | number }) {
++  return (
++    <div>
++      <div style={{ fontSize: 22, fontWeight: 700 }}>{value}</div>
++      <div className="muted">{label}</div>
++    </div>
++  );
++}
++
++const statGrid: React.CSSProperties = { display: "flex", flexWrap: "wrap", gap: 24, margin: "8px 0" };
++
++export default function AdminFounderHub() {
++  useDocumentTitle("Founder hub");
++  const [data, setData] = useState<FounderHubData | null>(null);
++  const [loading, setLoading] = useState(true);
++  const [error, setError] = useState<string | null>(null);
++
++  useEffect(() => {
++    let cancelled = false;
++    api.adminGetFounderHub()
++      .then((d) => { if (!cancelled) setData(d); })
++      .catch((err) => { if (!cancelled) setError(err instanceof Error ? err.message : "Could not load the founder hub."); })
++      .finally(() => { if (!cancelled) setLoading(false); });
++    return () => { cancelled = true; };
++  }, []);
++
++  return (
++    <div className="project-shell">
++      <AppSidebar />
++
++      <main id="main-content" className="project-main">
++        <PageHeader title="Founder hub" subtitle="Milestones, money, activation, usage, and friction, from the app's own data." />
++
++        {error && <div className="form-error">{error}</div>}
++
++        {loading ? (
++          <div className="skel-loading-block"><div className="skel skel-text" style={{ width: "45%" }} /><div className="skel skel-text" style={{ width: "80%" }} /><div className="skel skel-text" style={{ width: "60%", marginBottom: 0 }} /></div>
++        ) : data ? (
++          <div style={{ display: "grid", gap: 16, maxWidth: 860 }}>
++            <SoftCard title="Milestones">
++              {data.milestones.nextMilestone ? (
++                <p>
++                  <strong>Next milestone:</strong> {data.milestones.nextMilestone.label} — {data.milestones.nextMilestone.current} of {data.milestones.nextMilestone.target}
++                </p>
++              ) : (
++                <p><strong>Every measurable milestone is achieved.</strong></p>
++              )}
++              <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: 8 }}>
++                {data.milestones.rungs.map((rung) => (
++                  <li key={rung.id} style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
++                    <span>{rung.state === "achieved" ? "✓ " : ""}{rung.label}</span>
++                    {rung.state === "achieved" ? (
++                      <span className="pill pill-green">Achieved</span>
++                    ) : rung.state === "not_measurable" ? (
++                      <span className="muted">Not measurable yet</span>
++                    ) : (
++                      <span className="muted">{rung.current} of {rung.target}</span>
++                    )}
++                  </li>
++                ))}
++              </ul>
++              <p className="muted">
++                Monthly churn is not measurable yet: subscription records hold only the current state, with no
++                history to divide by, so this rung shows no percentage rather than a made-up one. Cancellations
++                in the last 30 days are counted under Friction below.
++              </p>
++            </SoftCard>
++
++            <SoftCard title="Revenue">
++              <div style={statGrid}>
++                <Stat label="MRR (from plan mix)" value={money(data.revenue.gaMrr)} />
++                <Stat label="GA payers" value={data.revenue.gaPayers} />
++                <Stat label="Paying monthly" value={data.revenue.payersByPlan.payingMonthly} />
++                <Stat label="Paying yearly" value={data.revenue.payersByPlan.payingYearly} />
++                <Stat label="In trial, monthly" value={data.revenue.payersByPlan.trialingMonthly} />
++                <Stat label="In trial, yearly" value={data.revenue.payersByPlan.trialingYearly} />
++              </div>
++              <p>
++                Trials running: {data.revenue.trials.count}
++                {data.revenue.trials.trialEnds.length > 0 && (
++                  <> · soonest ends {data.revenue.trials.trialEnds.map((d) => fmtDate(d)).join(", ")}</>
++                )}
++              </p>
++              <p>
++                Past due: {data.revenue.pastDue.count} · {money(data.revenue.pastDue.mrrAtRisk)} of MRR at risk
++              </p>
++              <p className="muted">
++                Founding subscribers (kept separate from GA): {data.revenue.foundingSubscribers.active} active,{" "}
++                {data.revenue.foundingSubscribers.trialing} in trial, {data.revenue.foundingSubscribers.pastDue} past due ·{" "}
++                {money(data.revenue.foundingSubscribers.mrr)} MRR. MRR is derived from the plan mix ($29 monthly,
++                $290 yearly) in the app's own subscription records, not a live Stripe read.{" "}
++                <a href="https://dashboard.stripe.com" target="_blank" rel="noreferrer">Reconcile in Stripe</a>
++              </p>
++            </SoftCard>
++
++            <SoftCard title="Users and activation">
++              <div style={statGrid}>
++                <Stat label="Total users" value={data.users.total} />
++                <Stat label="Free forever (beta/founding)" value={data.users.cohorts.freeForever} />
++                <Stat label="In trial" value={data.users.cohorts.inTrial} />
++                <Stat label="Paying monthly" value={data.users.cohorts.payingMonthly} />
++                <Stat label="Paying yearly" value={data.users.cohorts.payingYearly} />
++                <Stat label="Free" value={data.users.cohorts.freeRegular} />
++              </div>
++              <p className="muted">Every account is in exactly one group above, and the groups add up to the total.</p>
++
++              <h3>Activation (GA users)</h3>
++              <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: 6 }}>
++                {data.users.funnel.map((step) => (
++                  <li key={step.key} style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
++                    <span>{step.label}</span>
++                    <span className="muted">
++                      {step.count}{step.pctFromPrevious !== null ? ` · ${step.pctFromPrevious}% of the step before` : ""}
++                    </span>
++                  </li>
++                ))}
++              </ul>
++              <p className="muted">
++                Verified email reads close to 100% for older accounts: when email verification was added, every
++                existing account was marked verified at that moment, so this step is only meaningful for signups
++                after that change. Check-ins and decision requests are counted through the projects a person
++                owns, because those records do not name who posted them, so team activity counts toward the
++                project owner.
++              </p>
++
++              <h3>Signups per week</h3>
++              <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: 4 }}>
++                {data.users.signupsPerWeek.map((w) => (
++                  <li key={w.week} style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
++                    <span className="muted">Week of {fmtDate(w.week)}</span>
++                    <span>{w.count}</span>
++                  </li>
++                ))}
++              </ul>
++            </SoftCard>
++
++            <SoftCard title="Feature usage (last 30 days)">
++              <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: 6 }}>
++                {data.usage.sections.map((s) => (
++                  <li key={s.section} style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
++                    <span>{s.section}</span>
++                    <span className="muted">
++                      {s.actions30d} actions · {s.actionsAllTime} all time · {s.distinctProjects} projects · {s.distinctUsers} people
++                    </span>
++                  </li>
++                ))}
++              </ul>
++              {data.usage.rarelyUsed.length > 0 && (
++                <p>No activity in 30 days: {data.usage.rarelyUsed.join(", ")}</p>
++              )}
++              <p className="muted">
++                This measures doing, not reading: viewing a page or downloading a document leaves no record, so a
++                section can be read daily and still show zero here. Sections marked * never write an activity
++                record at all, so they will always read zero until they are instrumented. Project depth: a median
++                of {data.usage.depth.medianActionsPerProject ?? 0} actions per active project, across a median of{" "}
++                {data.usage.depth.medianSectionsPerProject ?? 0} kinds of activity ({data.usage.depth.activeProjects30d} active projects).
++              </p>
++            </SoftCard>
++
++            <SoftCard title="Friction">
++              <div style={statGrid}>
++                <Stat label="Feedback: new" value={data.friction.feedback.byStatus.new} />
++                <Stat label="Feedback: planned" value={data.friction.feedback.byStatus.planned} />
++                <Stat label="Feedback: shipped" value={data.friction.feedback.byStatus.shipped} />
++                <Stat label="Feedback: dismissed" value={data.friction.feedback.byStatus.dismissed} />
++                <Stat label="New feedback (7 days)" value={data.friction.feedback.newLast7d} />
++                <Stat label="New feedback (30 days)" value={data.friction.feedback.newLast30d} />
++                <Stat label="Cancellations (30 days)" value={data.friction.cancellations30d} />
++                <Stat label="Pulse emails sent (30 days)" value={data.friction.pulseSent30d} />
++              </div>
++              {data.friction.feedback.oldestNewAt && (
++                <p className="muted">
++                  Oldest new feedback has been waiting {data.friction.feedback.oldestNewAgeDays} days (since {fmtDate(data.friction.feedback.oldestNewAt)}).
++                </p>
++              )}
++              <p>
++                <Link className="btn btn-ghost" to="/admin/feedback">Open the feedback inbox</Link>
++              </p>
++              <p className="muted">
++                Pulse emails sent (30d): {data.friction.pulseSent30d} — replies go to your inbox and aren't tracked here.
++                Cancellations are a count, not a churn rate (see Milestones). Errors and traffic live outside the
++                app: <a href="https://sentry.io" target="_blank" rel="noreferrer">Sentry</a> ·{" "}
++                <a href="https://plausible.io" target="_blank" rel="noreferrer">Traffic and pre-signup funnel in Plausible</a>
++              </p>
++            </SoftCard>
++          </div>
++        ) : null}
++      </main>
++    </div>
++  );
++}
