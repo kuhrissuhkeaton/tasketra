@@ -95,7 +95,7 @@ export default function Workload() {
                       <tr>
                         <th scope="col" className="wl-owner-head">Owner</th>
                         <th scope="col">Overdue</th>
-                        {grid.weekStarts.map((start, i) => (
+                        {grid.weekStarts.map((start) => (
                           <th scope="col" key={start}>
                             {shortKey(start)}
                             {/* v151 (Part F9): tag the week that CONTAINS
