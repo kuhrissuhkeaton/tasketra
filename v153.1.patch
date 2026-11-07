@@ -1,0 +1,171 @@
+diff --git a/src/__tests__/projectNav.test.ts b/src/__tests__/projectNav.test.ts
+index a21502b..8c31da6 100644
+--- a/src/__tests__/projectNav.test.ts
++++ b/src/__tests__/projectNav.test.ts
+@@ -1,7 +1,7 @@
+ // Six-tab project navigation (redesign batch 2): the group map, the old-link guarantee,
+ // and the unchanged size-hiding rules.
+ import { describe, it, expect } from "vitest";
+-import { NAV_GROUPS, allNavTabIds, groupOf, sectionLabel, visibleGroups, visibleSections, STRIP_TABS } from "../lib/projectNav";
++import { NAV_GROUPS, allNavTabIds, groupOf, sectionLabel, sectionDirectory, visibleGroups, visibleSections, STRIP_TABS } from "../lib/projectNav";
+ import { hiddenTabIds } from "../lib/projectView";
+ // @ts-ignore node builtin: the app tsconfig has no node types, vitest runs in node
+ const read = async (p: string) => (await import("node:fs")).readFileSync(p, "utf8") as string;
+@@ -81,3 +81,48 @@ describe("heading rule", () => {
+     expect([...STRIP_TABS].sort()).toEqual(["budget", "home", "meetings", "roadmap", "tasks"]);
+   });
+ });
++
++describe("All sections directory (v153.1)", () => {
++  const dirIds = (size: "light" | "standard" | "full", showAll: boolean) =>
++    sectionDirectory(size, showAll).flatMap((x) => x.sections.map((s) => s.id));
++
++  it("a Standard project without show-all does NOT list the sections its size hides", () => {
++    const ids = dirIds("standard", false);
++    for (const hidden of ["quality", "compliance", "comms", "okrs", "raci", "templates"]) {
++      expect(ids, hidden).not.toContain(hidden);
++    }
++    // What Standard keeps is still listed, in the groups it belongs to.
++    const health = sectionDirectory("standard", false).find((x) => x.group.id === "health")!;
++    expect(health.sections.map((s) => s.id)).toEqual(["issues", "risks", "assumptions", "dependencies"]);
++    const people = sectionDirectory("standard", false).find((x) => x.group.id === "people")!;
++    expect(people.sections.map((s) => s.id)).toEqual(["decisions", "stakeholders", "team", "procurement"]);
++  });
++
++  it("show-all on a Standard project lists everything the directory ever lists", () => {
++    expect(dirIds("standard", true)).toHaveLength(24);
++    for (const id of ["quality", "compliance", "comms", "okrs", "raci", "templates"]) {
++      expect(dirIds("standard", true)).toContain(id);
++    }
++  });
++
++  it("a Full project lists everything, unchanged", () => {
++    expect(dirIds("full", false)).toHaveLength(24);
++    expect(dirIds("full", false)).toEqual(dirIds("standard", true));
++  });
++
++  it("the Overview entry itself is never listed, its empty group disappears, and no listed group is empty", () => {
++    for (const size of ["light", "standard", "full"] as const) {
++      const dir = sectionDirectory(size, false);
++      expect(dirIds(size, false)).not.toContain("home");
++      expect(dir.map((x) => x.group.id)).not.toContain("overview");
++      for (const x of dir) expect(x.sections.length).toBeGreaterThan(0);
++    }
++  });
++
++  it("a Light project keeps every group but only its visible sections", () => {
++    const dir = sectionDirectory("light", false);
++    expect(dir.map((x) => x.group.id)).toEqual(["tasks", "plan", "health", "people", "docs"]);
++    expect(dirIds("light", false)).not.toContain("budget");
++    expect(dirIds("light", false)).toContain("roadmap");
++  });
++});
+diff --git a/src/index.css b/src/index.css
+index 06f5a3c..9b4cbf2 100644
+--- a/src/index.css
++++ b/src/index.css
+@@ -698,6 +698,24 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
+ /* --- Today view --- */
+ .today-section { margin-bottom: 24px; }
+ .today-section h4, .today-section h3 { margin-bottom: 8px; }
++
++/* --- All sections directory (v153.1): one even grid of tiles per group,
++   replacing the underlined link list. Tiles follow the card recipe. --- */
++.section-dir { display: flex; flex-direction: column; gap: var(--ds-space-6); margin-top: var(--ds-space-3); }
++.section-dir-label {
++  margin: 0 0 var(--ds-space-2); font-size: var(--ds-text-xs); font-weight: 700;
++  text-transform: uppercase; letter-spacing: 0.04em; color: var(--slate-text);
++}
++.section-dir-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: var(--ds-space-3); }
++.section-dir-item {
++  display: block; width: 100%; height: 100%; text-align: left; cursor: pointer;
++  background: var(--cream); border: 1px solid var(--border); border-radius: var(--radius);
++  box-shadow: var(--ds-shadow-resting); padding: var(--ds-space-3) var(--ds-space-4);
++  font-family: inherit; transition: box-shadow var(--ease), transform var(--ease);
++}
++.section-dir-item:hover { box-shadow: var(--ds-shadow-raised); transform: translateY(-1px); }
++.section-dir-name { display: block; font-size: var(--ds-text-md); font-weight: 700; color: var(--navy); line-height: var(--ds-leading-tight); }
++.section-dir-blurb { display: block; margin-top: var(--ds-space-1); font-size: var(--ds-text-sm); color: var(--slate-text); line-height: var(--ds-leading-normal); }
+ .today-list { list-style: none; margin: 0; padding: 0; }
+ .today-list li {
+   padding: 10px 6px; border-bottom: 1px solid var(--border); font-size: 14px;
+diff --git a/src/lib/projectNav.ts b/src/lib/projectNav.ts
+index 69462a0..1899b82 100644
+--- a/src/lib/projectNav.ts
++++ b/src/lib/projectNav.ts
+@@ -82,5 +82,20 @@ export function visibleGroups(current: string, size: ProjectSize, showAll: boole
+     .map((x) => ({ ...x, opens: x.sections[0].id }));
+ }
+ 
++/** The Overview "All sections" directory: exactly the sections the sidebar
++ *  shows for this project, under the same size rule (projectView.ts) — a
++ *  section hidden by size is absent here too, unless "show all sections" is
++ *  on. The Overview entry itself is left out (the directory sits on it), and
++ *  a group with nothing visible left is dropped entirely. This is the one
++ *  function that decides what the directory lists; HomeTab renders it as-is. */
++export function sectionDirectory(size: ProjectSize, showAll: boolean): { group: NavGroup; sections: NavSection[] }[] {
++  return NAV_GROUPS
++    .map((group) => ({
++      group,
++      sections: visibleSections(group, "home", size, showAll).filter((s) => s.id !== "home"),
++    }))
++    .filter((x) => x.sections.length > 0);
++}
++
+ /** Tabs that keep the project name as the page heading (the old top strip). The rest get a breadcrumb. */
+ export const STRIP_TABS: ReadonlySet<string> = new Set(["home", "roadmap", "tasks", "budget", "meetings"]);
+diff --git a/src/pages/ProjectHome.tsx b/src/pages/ProjectHome.tsx
+index 4fbaf4e..6a9842c 100644
+--- a/src/pages/ProjectHome.tsx
++++ b/src/pages/ProjectHome.tsx
+@@ -20,7 +20,7 @@ import { fmtDate, fmtDateTime, fmtLocalDate, fmtMoney, fmtPct, fmtRatio, fmtByte
+ import { capacityLevel, CAPACITY_LABEL, CAPACITY_PILL, type CapacityLevel } from "../lib/capacity";
+ import { useAuth } from "../lib/auth-context";
+ import { AppSidebar } from "../components/AppSidebar";
+-import { NAV_GROUPS, STRIP_TABS, groupOf, sectionLabel, visibleGroups, visibleSections } from "../lib/projectNav";
++import { NAV_GROUPS, STRIP_TABS, groupOf, sectionLabel, sectionDirectory, visibleGroups } from "../lib/projectNav";
+ import { useConfirm } from "../components/ConfirmDialog";
+ import { RegisterRow, RegisterSummary, RegisterEmpty } from "../components/ui";
+ import { daysUntil, lateFlag, expiryFlag } from "../lib/rowFlags";
+@@ -478,25 +478,28 @@ function HomeTab({ projectId, isOwner, purpose, stage, size, showAll, onShowAllT
+         <StageRail projectId={projectId} isOwner={isOwner} onStageChange={onStageChange} onOpenTab={onOpenTab} />
+       </div>
+ 
++      {/* v153.1: the directory is a tidy tile grid, and sectionDirectory()
++          applies the same size rule as the sidebar — sections hidden by size
++          are simply not listed (the footnote below says how many). */}
+       <div className="today-section" style={{ marginTop: 28 }}>
+         <h4>All sections</h4>
+-        {NAV_GROUPS.map((g) => {
+-          const sections = visibleSections(g, "home", size, showAll).filter((s) => s.id !== "home");
+-          if (sections.length === 0) return null;
+-          return (
+-            <div key={g.id} style={{ marginTop: 12 }}>
+-              <p className="muted" style={{ margin: "0 0 6px" }}><strong>{g.label}</strong></p>
+-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(210px, 1fr))", gap: "6px 20px" }}>
++        <div className="section-dir">
++          {sectionDirectory(size, showAll).map(({ group, sections }) => (
++            <div key={group.id} className="section-dir-group">
++              <h5 className="section-dir-label">{group.label}</h5>
++              <div className="section-dir-grid">
+                 {sections.map((s) => (
+-                  <span key={s.id}>
+-                    <button type="button" className="view-banner-link" onClick={() => onOpenTab(s.id)}>{s.label}</button>
+-                    {SECTION_BLURB[s.id] && <span className="muted"> — {SECTION_BLURB[s.id]}</span>}
+-                  </span>
++                  <button key={s.id} type="button" className="section-dir-item" onClick={() => onOpenTab(s.id)}>
++                    <span className="section-dir-name">{s.label}</span>
++                    {SECTION_BLURB[s.id] && (
++                      <span className="section-dir-blurb">{SECTION_BLURB[s.id].charAt(0).toUpperCase() + SECTION_BLURB[s.id].slice(1)}</span>
++                    )}
++                  </button>
+                 ))}
+               </div>
+             </div>
+-          );
+-        })}
++          ))}
++        </div>
+         {size !== "full" && !showAll && (
+           <p className="muted" style={{ marginTop: 12 }}>
+             {hiddenTabLabels(size).length} sections are hidden by the {SIZE_LABEL[size]} view.

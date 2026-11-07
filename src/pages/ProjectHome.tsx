@@ -20,7 +20,7 @@ import { fmtDate, fmtDateTime, fmtLocalDate, fmtMoney, fmtPct, fmtRatio, fmtByte
 import { capacityLevel, CAPACITY_LABEL, CAPACITY_PILL, type CapacityLevel } from "../lib/capacity";
 import { useAuth } from "../lib/auth-context";
 import { AppSidebar } from "../components/AppSidebar";
-import { NAV_GROUPS, STRIP_TABS, groupOf, sectionLabel, visibleGroups, visibleSections } from "../lib/projectNav";
+import { NAV_GROUPS, STRIP_TABS, groupOf, sectionLabel, sectionDirectory, visibleGroups } from "../lib/projectNav";
 import { useConfirm } from "../components/ConfirmDialog";
 import { RegisterRow, RegisterSummary, RegisterEmpty } from "../components/ui";
 import { daysUntil, lateFlag, expiryFlag } from "../lib/rowFlags";
@@ -478,25 +478,28 @@ function HomeTab({ projectId, isOwner, purpose, stage, size, showAll, onShowAllT
         <StageRail projectId={projectId} isOwner={isOwner} onStageChange={onStageChange} onOpenTab={onOpenTab} />
       </div>
 
+      {/* v153.1: the directory is a tidy tile grid, and sectionDirectory()
+          applies the same size rule as the sidebar — sections hidden by size
+          are simply not listed (the footnote below says how many). */}
       <div className="today-section" style={{ marginTop: 28 }}>
         <h4>All sections</h4>
-        {NAV_GROUPS.map((g) => {
-          const sections = visibleSections(g, "home", size, showAll).filter((s) => s.id !== "home");
-          if (sections.length === 0) return null;
-          return (
-            <div key={g.id} style={{ marginTop: 12 }}>
-              <p className="muted" style={{ margin: "0 0 6px" }}><strong>{g.label}</strong></p>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(210px, 1fr))", gap: "6px 20px" }}>
+        <div className="section-dir">
+          {sectionDirectory(size, showAll).map(({ group, sections }) => (
+            <div key={group.id} className="section-dir-group">
+              <h5 className="section-dir-label">{group.label}</h5>
+              <div className="section-dir-grid">
                 {sections.map((s) => (
-                  <span key={s.id}>
-                    <button type="button" className="view-banner-link" onClick={() => onOpenTab(s.id)}>{s.label}</button>
-                    {SECTION_BLURB[s.id] && <span className="muted"> — {SECTION_BLURB[s.id]}</span>}
-                  </span>
+                  <button key={s.id} type="button" className="section-dir-item" onClick={() => onOpenTab(s.id)}>
+                    <span className="section-dir-name">{s.label}</span>
+                    {SECTION_BLURB[s.id] && (
+                      <span className="section-dir-blurb">{SECTION_BLURB[s.id].charAt(0).toUpperCase() + SECTION_BLURB[s.id].slice(1)}</span>
+                    )}
+                  </button>
                 ))}
               </div>
             </div>
-          );
-        })}
+          ))}
+        </div>
         {size !== "full" && !showAll && (
           <p className="muted" style={{ marginTop: 12 }}>
             {hiddenTabLabels(size).length} sections are hidden by the {SIZE_LABEL[size]} view.

@@ -82,5 +82,20 @@ export function visibleGroups(current: string, size: ProjectSize, showAll: boole
     .map((x) => ({ ...x, opens: x.sections[0].id }));
 }
 
+/** The Overview "All sections" directory: exactly the sections the sidebar
+ *  shows for this project, under the same size rule (projectView.ts) — a
+ *  section hidden by size is absent here too, unless "show all sections" is
+ *  on. The Overview entry itself is left out (the directory sits on it), and
+ *  a group with nothing visible left is dropped entirely. This is the one
+ *  function that decides what the directory lists; HomeTab renders it as-is. */
+export function sectionDirectory(size: ProjectSize, showAll: boolean): { group: NavGroup; sections: NavSection[] }[] {
+  return NAV_GROUPS
+    .map((group) => ({
+      group,
+      sections: visibleSections(group, "home", size, showAll).filter((s) => s.id !== "home"),
+    }))
+    .filter((x) => x.sections.length > 0);
+}
+
 /** Tabs that keep the project name as the page heading (the old top strip). The rest get a breadcrumb. */
 export const STRIP_TABS: ReadonlySet<string> = new Set(["home", "roadmap", "tasks", "budget", "meetings"]);

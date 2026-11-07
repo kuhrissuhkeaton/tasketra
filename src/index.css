@@ -698,6 +698,24 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
 /* --- Today view --- */
 .today-section { margin-bottom: 24px; }
 .today-section h4, .today-section h3 { margin-bottom: 8px; }
+
+/* --- All sections directory (v153.1): one even grid of tiles per group,
+   replacing the underlined link list. Tiles follow the card recipe. --- */
+.section-dir { display: flex; flex-direction: column; gap: var(--ds-space-6); margin-top: var(--ds-space-3); }
+.section-dir-label {
+  margin: 0 0 var(--ds-space-2); font-size: var(--ds-text-xs); font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.04em; color: var(--slate-text);
+}
+.section-dir-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: var(--ds-space-3); }
+.section-dir-item {
+  display: block; width: 100%; height: 100%; text-align: left; cursor: pointer;
+  background: var(--cream); border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: var(--ds-shadow-resting); padding: var(--ds-space-3) var(--ds-space-4);
+  font-family: inherit; transition: box-shadow var(--ease), transform var(--ease);
+}
+.section-dir-item:hover { box-shadow: var(--ds-shadow-raised); transform: translateY(-1px); }
+.section-dir-name { display: block; font-size: var(--ds-text-md); font-weight: 700; color: var(--navy); line-height: var(--ds-leading-tight); }
+.section-dir-blurb { display: block; margin-top: var(--ds-space-1); font-size: var(--ds-text-sm); color: var(--slate-text); line-height: var(--ds-leading-normal); }
 .today-list { list-style: none; margin: 0; padding: 0; }
 .today-list li {
   padding: 10px 6px; border-bottom: 1px solid var(--border); font-size: 14px;

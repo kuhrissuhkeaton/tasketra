@@ -1,7 +1,7 @@
 // Six-tab project navigation (redesign batch 2): the group map, the old-link guarantee,
 // and the unchanged size-hiding rules.
 import { describe, it, expect } from "vitest";
-import { NAV_GROUPS, allNavTabIds, groupOf, sectionLabel, visibleGroups, visibleSections, STRIP_TABS } from "../lib/projectNav";
+import { NAV_GROUPS, allNavTabIds, groupOf, sectionLabel, sectionDirectory, visibleGroups, visibleSections, STRIP_TABS } from "../lib/projectNav";
 import { hiddenTabIds } from "../lib/projectView";
 // @ts-ignore node builtin: the app tsconfig has no node types, vitest runs in node
 const read = async (p: string) => (await import("node:fs")).readFileSync(p, "utf8") as string;
@@ -79,5 +79,50 @@ describe("size hiding is unchanged", () => {
 describe("heading rule", () => {
   it("the old top-strip tabs keep the project name as the heading", () => {
     expect([...STRIP_TABS].sort()).toEqual(["budget", "home", "meetings", "roadmap", "tasks"]);
+  });
+});
+
+describe("All sections directory (v153.1)", () => {
+  const dirIds = (size: "light" | "standard" | "full", showAll: boolean) =>
+    sectionDirectory(size, showAll).flatMap((x) => x.sections.map((s) => s.id));
+
+  it("a Standard project without show-all does NOT list the sections its size hides", () => {
+    const ids = dirIds("standard", false);
+    for (const hidden of ["quality", "compliance", "comms", "okrs", "raci", "templates"]) {
+      expect(ids, hidden).not.toContain(hidden);
+    }
+    // What Standard keeps is still listed, in the groups it belongs to.
+    const health = sectionDirectory("standard", false).find((x) => x.group.id === "health")!;
+    expect(health.sections.map((s) => s.id)).toEqual(["issues", "risks", "assumptions", "dependencies"]);
+    const people = sectionDirectory("standard", false).find((x) => x.group.id === "people")!;
+    expect(people.sections.map((s) => s.id)).toEqual(["decisions", "stakeholders", "team", "procurement"]);
+  });
+
+  it("show-all on a Standard project lists everything the directory ever lists", () => {
+    expect(dirIds("standard", true)).toHaveLength(24);
+    for (const id of ["quality", "compliance", "comms", "okrs", "raci", "templates"]) {
+      expect(dirIds("standard", true)).toContain(id);
+    }
+  });
+
+  it("a Full project lists everything, unchanged", () => {
+    expect(dirIds("full", false)).toHaveLength(24);
+    expect(dirIds("full", false)).toEqual(dirIds("standard", true));
+  });
+
+  it("the Overview entry itself is never listed, its empty group disappears, and no listed group is empty", () => {
+    for (const size of ["light", "standard", "full"] as const) {
+      const dir = sectionDirectory(size, false);
+      expect(dirIds(size, false)).not.toContain("home");
+      expect(dir.map((x) => x.group.id)).not.toContain("overview");
+      for (const x of dir) expect(x.sections.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("a Light project keeps every group but only its visible sections", () => {
+    const dir = sectionDirectory("light", false);
+    expect(dir.map((x) => x.group.id)).toEqual(["tasks", "plan", "health", "people", "docs"]);
+    expect(dirIds("light", false)).not.toContain("budget");
+    expect(dirIds("light", false)).toContain("roadmap");
   });
 });
