@@ -559,6 +559,10 @@ function FeedTab({ projectId, focusComposerNonce = 0 }: { projectId: string; foc
   const [feed, setFeed] = useState<FeedItem[]>([]);
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(true);
+  // v151 (Part B2): the composer shows its work while a check-in posts --
+  // before, the button sat still and unchanged until the item appeared, so
+  // a slow save looked like nothing had happened.
+  const [posting, setPosting] = useState(false);
   // Stated status (v143): the composer pre-selects the project's computed
   // health as a suggestion (the same rollup HealthStrip shows, via the same
   // portfolio call). Picking another pill overrides it; clicking the
@@ -652,22 +656,28 @@ function FeedTab({ projectId, focusComposerNonce = 0 }: { projectId: string; foc
     e.preventDefault();
     const text = note.trim();
     if (!text && !selected) return;
+    if (posting) return;
     const health = selected;
-    // v150: show the check-in the moment it saves (the returned row is the
-    // feed item), and refresh the header's stated status in place. The
-    // background load() still reconciles with the server's full feed. On a
-    // failed save nothing below runs, so the text stays in the composer.
-    const { statusUpdate } = await api.createStatusUpdate(projectId, text, health ?? undefined);
-    const u = statusUpdate as { body: string; health: "on_track" | "at_risk" | "off_track" | null; created_at: string };
-    setFeed((cur) => [
-      { type: "status_update" as const, title: null, body: u.body, ts: u.created_at, meta: {}, health: u.health },
-      ...cur,
-    ]);
-    noteProjectChanged(projectId);
-    setNote("");
-    pickedRef.current = false;
-    setSelected(suggested);
-    load();
+    setPosting(true);
+    try {
+      // v150: show the check-in the moment it saves (the returned row is the
+      // feed item), and refresh the header's stated status in place. The
+      // background load() still reconciles with the server's full feed. On a
+      // failed save nothing below runs, so the text stays in the composer.
+      const { statusUpdate } = await api.createStatusUpdate(projectId, text, health ?? undefined);
+      const u = statusUpdate as { body: string; health: "on_track" | "at_risk" | "off_track" | null; created_at: string };
+      setFeed((cur) => [
+        { type: "status_update" as const, title: null, body: u.body, ts: u.created_at, meta: {}, health: u.health },
+        ...cur,
+      ]);
+      noteProjectChanged(projectId);
+      setNote("");
+      pickedRef.current = false;
+      setSelected(suggested);
+      load();
+    } finally {
+      setPosting(false);
+    }
   }
 
   return (
@@ -696,7 +706,7 @@ function FeedTab({ projectId, focusComposerNonce = 0 }: { projectId: string; foc
         )}
         <div className="inline-form feed-composer-form">
           <input ref={composerRef} aria-label="Status update" placeholder="How is the project going?" value={note} onChange={(e) => setNote(e.target.value)} />
-          <button className="btn btn-primary" disabled={!note.trim() && !selected}>Post</button>
+          <button className="btn btn-primary" disabled={posting || (!note.trim() && !selected)}>{posting ? "Posting…" : "Post"}</button>
         </div>
       </form>
 
@@ -822,9 +832,11 @@ function TodayTab({ projectId, onPostCheckIn }: { projectId: string; onPostCheck
     urgentIssues: data.urgentIssues,
     urgentRisks: data.urgentRisks,
     staleTasks: data.staleTasks,
-    taskCount: data.taskCount,
+    totalTaskCount: data.totalTaskCount,
     datedTaskCount: data.datedTaskCount ?? 0,
     stakeholderCount: data.stakeholderCount ?? 0,
+    openTasks: data.openTasks ?? [],
+    openTaskCount: data.openTaskCount ?? 0,
     daysSinceCheckIn,
   });
   const stepAction = nextStep.action;
@@ -876,8 +888,8 @@ function TodayTab({ projectId, onPostCheckIn }: { projectId: string; onPostCheck
                   >
                     {t.title}
                   </button>
-                  {" -- "}{t.owner_name || "unassigned"}
-                  <span className="muted"> -- blocked {daysAgo(t.updated_at)}d</span>
+                  {" · "}{t.owner_name || "unassigned"}
+                  <span className="muted"> · blocked {daysAgo(t.updated_at)}d</span>
                 </div>
                 {reassignId === t.id ? (
                   <div className="row-actions">
@@ -927,8 +939,8 @@ function TodayTab({ projectId, onPostCheckIn }: { projectId: string; onPostCheck
                   >
                     {t.title}
                   </button>
-                  {" -- "}{t.owner_name || "unassigned"}
-                  <span className="muted"> -- untouched {daysAgo(t.updated_at)}d</span>
+                  {" · "}{t.owner_name || "unassigned"}
+                  <span className="muted"> · untouched {daysAgo(t.updated_at)}d</span>
                 </div>
                 {reassignId === t.id ? (
                   <div className="row-actions">
@@ -971,8 +983,8 @@ function TodayTab({ projectId, onPostCheckIn }: { projectId: string; onPostCheck
               <li key={d.id} className="today-list-row">
                 <div>
                   <strong>{d.title}</strong>
-                  <span className="muted"> -- waiting {daysAgo(d.created_at)}d</span>
-                  {d.recipients.length > 0 && <span className="muted"> -- sent to {d.recipients.join(", ")}</span>}
+                  <span className="muted"> · waiting {daysAgo(d.created_at)}d</span>
+                  {d.recipients.length > 0 && <span className="muted"> · sent to {d.recipients.join(", ")}</span>}
                 </div>
                 <div className="row-actions">
                   <button className="btn-link" type="button" onClick={() => copyDecisionLink(d.id, d.public_token)}>
@@ -999,8 +1011,8 @@ function TodayTab({ projectId, onPostCheckIn }: { projectId: string; onPostCheck
                   >
                     {i.title}
                   </button>
-                  {" -- "}{i.owner_name || "unassigned"}
-                  <span className="muted"> -- {i.severity}</span>
+                  {" · "}{i.owner_name || "unassigned"}
+                  <span className="muted"> · {i.severity}</span>
                 </div>
                 {reassignId === i.id ? (
                   <div className="row-actions">
@@ -1049,8 +1061,8 @@ function TodayTab({ projectId, onPostCheckIn }: { projectId: string; onPostCheck
                   >
                     {r.title}
                   </button>
-                  {" -- "}{r.owner_name || "unassigned"}
-                  <span className="muted"> -- {r.probability} probability / {r.impact} impact</span>
+                  {" · "}{r.owner_name || "unassigned"}
+                  <span className="muted"> · {r.probability} probability / {r.impact} impact</span>
                 </div>
                 {reassignId === r.id ? (
                   <div className="row-actions">
@@ -1154,7 +1166,7 @@ function TrashTab({ projectId }: { projectId: string }) {
   return (
     <div>
       <p className="muted" style={{ marginBottom: 16 }}>
-        Deleted tasks, issues, risks, assumptions, dependencies, change requests, lessons, stakeholders, decisions, meetings, documents, and roadmap items land here. Restore them any time -- nothing is gone for good.
+        Deleted tasks, issues, risks, assumptions, dependencies, change requests, lessons, stakeholders, decisions, meetings, documents, and roadmap items land here. Restore them any time. Nothing is gone for good.
       </p>
 
       {loading ? (
@@ -1342,8 +1354,8 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
     setDrawerTaskId(t.id);
     setEditTitle(t.title);
     setEditOwner(t.owner_name || "");
-    setEditStart(t.start_date || "");
-    setEditDue(t.due_date || "");
+    setEditStart((t.start_date || "").slice(0, 10));
+    setEditDue((t.due_date || "").slice(0, 10));
     setEditDescription(t.description || "");
     setEditPhase(t.roadmap_item_id || "");
     setEditPriority(t.priority || "");
@@ -1621,7 +1633,7 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
                   >
                     {parent && <div className="kanban-parent muted">&#8627; {parent.title}</div>}
                     <div>{t.title}</div>
-                    <div className="muted">{t.owner_name || "unassigned"}{t.due_date ? ` -- ${fmtLocalDate(t.due_date)}` : ""}</div>
+                    <div className="muted">{t.owner_name || "unassigned"}{t.due_date ? ` · ${fmtLocalDate(t.due_date)}` : ""}</div>
                   </div>
                 );
               })}
@@ -4974,8 +4986,8 @@ function RoadmapTab({ projectId, isOwner, showBudget }: { projectId: string; isO
     setEditType(item.type);
     setEditTitle(item.title);
     setEditSwimlane(item.swimlane);
-    setEditStart(item.start_date || "");
-    setEditEnd(item.end_date || "");
+    setEditStart((item.start_date || "").slice(0, 10));
+    setEditEnd((item.end_date || "").slice(0, 10));
     setEditStatus(item.status);
     setEditDescription(item.description || "");
   }
@@ -5819,8 +5831,8 @@ function StakeholdersTab({ projectId }: { projectId: string }) {
       <>
         <RegisterSummary>
           {`${stakeholders.length} ${stakeholders.length === 1 ? "person" : "people"}`}
-          {" \u00b7 "}{stakeholders.filter((s) => s.power_level === "high").length} with high power
-          {" \u00b7 "}{(() => { const n = stakeholders.reduce((t, s) => t + (s.decisions_sent ?? 0) - (s.decisions_resolved ?? 0), 0); return `${n} ${n === 1 ? "decision" : "decisions"} waiting on them`; })()}
+          {" \u00b7 "}{stakeholders.filter((s) => s.power_level === "high").length} stakeholders with high power
+          {" \u00b7 "}{(() => { const n = stakeholders.reduce((t, s) => t + (s.decisions_sent ?? 0) - (s.decisions_resolved ?? 0), 0); return `${n} ${n === 1 ? "decision" : "decisions"} awaiting a response`; })()}
         </RegisterSummary>
         {stakeholders.length === 0 ? (
           <RegisterEmpty>No stakeholders yet. Add one above to start your register.</RegisterEmpty>
@@ -5977,6 +5989,8 @@ function StakeholderDecisionsTab({ projectId }: { projectId: string }) {
   const [deadline, setDeadline] = useState("");
   const [selectedStakeholders, setSelectedStakeholders] = useState<string[]>([]);
   const [lastShareUrl, setLastShareUrl] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [ownOption, setOwnOption] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -5985,6 +5999,41 @@ function StakeholderDecisionsTab({ projectId }: { projectId: string }) {
     setDecisions(d.decisions);
     setStakeholders(s.stakeholders);
     setLoading(false);
+  }
+
+  // v151 (Part D): copy the public link from a select-on-focus field, the
+  // same pattern as the share box, instead of a raw printed URL.
+  function copyShareLink(d: Decision) {
+    const url = `${window.location.origin}/d/${d.public_token}`;
+    navigator.clipboard.writeText(url).then(() => {
+      setCopiedId(d.id);
+      setTimeout(() => setCopiedId((cur) => (cur === d.id ? null : cur)), 2000);
+    });
+  }
+
+  // v151 (Part D): responses collect until the owner confirms the outcome.
+  async function confirmResponse(d: Decision, recordId: string) {
+    try {
+      await api.confirmDecision(d.id, { recordId });
+      announce("Decision confirmed.");
+      noteProjectChanged(projectId);
+      load();
+    } catch {
+      setError("Could not confirm that response. Try again.");
+    }
+  }
+
+  async function confirmOwnOption(d: Decision) {
+    const chosen = ownOption[d.id] ?? d.options[0];
+    if (!chosen) return;
+    try {
+      await api.confirmDecision(d.id, { chosenOption: chosen });
+      announce("Decision recorded.");
+      noteProjectChanged(projectId);
+      load();
+    } catch {
+      setError("Could not record that decision. Try again.");
+    }
   }
 
   useEffect(() => {
@@ -6048,9 +6097,16 @@ function StakeholderDecisionsTab({ projectId }: { projectId: string }) {
 
       {lastShareUrl && (
         <div className="callout">
-          Share this link with the stakeholder -- no account needed to respond:
+          Share this link with the stakeholder. No account needed to respond:
           <br />
-          <code>{window.location.origin}{lastShareUrl}</code>
+          <input
+            className="share-url"
+            type="text"
+            readOnly
+            value={`${window.location.origin}${lastShareUrl}`}
+            onFocus={(e) => e.target.select()}
+            aria-label="Decision share link"
+          />
         </div>
       )}
 
@@ -6089,7 +6145,7 @@ function StakeholderDecisionsTab({ projectId }: { projectId: string }) {
 
       {decisions.length > 0 && (
         <p className="muted" style={{ marginBottom: 12 }}>
-          {decisions.filter((d) => d.status === "open").length} awaiting response · {decisions.filter((d) => d.status !== "open").length} decided
+          {decisions.filter((d) => d.status === "open").length} awaiting a response · {decisions.filter((d) => d.status !== "open").length} decided
         </p>
       )}
       <div className="decision-list">
@@ -6116,15 +6172,61 @@ function StakeholderDecisionsTab({ projectId }: { projectId: string }) {
                     ? <>Asked: {d.recipients.map((r) => r.name).join(", ")} · waiting {daysAgo(d.created_at)}d</>
                     : "Not sent to anyone yet. Share the link below to ask."}
                 </p>
+                {(d.records ?? []).length > 0 && (
+                  <div className="decision-responses">
+                    <p className="muted">Responses so far. Confirm one to make it the decision:</p>
+                    <ul className="decision-response-list">
+                      {(d.records ?? []).map((r) => (
+                        <li key={r.id}>
+                          <strong>{r.chosen_option}</strong> · {r.responder_name}{" "}
+                          <button className="btn-link" type="button" onClick={() => confirmResponse(d, r.id)}>Confirm as the decision</button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                <div className="decision-confirm-own">
+                  <label className="muted" htmlFor={`own-option-${d.id}`}>Or record the decision yourself:</label>{" "}
+                  <select
+                    id={`own-option-${d.id}`}
+                    value={ownOption[d.id] ?? d.options[0] ?? ""}
+                    onChange={(e) => setOwnOption((cur) => ({ ...cur, [d.id]: e.target.value }))}
+                  >
+                    {d.options.map((o) => (
+                      <option key={o} value={o}>{o}</option>
+                    ))}
+                  </select>{" "}
+                  <button className="btn-link" type="button" onClick={() => confirmOwnOption(d)}>Record as the decision</button>
+                </div>
                 <div className="share-row">
-                  <code>{window.location.origin}/d/{d.public_token}</code>
+                  <input
+                    className="share-url"
+                    type="text"
+                    readOnly
+                    value={`${window.location.origin}/d/${d.public_token}`}
+                    onFocus={(e) => e.target.select()}
+                    aria-label="Decision share link"
+                  />
+                  <button className="btn btn-ghost" type="button" onClick={() => copyShareLink(d)}>
+                    {copiedId === d.id ? "Copied" : "Copy link"}
+                  </button>
                 </div>
               </>
             ) : (
               <div className="decision-record">
-                <strong>Decided:</strong> {d.chosen_option} · decided by <strong>{d.responder_name}</strong>
-                <br />
-                <span className="muted">{d.responded_at && fmtDateTime(d.responded_at)}</span>
+                {d.outcome_confirmed_at ? (
+                  <>
+                    <strong>Decided:</strong> {d.chosen_option} · response by <strong>{d.responder_name}</strong>
+                    <br />
+                    <span className="muted">Confirmed {fmtDateTime(d.outcome_confirmed_at)}</span>
+                  </>
+                ) : (
+                  <>
+                    <strong>Decided:</strong> {d.chosen_option} · decided by <strong>{d.responder_name}</strong>
+                    <br />
+                    <span className="muted">{d.responded_at && fmtDateTime(d.responded_at)}</span>
+                  </>
+                )}
               </div>
             )}
             <div className="row-actions" style={{ marginTop: 10 }}>
@@ -6344,7 +6446,7 @@ function ChangeRequestsTab({ projectId }: { projectId: string }) {
                       CCB: {c.ccb_approvals.length}/{reviewers.length} signed
                       {reviewers.length > 0 && c.ccb_approvals.length < reviewers.length && isReviewer && !c.ccb_approvals.some((a) => a.email === user?.email) && (
                         <>
-                          {" -- "}
+                          {" · "}
                           <button
                             className="btn-link"
                             type="button"
@@ -6647,7 +6749,7 @@ function TeamTab({ projectId, isOwner, onSetupChange }: { projectId: string; isO
               <div className="member-avatar" style={{ background: avatarColor(m.email) }}>{initials(m.email)}</div>
               <div className="member-info">
                 <div className="member-name">{m.email}{isSelf && " (you)"}</div>
-                <div className="member-email">{m.status === "active" ? "Active" : "Invited -- awaiting sign-up"}</div>
+                <div className="member-email">{m.status === "active" ? "Active" : "Invited · awaiting sign-up"}</div>
               </div>
               <span className="role-pill">Member</span>
               {project?.ccb_enabled && (
@@ -7074,7 +7176,7 @@ function WeeklyReportView({ projectId, projectName }: { projectId: string; proje
       </div>
 
       <div className="today-section">
-        <h4>New tasks added ({tasksAdded.length})</h4>
+        <h4>Tasks added this week ({tasksAdded.length})</h4>
         <ul className="today-list">
           {tasksAdded.map((t) => <li key={t.id}>{t.title} <span className="muted">· {STATUS_LABEL[t.status as Task["status"]]}{t.due_date ? ` · due ${fmtLocalDate(t.due_date)}` : ""}{t.deleted_at ? " · since moved to Trash" : ""}</span></li>)}
           {tasksAdded.length === 0 && <li className="muted">No new tasks this week.</li>}
@@ -7102,7 +7204,13 @@ function WeeklyReportView({ projectId, projectName }: { projectId: string; proje
       <div className="today-section">
         <h4>Decisions made ({decisionsMade.length})</h4>
         <ul className="today-list">
-          {decisionsMade.map((d) => <li key={d.id}>{d.title}: <strong>{d.chosen_option}</strong> · approved by {d.responder_name}</li>)}
+          {decisionsMade.map((d) => (
+            <li key={d.id}>
+              {d.title}: <strong>{d.chosen_option}</strong> · {d.confirmed_at
+                ? <>confirmed by {d.owner_name}</>
+                : <>decided by {d.responder_name}</>}
+            </li>
+          ))}
           {decisionsMade.length === 0 && <li className="muted">No decisions resolved this week.</li>}
         </ul>
       </div>
@@ -7484,7 +7592,7 @@ function ExportTab({ projectId, projectName }: { projectId: string; projectName:
           <p className="muted">{d.responded_at && fmtDateTime(d.responded_at)}</p>
         </div>
       ))}
-      {decisions.length === 0 && <p className="muted">No decisions recorded yet.</p>}
+      {decisions.length === 0 && <p className="muted">No decisions decided yet.</p>}
     </div>
   );
 }

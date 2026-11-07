@@ -67,7 +67,7 @@ export default withSentry(async (req: Request) => {
   // A stakeholder answered a decision on a project this person owns or is an
   // active member of.
   const decisions = await database.sql`
-    SELECT dr.id, dr.title, dr.project_id, rec.responder_name, rec.chosen_option, rec.responded_at,
+    SELECT dr.id, dr.title, dr.project_id, rec.id AS record_id, rec.responder_name, rec.chosen_option, rec.responded_at,
            rec.responded_at > (SELECT notifications_seen_at FROM users WHERE id = ${userId}) AS unread
     FROM decision_records rec
     JOIN decision_requests dr ON dr.id = rec.decision_request_id
@@ -83,7 +83,9 @@ export default withSentry(async (req: Request) => {
   `;
   for (const d of decisions) {
     items.push({
-      id: `decision:${d.id}`,
+      // v151: one item per RESPONSE, so the id keys on the record, not the
+      // request -- a request can now collect several responses.
+      id: `decision:${d.record_id}`,
       type: "decision_response",
       text: `${d.responder_name} answered "${snippet(d.title)}": ${snippet(d.chosen_option, 40)}`,
       at: d.responded_at ? new Date(d.responded_at).toISOString() : null,

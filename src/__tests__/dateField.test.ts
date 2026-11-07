@@ -27,6 +27,8 @@ describe("formatDateForDisplay", () => {
   it("renders ISO as M/D/YYYY", () => {
     expect(formatDateForDisplay("2026-11-20")).toBe("11/20/2026");
     expect(formatDateForDisplay("2027-01-05")).toBe("1/5/2027");
+    // v151 (Part A4): a stored timestamp renders as its date, never raw.
+    expect(formatDateForDisplay("2026-11-25T00:00:00.000Z")).toBe("11/25/2026");
   });
 
   it("passes through anything unrecognized", () => {

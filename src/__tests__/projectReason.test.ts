@@ -20,7 +20,7 @@ describe("projectReason", () => {
     expect(projectReason({ ...base, health: "off_track" })).toMatch(/^Off track/);
   });
   it("says something calm for a healthy project", () => {
-    expect(projectReason({ ...base, nextUp: "Ship it" })).toBe("Next up: Ship it");
+    expect(projectReason({ ...base, nextUp: "Ship it" })).toBe("Next up in Execute: Ship it");
     expect(projectReason(base)).toBe("Nothing flagged");
     expect(projectReason({ ...base, totalTasks: 0 })).toBe("No tasks yet");
   });

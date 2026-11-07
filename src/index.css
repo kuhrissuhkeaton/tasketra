@@ -458,7 +458,7 @@ textarea { resize: vertical; }
 .btn-danger:hover { background: #742F22; box-shadow: none; transform: translateY(-1px); }
 .btn-danger:active { transform: translateY(0); box-shadow: none; }
 .btn-block { width: 100%; margin-top: 16px; }
-.btn:disabled { opacity: 0.55; cursor: default; transform: none; box-shadow: none; }
+.btn:disabled { opacity: 0.55; cursor: not-allowed; transform: none; box-shadow: none; }
 
 /* --- Confirm dialog --- */
 .confirm-overlay {
@@ -1447,7 +1447,7 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
 
 /* --- What's new --- */
 .whats-new-list { display: flex; flex-direction: column; gap: 4px; max-width: 640px; }
-.whats-new-entry { padding: 18px 0; border-bottom: 1px solid var(--border); }
+.whats-new-entry { padding: 18px 0; border-bottom: 1px solid var(--border); scroll-margin-top: 16px; }
 .whats-new-entry:last-child { border-bottom: none; }
 .whats-new-meta { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
 .whats-new-entry h4, .whats-new-entry h2.heading-sm { margin: 0 0 6px; }

@@ -59,6 +59,64 @@ describe("feed decision de-duplication", () => {
     }
   });
 
+  // v151 (Part C2): updates doubled the same way creations did -- the
+  // derived branch re-surfaces the entity at updated_at and the activity
+  // branch carried the "updated" copy. One row per entity after an update.
+  it("shows an updated task, issue and risk once each", async () => {
+    const owner = await createTestUser("owner@example.com");
+    await createTestProject(owner.id);
+    const [project] = await db().sql`SELECT id FROM projects LIMIT 1`;
+    const projectId = project.id as string;
+
+    const post = async (handler: any, path: string, title: string) => {
+      const res = await handler(asUser(owner, { method: "POST", url: `https://app.tasketra.com/api/${path}`, body: { projectId, title } }));
+      expect(res.status).toBe(201);
+      return jsonBody(res);
+    };
+    const task = (await post(tasksHandler, "tasks", "Book the venue")).task;
+    const issue = (await post(issuesHandler, "issues", "Vendor is late")).issue;
+    const risk = (await post(risksHandler, "risks", "Budget overrun")).risk;
+
+    const patch = async (handler: any, path: string, id: string, status: string) => {
+      const res = await handler(asUser(owner, { method: "PATCH", url: `https://app.tasketra.com/api/${path}`, body: { id, status } }));
+      expect(res.status).toBe(200);
+    };
+    await patch(tasksHandler, "tasks", task.id, "in_progress");
+    await patch(issuesHandler, "issues", issue.id, "in_progress");
+    await patch(risksHandler, "risks", risk.id, "monitoring");
+
+    const feedRes = await feedHandler(asUser(owner, { method: "GET", url: `https://app.tasketra.com/api/feed?projectId=${projectId}` }));
+    const body = await jsonBody(feedRes);
+    for (const [title, type, label] of [["Book the venue", "task", "In progress"], ["Vendor is late", "issue", "In progress"], ["Budget overrun", "risk", "Monitoring"]] as const) {
+      const rows = body.feed.filter((f: any) => f.title === title);
+      expect(rows, title).toHaveLength(1);
+      expect(rows[0].type).toBe(type);
+      expect(rows[0].body).toBe(label);
+    }
+    // The humanized diff is not lost -- it lives in the activity summary the
+    // update stored (My activity reads the same table).
+    const [row] = await db().sql`SELECT summary FROM activity_log WHERE entity_type = 'task' AND action = 'updated'`;
+    expect(row.summary).toBe("status: Not started → In progress");
+  });
+
+  it("still shows a task deletion as an activity row", async () => {
+    const owner = await createTestUser("owner@example.com");
+    await createTestProject(owner.id);
+    const [project] = await db().sql`SELECT id FROM projects LIMIT 1`;
+    const projectId = project.id as string;
+    const res = await tasksHandler(asUser(owner, { method: "POST", url: "https://app.tasketra.com/api/tasks", body: { projectId, title: "Doomed task" } }));
+    const { task } = await jsonBody(res);
+    const del = await tasksHandler(asUser(owner, { method: "DELETE", url: `https://app.tasketra.com/api/tasks?id=${task.id}` }));
+    expect(del.status).toBe(200);
+
+    const feedRes = await feedHandler(asUser(owner, { method: "GET", url: `https://app.tasketra.com/api/feed?projectId=${projectId}` }));
+    const body = await jsonBody(feedRes);
+    const rows = body.feed.filter((f: any) => f.title === "Doomed task");
+    expect(rows).toHaveLength(1);
+    expect(rows[0].type).toBe("activity");
+    expect(rows[0].meta.action).toBe("deleted");
+  });
+
   it("still shows other activity entries (a decision deletion is not hidden)", async () => {
     const owner = await createTestUser("owner@example.com");
     await createTestProject(owner.id);

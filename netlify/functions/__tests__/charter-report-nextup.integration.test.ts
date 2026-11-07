@@ -6,6 +6,7 @@ import weeklyHandler from "../weekly-report.mts";
 import portfolioHandler from "../portfolio.mts";
 import approvalHandler from "../charter-approval.mts";
 import decisionPublicHandler from "../decision-public.mts";
+import decisionsHandler from "../decisions.mts";
 
 const patch = (user: { cookie: string }, body: unknown) =>
   projectHandler(asUser(user, { method: "PATCH", url: "https://tasketra.com/api/project", body }));
@@ -46,6 +47,13 @@ describe("charter in the weekly report", () => {
       method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ token: approval.publicToken, chosenOption: "Approve", responderName: "Dana Reyes" }),
     }));
+    // v151: the answer collects as a response; the report still shows
+    // pending until the owner confirms it.
+    r = await report(owner, project.id);
+    expect(r.charter.approval).toEqual({ status: "pending", responderName: null });
+    const { decisions } = await jsonBody<{ decisions: any[] }>(await decisionsHandler(asUser(owner, { method: "GET", url: `https://tasketra.com/api/decisions?projectId=${project.id}` })));
+    const confirmRes = await decisionsHandler(asUser(owner, { method: "PATCH", url: "https://tasketra.com/api/decisions", body: { id: decisions[0].id, action: "confirm", recordId: decisions[0].records[0].id } }));
+    expect(confirmRes.status).toBe(200);
     r = await report(owner, project.id);
     expect(r.charter.approval).toEqual({ status: "approved", responderName: "Dana Reyes" });
   });

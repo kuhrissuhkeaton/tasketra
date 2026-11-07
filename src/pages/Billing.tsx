@@ -196,7 +196,7 @@ export default function Billing() {
               )}
               <p className="muted">
                 Unlimited projects, up to 25 team members per project, and 25GB of document storage.
-                Update your card, view invoices, switch billing interval, or cancel any time -- no need to contact us.
+                Update your card, view invoices, switch billing interval, or cancel any time, no need to contact us.
               </p>
               <button className="btn btn-primary" type="button" disabled={loadingPortal} onClick={manageBilling}>
                 {loadingPortal ? "Opening..." : plan === "past_due" ? "Update payment method" : "Manage billing"}
@@ -209,8 +209,8 @@ export default function Billing() {
               <p className="muted">
                 Up to 3 active projects (finished projects don't count), up to 25 team members per project, and 2GB of document storage.
                 {trialOffer
-                  ? " Upgrade to Pro for unlimited projects and 25GB of storage -- 14 days free, cancel any time from this page."
-                  : " Upgrade to Pro for unlimited projects and 25GB of storage. Cancel any time from this page."}
+                  ? " Upgrade to Pro for unlimited projects and 25GB of storage, 14 days free, cancel any time from this page."
+                  : " Upgrade to Pro for unlimited projects and 25GB of storage."}
               </p>
               {details?.hasBillingAccount && (
                 <p className="muted">
@@ -223,14 +223,14 @@ export default function Billing() {
                   type="button"
                   onClick={() => upgrade("month")}
                 >
-                  Upgrade -- $29/month
+                  Upgrade · $29/month
                 </button>
                 <button
                   className="btn btn-ghost"
                   type="button"
                   onClick={() => upgrade("year")}
                 >
-                  Upgrade -- $290/year (2 months free)
+                  Upgrade · $290/year (2 months free)
                 </button>
               </div>
             </>

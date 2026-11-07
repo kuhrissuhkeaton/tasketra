@@ -1,0 +1,2446 @@
+diff --git a/netlify/database/migrations/20261106010000_add_decision_confirmation/migration.sql b/netlify/database/migrations/20261106010000_add_decision_confirmation/migration.sql
+new file mode 100644
+index 0000000..333f6cd
+--- /dev/null
++++ b/netlify/database/migrations/20261106010000_add_decision_confirmation/migration.sql
+@@ -0,0 +1,24 @@
++-- Decision responses the owner confirms (v151, Part D Option 1) + check-ins
++-- in the activity log (v151, Part C3). Three data-preserving changes; no row
++-- is rewritten, deleted, or backfilled anywhere in this migration.
++--
++-- 1. The confirmed-outcome marker: NULL on every existing record and on new
++--    public responses; set only when the project owner confirms a response
++--    (or records an outcome) in the Decisions tab. Decisions resolved before
++--    this release keep exactly the meaning they have today -- their single
++--    record is treated as the outcome with no marker needed.
++ALTER TABLE decision_records ADD COLUMN IF NOT EXISTS confirmed_at TIMESTAMPTZ;
++
++-- 2. Responses can now collect: until v151 the first public response was the
++--    decision, so the schema enforced one record per request. Option 1
++--    records every response and lets the owner pick the outcome, so the
++--    uniqueness has to go. Dropping it changes no existing data -- every
++--    request still has exactly the records it has today.
++ALTER TABLE decision_records DROP CONSTRAINT IF EXISTS decision_records_decision_request_id_key;
++
++-- 3. Check-ins join the activity log (so they appear in My activity): the
++--    entity_type CHECK widens by one value, the same drop-and-re-add pattern
++--    every earlier entity type used.
++ALTER TABLE activity_log DROP CONSTRAINT IF EXISTS activity_log_entity_type_check;
++ALTER TABLE activity_log ADD CONSTRAINT activity_log_entity_type_check
++  CHECK (entity_type IN ('task', 'issue', 'risk', 'stakeholder', 'decision', 'member', 'assumption', 'dependency', 'change_request', 'lesson', 'meeting', 'project', 'document', 'roadmap_item', 'quality_item', 'procurement_item', 'comm_plan_item', 'compliance_item', 'objective', 'key_result', 'status_update'));
+diff --git a/netlify/functions/__tests__/charter-approval.integration.test.ts b/netlify/functions/__tests__/charter-approval.integration.test.ts
+index b72b2a8..7478760 100644
+--- a/netlify/functions/__tests__/charter-approval.integration.test.ts
++++ b/netlify/functions/__tests__/charter-approval.integration.test.ts
+@@ -17,6 +17,14 @@ const answer = (token: string, chosenOption: string) =>
+     method: "POST", headers: { "content-type": "application/json" },
+     body: JSON.stringify({ token, chosenOption, responderName: "Dana Reyes" }),
+   }));
++// v151: a public answer is now a RESPONSE, not the outcome. The approval
++// only lands once the owner confirms the response in the Decisions tab.
++const confirmFirstResponse = async (user: { cookie: string }, projectId: string) => {
++  const { decisions } = await jsonBody<{ decisions: any[] }>(await decisionsHandler(asUser(user, { method: "GET", url: `https://tasketra.com/api/decisions?projectId=${projectId}` })));
++  const recordId = decisions[0].records[0].id;
++  const res = await decisionsHandler(asUser(user, { method: "PATCH", url: "https://tasketra.com/api/decisions", body: { id: decisions[0].id, action: "confirm", recordId } }));
++  expect(res.status).toBe(200);
++};
+ 
+ describe("charter approval", () => {
+   beforeAll(async () => {
+@@ -57,6 +65,10 @@ describe("charter approval", () => {
+     expect(decisions.decisions[0].context).toContain("Open a clinic");
+ 
+     expect((await answer(approval.publicToken, "Approve")).status).toBe(201);
++    // v151: the answer alone no longer approves -- it collects as a response.
++    approval = await read(owner, project.id);
++    expect(approval.status).toBe("pending");
++    await confirmFirstResponse(owner, project.id);
+     approval = await read(owner, project.id);
+     expect(approval.status).toBe("approved");
+     expect(approval.responderName).toBe("Dana Reyes");
+@@ -69,6 +81,9 @@ describe("charter approval", () => {
+     await request(owner, project.id);
+     const { publicToken } = await read(owner, project.id);
+     await answer(publicToken, "Request changes");
++    // v151: still pending until the owner confirms the response.
++    expect((await read(owner, project.id)).status).toBe("pending");
++    await confirmFirstResponse(owner, project.id);
+     expect((await read(owner, project.id)).status).toBe("changes_requested");
+   });
+ 
+diff --git a/netlify/functions/__tests__/charter-report-nextup.integration.test.ts b/netlify/functions/__tests__/charter-report-nextup.integration.test.ts
+index 16e20aa..928b31d 100644
+--- a/netlify/functions/__tests__/charter-report-nextup.integration.test.ts
++++ b/netlify/functions/__tests__/charter-report-nextup.integration.test.ts
+@@ -6,6 +6,7 @@ import weeklyHandler from "../weekly-report.mts";
+ import portfolioHandler from "../portfolio.mts";
+ import approvalHandler from "../charter-approval.mts";
+ import decisionPublicHandler from "../decision-public.mts";
++import decisionsHandler from "../decisions.mts";
+ 
+ const patch = (user: { cookie: string }, body: unknown) =>
+   projectHandler(asUser(user, { method: "PATCH", url: "https://tasketra.com/api/project", body }));
+@@ -46,6 +47,13 @@ describe("charter in the weekly report", () => {
+       method: "POST", headers: { "content-type": "application/json" },
+       body: JSON.stringify({ token: approval.publicToken, chosenOption: "Approve", responderName: "Dana Reyes" }),
+     }));
++    // v151: the answer collects as a response; the report still shows
++    // pending until the owner confirms it.
++    r = await report(owner, project.id);
++    expect(r.charter.approval).toEqual({ status: "pending", responderName: null });
++    const { decisions } = await jsonBody<{ decisions: any[] }>(await decisionsHandler(asUser(owner, { method: "GET", url: `https://tasketra.com/api/decisions?projectId=${project.id}` })));
++    const confirmRes = await decisionsHandler(asUser(owner, { method: "PATCH", url: "https://tasketra.com/api/decisions", body: { id: decisions[0].id, action: "confirm", recordId: decisions[0].records[0].id } }));
++    expect(confirmRes.status).toBe(200);
+     r = await report(owner, project.id);
+     expect(r.charter.approval).toEqual({ status: "approved", responderName: "Dana Reyes" });
+   });
+diff --git a/netlify/functions/__tests__/decision-confirm.integration.test.ts b/netlify/functions/__tests__/decision-confirm.integration.test.ts
+new file mode 100644
+index 0000000..72bfe32
+--- /dev/null
++++ b/netlify/functions/__tests__/decision-confirm.integration.test.ts
+@@ -0,0 +1,113 @@
++import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
++import { setupTestDb, teardownTestDb, resetTestDb } from "../../lib/__tests__/testDb.ts";
++import { createTestUser, createTestProject, asUser, jsonBody } from "./fixtures.ts";
++import decisionsHandler from "../decisions.mts";
++import decisionPublicHandler from "../decision-public.mts";
++
++// v151 (Part D, Option 1): public responses COLLECT as responses. The
++// request stays open until the owner confirms one response as the outcome
++// (or records an outcome directly) -- the first reply no longer decides it.
++const respond = (token: string, chosenOption: string, responderName: string) =>
++  decisionPublicHandler(new Request("https://app.tasketra.com/api/decision-public", {
++    method: "POST", headers: { "content-type": "application/json" },
++    body: JSON.stringify({ token, chosenOption, responderName }),
++  }));
++
++const publicGet = async (token: string) =>
++  jsonBody<any>(await decisionPublicHandler(new Request(`https://app.tasketra.com/api/decision-public?token=${token}`)));
++
++const listDecisions = async (owner: any, projectId: string) =>
++  (await jsonBody<{ decisions: any[] }>(await decisionsHandler(asUser(owner, {
++    method: "GET", url: `https://app.tasketra.com/api/decisions?projectId=${projectId}`,
++  })))).decisions;
++
++const confirm = (owner: any, body: unknown) =>
++  decisionsHandler(asUser(owner, { method: "PATCH", url: "https://app.tasketra.com/api/decisions", body }));
++
++async function makeDecision(owner: any, projectId: string) {
++  const res = await decisionsHandler(asUser(owner, {
++    method: "POST", url: "https://app.tasketra.com/api/decisions",
++    body: { projectId, title: "Which date works best?", options: ["Nov 20", "Nov 27"], stakeholderIds: [] },
++  }));
++  expect(res.status).toBe(201);
++  const { decision } = await jsonBody<any>(res);
++  return decision;
++}
++
++describe("decision responses collect; the owner confirms (v151)", () => {
++  beforeAll(async () => { await setupTestDb(); }, 30000);
++  afterAll(async () => { await teardownTestDb(); });
++  beforeEach(async () => { await resetTestDb(); });
++
++  it("stays open after responses, resolves only on confirm, with the confirmed record as outcome", async () => {
++    const owner = await createTestUser("owner@example.com");
++    const project = await createTestProject(owner.id);
++    const decision = await makeDecision(owner, project.id);
++    const token = decision.public_token;
++
++    // First response: recorded, but the decision is NOT decided.
++    expect((await respond(token, "Nov 20", "Sponsor One")).status).toBe(201);
++    let pub = await publicGet(token);
++    expect(pub.decision.status).toBe("open");
++    expect(pub.record).toBeNull();
++
++    // Second response from someone else: also fine (the old rule 409'd it
++    // because the first response had already resolved the request).
++    expect((await respond(token, "Nov 27", "Stakeholder Two")).status).toBe(201);
++
++    let [d] = await listDecisions(owner, project.id);
++    expect(d.status).toBe("open");
++    expect(d.chosen_option).toBeNull();
++    expect(d.records.map((r: any) => r.chosen_option)).toEqual(["Nov 20", "Nov 27"]);
++    expect(d.records.every((r: any) => r.confirmed_at === null)).toBe(true);
++
++    // The owner confirms the SECOND response.
++    const secondId = d.records[1].id;
++    expect((await confirm(owner, { id: d.id, action: "confirm", recordId: secondId })).status).toBe(200);
++
++    [d] = await listDecisions(owner, project.id);
++    expect(d.status).toBe("resolved");
++    expect(d.chosen_option).toBe("Nov 27");
++    expect(d.responder_name).toBe("Stakeholder Two");
++    expect(d.outcome_confirmed_at).toBeTruthy();
++
++    // The public page now shows the confirmed outcome.
++    pub = await publicGet(token);
++    expect(pub.decision.status).toBe("resolved");
++    expect(pub.record.chosen_option).toBe("Nov 27");
++    expect(pub.record.responder_name).toBe("Stakeholder Two");
++
++    // No more responses, no re-confirming.
++    expect((await respond(token, "Nov 20", "Late Comer")).status).toBe(409);
++    expect((await confirm(owner, { id: d.id, action: "confirm", recordId: secondId })).status).toBe(409);
++  });
++
++  it("lets the owner record an outcome directly, validated against the options", async () => {
++    const owner = await createTestUser("owner@example.com");
++    const project = await createTestProject(owner.id);
++    const decision = await makeDecision(owner, project.id);
++
++    expect((await confirm(owner, { id: decision.id, action: "confirm", chosenOption: "Dec 4" })).status).toBe(400);
++    expect((await confirm(owner, { id: decision.id, action: "confirm", chosenOption: "Nov 20" })).status).toBe(200);
++
++    const [d] = await listDecisions(owner, project.id);
++    expect(d.status).toBe("resolved");
++    expect(d.chosen_option).toBe("Nov 20");
++    expect(d.outcome_confirmed_at).toBeTruthy();
++    expect(d.records).toHaveLength(1);
++    expect(d.records[0].confirmed_at).toBeTruthy();
++  });
++
++  it("rejects confirming a response that belongs to another decision", async () => {
++    const owner = await createTestUser("owner@example.com");
++    const project = await createTestProject(owner.id);
++    const a = await makeDecision(owner, project.id);
++    const b = await makeDecision(owner, project.id);
++    await respond(a.public_token, "Nov 20", "Sponsor One");
++    const [withRecord] = (await listDecisions(owner, project.id)).filter((d: any) => d.id === a.id);
++    const recordId = withRecord.records[0].id;
++    expect((await confirm(owner, { id: b.id, action: "confirm", recordId })).status).toBe(404);
++    const [bAfter] = (await listDecisions(owner, project.id)).filter((d: any) => d.id === b.id);
++    expect(bAfter.status).toBe("open");
++  });
++});
+diff --git a/netlify/functions/__tests__/feed-actor.integration.test.ts b/netlify/functions/__tests__/feed-actor.integration.test.ts
+index b415247..794f954 100644
+--- a/netlify/functions/__tests__/feed-actor.integration.test.ts
++++ b/netlify/functions/__tests__/feed-actor.integration.test.ts
+@@ -5,12 +5,14 @@ import { db } from "../../lib/db.ts";
+ import handler from "../feed.mts";
+ 
+ async function addEntry(projectId: string, actorId: string | null, title: string) {
+-  // 'updated', not 'created': creations of tasks (and decisions, issues,
+-  // risks) are de-duplicated out of the feed's activity branch since v150.1
+-  // because those entities have their own derived feed rows.
++  // 'stakeholder' + 'updated': creations AND updates of tasks, decisions,
++  // issues and risks are de-duplicated out of the feed's activity branch
++  // (v150.1 creations, v151 updates) because those entities have their own
++  // derived feed rows. Stakeholders have no derived branch, so the activity
++  // row itself is what the feed carries -- which is what this suite tests.
+   await db().sql`
+     INSERT INTO activity_log (project_id, entity_type, entity_id, entity_title, action, actor_id)
+-    VALUES (${projectId}, 'task', gen_random_uuid(), ${title}, 'updated', ${actorId})
++    VALUES (${projectId}, 'stakeholder', gen_random_uuid(), ${title}, 'updated', ${actorId})
+   `;
+ }
+ 
+diff --git a/netlify/functions/__tests__/feed-dedupe.integration.test.ts b/netlify/functions/__tests__/feed-dedupe.integration.test.ts
+index 16cb09a..890d361 100644
+--- a/netlify/functions/__tests__/feed-dedupe.integration.test.ts
++++ b/netlify/functions/__tests__/feed-dedupe.integration.test.ts
+@@ -59,6 +59,64 @@ describe("feed decision de-duplication", () => {
+     }
+   });
+ 
++  // v151 (Part C2): updates doubled the same way creations did -- the
++  // derived branch re-surfaces the entity at updated_at and the activity
++  // branch carried the "updated" copy. One row per entity after an update.
++  it("shows an updated task, issue and risk once each", async () => {
++    const owner = await createTestUser("owner@example.com");
++    await createTestProject(owner.id);
++    const [project] = await db().sql`SELECT id FROM projects LIMIT 1`;
++    const projectId = project.id as string;
++
++    const post = async (handler: any, path: string, title: string) => {
++      const res = await handler(asUser(owner, { method: "POST", url: `https://app.tasketra.com/api/${path}`, body: { projectId, title } }));
++      expect(res.status).toBe(201);
++      return jsonBody(res);
++    };
++    const task = (await post(tasksHandler, "tasks", "Book the venue")).task;
++    const issue = (await post(issuesHandler, "issues", "Vendor is late")).issue;
++    const risk = (await post(risksHandler, "risks", "Budget overrun")).risk;
++
++    const patch = async (handler: any, path: string, id: string, status: string) => {
++      const res = await handler(asUser(owner, { method: "PATCH", url: `https://app.tasketra.com/api/${path}`, body: { id, status } }));
++      expect(res.status).toBe(200);
++    };
++    await patch(tasksHandler, "tasks", task.id, "in_progress");
++    await patch(issuesHandler, "issues", issue.id, "in_progress");
++    await patch(risksHandler, "risks", risk.id, "monitoring");
++
++    const feedRes = await feedHandler(asUser(owner, { method: "GET", url: `https://app.tasketra.com/api/feed?projectId=${projectId}` }));
++    const body = await jsonBody(feedRes);
++    for (const [title, type, label] of [["Book the venue", "task", "In progress"], ["Vendor is late", "issue", "In progress"], ["Budget overrun", "risk", "Monitoring"]] as const) {
++      const rows = body.feed.filter((f: any) => f.title === title);
++      expect(rows, title).toHaveLength(1);
++      expect(rows[0].type).toBe(type);
++      expect(rows[0].body).toBe(label);
++    }
++    // The humanized diff is not lost -- it lives in the activity summary the
++    // update stored (My activity reads the same table).
++    const [row] = await db().sql`SELECT summary FROM activity_log WHERE entity_type = 'task' AND action = 'updated'`;
++    expect(row.summary).toBe("status: Not started → In progress");
++  });
++
++  it("still shows a task deletion as an activity row", async () => {
++    const owner = await createTestUser("owner@example.com");
++    await createTestProject(owner.id);
++    const [project] = await db().sql`SELECT id FROM projects LIMIT 1`;
++    const projectId = project.id as string;
++    const res = await tasksHandler(asUser(owner, { method: "POST", url: "https://app.tasketra.com/api/tasks", body: { projectId, title: "Doomed task" } }));
++    const { task } = await jsonBody(res);
++    const del = await tasksHandler(asUser(owner, { method: "DELETE", url: `https://app.tasketra.com/api/tasks?id=${task.id}` }));
++    expect(del.status).toBe(200);
++
++    const feedRes = await feedHandler(asUser(owner, { method: "GET", url: `https://app.tasketra.com/api/feed?projectId=${projectId}` }));
++    const body = await jsonBody(feedRes);
++    const rows = body.feed.filter((f: any) => f.title === "Doomed task");
++    expect(rows).toHaveLength(1);
++    expect(rows[0].type).toBe("activity");
++    expect(rows[0].meta.action).toBe("deleted");
++  });
++
+   it("still shows other activity entries (a decision deletion is not hidden)", async () => {
+     const owner = await createTestUser("owner@example.com");
+     await createTestProject(owner.id);
+diff --git a/netlify/functions/__tests__/stage-gate.integration.test.ts b/netlify/functions/__tests__/stage-gate.integration.test.ts
+index 01c6809..da23ead 100644
+--- a/netlify/functions/__tests__/stage-gate.integration.test.ts
++++ b/netlify/functions/__tests__/stage-gate.integration.test.ts
+@@ -18,6 +18,14 @@ const answer = (token: string, chosenOption: string) =>
+     method: "POST", headers: { "content-type": "application/json" },
+     body: JSON.stringify({ token, chosenOption, responderName: "Dana Reyes" }),
+   }));
++// v151: a public answer is now a RESPONSE, not the outcome. The gate only
++// lands once the owner confirms the response in the Decisions tab.
++const confirmFirstResponse = async (user: { cookie: string }, projectId: string) => {
++  const { decisions } = await jsonBody<{ decisions: any[] }>(await decisionsHandler(asUser(user, { method: "GET", url: `https://tasketra.com/api/decisions?projectId=${projectId}` })));
++  const recordId = decisions[0].records[0].id;
++  const res = await decisionsHandler(asUser(user, { method: "PATCH", url: "https://tasketra.com/api/decisions", body: { id: decisions[0].id, action: "confirm", recordId } }));
++  expect(res.status).toBe(200);
++};
+ 
+ describe("stage gates", () => {
+   beforeAll(async () => { await setupTestDb(); }, 30000);
+@@ -55,6 +63,10 @@ describe("stage gates", () => {
+     expect(decisions.decisions[0].context).toContain("Open a clinic");
+ 
+     await answer(gate.publicToken, "Approve");
++    // v151: the answer alone no longer approves the gate -- it collects.
++    gate = await read(owner, project.id);
++    expect(gate.status).toBe("pending");
++    await confirmFirstResponse(owner, project.id);
+     gate = await read(owner, project.id);
+     expect(gate.status).toBe("approved");
+     expect(gate.responderName).toBe("Dana Reyes");
+@@ -66,6 +78,9 @@ describe("stage gates", () => {
+     expect((await ask(owner, { projectId: project.id, from: "initiate", to: "plan" })).status).toBe(201);
+     const { publicToken } = await read(owner, project.id);
+     await answer(publicToken, "Request changes");
++    // v151: still pending until the owner confirms the response.
++    expect((await read(owner, project.id)).status).toBe("pending");
++    await confirmFirstResponse(owner, project.id);
+     expect((await read(owner, project.id)).status).toBe("changes_requested");
+   });
+ 
+diff --git a/netlify/functions/__tests__/status-updates-activity.integration.test.ts b/netlify/functions/__tests__/status-updates-activity.integration.test.ts
+new file mode 100644
+index 0000000..ba3f0e5
+--- /dev/null
++++ b/netlify/functions/__tests__/status-updates-activity.integration.test.ts
+@@ -0,0 +1,75 @@
++import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
++import { setupTestDb, teardownTestDb, resetTestDb } from "../../lib/__tests__/testDb.ts";
++import { createTestUser, createTestProject, asUser, jsonBody } from "./fixtures.ts";
++import statusUpdatesHandler from "../status-updates.mts";
++import myActivityHandler from "../my-activity.mts";
++import feedHandler from "../feed.mts";
++
++// v151 (Part C3): posting a check-in writes an activity_log row with the
++// poster as actor, so the check-in shows up in the poster's My activity --
++// while the project Feed keeps carrying it exactly once via its derived
++// status_update branch.
++describe("check-ins in My activity", () => {
++  beforeAll(async () => { await setupTestDb(); }, 30000);
++  afterAll(async () => { await teardownTestDb(); });
++  beforeEach(async () => { await resetTestDb(); });
++
++  it("appears once in the poster's My activity and once in the project feed", async () => {
++    const owner = await createTestUser("owner@example.com");
++    const project = await createTestProject(owner.id);
++    const projectId = project.id;
++
++    const res = await statusUpdatesHandler(asUser(owner, {
++      method: "POST",
++      url: "https://app.tasketra.com/api/status-updates",
++      body: { projectId, body: "Venue booked, catering next", health: "on_track" },
++    }));
++    expect(res.status).toBe(201);
++
++    const mine = await jsonBody(await myActivityHandler(asUser(owner, { method: "GET", url: "https://app.tasketra.com/api/my-activity" })));
++    const checkIns = mine.items.filter((i: any) => i.entityType === "status_update");
++    expect(checkIns).toHaveLength(1);
++    expect(checkIns[0].action).toBe("created");
++    expect(checkIns[0].summary).toBe("Venue booked, catering next");
++    expect(checkIns[0].projectId).toBe(projectId);
++
++    const feed = await jsonBody(await feedHandler(asUser(owner, { method: "GET", url: `https://app.tasketra.com/api/feed?projectId=${projectId}` })));
++    const feedCheckIns = feed.feed.filter((f: any) => f.type === "status_update");
++    expect(feedCheckIns).toHaveLength(1);
++    expect(feed.feed.filter((f: any) => f.type === "activity")).toHaveLength(0);
++  });
++
++  it("does not appear in another member's My activity", async () => {
++    const owner = await createTestUser("owner@example.com");
++    const other = await createTestUser("other@example.com");
++    const project = await createTestProject(owner.id);
++    const projectId = project.id;
++
++    const res = await statusUpdatesHandler(asUser(owner, {
++      method: "POST",
++      url: "https://app.tasketra.com/api/status-updates",
++      body: { projectId, body: "Owner's note" },
++    }));
++    expect(res.status).toBe(201);
++
++    const theirs = await jsonBody(await myActivityHandler(asUser(other, { method: "GET", url: "https://app.tasketra.com/api/my-activity" })));
++    expect(theirs.items.filter((i: any) => i.entityType === "status_update")).toHaveLength(0);
++  });
++
++  it("records a health-only check-in with its stated status as the summary", async () => {
++    const owner = await createTestUser("owner@example.com");
++    const project = await createTestProject(owner.id);
++
++    const res = await statusUpdatesHandler(asUser(owner, {
++      method: "POST",
++      url: "https://app.tasketra.com/api/status-updates",
++      body: { projectId: project.id, body: "", health: "at_risk" },
++    }));
++    expect(res.status).toBe(201);
++
++    const mine = await jsonBody(await myActivityHandler(asUser(owner, { method: "GET", url: "https://app.tasketra.com/api/my-activity" })));
++    const checkIns = mine.items.filter((i: any) => i.entityType === "status_update");
++    expect(checkIns).toHaveLength(1);
++    expect(checkIns[0].summary).toBe("At risk");
++  });
++});
+diff --git a/netlify/functions/__tests__/today-next-step.integration.test.ts b/netlify/functions/__tests__/today-next-step.integration.test.ts
+index 8386822..6ba0ba1 100644
+--- a/netlify/functions/__tests__/today-next-step.integration.test.ts
++++ b/netlify/functions/__tests__/today-next-step.integration.test.ts
+@@ -23,7 +23,9 @@ describe("today next-step fields", () => {
+     const res = await handler(asUser(owner, { method: "GET", url: `https://app.tasketra.com/api/today?projectId=${projectId}` }));
+     expect(res.status).toBe(200);
+     const body = await jsonBody(res);
+-    expect(body.taskCount).toBe(0);
++    expect(body.totalTaskCount).toBe(0);
++    expect(body.openTasks).toEqual([]);
++    expect(body.openTaskCount).toBe(0);
+     expect(body.datedTaskCount).toBe(0);
+     expect(body.stakeholderCount).toBe(0);
+     expect(body.lastCheckInAt).toBeNull();
+@@ -44,10 +46,31 @@ describe("today next-step fields", () => {
+ 
+     const res = await handler(asUser(owner, { method: "GET", url: `https://app.tasketra.com/api/today?projectId=${projectId}` }));
+     const body = await jsonBody(res);
+-    expect(body.taskCount).toBe(4);
++    expect(body.totalTaskCount).toBe(4);
+     expect(body.datedTaskCount).toBe(3);
+     expect(body.stakeholderCount).toBe(1);
+     expect(body.overdueTasks.map((t: any) => t.title)).toEqual(["Overdue one"]);
+     expect(body.lastCheckInAt).toBeTruthy();
++    // v151: open = status != 'done' and not deleted, every row counts. The
++    // list is dated-first by due date, undated last; done tasks never appear.
++    expect(body.openTaskCount).toBe(3);
++    expect(body.openTasks.map((t: any) => t.title)).toEqual(["Overdue one", "Future one", "Undated one"]);
++  });
++
++  it("orders open tasks dated-first, then in-progress before not-started", async () => {
++    const { owner, projectId } = await setup();
++    await db().sql`
++      INSERT INTO tasks (project_id, title, status, due_date, created_at) VALUES
++        (${projectId}, 'Undated not started', 'not_started', NULL, now() - interval '2 days'),
++        (${projectId}, 'Undated in progress', 'in_progress', NULL, now() - interval '1 day'),
++        (${projectId}, 'Dated later', 'not_started', CURRENT_DATE + 5, now()),
++        (${projectId}, 'Deleted open', 'not_started', CURRENT_DATE + 1, now())
++    `;
++    await db().sql`UPDATE tasks SET deleted_at = now() WHERE title = 'Deleted open'`;
++
++    const res = await handler(asUser(owner, { method: "GET", url: `https://app.tasketra.com/api/today?projectId=${projectId}` }));
++    const body = await jsonBody(res);
++    expect(body.openTaskCount).toBe(3);
++    expect(body.openTasks.map((t: any) => t.title)).toEqual(["Dated later", "Undated in progress", "Undated not started"]);
+   });
+ });
+diff --git a/netlify/functions/admin-project-view.mts b/netlify/functions/admin-project-view.mts
+index 16ef7b9..81d878c 100644
+--- a/netlify/functions/admin-project-view.mts
++++ b/netlify/functions/admin-project-view.mts
+@@ -157,7 +157,19 @@ export default withSentry(async (req: Request) => {
+             '[]'
+           ) AS recipients
+         FROM decision_requests dr
+-        LEFT JOIN decision_records rec ON rec.decision_request_id = dr.id
++        -- v151: outcome record only (confirmed, or a pre-v151 single
++        -- record), so the snapshot stays one row per decision.
++        LEFT JOIN LATERAL (
++          SELECT r.chosen_option, r.responder_name, r.responded_at
++          FROM decision_records r
++          WHERE r.decision_request_id = dr.id
++            AND (r.confirmed_at IS NOT NULL
++                 OR (dr.status = 'resolved' AND NOT EXISTS (
++                       SELECT 1 FROM decision_records c
++                       WHERE c.decision_request_id = dr.id AND c.confirmed_at IS NOT NULL)))
++          ORDER BY r.confirmed_at DESC NULLS LAST, r.responded_at DESC
++          LIMIT 1
++        ) rec ON true
+         WHERE dr.project_id = ${projectId} AND dr.deleted_at IS NULL
+         ORDER BY dr.created_at DESC
+       `,
+diff --git a/netlify/functions/charter-approval.mts b/netlify/functions/charter-approval.mts
+index 1e2089c..507d4cd 100644
+--- a/netlify/functions/charter-approval.mts
++++ b/netlify/functions/charter-approval.mts
+@@ -21,7 +21,13 @@ async function readApproval(database: ReturnType<typeof db>, projectId: string)
+       rec.chosen_option, rec.responder_name, rec.responded_at
+     FROM projects p
+     JOIN decision_requests dr ON dr.id = p.charter_decision_id AND dr.deleted_at IS NULL
++    -- v151: join only the OUTCOME record (confirmed, or a pre-v151 single
++    -- record) -- responses that merely collected must not read as approval.
+     LEFT JOIN decision_records rec ON rec.decision_request_id = dr.id
++      AND (rec.confirmed_at IS NOT NULL
++           OR (dr.status = 'resolved' AND NOT EXISTS (
++                 SELECT 1 FROM decision_records c
++                 WHERE c.decision_request_id = dr.id AND c.confirmed_at IS NOT NULL)))
+     WHERE p.id = ${projectId}
+   `;
+   if (!row) return null;
+diff --git a/netlify/functions/decision-public.mts b/netlify/functions/decision-public.mts
+index 22bc56a..0e77e84 100644
+--- a/netlify/functions/decision-public.mts
++++ b/netlify/functions/decision-public.mts
+@@ -6,6 +6,12 @@ import { withSentry } from "../lib/sentry.ts";
+ 
+ // Public, unauthenticated endpoint. Only ever exposes the single decision
+ // request matching an unguessable token -- never a list, never other project data.
++//
++// v151 (Part D, Option 1): a response is recorded as a RESPONSE. It no
++// longer resolves the request -- the project owner confirms one response
++// as the outcome in the app (see decisions.mts PATCH action "confirm").
++// The GET record is the confirmed outcome, present only once the request
++// is resolved (for pre-v151 decisions, their single record).
+ 
+ export default withSentry(async (req: Request) => {
+   const database = db();
+@@ -26,8 +32,15 @@ export default withSentry(async (req: Request) => {
+     let record = null;
+     if (decision.status === "resolved") {
+       const [rec] = await database.sql`
+-        SELECT chosen_option, responder_name, responded_at
+-        FROM decision_records WHERE decision_request_id = ${decision.id}
++        SELECT chosen_option, responder_name, responded_at, confirmed_at
++        FROM decision_records rec
++        WHERE rec.decision_request_id = ${decision.id}
++          AND (rec.confirmed_at IS NOT NULL
++               OR NOT EXISTS (SELECT 1 FROM decision_records c
++                              WHERE c.decision_request_id = rec.decision_request_id
++                                AND c.confirmed_at IS NOT NULL))
++        ORDER BY rec.confirmed_at DESC NULLS LAST, rec.responded_at DESC
++        LIMIT 1
+       `;
+       record = rec || null;
+     }
+@@ -62,7 +75,8 @@ export default withSentry(async (req: Request) => {
+       VALUES (${decision.id}, ${chosenOption}, ${responderName})
+       RETURNING chosen_option, responder_name, responded_at
+     `;
+-    await database.sql`UPDATE decision_requests SET status = 'resolved' WHERE id = ${decision.id}`;
++    // v151: deliberately NO status flip here. The response collects with
++    // any others until the owner confirms the outcome.
+ 
+     // Best-effort notification to the PM who owns this project. Failure here
+     // must never block the stakeholder's response from being recorded.
+@@ -77,8 +91,8 @@ export default withSentry(async (req: Request) => {
+       if (owner?.owner_email) {
+         await sendEmail(
+           owner.owner_email,
+-          `Decision recorded: ${decision.title}`,
+-          `${responderName} responded "${chosenOption}" to "${decision.title}". View it in tasketra's project feed.`
++          `Decision response: ${decision.title}`,
++          `${responderName} responded "${chosenOption}" to "${decision.title}". It stays open until you confirm the outcome in Tasketra's Decisions tab.`
+         );
+       }
+     } catch {
+diff --git a/netlify/functions/decisions.mts b/netlify/functions/decisions.mts
+index 9028e4f..d02ed3c 100644
+--- a/netlify/functions/decisions.mts
++++ b/netlify/functions/decisions.mts
+@@ -11,6 +11,15 @@ import { withSentry } from "../lib/sentry.ts";
+ // (or answered) via its public link, retroactively changing the title or
+ // options gets semantically messy. Delete/restore is supported like every
+ // other entity; editing is deliberately out of scope for now.
++//
++// v151 (Part D, Option 1): public responses COLLECT as responses -- they no
++// longer resolve the request. The owner confirms one response as the
++// outcome (PATCH action "confirm"), or records an outcome directly; only
++// that flips status to 'resolved'. A request's OUTCOME record is the one
++// with confirmed_at set -- or, for decisions resolved before v151 (exactly
++// one record, never confirmed), that single record. The OUTCOME predicate
++// below is repeated wherever a reader needs the outcome
++// (decision-public, charter-approval, stage-gate, weekly-report).
+ 
+ export default withSentry(async (req: Request) => {
+   const userId = getUserIdFromRequest(req);
+@@ -25,7 +34,16 @@ export default withSentry(async (req: Request) => {
+ 
+     const decisions = await database.sql`
+       SELECT dr.id, dr.title, dr.context, dr.options, dr.deadline, dr.public_token, dr.status, dr.created_at,
+-        rec.chosen_option, rec.responder_name, rec.responded_at,
++        outcome.chosen_option, outcome.responder_name, outcome.responded_at, outcome.confirmed_at AS outcome_confirmed_at,
++        COALESCE(
++          (SELECT json_agg(json_build_object(
++              'id', rec.id, 'chosen_option', rec.chosen_option, 'responder_name', rec.responder_name,
++              'responded_at', rec.responded_at, 'confirmed_at', rec.confirmed_at
++            ) ORDER BY rec.responded_at ASC)
++             FROM decision_records rec
++             WHERE rec.decision_request_id = dr.id),
++          '[]'
++        ) AS records,
+         COALESCE(
+           (SELECT json_agg(json_build_object('id', s.id, 'name', s.name))
+              FROM decision_request_recipients rr
+@@ -34,7 +52,17 @@ export default withSentry(async (req: Request) => {
+           '[]'
+         ) AS recipients
+       FROM decision_requests dr
+-      LEFT JOIN decision_records rec ON rec.decision_request_id = dr.id
++      LEFT JOIN LATERAL (
++        SELECT rec.chosen_option, rec.responder_name, rec.responded_at, rec.confirmed_at
++        FROM decision_records rec
++        WHERE rec.decision_request_id = dr.id
++          AND (rec.confirmed_at IS NOT NULL
++               OR (dr.status = 'resolved' AND NOT EXISTS (
++                     SELECT 1 FROM decision_records c
++                     WHERE c.decision_request_id = dr.id AND c.confirmed_at IS NOT NULL)))
++        ORDER BY rec.confirmed_at DESC NULLS LAST, rec.responded_at DESC
++        LIMIT 1
++      ) outcome ON true
+       WHERE dr.project_id = ${projectId} AND dr.deleted_at IS NULL
+       ORDER BY dr.created_at DESC
+     `;
+@@ -75,11 +103,57 @@ export default withSentry(async (req: Request) => {
+   if (req.method === "PATCH") {
+     const body = await req.json().catch(() => null) as any;
+     const id = body?.id;
+-    if (!id || !body?.restore) return json({ error: "id and restore are required." }, { status: 400 });
+-    const [existing] = await database.sql`SELECT project_id, title FROM decision_requests WHERE id = ${id}`;
++    if (!id) return json({ error: "id required" }, { status: 400 });
++    const [existing] = await database.sql`SELECT project_id, title, status, options, deleted_at FROM decision_requests WHERE id = ${id}`;
+     if (!existing || !(await hasProjectAccess(userId, existing.project_id))) {
+       return json({ error: "Not found" }, { status: 404 });
+     }
++
++    // v151 (Part D, Option 1): the owner confirms the outcome. Either an
++    // existing response is confirmed (recordId), or the owner records an
++    // outcome directly (chosenOption, one of the request's options, stored
++    // as a response under the owner's own name). Only this resolves the
++    // request.
++    if (body?.action === "confirm") {
++      if (existing.deleted_at) return json({ error: "Not found" }, { status: 404 });
++      if (existing.status === "resolved") {
++        return json({ error: "This decision has already been decided." }, { status: 409 });
++      }
++      let outcomeOption: string | null = null;
++      if (body?.recordId) {
++        const [record] = await database.sql`
++          SELECT id, chosen_option FROM decision_records
++          WHERE id = ${body.recordId} AND decision_request_id = ${id}
++        `;
++        if (!record) return json({ error: "That response was not found." }, { status: 404 });
++        await database.sql`UPDATE decision_records SET confirmed_at = now() WHERE id = ${record.id}`;
++        outcomeOption = record.chosen_option;
++      } else if (typeof body?.chosenOption === "string" && body.chosenOption.trim()) {
++        const chosen = body.chosenOption.trim();
++        const validOptions: string[] = existing.options ?? [];
++        if (!validOptions.includes(chosen)) {
++          return json({ error: "That is not one of this decision's options." }, { status: 400 });
++        }
++        const [me] = await database.sql`
++          SELECT COALESCE(NULLIF(TRIM(display_name), ''), email) AS name FROM users WHERE id = ${userId}
++        `;
++        await database.sql`
++          INSERT INTO decision_records (decision_request_id, chosen_option, responder_name, confirmed_at)
++          VALUES (${id}, ${chosen}, ${me?.name ?? "Project owner"}, now())
++        `;
++        outcomeOption = chosen;
++      } else {
++        return json({ error: "recordId or chosenOption is required to confirm a decision." }, { status: 400 });
++      }
++      await database.sql`UPDATE decision_requests SET status = 'resolved' WHERE id = ${id}`;
++      await logActivity(database, {
++        projectId: existing.project_id, entityType: "decision", entityId: id, entityTitle: existing.title,
++        action: "updated", summary: `Decision confirmed: ${outcomeOption}`,
++      });
++      return json({ ok: true });
++    }
++
++    if (!body?.restore) return json({ error: "id and restore are required." }, { status: 400 });
+     await database.sql`UPDATE decision_requests SET deleted_at = NULL WHERE id = ${id}`;
+     await logActivity(database, { projectId: existing.project_id, entityType: "decision", entityId: id, entityTitle: existing.title, action: "restored" });
+     return json({ ok: true });
+diff --git a/netlify/functions/feed.mts b/netlify/functions/feed.mts
+index f686a24..4a021e4 100644
+--- a/netlify/functions/feed.mts
++++ b/netlify/functions/feed.mts
+@@ -37,7 +37,7 @@ export default withSentry(async (req: Request) => {
+     UNION ALL
+ 
+     SELECT 'decision_record' AS type, dr.title AS title,
+-      (rec.chosen_option || ' -- ' || rec.responder_name) AS body, rec.responded_at AS ts,
++      (rec.chosen_option || ' · ' || rec.responder_name) AS body, rec.responded_at AS ts,
+       jsonb_build_object('chosenOption', rec.chosen_option, 'responderName', rec.responder_name) AS meta, NULL AS health
+     FROM decision_records rec
+     JOIN decision_requests dr ON dr.id = rec.decision_request_id
+@@ -75,6 +75,18 @@ export default withSentry(async (req: Request) => {
+       -- (stakeholders, roadmap items, documents...) have no derived branch
+       -- and keep their activity row.
+       AND NOT (a.action = 'created' AND a.entity_type IN ('decision', 'task', 'issue', 'risk'))
++      -- v151 (Part C2): updates of tasks, issues and risks double the same
++      -- way -- the derived branch re-surfaces the entity at its updated_at
++      -- carrying its new status, so the activity "updated" row is the copy.
++      -- (The diff text still lives in My activity.) Decisions are NOT in
++      -- this list: a decision confirm is an 'updated' activity row and the
++      -- derived decision_request row stays at its created_at, so the
++      -- activity row is the only feed trace of the confirmation.
++      AND NOT (a.action = 'updated' AND a.entity_type IN ('task', 'issue', 'risk'))
++      -- v151 (Part C3): check-ins write an activity row now (for My
++      -- activity); the derived status_update branch above already carries
++      -- them here, so the activity copy would double every check-in.
++      AND NOT (a.action = 'created' AND a.entity_type = 'status_update')
+ 
+     ORDER BY ts DESC
+     LIMIT 200
+diff --git a/netlify/functions/notifications.mts b/netlify/functions/notifications.mts
+index 98b132e..ed64a93 100644
+--- a/netlify/functions/notifications.mts
++++ b/netlify/functions/notifications.mts
+@@ -67,7 +67,7 @@ export default withSentry(async (req: Request) => {
+   // A stakeholder answered a decision on a project this person owns or is an
+   // active member of.
+   const decisions = await database.sql`
+-    SELECT dr.id, dr.title, dr.project_id, rec.responder_name, rec.chosen_option, rec.responded_at,
++    SELECT dr.id, dr.title, dr.project_id, rec.id AS record_id, rec.responder_name, rec.chosen_option, rec.responded_at,
+            rec.responded_at > (SELECT notifications_seen_at FROM users WHERE id = ${userId}) AS unread
+     FROM decision_records rec
+     JOIN decision_requests dr ON dr.id = rec.decision_request_id
+@@ -83,7 +83,9 @@ export default withSentry(async (req: Request) => {
+   `;
+   for (const d of decisions) {
+     items.push({
+-      id: `decision:${d.id}`,
++      // v151: one item per RESPONSE, so the id keys on the record, not the
++      // request -- a request can now collect several responses.
++      id: `decision:${d.record_id}`,
+       type: "decision_response",
+       text: `${d.responder_name} answered "${snippet(d.title)}": ${snippet(d.chosen_option, 40)}`,
+       at: d.responded_at ? new Date(d.responded_at).toISOString() : null,
+diff --git a/netlify/functions/stage-gate.mts b/netlify/functions/stage-gate.mts
+index 32e78df..50768ef 100644
+--- a/netlify/functions/stage-gate.mts
++++ b/netlify/functions/stage-gate.mts
+@@ -21,7 +21,13 @@ async function readGate(database: ReturnType<typeof db>, projectId: string) {
+       rec.chosen_option, rec.responder_name, rec.responded_at
+     FROM projects p
+     JOIN decision_requests dr ON dr.id::text = p.stage_gate->>'decisionId' AND dr.deleted_at IS NULL
++    -- v151: join only the OUTCOME record (confirmed, or a pre-v151 single
++    -- record) -- responses that merely collected must not read as approval.
+     LEFT JOIN decision_records rec ON rec.decision_request_id = dr.id
++      AND (rec.confirmed_at IS NOT NULL
++           OR (dr.status = 'resolved' AND NOT EXISTS (
++                 SELECT 1 FROM decision_records c
++                 WHERE c.decision_request_id = dr.id AND c.confirmed_at IS NOT NULL)))
+     WHERE p.id = ${projectId}
+   `;
+   const ref = row ? parseGateRef(row.stage_gate) : null;
+diff --git a/netlify/functions/status-updates.mts b/netlify/functions/status-updates.mts
+index cc4f3c2..ffdc76d 100644
+--- a/netlify/functions/status-updates.mts
++++ b/netlify/functions/status-updates.mts
+@@ -3,6 +3,7 @@ import { db } from "../lib/db.ts";
+ import { getUserIdFromRequest } from "../lib/auth.ts";
+ import { hasProjectAccess } from "../lib/ownership.ts";
+ import { json } from "../lib/http.ts";
++import { logActivity } from "../lib/activity.ts";
+ import { withSentry } from "../lib/sentry.ts";
+ 
+ // The stated-status vocabulary a check-in can carry (v143) -- the same words
+@@ -34,6 +35,21 @@ export default withSentry(async (req: Request) => {
+     INSERT INTO status_updates (project_id, body, health) VALUES (${projectId}, ${text}, ${health})
+     RETURNING id, body, health, created_at
+   `;
++  // v151 (Part C3): a check-in is the poster's own work, so it belongs in
++  // their My activity -- which reads only activity_log. status_updates has
++  // no author column; the author lives on this row's actor_id. The project
++  // Feed excludes status_update 'created' activity rows (its derived branch
++  // already carries the check-in), so nothing doubles there.
++  const HEALTH_LABEL: Record<string, string> = { on_track: "On track", at_risk: "At risk", off_track: "Off track" };
++  const summary = text ? text.slice(0, 120) : (health ? HEALTH_LABEL[health] : null);
++  await logActivity(database, {
++    projectId,
++    entityType: "status_update",
++    entityId: update.id,
++    entityTitle: null,
++    action: "created",
++    summary,
++  });
+   return json({ statusUpdate: update }, { status: 201 });
+ });
+ 
+diff --git a/netlify/functions/today.mts b/netlify/functions/today.mts
+index 094d570..81aa68f 100644
+--- a/netlify/functions/today.mts
++++ b/netlify/functions/today.mts
+@@ -19,7 +19,7 @@ export default withSentry(async (req: Request) => {
+   if (!projectId) return json({ error: "projectId required" }, { status: 400 });
+   if (!(await hasProjectAccess(userId, projectId))) return json({ error: "Not found" }, { status: 404 });
+ 
+-  const [blockedTasks, staleTasks, awaitingDecisions, urgentIssues, urgentRisks, taskCountRows, overdueTasks, datedTaskCountRows, stakeholderCountRows, lastCheckInRows] = await Promise.all([
++  const [blockedTasks, staleTasks, awaitingDecisions, urgentIssues, urgentRisks, taskCountRows, overdueTasks, datedTaskCountRows, stakeholderCountRows, lastCheckInRows, openTasks, openTaskCountRows] = await Promise.all([
+     database.sql`
+       SELECT id, title, owner_name, due_date, updated_at
+       FROM tasks WHERE project_id = ${projectId} AND status = 'blocked' AND deleted_at IS NULL
+@@ -78,14 +78,35 @@ export default withSentry(async (req: Request) => {
+       SELECT max(created_at) AS last_check_in_at
+       FROM status_updates WHERE project_id = ${projectId}
+     `,
++    // v151: the open-work list the Next Step card points at when nothing is
++    // wrong but work remains. "Open task" has ONE definition across the app
++    // (written here, shared with weekly-sync / weekly-report): a task whose
++    // status is not 'done' and that is not deleted. Every task row counts,
++    // subtasks included -- a subtask is a task. Ordering: dated first by due
++    // date, then in-progress before not-started, then oldest first.
++    database.sql`
++      SELECT id, title, status, due_date
++      FROM tasks
++      WHERE project_id = ${projectId} AND status != 'done' AND deleted_at IS NULL
++      ORDER BY (due_date IS NULL) ASC, due_date ASC,
++        CASE status WHEN 'in_progress' THEN 0 ELSE 1 END, created_at ASC
++      LIMIT 10
++    `,
++    database.sql`
++      SELECT count(*)::int AS count
++      FROM tasks WHERE project_id = ${projectId} AND status != 'done' AND deleted_at IS NULL
++    `,
+   ]);
+ 
+-  const taskCount = taskCountRows[0]?.count ?? 0;
++  // Renamed in v151: this counts ALL non-deleted tasks (done included). It is
++  // only a "has anything ever been added" gate -- never read it as "open".
++  const totalTaskCount = taskCountRows[0]?.count ?? 0;
++  const openTaskCount = openTaskCountRows[0]?.count ?? 0;
+   const datedTaskCount = datedTaskCountRows[0]?.count ?? 0;
+   const stakeholderCount = stakeholderCountRows[0]?.count ?? 0;
+   const lastCheckInAt = lastCheckInRows[0]?.last_check_in_at ?? null;
+ 
+-  return json({ blockedTasks, staleTasks, awaitingDecisions, urgentIssues, urgentRisks, taskCount, overdueTasks, datedTaskCount, stakeholderCount, lastCheckInAt });
++  return json({ blockedTasks, staleTasks, awaitingDecisions, urgentIssues, urgentRisks, totalTaskCount, overdueTasks, datedTaskCount, stakeholderCount, lastCheckInAt, openTasks, openTaskCount });
+ });
+ 
+ export const config: Config = { path: "/api/today" };
+diff --git a/netlify/functions/weekly-report.mts b/netlify/functions/weekly-report.mts
+index 386fa28..c43fda7 100644
+--- a/netlify/functions/weekly-report.mts
++++ b/netlify/functions/weekly-report.mts
+@@ -68,11 +68,21 @@ export default withSentry(async (req: Request) => {
+       ORDER BY resolved_at DESC
+     `,
+     database.sql`
+-      SELECT dr.id, dr.title, rec.chosen_option, rec.responder_name, rec.responded_at
++      SELECT dr.id, dr.title, rec.chosen_option, rec.responder_name, rec.responded_at, rec.confirmed_at,
++        COALESCE(NULLIF(TRIM(u.display_name), ''), u.email) AS owner_name
+       FROM decision_records rec
+       JOIN decision_requests dr ON dr.id = rec.decision_request_id
+-      WHERE dr.project_id = ${projectId} AND dr.deleted_at IS NULL AND rec.responded_at >= now() - interval '7 days'
+-      ORDER BY rec.responded_at DESC
++      JOIN projects p ON p.id = dr.project_id
++      JOIN users u ON u.id = p.owner_id
++      WHERE dr.project_id = ${projectId} AND dr.deleted_at IS NULL
++        AND COALESCE(rec.confirmed_at, rec.responded_at) >= now() - interval '7 days'
++        -- v151: only the OUTCOME record is a decision made (confirmed, or a
++        -- pre-v151 single record). Collected responses are not outcomes.
++        AND (rec.confirmed_at IS NOT NULL
++             OR (dr.status = 'resolved' AND NOT EXISTS (
++                   SELECT 1 FROM decision_records c
++                   WHERE c.decision_request_id = dr.id AND c.confirmed_at IS NOT NULL)))
++      ORDER BY COALESCE(rec.confirmed_at, rec.responded_at) DESC
+     `,
+     database.sql`
+       SELECT id, body, health, created_at FROM status_updates
+@@ -81,6 +91,10 @@ export default withSentry(async (req: Request) => {
+     `,
+     database.sql`
+       SELECT
++        -- "Open task" (v151, the one shared definition): status != 'done'
++        -- AND deleted_at IS NULL, counting every task row -- subtasks are
++        -- tasks, parents count too. Same words in today.mts / the Next Step
++        -- card, so the numbers a user compares across pages agree.
+         (SELECT count(*) FROM tasks WHERE project_id = ${projectId} AND status != 'done' AND deleted_at IS NULL) AS open_tasks,
+         (SELECT count(*) FROM tasks WHERE project_id = ${projectId} AND status = 'blocked' AND deleted_at IS NULL) AS blocked_tasks,
+         (SELECT count(*) FROM issues WHERE project_id = ${projectId} AND status != 'resolved' AND deleted_at IS NULL) AS open_issues,
+@@ -93,6 +107,10 @@ export default withSentry(async (req: Request) => {
+       FROM projects p
+       LEFT JOIN decision_requests dr ON dr.id = p.charter_decision_id AND dr.deleted_at IS NULL
+       LEFT JOIN decision_records rec ON rec.decision_request_id = dr.id
++        AND (rec.confirmed_at IS NOT NULL
++             OR (dr.status = 'resolved' AND NOT EXISTS (
++                   SELECT 1 FROM decision_records c
++                   WHERE c.decision_request_id = dr.id AND c.confirmed_at IS NOT NULL)))
+       WHERE p.id = ${projectId}
+     `,
+     database.sql`SELECT budget_at_completion FROM projects WHERE id = ${projectId}`,
+diff --git a/netlify/functions/weekly-sync.mts b/netlify/functions/weekly-sync.mts
+index 35b8066..0d445c7 100644
+--- a/netlify/functions/weekly-sync.mts
++++ b/netlify/functions/weekly-sync.mts
+@@ -58,7 +58,11 @@ export default withSentry(async (req: Request) => {
+     `,
+     // The portfolio's own per-project task rollup (its overdue count feeds
+     // projectHealth unchanged), plus the leaf-only overdue count the sync
+-    // lines quote: open leaf tasks whose due date has passed.
++    // lines quote: open leaf tasks whose due date has passed. NOTE (v151):
++    // these leaf counts are health inputs, deliberately narrower than the
++    // shared "open task" display definition (status != 'done', not deleted,
++    // every row counts -- see today.mts). Nothing here is labeled "open
++    // tasks" to a user, so the two never appear side by side as if equal.
+     database.sql`
+       SELECT t.project_id,
+         count(*) FILTER (WHERE t.status != 'done' AND t.due_date IS NOT NULL AND t.due_date < now()::date)::int AS overdue_tasks,
+diff --git a/netlify/lib/__tests__/activity.test.ts b/netlify/lib/__tests__/activity.test.ts
+new file mode 100644
+index 0000000..8cb9eda
+--- /dev/null
++++ b/netlify/lib/__tests__/activity.test.ts
+@@ -0,0 +1,66 @@
++import { describe, it, expect } from "vitest";
++import { diffSummary, formatDiffValue } from "../activity.ts";
++
++// v151 (Part C1): activity summaries are read by people, so diffs render the
++// way the app talks -- status labels, real dates, "not set" -- never raw
++// stored enum names, ISO timestamps, or "--".
++describe("diffSummary humanization", () => {
++  const FIELDS = [
++    { key: "status", label: "status" },
++    { key: "due_date", label: "due" },
++    { key: "owner_name", label: "owner" },
++  ];
++
++  it("renders a status change with display labels and an arrow", () => {
++    expect(diffSummary({ status: "not_started" }, { status: "in_progress" }, FIELDS))
++      .toBe("status: Not started → In progress");
++    expect(diffSummary({ status: "open" }, { status: "resolved" }, FIELDS))
++      .toBe("status: Open → Resolved");
++  });
++
++  it("renders dates as 'Dec 5, 2026' and null as 'not set'", () => {
++    expect(diffSummary({ due_date: null }, { due_date: "2026-12-05" }, FIELDS))
++      .toBe("due: not set → Dec 5, 2026");
++    expect(diffSummary({ due_date: "2026-11-25T00:00:00.000Z" }, { due_date: "2026-12-05" }, FIELDS))
++      .toBe("due: Nov 25, 2026 → Dec 5, 2026");
++  });
++
++  it("contains no raw enum names and no '->'", () => {
++    const out = diffSummary(
++      { status: "not_started", due_date: null },
++      { status: "done", due_date: "2026-12-05" },
++      FIELDS,
++    );
++    expect(out).not.toContain("not_started");
++    expect(out).not.toContain("->");
++    expect(out).not.toContain("--");
++  });
++
++  it("treats values that format the same as unchanged", () => {
++    expect(diffSummary({ due_date: "2026-12-05" }, { due_date: "2026-12-05T00:00:00.000Z" }, FIELDS))
++      .toBe("details updated");
++  });
++
++  it("keeps plain text values verbatim", () => {
++    expect(diffSummary({ owner_name: null }, { owner_name: "Dana" }, FIELDS))
++      .toBe("owner: not set → Dana");
++  });
++
++  it("honors a per-field format override", () => {
++    const fields = [{ key: "status", label: "status", format: (v: any) => (v == null ? "none" : String(v).toUpperCase()) }];
++    expect(diffSummary({ status: "open" }, { status: "done" }, fields)).toBe("status: OPEN → DONE");
++  });
++});
++
++describe("formatDiffValue", () => {
++  it("humanizes unknown status tokens and enum keys", () => {
++    expect(formatDiffValue("status", "changes_requested")).toBe("Changes requested");
++    expect(formatDiffValue("severity", "critical")).toBe("Critical");
++    expect(formatDiffValue("priority", "high")).toBe("High");
++  });
++
++  it("leaves free text alone", () => {
++    expect(formatDiffValue("title", "not_started plan")).toBe("not_started plan");
++    expect(formatDiffValue("owner_name", "dana_k")).toBe("dana_k");
++  });
++});
+diff --git a/netlify/lib/__tests__/stageChecklist.test.ts b/netlify/lib/__tests__/stageChecklist.test.ts
+index 49f365d..3eb8fcf 100644
+--- a/netlify/lib/__tests__/stageChecklist.test.ts
++++ b/netlify/lib/__tests__/stageChecklist.test.ts
+@@ -37,6 +37,9 @@ describe("plan checklist", () => {
+     const i = item("plan", { ...EMPTY, tasks: 12, datedTasks: 9 }, "schedule");
+     expect(i.status).toBe("partial");
+     expect(i.meta).toBe("9 of 12 tasks have dates. 3 still need one.");
++    // v151 (Part F4): the singular agrees -- "1 still needs one."
++    expect(item("plan", { ...EMPTY, tasks: 2, datedTasks: 1 }, "schedule").meta)
++      .toBe("1 of 2 tasks have dates. 1 still needs one.");
+   });
+ 
+   it("marks the schedule done only when every task is dated", () => {
+diff --git a/netlify/lib/activity.ts b/netlify/lib/activity.ts
+index e709e5e..ed32e92 100644
+--- a/netlify/lib/activity.ts
++++ b/netlify/lib/activity.ts
+@@ -11,7 +11,7 @@
+ import { isWebhookUrlSafeToDispatch } from "./ssrf-guard.ts";
+ import { currentUserId } from "./requestContext.ts";
+ 
+-export type EntityType = "task" | "issue" | "risk" | "stakeholder" | "decision" | "member" | "assumption" | "dependency" | "change_request" | "lesson" | "meeting" | "project" | "document" | "roadmap_item" | "quality_item" | "procurement_item" | "comm_plan_item" | "compliance_item" | "objective" | "key_result";
++export type EntityType = "task" | "issue" | "risk" | "stakeholder" | "decision" | "member" | "assumption" | "dependency" | "change_request" | "lesson" | "meeting" | "project" | "document" | "roadmap_item" | "quality_item" | "procurement_item" | "comm_plan_item" | "compliance_item" | "objective" | "key_result" | "status_update";
+ export type ActivityAction = "created" | "updated" | "deleted" | "restored";
+ 
+ export async function logActivity(
+@@ -88,22 +88,77 @@ async function dispatchWebhook(
+   }
+ }
+ 
++// --- Human-readable diff values (v151) -------------------------------------
++// Activity summaries are read by people (the project Feed, My activity), so
++// the values in a diff have to read like the app does everywhere else: status
++// enums get their display labels, dates render "Dec 5, 2026", and an empty
++// value is "not set" -- never the stored "not_started" or a raw ISO
++// timestamp. Only summaries written after this change improve; stored
++// history keeps the wording it was written with.
++
++const STATUS_LABELS: Record<string, string> = {
++  // tasks
++  not_started: "Not started", in_progress: "In progress", blocked: "Blocked", done: "Done",
++  // issues / risks
++  open: "Open", monitoring: "Monitoring", resolved: "Resolved",
++  // change requests
++  proposed: "Proposed", approved: "Approved", rejected: "Rejected", implemented: "Implemented",
++  // objectives / health (status updates, objectives)
++  on_track: "On track", at_risk: "At risk", off_track: "Off track",
++  // assumptions / lessons / compliance / dependencies
++  active: "Active", validated: "Validated", invalidated: "Invalidated",
++  pending: "Pending", met: "Met", unmet: "Unmet", waived: "Waived",
++};
++
++/** "some_value" -> "Some value" for enum tokens with no explicit label. */
++function humanizeToken(value: string): string {
++  const spaced = value.replace(/_/g, " ");
++  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
++}
++
++const MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
++
++/** A stored date (bare YYYY-MM-DD, an ISO timestamp, or a Date) -> "Dec 5, 2026". */
++function formatDateValue(value: unknown): string | null {
++  const raw = value instanceof Date ? value.toISOString() : String(value);
++  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(raw);
++  if (!m) return null;
++  const month = Number(m[2]);
++  const day = Number(m[3]);
++  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
++  return `${MONTHS_SHORT[month - 1]} ${day}, ${m[1]}`;
++}
++
++const DATE_KEYS = new Set(["start_date", "due_date", "check_by", "needed_by", "meeting_date", "target_date", "deadline", "date"]);
++const ENUM_KEYS = new Set(["severity", "probability", "impact", "priority", "power_level", "interest_level", "direction", "metric_type", "category", "frequency", "channel", "meeting_type", "preferred_contact", "type"]);
++
++/** The display form of one diff value for a watched field. */
++export function formatDiffValue(key: string, value: unknown): string {
++  if (value === null || value === undefined || value === "") return "not set";
++  if (DATE_KEYS.has(key)) return formatDateValue(value) ?? String(value);
++  if (key === "status" && typeof value === "string") return STATUS_LABELS[value] ?? humanizeToken(value);
++  if (ENUM_KEYS.has(key) && typeof value === "string" && /^[a-z][a-z0-9_]*$/.test(value)) return humanizeToken(value);
++  return String(value);
++}
++
+ // Compares "before" and "after" snapshots across a list of watched fields and
+-// produces a short human-readable summary like "status: open -> resolved;
+-// owner: Dana -> Marcus". Only fields that were actually provided (present in
+-// `after`) and differ from `before` are included.
++// produces a short human-readable summary like "status: Not started →
++// In progress; due: not set → Dec 5, 2026". Only fields that were actually
++// provided (present in `after`) and differ from `before` are included. A
++// field may carry its own `format` to override the built-in display rules.
+ export function diffSummary(
+   before: Record<string, any>,
+   after: Record<string, any>,
+-  fields: { key: string; label: string }[]
++  fields: { key: string; label: string; format?: (value: any) => string }[]
+ ): string {
+   const changes: string[] = [];
+   for (const f of fields) {
+     if (after[f.key] === undefined) continue;
+-    const beforeVal = before[f.key] ?? "--";
+-    const afterVal = after[f.key] ?? "--";
+-    if (String(beforeVal) !== String(afterVal)) {
+-      changes.push(`${f.label}: ${beforeVal} -> ${afterVal}`);
++    const format = f.format ?? ((v: any) => formatDiffValue(f.key, v));
++    const beforeText = format(before[f.key]);
++    const afterText = format(after[f.key]);
++    if (beforeText !== afterText) {
++      changes.push(`${f.label}: ${beforeText} → ${afterText}`);
+     }
+   }
+   return changes.length ? changes.join("; ") : "details updated";
+diff --git a/netlify/lib/stageChecklist.ts b/netlify/lib/stageChecklist.ts
+index c796ae1..e41fc1b 100644
+--- a/netlify/lib/stageChecklist.ts
++++ b/netlify/lib/stageChecklist.ts
+@@ -120,7 +120,7 @@ function planItems(c: StageCounts, size: ProjectSize): ChecklistItem[] {
+   } else if (c.datedTasks > 0) {
+     schedule = {
+       id: "schedule", title: "Schedule dates set",
+-      meta: `${c.datedTasks} of ${c.tasks} tasks have dates. ${c.tasks - c.datedTasks} still need one.`,
++      meta: `${c.datedTasks} of ${c.tasks} tasks have dates. ${c.tasks - c.datedTasks} still ${c.tasks - c.datedTasks === 1 ? "needs" : "need"} one.`,
+       status: "partial", tab: "tasks", action: "Add dates",
+     };
+   } else {
+diff --git a/src/__tests__/billing.page.test.tsx b/src/__tests__/billing.page.test.tsx
+index b006ed0..d959f73 100644
+--- a/src/__tests__/billing.page.test.tsx
++++ b/src/__tests__/billing.page.test.tsx
+@@ -78,7 +78,7 @@ describe("Billing page", () => {
+       );
+     });
+     await flush();
+-    await act(async () => { button("Upgrade -- $290/year").click(); });
++    await act(async () => { button("Upgrade · $290/year").click(); });
+     await flush();
+     expect(container.textContent).toContain("CHECKOUT PAGE");
+     expect(calls.checkout).not.toHaveBeenCalled();
+diff --git a/src/__tests__/dashboardPolishD.test.ts b/src/__tests__/dashboardPolishD.test.ts
+index 2253a40..38094bd 100644
+--- a/src/__tests__/dashboardPolishD.test.ts
++++ b/src/__tests__/dashboardPolishD.test.ts
+@@ -23,7 +23,9 @@ describe("every register's quick-add starts collapsed when empty", () => {
+ describe("Dashboard polish", () => {
+   it("header shows decisions only; overdue stays as a KPI tile", async () => {
+     const src = await read("src/pages/Dashboard.tsx");
+-    expect(src).toContain("decisions await");
++    // v151 (Part F10): the header's decision fragment converged on
++    // "awaiting a response" everywhere.
++    expect(src).toContain("awaiting a response");
+     expect(src).not.toMatch(/overdue tasks<\/div>/);
+     expect(src).toContain("Overdue");
+   });
+diff --git a/src/__tests__/dateField.test.ts b/src/__tests__/dateField.test.ts
+index 203602c..b4bbf05 100644
+--- a/src/__tests__/dateField.test.ts
++++ b/src/__tests__/dateField.test.ts
+@@ -27,6 +27,8 @@ describe("formatDateForDisplay", () => {
+   it("renders ISO as M/D/YYYY", () => {
+     expect(formatDateForDisplay("2026-11-20")).toBe("11/20/2026");
+     expect(formatDateForDisplay("2027-01-05")).toBe("1/5/2027");
++    // v151 (Part A4): a stored timestamp renders as its date, never raw.
++    expect(formatDateForDisplay("2026-11-25T00:00:00.000Z")).toBe("11/25/2026");
+   });
+ 
+   it("passes through anything unrecognized", () => {
+diff --git a/src/__tests__/firstRun.test.tsx b/src/__tests__/firstRun.test.tsx
+index 88c4759..e3995e5 100644
+--- a/src/__tests__/firstRun.test.tsx
++++ b/src/__tests__/firstRun.test.tsx
+@@ -275,7 +275,7 @@ describe("Dashboard command center", () => {
+   }
+   afterEach(() => { delete (window as any).matchMedia; });
+ 
+-  async function render(wide: boolean, extra: { overdue?: number; decisions?: number; ms?: number } = {}, entry = "/app?view=dashboard") {
++  async function render(wide: boolean, extra: { overdue?: number; decisions?: number; ms?: number; keepHealth?: boolean } = {}, entry = "/app?view=dashboard") {
+     setMatchMedia(wide);
+     const projs = [
+       { ...project("p1", "Alpha"), open_decisions: extra.decisions ?? 0 },
+@@ -286,7 +286,7 @@ describe("Dashboard command center", () => {
+     base.projects[0].name = "Alpha"; base.projects[0].overdueTasks = extra.overdue ?? 0; base.projects[0].nextUp = "Add tasks";
+     base.projects[1].name = "Beta";
+     base.kpis.overdueTasks = extra.overdue ?? 0;
+-    if (extra.overdue) { base.kpis.atRiskProjects = 1; base.projects[0].health = "at_risk"; base.kpis.highIssues = 2; base.projects[0].highRisks = 1; }
++    if (extra.overdue && !extra.keepHealth) { base.kpis.atRiskProjects = 1; base.projects[0].health = "at_risk"; base.kpis.highIssues = 2; base.projects[0].highRisks = 1; }
+     base.upcomingMilestones = Array.from({ length: extra.ms ?? 0 }, (_, i) => ({ id: `m${i}`, title: `Milestone ${i}`, date: "2026-11-01", status: "planned", projectId: "p1", projectName: "Alpha" }));
+     calls.getPortfolio.mockResolvedValue(base);
+     await act(async () => {
+@@ -370,7 +370,7 @@ describe("Dashboard command center", () => {
+       ["Need attention", "0", "Everything is on track"],
+       ["Overdue tasks", "0", "Nothing is late"],
+       ["High-severity items", "0", "No high issues or risks"],
+-      ["Due in 7 days", "0", "No milestones this week"],
++      ["Milestones due in 7 days", "0", "No milestones this week"],
+     ]);
+     expect(container.querySelectorAll(".kp-bad").length).toBe(0);
+   });
+@@ -381,7 +381,7 @@ describe("Dashboard command center", () => {
+       ["Need attention", "1", "of 2 projects"],
+       ["Overdue tasks", "2", "across 1 project"],
+       ["High-severity items", "3", "2 issues, 1 risk"],
+-      ["Due in 7 days", "0", "No milestones this week"],
++      ["Milestones due in 7 days", "0", "No milestones this week"],
+     ]);
+     expect(container.querySelectorAll(".kp-bad").length).toBe(3);
+     expect(container.querySelector('a.kp-tile')?.getAttribute("href")).toBe("/app");
+@@ -391,6 +391,19 @@ describe("Dashboard command center", () => {
+     expect(chip("Needs attention").getAttribute("aria-pressed")).toBe("true");
+   });
+ 
++  it("agrees on the needs-attention count everywhere, even for an on-track project with an overdue task", async () => {
++    // v151 (Part A1): the tile used to count at-risk + off-track projects
++    // (0 here) while the section listed this project (1). One definition now.
++    await render(true, { overdue: 1, keepHealth: true });
++    expect(tiles()[0]).toEqual(["Need attention", "1", "of 2 projects"]);
++    expect(container.querySelector(".dash-attention .dash-sec-summary")?.textContent).toBe("1 project");
++    expect(container.querySelectorAll(".dash-attention-row").length).toBe(1);
++    expect(container.querySelector(".tw-sub")?.textContent).toContain("1 needs attention");
++    await act(async () => { (container.querySelector("button.kp-tile") as HTMLButtonElement).click(); });
++    await flush();
++    expect(chip("Needs attention").textContent).toContain("1");
++  });
++
+   const rowNames = () => [...container.querySelectorAll(".pw-row .pw-name")].map((n) => n.textContent);
+   const chip = (label: string) => [...container.querySelectorAll(".pw-filters button")].find((b) => b.textContent?.startsWith(label)) as HTMLButtonElement;
+ 
+diff --git a/src/__tests__/healthStrip.test.tsx b/src/__tests__/healthStrip.test.tsx
+index 4d5edbe..e747eba 100644
+--- a/src/__tests__/healthStrip.test.tsx
++++ b/src/__tests__/healthStrip.test.tsx
+@@ -43,15 +43,19 @@ describe("HealthStrip", () => {
+     expect(links.map((l) => l.textContent)).toEqual(["3 tasks overdue", "2 high or critical issues"]);
+     await act(async () => { (links[1] as HTMLButtonElement).click(); });
+     expect(open).toHaveBeenCalledWith("issues");
+-    expect(strip()!.querySelector(".hs-next")!.textContent).toContain("Electrical inspection");
++    // v151 (Part A2): the stage-checklist hint no longer renders in the
++    // strip -- inside the project it read as a second task list.
++    expect(strip()!.querySelector(".hs-next")).toBeNull();
++    expect(strip()!.textContent).not.toContain("Electrical inspection");
+   });
+ 
+-  it("is calm for a healthy project and shows what is next once", async () => {
++  it("is calm for a healthy project and leaves the stage-checklist hint to the Dashboard", async () => {
+     m.getPortfolio.mockResolvedValue({ projects: [summary({ nextUp: "Finalize launch copy" })] });
+     await mount();
+     expect(strip()!.querySelector(".pill")!.textContent).toBe("On track");
+-    expect(strip()!.textContent).toContain("Next up: Finalize launch copy");
+-    expect(strip()!.textContent!.match(/Next up/g)!.length).toBe(1);
++    expect(strip()!.textContent).toContain("Nothing flagged");
++    expect(strip()!.textContent).not.toContain("Finalize launch copy");
++    expect(strip()!.textContent).not.toContain("Next up");
+     expect(strip()!.querySelector("button")).toBeNull();
+   });
+ 
+diff --git a/src/__tests__/nextStep.test.ts b/src/__tests__/nextStep.test.ts
+index 2bb2666..e943e71 100644
+--- a/src/__tests__/nextStep.test.ts
++++ b/src/__tests__/nextStep.test.ts
+@@ -11,7 +11,9 @@ function input(overrides: Partial<NextStepInput> = {}): NextStepInput {
+     urgentIssues: [],
+     urgentRisks: [],
+     staleTasks: [],
+-    taskCount: 3,
++    totalTaskCount: 3,
++    openTasks: [],
++    openTaskCount: 0,
+     datedTaskCount: 1,
+     stakeholderCount: 1,
+     daysSinceCheckIn: 2,
+@@ -21,7 +23,7 @@ function input(overrides: Partial<NextStepInput> = {}): NextStepInput {
+ 
+ describe("computeNextStep", () => {
+   it("leads a brand-new project to its first task", () => {
+-    const step = computeNextStep(input({ taskCount: 0, datedTaskCount: 0, stakeholderCount: 0, daysSinceCheckIn: null }), NOW);
++    const step = computeNextStep(input({ totalTaskCount: 0, datedTaskCount: 0, stakeholderCount: 0, daysSinceCheckIn: null }), NOW);
+     expect(step.kind).toBe("first-task");
+     expect(step.action).toMatchObject({ type: "tab", tab: "tasks" });
+   });
+@@ -52,7 +54,7 @@ describe("computeNextStep", () => {
+ 
+   it("puts a blocked task ahead of setup steps", () => {
+     const step = computeNextStep(input({
+-      taskCount: 0, datedTaskCount: 0, stakeholderCount: 0, daysSinceCheckIn: null,
++      totalTaskCount: 0, datedTaskCount: 0, stakeholderCount: 0, daysSinceCheckIn: null,
+       blockedTasks: [{ id: "t1", title: "Venue contract", updated_at: "2026-11-03T12:00:00Z" }],
+     }), NOW);
+     expect(step.kind).toBe("blocked");
+@@ -90,4 +92,51 @@ describe("computeNextStep", () => {
+     expect(step.action).toBeNull();
+     expect(step.meta).toContain("5 days");
+   });
++
++  // v151: open work used to fall through to "You're all set" -- the card now
++  // points at the next open task, and quiet means no open tasks at all.
++  it("points at the next open task when work is under way", () => {
++    const step = computeNextStep(input({
++      openTasks: [{ id: "t9", title: "Order catering", status: "not_started", due_date: "2026-11-20" }],
++      openTaskCount: 3,
++      daysSinceCheckIn: 2,
++    }), NOW);
++    expect(step.kind).toBe("next-task");
++    expect(step.quiet).toBe(false);
++    expect(step.title).toBe("Order catering");
++    expect(step.meta).toContain("Due Nov 20");
++    expect(step.meta).toContain("3 open tasks");
++    expect(step.action).toMatchObject({ type: "tab", tab: "tasks", highlightId: "t9" });
++  });
++
++  it("prefers the server's order: the first open task wins as returned", () => {
++    const step = computeNextStep(input({
++      openTasks: [
++        { id: "t8", title: "In progress one", status: "in_progress", due_date: null },
++        { id: "t9", title: "Not started one", status: "not_started", due_date: null },
++      ],
++      openTaskCount: 2,
++    }), NOW);
++    expect(step.kind).toBe("next-task");
++    expect(step.title).toBe("In progress one");
++    expect(step.meta).toContain("In progress");
++  });
++
++  it("acknowledges today's check-in in the meta instead of going quiet", () => {
++    const step = computeNextStep(input({
++      openTasks: [{ id: "t9", title: "Verify v150", status: "in_progress", due_date: null }],
++      openTaskCount: 1,
++      daysSinceCheckIn: 0,
++    }), NOW);
++    expect(step.kind).toBe("next-task");
++    expect(step.meta).toContain("Checked in today");
++  });
++
++  it("only goes quiet when there are no open tasks", () => {
++    const step = computeNextStep(input({
++      totalTaskCount: 5, openTasks: [], openTaskCount: 0, daysSinceCheckIn: 0,
++    }), NOW);
++    expect(step.kind).toBe("quiet");
++    expect(step.meta).toContain("You checked in today");
++  });
+ });
+diff --git a/src/__tests__/projectReason.test.ts b/src/__tests__/projectReason.test.ts
+index 5cc0414..6fd301e 100644
+--- a/src/__tests__/projectReason.test.ts
++++ b/src/__tests__/projectReason.test.ts
+@@ -20,7 +20,7 @@ describe("projectReason", () => {
+     expect(projectReason({ ...base, health: "off_track" })).toMatch(/^Off track/);
+   });
+   it("says something calm for a healthy project", () => {
+-    expect(projectReason({ ...base, nextUp: "Ship it" })).toBe("Next up: Ship it");
++    expect(projectReason({ ...base, nextUp: "Ship it" })).toBe("Next up in Execute: Ship it");
+     expect(projectReason(base)).toBe("Nothing flagged");
+     expect(projectReason({ ...base, totalTasks: 0 })).toBe("No tasks yet");
+   });
+diff --git a/src/components/AppSidebar.tsx b/src/components/AppSidebar.tsx
+index 96a26f6..654cf28 100644
+--- a/src/components/AppSidebar.tsx
++++ b/src/components/AppSidebar.tsx
+@@ -5,7 +5,7 @@ import { Wordmark } from "./Wordmark";
+ import { FeedbackModal } from "./FeedbackModal";
+ import { NavIcon } from "./NavIcon";
+ import { NotificationBell } from "./NotificationBell";
+-import { readSidebarCollapsed, writeSidebarCollapsed } from "../lib/sidebarState";
++import { readSidebarCollapsed, writeSidebarCollapsed, readNavGroupCollapsed, writeNavGroupCollapsed } from "../lib/sidebarState";
+ 
+ /** Collapsible nav section used by both the sidebar's own global group and
+  * ProjectHome's secondary (non-pill-bar) groups -- clicking the label
+@@ -26,20 +26,30 @@ export function NavGroup({
+    * the user's own toggle -- it only ever forces open, never closed. */
+   forceExpanded?: boolean;
+ }) {
+-  const [collapsed, setCollapsed] = useState(defaultCollapsed);
++  // v151 (Part E1): the stored choice for this group wins over the default;
++  // toggling stores the new one. Groups the user never touched start from
++  // defaultCollapsed, exactly as before.
++  const [collapsed, setCollapsed] = useState<boolean>(() => readNavGroupCollapsed(label) ?? defaultCollapsed);
+ 
+   useEffect(() => {
+     if (forceExpanded) setCollapsed(false);
+   }, [forceExpanded]);
+ 
++  function toggle() {
++    setCollapsed((c) => {
++      writeNavGroupCollapsed(label, !c);
++      return !c;
++    });
++  }
++
+   return (
+     <div className={collapsed ? "side-nav-group collapsed" : "side-nav-group"}>
+       <div
+         className="side-nav-label collapsible"
+-        onClick={() => setCollapsed((c) => !c)}
++        onClick={toggle}
+         role="button"
+         tabIndex={0}
+-        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setCollapsed((c) => !c); } }}
++        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } }}
+       >
+         {label}
+         <span className="side-nav-chevron" aria-hidden="true">▾</span>
+@@ -166,7 +176,12 @@ export function AppSidebar({ children, menuLabel = "Menu" }: { children?: ReactN
+       </div>
+ 
+       <nav className="side-nav" id="sidebar-nav" aria-label="Main">
+-        <NavGroup label="Workspace" defaultCollapsed={!!children}>
++        {/* v151 (Part E1): Workspace starts expanded everywhere, project
++            pages included -- the old defaultCollapsed={!!children} hid the
++            global nav behind an unmarked header on exactly the pages where
++            people need it to escape the project. A stored user choice
++            still wins (see NavGroup). */}
++        <NavGroup label="Workspace">
+           <Link to="/app" className={pathname === "/app" ? "side-tab active" : "side-tab"}>
+             <NavIcon name="today" active={pathname === "/app"} />
+             Today
+diff --git a/src/components/DateField.tsx b/src/components/DateField.tsx
+index 44d96ed..8d230ba 100644
+--- a/src/components/DateField.tsx
++++ b/src/components/DateField.tsx
+@@ -29,9 +29,13 @@ export function parseDateInput(text: string): string | null {
+   return `${y}-${pad(m)}-${pad(d)}`;
+ }
+ 
+-/** YYYY-MM-DD -> M/D/YYYY for display in the text box. */
++/** YYYY-MM-DD -> M/D/YYYY for display in the text box. Tolerates a full
++ *  ISO timestamp ("2026-11-25T00:00:00.000Z"): the date part is what a date
++ *  field means. Some stored due/start values carry a time component, and
++ *  v150's strict regex passed them through raw -- the walkthrough caught
++ *  the task edit drawer showing the whole timestamp (v151, Part A4). */
+ export function formatDateForDisplay(iso: string): string {
+-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
++  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso).slice(0, 10));
+   if (!m) return iso;
+   return `${Number(m[2])}/${Number(m[3])}/${m[1]}`;
+ }
+@@ -118,7 +122,7 @@ export function DateField({
+         tabIndex={-1}
+         aria-hidden="true"
+         aria-label="Calendar date"
+-        value={value}
++        value={String(value).slice(0, 10)}
+         onChange={(e) => {
+           setError("");
+           onChange(e.target.value);
+diff --git a/src/components/HealthStrip.tsx b/src/components/HealthStrip.tsx
+index 3578c58..2194a3f 100644
+--- a/src/components/HealthStrip.tsx
++++ b/src/components/HealthStrip.tsx
+@@ -49,15 +49,21 @@ export function HealthStrip({ projectId, refreshKey, onOpenTab }: { projectId: s
+       </div>
+     );
+   }
+-  const parts = projectReasonParts(summary);
++  const allParts = projectReasonParts(summary);
+   const isNew = summary.totalTasks === 0 && summary.health === "on_track";
+-  const nextUp = summary.nextUp && !parts.some((p) => p.text.startsWith("Next up")) ? summary.nextUp : null;
++  // v151 (Part A2): the stage-checklist hint does not belong in the health
++  // strip -- inside the project it read as a second, disagreeing task list
++  // (the Next Step card owns "what's next" here). The hint stays on the
++  // Dashboard rows, where it names its stage. If it was the only part, the
++  // strip falls back to a plain "Nothing flagged".
++  const parts = allParts.filter((p) => !p.nextUp);
++  const shownParts = parts.length > 0 ? parts : [{ text: "Nothing flagged" }];
+ 
+   return (
+     <div className="hs-strip" role="status" aria-label="Project health">
+       <span className={`pill ${isNew ? "hs-new" : PILL[summary.health]}`}>{isNew ? "New" : LABEL[summary.health]}</span>
+       <span className="hs-why">
+-        {parts.map((p, i) => (
++        {shownParts.map((p, i) => (
+           <span key={p.text}>
+             {i > 0 && ", "}
+             {p.tab ? (
+@@ -82,7 +88,6 @@ export function HealthStrip({ projectId, refreshKey, onOpenTab }: { projectId: s
+           <span className="muted">No status stated yet</span>
+         )}
+       </span>
+-      {nextUp && <span className="hs-next muted" title={nextUp}><span>Next up:</span> {nextUp}</span>}
+     </div>
+   );
+ }
+diff --git a/src/components/NotificationBell.tsx b/src/components/NotificationBell.tsx
+index d5a5809..c33ed0b 100644
+--- a/src/components/NotificationBell.tsx
++++ b/src/components/NotificationBell.tsx
+@@ -65,6 +65,12 @@ export function NotificationBell() {
+   // Reading the What's new page counts as seeing every entry on it.
+   useEffect(() => {
+     if (pathname === "/app/whats-new" && LATEST_VERSION && newEntries.length > 0) {
++      // v151 (Part E2): remember WHICH entries this visit just marked seen,
++      // so the page can flag exactly those "New" instead of the badge
++      // vanishing with no trace of what was new.
++      try {
++        sessionStorage.setItem("tasketra.whatsNewJustSeen", JSON.stringify(newEntries.map((c) => c.version)));
++      } catch { /* the pills are a nicety; losing them is fine */ }
+       setSeenVersion(LATEST_VERSION);
+       api.setWhatsNewSeen(LATEST_VERSION).catch(() => {});
+     }
+@@ -171,7 +177,7 @@ export function NotificationBell() {
+             <ul className="notif-list">
+               {shownEntries.map((c) => (
+                 <li key={c.version}>
+-                  <Link to="/app/whats-new" className="notif-item notif-unread">
++                  <Link to={`/app/whats-new#${c.version}`} className="notif-item notif-unread">
+                     <span className="notif-dot" aria-hidden="true" />
+                     <span className="notif-text">New in Tasketra: {c.title}</span>
+                     <span className="notif-when muted">{c.version}</span>
+diff --git a/src/index.css b/src/index.css
+index fda00f4..4f411f1 100644
+--- a/src/index.css
++++ b/src/index.css
+@@ -458,7 +458,7 @@ textarea { resize: vertical; }
+ .btn-danger:hover { background: #742F22; box-shadow: none; transform: translateY(-1px); }
+ .btn-danger:active { transform: translateY(0); box-shadow: none; }
+ .btn-block { width: 100%; margin-top: 16px; }
+-.btn:disabled { opacity: 0.55; cursor: default; transform: none; box-shadow: none; }
++.btn:disabled { opacity: 0.55; cursor: not-allowed; transform: none; box-shadow: none; }
+ 
+ /* --- Confirm dialog --- */
+ .confirm-overlay {
+@@ -1447,7 +1447,7 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
+ 
+ /* --- What's new --- */
+ .whats-new-list { display: flex; flex-direction: column; gap: 4px; max-width: 640px; }
+-.whats-new-entry { padding: 18px 0; border-bottom: 1px solid var(--border); }
++.whats-new-entry { padding: 18px 0; border-bottom: 1px solid var(--border); scroll-margin-top: 16px; }
+ .whats-new-entry:last-child { border-bottom: none; }
+ .whats-new-meta { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+ .whats-new-entry h4, .whats-new-entry h2.heading-sm { margin: 0 0 6px; }
+diff --git a/src/lib/api.ts b/src/lib/api.ts
+index 679d291..7e97476 100644
+--- a/src/lib/api.ts
++++ b/src/lib/api.ts
+@@ -269,6 +269,14 @@ export type RiskTaskLink = { id: string; risk_id: string; task_id: string; risk_
+ export type IssueTaskLink = { id: string; issue_id: string; task_id: string; issue_title: string; task_title: string };
+ export type TaskTaskLink = { id: string; task_id: string; depends_on_task_id: string; task_title: string; depends_on_title: string };
+ 
++export type DecisionRecord = {
++  id: string;
++  chosen_option: string;
++  responder_name: string;
++  responded_at: string;
++  confirmed_at: string | null;
++};
++
+ export type Decision = {
+   id: string;
+   title: string;
+@@ -278,9 +286,14 @@ export type Decision = {
+   public_token: string;
+   status: "open" | "resolved";
+   created_at: string;
++  // The confirmed outcome (v151): for a resolved decision, the record the
++  // owner confirmed -- or, for pre-v151 decisions, their single record.
+   chosen_option: string | null;
+   responder_name: string | null;
+   responded_at: string | null;
++  outcome_confirmed_at: string | null;
++  // Every response collected so far, oldest first.
++  records: DecisionRecord[];
+   recipients: { id: string; name: string }[];
+ };
+ 
+@@ -675,12 +688,16 @@ export type TodayData = {
+   awaitingDecisions: { id: string; title: string; created_at: string; deadline: string | null; recipients: string[]; public_token: string }[];
+   urgentIssues: { id: string; title: string; severity: string; owner_name: string | null; status: Issue["status"] }[];
+   urgentRisks: { id: string; title: string; probability: string; impact: string; owner_name: string | null; status: Risk["status"] }[];
+-  taskCount: number;
++  totalTaskCount: number;
+   // v150: Next Step card inputs (see src/lib/nextStep.ts).
+   overdueTasks: { id: string; title: string; due_date: string | null }[];
+   datedTaskCount: number;
+   stakeholderCount: number;
+   lastCheckInAt: string | null;
++  // v151: open work for the Next Step card's "work under way" state. Open =
++  // status != 'done' and not deleted; the shared definition (see today.mts).
++  openTasks: { id: string; title: string; status: string; due_date: string | null }[];
++  openTaskCount: number;
+ };
+ 
+ export type WeeklyReport = {
+@@ -692,7 +709,7 @@ export type WeeklyReport = {
+   issuesResolved: { id: string; title: string; severity: string; resolution: string | null; resolved_at: string }[];
+   risksOpened: { id: string; title: string; probability: string; impact: string; owner_name: string | null; created_at: string }[];
+   risksResolved: { id: string; title: string; probability: string; impact: string; resolved_at: string }[];
+-  decisionsMade: { id: string; title: string; chosen_option: string; responder_name: string; responded_at: string }[];
++  decisionsMade: { id: string; title: string; chosen_option: string; responder_name: string; responded_at: string; confirmed_at: string | null; owner_name: string }[];
+   statusUpdates: { id: string; body: string; health: "on_track" | "at_risk" | "off_track" | null; created_at: string }[];
+   snapshot: {
+     open_tasks: number;
+@@ -1093,6 +1110,10 @@ export const api = {
+   deleteDecision: (id: string) => request<{ ok: true }>(`/decisions?id=${id}`, { method: "DELETE" }),
+   restoreDecision: (id: string) =>
+     request<{ ok: true }>("/decisions", { method: "PATCH", body: JSON.stringify({ id, restore: true }) }),
++  // v151 (Part D): confirm an existing response as the outcome, or record
++  // an outcome directly. Only this resolves the decision.
++  confirmDecision: (id: string, confirm: { recordId: string } | { chosenOption: string }) =>
++    request<{ ok: true }>("/decisions", { method: "PATCH", body: JSON.stringify({ id, action: "confirm", ...confirm }) }),
+ 
+   listIssues: (projectId: string) => request<{ issues: Issue[] }>(`/issues?projectId=${projectId}`),
+   createIssue: (projectId: string, title: string, description?: string, severity?: Issue["severity"], ownerName?: string, status?: Issue["status"]) =>
+diff --git a/src/lib/nextStep.ts b/src/lib/nextStep.ts
+index 1880267..b9f5d43 100644
+--- a/src/lib/nextStep.ts
++++ b/src/lib/nextStep.ts
+@@ -2,7 +2,8 @@
+ // home leads with this and nothing else competes with it: problems first
+ // (blocked, overdue, waiting, urgent), then the setup path for a young
+ // project (first task, first date, first stakeholder, first check-in), then
+-// staleness, then a quiet all-set state. Pure: the caller passes `now`.
++// staleness, then the next open task when work is simply under way (v151),
++// then a quiet all-set state. Pure: the caller passes `now`.
+ 
+ export type NextStepAction =
+   | { type: "tab"; tab: string; highlightId?: string; button: string }
+@@ -10,7 +11,7 @@ export type NextStepAction =
+   | null;
+ 
+ export type NextStep = {
+-  kind: "blocked" | "overdue" | "awaiting" | "issue" | "risk" | "first-task" | "first-date" | "first-stakeholder" | "checkin" | "stale" | "quiet";
++  kind: "blocked" | "overdue" | "awaiting" | "issue" | "risk" | "first-task" | "first-date" | "first-stakeholder" | "checkin" | "stale" | "next-task" | "quiet";
+   title: string;
+   meta: string;
+   action: NextStepAction;
+@@ -24,9 +25,14 @@ export type NextStepInput = {
+   urgentIssues: { id: string; title: string }[];
+   urgentRisks: { id: string; title: string }[];
+   staleTasks: { id: string; title: string; updated_at: string }[];
+-  taskCount: number;
++  /** ALL non-deleted tasks, done included (v151 rename of `taskCount`). */
++  totalTaskCount: number;
+   datedTaskCount: number;
+   stakeholderCount: number;
++  /** Open tasks (status != 'done', not deleted), pre-sorted by the server:
++   * dated first by due date, then in-progress before not-started. */
++  openTasks: { id: string; title: string; status: string; due_date: string | null }[];
++  openTaskCount: number;
+   /** Whole days since the newest status update, or null when there has never been one. */
+   daysSinceCheckIn: number | null;
+ };
+@@ -46,6 +52,18 @@ function daysLate(dueDate: string | null, now: Date): number {
+ 
+ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+ 
++const MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
++
++/** "Due today" / "Due tomorrow" / "Due Nov 20" for a YYYY-MM-DD due date. */
++function dueLabel(dueDate: string, now: Date): string {
++  const due = new Date(`${dueDate.slice(0, 10)}T00:00:00`);
++  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
++  const days = Math.round((due.getTime() - startOfToday.getTime()) / 86_400_000);
++  if (days <= 0) return "Due today";
++  if (days === 1) return "Due tomorrow";
++  return `Due ${MONTHS_SHORT[due.getMonth()]} ${due.getDate()}`;
++}
++
+ export function computeNextStep(input: NextStepInput, now: Date = new Date()): NextStep {
+   const blocked = input.blockedTasks[0];
+   if (blocked) {
+@@ -106,7 +124,7 @@ export function computeNextStep(input: NextStepInput, now: Date = new Date()): N
+     };
+   }
+ 
+-  if (input.taskCount === 0) {
++  if (input.totalTaskCount === 0) {
+     return {
+       kind: "first-task",
+       title: "Add your first task",
+@@ -160,6 +178,25 @@ export function computeNextStep(input: NextStepInput, now: Date = new Date()): N
+     };
+   }
+ 
++  // v151: nothing is wrong and the project is set up, but work is under way.
++  // Point at the next open task instead of declaring the project finished --
++  // "quiet" now truly means there is no open task left. A check-in posted
++  // today is acknowledged in the meta rather than being the whole message.
++  const nextTask = input.openTasks[0];
++  if (nextTask) {
++    const checkedIn = input.daysSinceCheckIn === 0 ? "Checked in today · " : "";
++    const count = input.openTaskCount > 1 ? ` · ${plural(input.openTaskCount, "open task")}` : "";
++    return {
++      kind: "next-task",
++      title: nextTask.title,
++      meta: nextTask.due_date
++        ? `${checkedIn}${dueLabel(nextTask.due_date, now)}${count}`
++        : `${checkedIn}${nextTask.status === "in_progress" ? "In progress" : "Not started"}${count}`,
++      action: { type: "tab", tab: "tasks", highlightId: nextTask.id, button: "Open" },
++      quiet: false,
++    };
++  }
++
+   const daysUntilNext = 7 - (input.daysSinceCheckIn ?? 0);
+   return {
+     kind: "quiet",
+diff --git a/src/lib/projectReason.ts b/src/lib/projectReason.ts
+index e2bb3cd..4069dae 100644
+--- a/src/lib/projectReason.ts
++++ b/src/lib/projectReason.ts
+@@ -9,7 +9,17 @@ type Health = PortfolioProjectSummary["health"];
+ 
+ const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
+ 
+-export type ReasonPart = { text: string; tab?: string };
++export type ReasonPart = { text: string; tab?: string; nextUp?: boolean };
++
++// v151 (Part A2): nextUp is the first unfinished item on the project's
++// current STAGE checklist -- not a task. Wherever it is shown it names its
++// stage so it cannot be mistaken for one. (Same labels as StageRail.)
++const STAGE_LABEL: Record<PortfolioProjectSummary["stage"], string> = {
++  initiate: "Initiate",
++  plan: "Plan",
++  execute: "Execute",
++  close: "Close",
++};
+ 
+ /** The same reasons as projectReason, as pieces, so a screen can link each one to the place that fixes it. */
+ export function projectReasonParts(p: PortfolioProjectSummary, openDecisions = 0): ReasonPart[] {
+@@ -23,7 +33,7 @@ export function projectReasonParts(p: PortfolioProjectSummary, openDecisions = 0
+   if (p.health === "off_track") return [{ text: "Off track: a critical issue, an off-track objective, or a badly overrun score" }];
+   if (p.health === "at_risk") return [{ text: "Health score is at risk" }];
+   if (p.totalTasks === 0) return [{ text: "No tasks yet", tab: "tasks" }];
+-  return [{ text: p.nextUp ? `Next up: ${p.nextUp}` : "Nothing flagged" }];
++  return [{ text: p.nextUp ? `Next up in ${STAGE_LABEL[p.stage]}: ${p.nextUp}` : "Nothing flagged", ...(p.nextUp ? { nextUp: true } : {}) }];
+ }
+ 
+ export function projectReason(p: PortfolioProjectSummary, openDecisions = 0): string {
+diff --git a/src/lib/sidebarState.ts b/src/lib/sidebarState.ts
+index bb81958..20bd145 100644
+--- a/src/lib/sidebarState.ts
++++ b/src/lib/sidebarState.ts
+@@ -18,3 +18,25 @@ export function writeSidebarCollapsed(collapsed: boolean): void {
+     // Not remembering the choice is fine.
+   }
+ }
++
++// v151 (Part E1): nav-group collapse is remembered per group label, so a
++// group the user closed stays closed -- and one they never touched starts
++// from its default. Returns null when nothing was stored.
++const NAV_GROUP_KEY = "tasketra.navGroupCollapsed.";
++
++export function readNavGroupCollapsed(label: string): boolean | null {
++  try {
++    const v = window.localStorage.getItem(NAV_GROUP_KEY + label);
++    return v === null ? null : v === "1";
++  } catch {
++    return null;
++  }
++}
++
++export function writeNavGroupCollapsed(label: string, collapsed: boolean): void {
++  try {
++    window.localStorage.setItem(NAV_GROUP_KEY + label, collapsed ? "1" : "0");
++  } catch {
++    // Not remembering the choice is fine.
++  }
++}
+diff --git a/src/lib/whatsNewData.ts b/src/lib/whatsNewData.ts
+index 6cb0f16..a6d149e 100644
+--- a/src/lib/whatsNewData.ts
++++ b/src/lib/whatsNewData.ts
+@@ -9,6 +9,12 @@ export type ChangeEntry = { version: string; date: string; title: string; body:
+ // about; skip pure bug fixes and internal refactors that don't change what
+ // they can do.
+ export const CHANGES: ChangeEntry[] = [
++  {
++    version: "v151",
++    date: "November 2026",
++    title: "Counts that agree, and decisions you confirm",
++    body: "Your counts now agree everywhere, the Next Step card points at your next open task instead of going quiet, and activity reads like people wrote it. Decision links now collect responses for you to confirm, instead of the first reply deciding it: responses gather on the decision card, and nothing counts as decided until you confirm the outcome.",
++  },
+   {
+     version: "v150",
+     date: "November 2026",
+diff --git a/src/pages/Account.tsx b/src/pages/Account.tsx
+index 96e9a79..8a62bd8 100644
+--- a/src/pages/Account.tsx
++++ b/src/pages/Account.tsx
+@@ -179,7 +179,7 @@ export default function Account() {
+             <input id="f-account-172" type="text" value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} placeholder="e.g. Senior PM" />
+             <label htmlFor="f-account-174">Timezone</label>
+             <select id="f-account-174" value={timezone} onChange={(e) => setTimezone(e.target.value)}>
+-              <option value="">Not set</option>
++              <option value="">Set timezone…</option>
+               {TIMEZONES.map((tz) => (
+                 <option key={tz} value={tz}>{tz}</option>
+               ))}
+diff --git a/src/pages/Billing.tsx b/src/pages/Billing.tsx
+index a1b0693..2f3c363 100644
+--- a/src/pages/Billing.tsx
++++ b/src/pages/Billing.tsx
+@@ -196,7 +196,7 @@ export default function Billing() {
+               )}
+               <p className="muted">
+                 Unlimited projects, up to 25 team members per project, and 25GB of document storage.
+-                Update your card, view invoices, switch billing interval, or cancel any time -- no need to contact us.
++                Update your card, view invoices, switch billing interval, or cancel any time, no need to contact us.
+               </p>
+               <button className="btn btn-primary" type="button" disabled={loadingPortal} onClick={manageBilling}>
+                 {loadingPortal ? "Opening..." : plan === "past_due" ? "Update payment method" : "Manage billing"}
+@@ -209,8 +209,8 @@ export default function Billing() {
+               <p className="muted">
+                 Up to 3 active projects (finished projects don't count), up to 25 team members per project, and 2GB of document storage.
+                 {trialOffer
+-                  ? " Upgrade to Pro for unlimited projects and 25GB of storage -- 14 days free, cancel any time from this page."
+-                  : " Upgrade to Pro for unlimited projects and 25GB of storage. Cancel any time from this page."}
++                  ? " Upgrade to Pro for unlimited projects and 25GB of storage, 14 days free, cancel any time from this page."
++                  : " Upgrade to Pro for unlimited projects and 25GB of storage."}
+               </p>
+               {details?.hasBillingAccount && (
+                 <p className="muted">
+@@ -223,14 +223,14 @@ export default function Billing() {
+                   type="button"
+                   onClick={() => upgrade("month")}
+                 >
+-                  Upgrade -- $29/month
++                  Upgrade · $29/month
+                 </button>
+                 <button
+                   className="btn btn-ghost"
+                   type="button"
+                   onClick={() => upgrade("year")}
+                 >
+-                  Upgrade -- $290/year (2 months free)
++                  Upgrade · $290/year (2 months free)
+                 </button>
+               </div>
+             </>
+diff --git a/src/pages/Dashboard.tsx b/src/pages/Dashboard.tsx
+index b02e881..5cc75d0 100644
+--- a/src/pages/Dashboard.tsx
++++ b/src/pages/Dashboard.tsx
+@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
+ import { Link, useNavigate, useSearchParams } from "react-router-dom";
+ import { api, ApiError, type Project, type ProjectStage, type PortfolioData, type PortfolioProjectSummary, type Task, type Issue, type UserTemplate, type MyTodayData, type CalendarItem } from "../lib/api";
+ import { AppSidebar } from "../components/AppSidebar";
+-import { StageChip, STAGES } from "../components/StageRail";
++import { StageChip, STAGES, STAGE_LABEL } from "../components/StageRail";
+ import { ProjectSetupPicker } from "../components/ProjectSetup";
+ import type { ProjectSize, ProjectApproach } from "../lib/projectView";
+ import { PROJECT_TEMPLATES, getTemplate, isTemplateId, templateSummary } from "../lib/projectTemplates";
+@@ -157,9 +157,13 @@ function jumpTo(sectionId: string) {
+   document.getElementById(`dash-sec-${sectionId}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+ }
+ 
+-function PortfolioOverview({ data, wide, onShowAttention, glance }: { data: PortfolioData; wide: boolean; onShowAttention: () => void; glance?: ReactNode }) {
++function PortfolioOverview({ data, wide, onShowAttention, glance, attentionCount }: { data: PortfolioData; wide: boolean; onShowAttention: () => void; glance?: ReactNode; attentionCount: number }) {
+   const { kpis } = data;
+-  const needAttention = kpis.atRiskProjects + kpis.offTrackProjects;
++  // v151 (Part A1): ONE definition of "needs attention" -- the
++  // buildNeedsAttention list the section below renders. The old tile counted
++  // at-risk + off-track projects, which disagreed with the section (an
++  // on-track project with an overdue task was in one and not the other).
++  const needAttention = attentionCount;
+   const overdueProjects = data.projects.filter((x) => x.overdueTasks > 0).length;
+   const highRisks = data.projects.reduce((n, x) => n + x.highRisks, 0);
+   const highItems = kpis.highIssues + highRisks;
+@@ -191,7 +195,7 @@ function PortfolioOverview({ data, wide, onShowAttention, glance }: { data: Port
+           <span className="kp-sub">{highItems === 0 ? "No high issues or risks" : `${kpis.highIssues} ${kpis.highIssues === 1 ? "issue" : "issues"}, ${highRisks} ${highRisks === 1 ? "risk" : "risks"}`}</span>
+         </button>
+         <button type="button" className="kp-tile" onClick={() => jumpTo("milestones")}>
+-          <span className="kp-label">Due in 7 days</span>
++          <span className="kp-label">Milestones due in 7 days</span>
+           <span className="kp-value">{dueSoon}</span>
+           <span className="kp-sub">{dueSoon === 0 ? "No milestones this week" : dueSoon === 1 ? "milestone" : "milestones"}</span>
+         </button>
+@@ -449,6 +453,9 @@ export default function Dashboard() {
+         Object.fromEntries(projects.map((p) => [p.id, p.open_decisions ?? 0])),
+       )
+     : [];
++  // v151 (Part A2): the attention rows' "Next up" hint names its stage --
++  // it is the first unfinished item on that stage's checklist, not a task.
++  const stageById = new Map((portfolio?.projects ?? []).map((p) => [p.id, p.stage]));
+ 
+   // v142 "Needs a look" context: ages and quiet spells per project, each one
+   // only claimed when the data behind it is complete (see lib/needsALook.ts).
+@@ -667,7 +674,9 @@ export default function Dashboard() {
+ 
+   const totalOpenDecisions = projects.reduce((sum, p) => sum + (p.open_decisions || 0), 0);
+ 
+-  const attentionCount = listSummaries.filter((x) => x.health !== "on_track" && !x.closed_at).length;
++  // v151 (Part A1): the subtitle uses the same single needs-attention
++  // definition as the tile, chip and section heading (the attention list).
++  const attentionCount = attention.length;
+   const byId = new Map(listSummaries.map((x) => [x.id, x]));
+   const rows = sortByHealth(
+     projects.map((p) => {
+@@ -693,7 +702,7 @@ export default function Dashboard() {
+     ? "Loading your projects..."
+     : projects.length === 0
+     ? "No projects yet"
+-    : `${projects.length} ${projects.length === 1 ? "project" : "projects"} · ${attentionCount === 0 ? "all on track" : `${attentionCount} ${attentionCount === 1 ? "needs" : "need"} attention`}${totalOpenDecisions > 0 ? ` · ${totalOpenDecisions} ${totalOpenDecisions === 1 ? "decision awaits" : "decisions await"} a response` : ""}`;
++    : `${projects.length} ${projects.length === 1 ? "project" : "projects"} · ${attentionCount === 0 ? "all on track" : `${attentionCount} ${attentionCount === 1 ? "needs" : "need"} attention`}${totalOpenDecisions > 0 ? ` · ${totalOpenDecisions} ${totalOpenDecisions === 1 ? "decision" : "decisions"} awaiting a response` : ""}`;
+ 
+   const deletedSection = deletedProjects.length > 0 && (
+     <div style={{ marginTop: 32 }}>
+@@ -889,7 +898,7 @@ export default function Dashboard() {
+               <div className="pw-filters" role="group" aria-label="Filter projects">
+                 {([
+                   ["all", "All", rows.length],
+-                  ["attention", "Needs attention", rows.filter((r) => r.health !== "on_track" && !r.project.closed_at).length],
++                  ["attention", "Needs attention", attention.length],
+                   ["on_track", "On track", rows.filter((r) => r.health === "on_track").length],
+                 ] as const).map(([key, label, n]) => (
+                   <button
+@@ -1054,7 +1063,7 @@ export default function Dashboard() {
+                           <span key={r.key} className={`pill pill-${r.tone}`} title={r.explain}>{r.label}<span className="sr-only">. {r.explain}</span></span>
+                         ))}
+                       </span>
+-                      {a.nextUp && <span className="dash-attention-next muted"><span>Next up</span> {a.nextUp}</span>}
++                      {a.nextUp && <span className="dash-attention-next muted"><span>Next up{stageById.get(a.id) ? ` in ${STAGE_LABEL[stageById.get(a.id)!]}` : ""}</span> {a.nextUp}</span>}
+                     </li>
+                   ))}
+                 </ul>
+@@ -1079,7 +1088,7 @@ export default function Dashboard() {
+           </div>
+         ) : portfolio && projects.length > 0 ? (
+           <div style={{ opacity: portfolioLoading ? 0.6 : 1, transition: "opacity 120ms ease" }}>
+-            <PortfolioOverview data={portfolio} wide={wide} onShowAttention={() => { setListFilter("attention"); setView("list"); }} glance={glanceBand} />
++            <PortfolioOverview data={portfolio} wide={wide} onShowAttention={() => { setListFilter("attention"); setView("list"); }} glance={glanceBand} attentionCount={attention.length} />
+           </div>
+         ) : null}
+ 
+diff --git a/src/pages/DecisionPublic.tsx b/src/pages/DecisionPublic.tsx
+index 1edae46..b7ff40f 100644
+--- a/src/pages/DecisionPublic.tsx
++++ b/src/pages/DecisionPublic.tsx
+@@ -14,6 +14,10 @@ export default function DecisionPublic() {
+   const [error, setError] = useState<string | null>(null);
+   const [loading, setLoading] = useState(true);
+   const [submitting, setSubmitting] = useState(false);
++  // v151: a just-submitted RESPONSE is not the decision yet -- the project
++  // owner confirms the outcome. The thanks state says so; only a record
++  // loaded already-resolved shows the decided state.
++  const [justSubmitted, setJustSubmitted] = useState(false);
+ 
+   useDocumentTitle(decision?.title ?? "Decision request");
+   useEffect(() => {
+@@ -36,6 +40,7 @@ export default function DecisionPublic() {
+     try {
+       const { record } = await api.respondToDecision(token, chosen, name.trim());
+       setRecord(record);
++      setJustSubmitted(true);
+     } catch (err) {
+       setError(err instanceof Error ? err.message : "Something went wrong.");
+     } finally {
+@@ -65,16 +70,27 @@ export default function DecisionPublic() {
+       {decision.deadline && <p className="muted">Requested by: {decision.deadline}</p>}
+ 
+       {record ? (
+-        <div className="decision-record-card">
+-          <p>
+-            <strong>{record.chosen_option}</strong> -- recorded for <strong>{record.responder_name}</strong>
+-          </p>
+-          <p className="muted">{fmtDateTime(record.responded_at)}</p>
+-          <p className="muted">This decision has been recorded. You can close this page.</p>
+-        </div>
++        justSubmitted ? (
++          <div className="decision-record-card">
++            <p>
++              <strong>{record.chosen_option}</strong> · recorded for <strong>{record.responder_name}</strong>
++            </p>
++            <p className="muted">{fmtDateTime(record.responded_at)}</p>
++            <p className="muted">Thanks, your response was recorded. The project owner will confirm the final decision.</p>
++          </div>
++        ) : (
++          <div className="decision-record-card">
++            <p>
++              <strong>{record.chosen_option}</strong> · decided · response by <strong>{record.responder_name}</strong>
++            </p>
++            <p className="muted">{fmtDateTime(record.responded_at)}</p>
++            <p className="muted">This decision has been decided. You can close this page.</p>
++          </div>
++        )
+       ) : (
+         <form className="stacked-form" onSubmit={submit}>
+           <label>Your response</label>
++          <p className="muted">Your response is recorded for the project team. The owner confirms the final decision.</p>
+           <div className="option-list">
+             {decision.options.map((opt) => (
+               <label key={opt} className="option-row">
+diff --git a/src/pages/ProjectHome.tsx b/src/pages/ProjectHome.tsx
+index 75663a3..cd540f3 100644
+--- a/src/pages/ProjectHome.tsx
++++ b/src/pages/ProjectHome.tsx
+@@ -559,6 +559,10 @@ function FeedTab({ projectId, focusComposerNonce = 0 }: { projectId: string; foc
+   const [feed, setFeed] = useState<FeedItem[]>([]);
+   const [note, setNote] = useState("");
+   const [loading, setLoading] = useState(true);
++  // v151 (Part B2): the composer shows its work while a check-in posts --
++  // before, the button sat still and unchanged until the item appeared, so
++  // a slow save looked like nothing had happened.
++  const [posting, setPosting] = useState(false);
+   // Stated status (v143): the composer pre-selects the project's computed
+   // health as a suggestion (the same rollup HealthStrip shows, via the same
+   // portfolio call). Picking another pill overrides it; clicking the
+@@ -652,22 +656,28 @@ function FeedTab({ projectId, focusComposerNonce = 0 }: { projectId: string; foc
+     e.preventDefault();
+     const text = note.trim();
+     if (!text && !selected) return;
++    if (posting) return;
+     const health = selected;
+-    // v150: show the check-in the moment it saves (the returned row is the
+-    // feed item), and refresh the header's stated status in place. The
+-    // background load() still reconciles with the server's full feed. On a
+-    // failed save nothing below runs, so the text stays in the composer.
+-    const { statusUpdate } = await api.createStatusUpdate(projectId, text, health ?? undefined);
+-    const u = statusUpdate as { body: string; health: "on_track" | "at_risk" | "off_track" | null; created_at: string };
+-    setFeed((cur) => [
+-      { type: "status_update" as const, title: null, body: u.body, ts: u.created_at, meta: {}, health: u.health },
+-      ...cur,
+-    ]);
+-    noteProjectChanged(projectId);
+-    setNote("");
+-    pickedRef.current = false;
+-    setSelected(suggested);
+-    load();
++    setPosting(true);
++    try {
++      // v150: show the check-in the moment it saves (the returned row is the
++      // feed item), and refresh the header's stated status in place. The
++      // background load() still reconciles with the server's full feed. On a
++      // failed save nothing below runs, so the text stays in the composer.
++      const { statusUpdate } = await api.createStatusUpdate(projectId, text, health ?? undefined);
++      const u = statusUpdate as { body: string; health: "on_track" | "at_risk" | "off_track" | null; created_at: string };
++      setFeed((cur) => [
++        { type: "status_update" as const, title: null, body: u.body, ts: u.created_at, meta: {}, health: u.health },
++        ...cur,
++      ]);
++      noteProjectChanged(projectId);
++      setNote("");
++      pickedRef.current = false;
++      setSelected(suggested);
++      load();
++    } finally {
++      setPosting(false);
++    }
+   }
+ 
+   return (
+@@ -696,7 +706,7 @@ function FeedTab({ projectId, focusComposerNonce = 0 }: { projectId: string; foc
+         )}
+         <div className="inline-form feed-composer-form">
+           <input ref={composerRef} aria-label="Status update" placeholder="How is the project going?" value={note} onChange={(e) => setNote(e.target.value)} />
+-          <button className="btn btn-primary" disabled={!note.trim() && !selected}>Post</button>
++          <button className="btn btn-primary" disabled={posting || (!note.trim() && !selected)}>{posting ? "Posting…" : "Post"}</button>
+         </div>
+       </form>
+ 
+@@ -822,9 +832,11 @@ function TodayTab({ projectId, onPostCheckIn }: { projectId: string; onPostCheck
+     urgentIssues: data.urgentIssues,
+     urgentRisks: data.urgentRisks,
+     staleTasks: data.staleTasks,
+-    taskCount: data.taskCount,
++    totalTaskCount: data.totalTaskCount,
+     datedTaskCount: data.datedTaskCount ?? 0,
+     stakeholderCount: data.stakeholderCount ?? 0,
++    openTasks: data.openTasks ?? [],
++    openTaskCount: data.openTaskCount ?? 0,
+     daysSinceCheckIn,
+   });
+   const stepAction = nextStep.action;
+@@ -876,8 +888,8 @@ function TodayTab({ projectId, onPostCheckIn }: { projectId: string; onPostCheck
+                   >
+                     {t.title}
+                   </button>
+-                  {" -- "}{t.owner_name || "unassigned"}
+-                  <span className="muted"> -- blocked {daysAgo(t.updated_at)}d</span>
++                  {" · "}{t.owner_name || "unassigned"}
++                  <span className="muted"> · blocked {daysAgo(t.updated_at)}d</span>
+                 </div>
+                 {reassignId === t.id ? (
+                   <div className="row-actions">
+@@ -927,8 +939,8 @@ function TodayTab({ projectId, onPostCheckIn }: { projectId: string; onPostCheck
+                   >
+                     {t.title}
+                   </button>
+-                  {" -- "}{t.owner_name || "unassigned"}
+-                  <span className="muted"> -- untouched {daysAgo(t.updated_at)}d</span>
++                  {" · "}{t.owner_name || "unassigned"}
++                  <span className="muted"> · untouched {daysAgo(t.updated_at)}d</span>
+                 </div>
+                 {reassignId === t.id ? (
+                   <div className="row-actions">
+@@ -971,8 +983,8 @@ function TodayTab({ projectId, onPostCheckIn }: { projectId: string; onPostCheck
+               <li key={d.id} className="today-list-row">
+                 <div>
+                   <strong>{d.title}</strong>
+-                  <span className="muted"> -- waiting {daysAgo(d.created_at)}d</span>
+-                  {d.recipients.length > 0 && <span className="muted"> -- sent to {d.recipients.join(", ")}</span>}
++                  <span className="muted"> · waiting {daysAgo(d.created_at)}d</span>
++                  {d.recipients.length > 0 && <span className="muted"> · sent to {d.recipients.join(", ")}</span>}
+                 </div>
+                 <div className="row-actions">
+                   <button className="btn-link" type="button" onClick={() => copyDecisionLink(d.id, d.public_token)}>
+@@ -999,8 +1011,8 @@ function TodayTab({ projectId, onPostCheckIn }: { projectId: string; onPostCheck
+                   >
+                     {i.title}
+                   </button>
+-                  {" -- "}{i.owner_name || "unassigned"}
+-                  <span className="muted"> -- {i.severity}</span>
++                  {" · "}{i.owner_name || "unassigned"}
++                  <span className="muted"> · {i.severity}</span>
+                 </div>
+                 {reassignId === i.id ? (
+                   <div className="row-actions">
+@@ -1049,8 +1061,8 @@ function TodayTab({ projectId, onPostCheckIn }: { projectId: string; onPostCheck
+                   >
+                     {r.title}
+                   </button>
+-                  {" -- "}{r.owner_name || "unassigned"}
+-                  <span className="muted"> -- {r.probability} probability / {r.impact} impact</span>
++                  {" · "}{r.owner_name || "unassigned"}
++                  <span className="muted"> · {r.probability} probability / {r.impact} impact</span>
+                 </div>
+                 {reassignId === r.id ? (
+                   <div className="row-actions">
+@@ -1154,7 +1166,7 @@ function TrashTab({ projectId }: { projectId: string }) {
+   return (
+     <div>
+       <p className="muted" style={{ marginBottom: 16 }}>
+-        Deleted tasks, issues, risks, assumptions, dependencies, change requests, lessons, stakeholders, decisions, meetings, documents, and roadmap items land here. Restore them any time -- nothing is gone for good.
++        Deleted tasks, issues, risks, assumptions, dependencies, change requests, lessons, stakeholders, decisions, meetings, documents, and roadmap items land here. Restore them any time. Nothing is gone for good.
+       </p>
+ 
+       {loading ? (
+@@ -1342,8 +1354,8 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
+     setDrawerTaskId(t.id);
+     setEditTitle(t.title);
+     setEditOwner(t.owner_name || "");
+-    setEditStart(t.start_date || "");
+-    setEditDue(t.due_date || "");
++    setEditStart((t.start_date || "").slice(0, 10));
++    setEditDue((t.due_date || "").slice(0, 10));
+     setEditDescription(t.description || "");
+     setEditPhase(t.roadmap_item_id || "");
+     setEditPriority(t.priority || "");
+@@ -1621,7 +1633,7 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
+                   >
+                     {parent && <div className="kanban-parent muted">&#8627; {parent.title}</div>}
+                     <div>{t.title}</div>
+-                    <div className="muted">{t.owner_name || "unassigned"}{t.due_date ? ` -- ${fmtLocalDate(t.due_date)}` : ""}</div>
++                    <div className="muted">{t.owner_name || "unassigned"}{t.due_date ? ` · ${fmtLocalDate(t.due_date)}` : ""}</div>
+                   </div>
+                 );
+               })}
+@@ -4974,8 +4986,8 @@ function RoadmapTab({ projectId, isOwner, showBudget }: { projectId: string; isO
+     setEditType(item.type);
+     setEditTitle(item.title);
+     setEditSwimlane(item.swimlane);
+-    setEditStart(item.start_date || "");
+-    setEditEnd(item.end_date || "");
++    setEditStart((item.start_date || "").slice(0, 10));
++    setEditEnd((item.end_date || "").slice(0, 10));
+     setEditStatus(item.status);
+     setEditDescription(item.description || "");
+   }
+@@ -5819,8 +5831,8 @@ function StakeholdersTab({ projectId }: { projectId: string }) {
+       <>
+         <RegisterSummary>
+           {`${stakeholders.length} ${stakeholders.length === 1 ? "person" : "people"}`}
+-          {" \u00b7 "}{stakeholders.filter((s) => s.power_level === "high").length} with high power
+-          {" \u00b7 "}{(() => { const n = stakeholders.reduce((t, s) => t + (s.decisions_sent ?? 0) - (s.decisions_resolved ?? 0), 0); return `${n} ${n === 1 ? "decision" : "decisions"} waiting on them`; })()}
++          {" \u00b7 "}{stakeholders.filter((s) => s.power_level === "high").length} stakeholders with high power
++          {" \u00b7 "}{(() => { const n = stakeholders.reduce((t, s) => t + (s.decisions_sent ?? 0) - (s.decisions_resolved ?? 0), 0); return `${n} ${n === 1 ? "decision" : "decisions"} awaiting a response`; })()}
+         </RegisterSummary>
+         {stakeholders.length === 0 ? (
+           <RegisterEmpty>No stakeholders yet. Add one above to start your register.</RegisterEmpty>
+@@ -5977,6 +5989,8 @@ function StakeholderDecisionsTab({ projectId }: { projectId: string }) {
+   const [deadline, setDeadline] = useState("");
+   const [selectedStakeholders, setSelectedStakeholders] = useState<string[]>([]);
+   const [lastShareUrl, setLastShareUrl] = useState<string | null>(null);
++  const [copiedId, setCopiedId] = useState<string | null>(null);
++  const [ownOption, setOwnOption] = useState<Record<string, string>>({});
+   const [loading, setLoading] = useState(true);
+   const [error, setError] = useState("");
+ 
+@@ -5987,6 +6001,41 @@ function StakeholderDecisionsTab({ projectId }: { projectId: string }) {
+     setLoading(false);
+   }
+ 
++  // v151 (Part D): copy the public link from a select-on-focus field, the
++  // same pattern as the share box, instead of a raw printed URL.
++  function copyShareLink(d: Decision) {
++    const url = `${window.location.origin}/d/${d.public_token}`;
++    navigator.clipboard.writeText(url).then(() => {
++      setCopiedId(d.id);
++      setTimeout(() => setCopiedId((cur) => (cur === d.id ? null : cur)), 2000);
++    });
++  }
++
++  // v151 (Part D): responses collect until the owner confirms the outcome.
++  async function confirmResponse(d: Decision, recordId: string) {
++    try {
++      await api.confirmDecision(d.id, { recordId });
++      announce("Decision confirmed.");
++      noteProjectChanged(projectId);
++      load();
++    } catch {
++      setError("Could not confirm that response. Try again.");
++    }
++  }
++
++  async function confirmOwnOption(d: Decision) {
++    const chosen = ownOption[d.id] ?? d.options[0];
++    if (!chosen) return;
++    try {
++      await api.confirmDecision(d.id, { chosenOption: chosen });
++      announce("Decision recorded.");
++      noteProjectChanged(projectId);
++      load();
++    } catch {
++      setError("Could not record that decision. Try again.");
++    }
++  }
++
+   useEffect(() => {
+     setLoading(true);
+     load();
+@@ -6048,9 +6097,16 @@ function StakeholderDecisionsTab({ projectId }: { projectId: string }) {
+ 
+       {lastShareUrl && (
+         <div className="callout">
+-          Share this link with the stakeholder -- no account needed to respond:
++          Share this link with the stakeholder. No account needed to respond:
+           <br />
+-          <code>{window.location.origin}{lastShareUrl}</code>
++          <input
++            className="share-url"
++            type="text"
++            readOnly
++            value={`${window.location.origin}${lastShareUrl}`}
++            onFocus={(e) => e.target.select()}
++            aria-label="Decision share link"
++          />
+         </div>
+       )}
+ 
+@@ -6089,7 +6145,7 @@ function StakeholderDecisionsTab({ projectId }: { projectId: string }) {
+ 
+       {decisions.length > 0 && (
+         <p className="muted" style={{ marginBottom: 12 }}>
+-          {decisions.filter((d) => d.status === "open").length} awaiting response · {decisions.filter((d) => d.status !== "open").length} decided
++          {decisions.filter((d) => d.status === "open").length} awaiting a response · {decisions.filter((d) => d.status !== "open").length} decided
+         </p>
+       )}
+       <div className="decision-list">
+@@ -6116,15 +6172,61 @@ function StakeholderDecisionsTab({ projectId }: { projectId: string }) {
+                     ? <>Asked: {d.recipients.map((r) => r.name).join(", ")} · waiting {daysAgo(d.created_at)}d</>
+                     : "Not sent to anyone yet. Share the link below to ask."}
+                 </p>
++                {(d.records ?? []).length > 0 && (
++                  <div className="decision-responses">
++                    <p className="muted">Responses so far. Confirm one to make it the decision:</p>
++                    <ul className="decision-response-list">
++                      {(d.records ?? []).map((r) => (
++                        <li key={r.id}>
++                          <strong>{r.chosen_option}</strong> · {r.responder_name}{" "}
++                          <button className="btn-link" type="button" onClick={() => confirmResponse(d, r.id)}>Confirm as the decision</button>
++                        </li>
++                      ))}
++                    </ul>
++                  </div>
++                )}
++                <div className="decision-confirm-own">
++                  <label className="muted" htmlFor={`own-option-${d.id}`}>Or record the decision yourself:</label>{" "}
++                  <select
++                    id={`own-option-${d.id}`}
++                    value={ownOption[d.id] ?? d.options[0] ?? ""}
++                    onChange={(e) => setOwnOption((cur) => ({ ...cur, [d.id]: e.target.value }))}
++                  >
++                    {d.options.map((o) => (
++                      <option key={o} value={o}>{o}</option>
++                    ))}
++                  </select>{" "}
++                  <button className="btn-link" type="button" onClick={() => confirmOwnOption(d)}>Record as the decision</button>
++                </div>
+                 <div className="share-row">
+-                  <code>{window.location.origin}/d/{d.public_token}</code>
++                  <input
++                    className="share-url"
++                    type="text"
++                    readOnly
++                    value={`${window.location.origin}/d/${d.public_token}`}
++                    onFocus={(e) => e.target.select()}
++                    aria-label="Decision share link"
++                  />
++                  <button className="btn btn-ghost" type="button" onClick={() => copyShareLink(d)}>
++                    {copiedId === d.id ? "Copied" : "Copy link"}
++                  </button>
+                 </div>
+               </>
+             ) : (
+               <div className="decision-record">
+-                <strong>Decided:</strong> {d.chosen_option} · decided by <strong>{d.responder_name}</strong>
+-                <br />
+-                <span className="muted">{d.responded_at && fmtDateTime(d.responded_at)}</span>
++                {d.outcome_confirmed_at ? (
++                  <>
++                    <strong>Decided:</strong> {d.chosen_option} · response by <strong>{d.responder_name}</strong>
++                    <br />
++                    <span className="muted">Confirmed {fmtDateTime(d.outcome_confirmed_at)}</span>
++                  </>
++                ) : (
++                  <>
++                    <strong>Decided:</strong> {d.chosen_option} · decided by <strong>{d.responder_name}</strong>
++                    <br />
++                    <span className="muted">{d.responded_at && fmtDateTime(d.responded_at)}</span>
++                  </>
++                )}
+               </div>
+             )}
+             <div className="row-actions" style={{ marginTop: 10 }}>
+@@ -6344,7 +6446,7 @@ function ChangeRequestsTab({ projectId }: { projectId: string }) {
+                       CCB: {c.ccb_approvals.length}/{reviewers.length} signed
+                       {reviewers.length > 0 && c.ccb_approvals.length < reviewers.length && isReviewer && !c.ccb_approvals.some((a) => a.email === user?.email) && (
+                         <>
+-                          {" -- "}
++                          {" · "}
+                           <button
+                             className="btn-link"
+                             type="button"
+@@ -6647,7 +6749,7 @@ function TeamTab({ projectId, isOwner, onSetupChange }: { projectId: string; isO
+               <div className="member-avatar" style={{ background: avatarColor(m.email) }}>{initials(m.email)}</div>
+               <div className="member-info">
+                 <div className="member-name">{m.email}{isSelf && " (you)"}</div>
+-                <div className="member-email">{m.status === "active" ? "Active" : "Invited -- awaiting sign-up"}</div>
++                <div className="member-email">{m.status === "active" ? "Active" : "Invited · awaiting sign-up"}</div>
+               </div>
+               <span className="role-pill">Member</span>
+               {project?.ccb_enabled && (
+@@ -7074,7 +7176,7 @@ function WeeklyReportView({ projectId, projectName }: { projectId: string; proje
+       </div>
+ 
+       <div className="today-section">
+-        <h4>New tasks added ({tasksAdded.length})</h4>
++        <h4>Tasks added this week ({tasksAdded.length})</h4>
+         <ul className="today-list">
+           {tasksAdded.map((t) => <li key={t.id}>{t.title} <span className="muted">· {STATUS_LABEL[t.status as Task["status"]]}{t.due_date ? ` · due ${fmtLocalDate(t.due_date)}` : ""}{t.deleted_at ? " · since moved to Trash" : ""}</span></li>)}
+           {tasksAdded.length === 0 && <li className="muted">No new tasks this week.</li>}
+@@ -7102,7 +7204,13 @@ function WeeklyReportView({ projectId, projectName }: { projectId: string; proje
+       <div className="today-section">
+         <h4>Decisions made ({decisionsMade.length})</h4>
+         <ul className="today-list">
+-          {decisionsMade.map((d) => <li key={d.id}>{d.title}: <strong>{d.chosen_option}</strong> · approved by {d.responder_name}</li>)}
++          {decisionsMade.map((d) => (
++            <li key={d.id}>
++              {d.title}: <strong>{d.chosen_option}</strong> · {d.confirmed_at
++                ? <>confirmed by {d.owner_name}</>
++                : <>decided by {d.responder_name}</>}
++            </li>
++          ))}
+           {decisionsMade.length === 0 && <li className="muted">No decisions resolved this week.</li>}
+         </ul>
+       </div>
+@@ -7484,7 +7592,7 @@ function ExportTab({ projectId, projectName }: { projectId: string; projectName:
+           <p className="muted">{d.responded_at && fmtDateTime(d.responded_at)}</p>
+         </div>
+       ))}
+-      {decisions.length === 0 && <p className="muted">No decisions recorded yet.</p>}
++      {decisions.length === 0 && <p className="muted">No decisions decided yet.</p>}
+     </div>
+   );
+ }
+diff --git a/src/pages/WhatsNew.tsx b/src/pages/WhatsNew.tsx
+index 4c7c998..29c5e73 100644
+--- a/src/pages/WhatsNew.tsx
++++ b/src/pages/WhatsNew.tsx
+@@ -1,3 +1,5 @@
++import { useEffect, useState } from "react";
++import { useLocation } from "react-router-dom";
+ import { PageHeader } from "../components/ui";
+ import { AppSidebar } from "../components/AppSidebar";
+ import { CHANGES } from "../lib/whatsNewData";
+@@ -5,6 +7,25 @@ import { useDocumentTitle } from "../lib/documentTitle";
+ 
+ export default function WhatsNew() {
+   useDocumentTitle("What's new");
++  const { hash } = useLocation();
++  // v151 (Part E2): the entries this visit just marked seen (stored by the
++  // notification bell on arrival) keep a "New" pill for the visit, so
++  // following a bell entry lands on a page that shows what was new.
++  const [justSeen] = useState<ReadonlySet<string>>(() => {
++    try {
++      const raw = sessionStorage.getItem("tasketra.whatsNewJustSeen");
++      return new Set<string>(raw ? (JSON.parse(raw) as string[]) : []);
++    } catch {
++      return new Set<string>();
++    }
++  });
++
++  // Bell entries deep-link to their section (#v151); scroll it into view.
++  useEffect(() => {
++    if (!hash) return;
++    document.querySelector(hash)?.scrollIntoView({ block: "start" });
++  }, [hash]);
++
+   return (
+     <div className="project-shell">
+       <AppSidebar />
+@@ -16,9 +37,10 @@ export default function WhatsNew() {
+ 
+         <div className="whats-new-list">
+           {CHANGES.map((c) => (
+-            <section className="tw-card whats-new-entry" key={c.version}>
++            <section className="tw-card whats-new-entry" key={c.version} id={c.version}>
+               <div className="whats-new-meta">
+                 <span className="pill pill-navy">{c.version}</span>
++                {justSeen.has(c.version) && <span className="pill pill-gold">New</span>}
+                 <span className="muted">{c.date}</span>
+               </div>
+               <h2 className="heading-sm">{c.title}</h2>
+diff --git a/src/pages/Workload.tsx b/src/pages/Workload.tsx
+index 75e3129..9ca669f 100644
+--- a/src/pages/Workload.tsx
++++ b/src/pages/Workload.tsx
+@@ -3,7 +3,7 @@ import { AppSidebar } from "../components/AppSidebar";
+ import { api, type WorkloadData } from "../lib/api";
+ import { useDocumentTitle } from "../lib/documentTitle";
+ import { PageHeader, SoftCard } from "../components/ui";
+-import { localDateKey } from "../lib/today";
++import { addDays, localDateKey } from "../lib/today";
+ import { buildWorkloadGrid, type WorkloadRow } from "../lib/workloadGrid";
+ import { formatDateKey } from "../lib/syncRecap";
+ 
+@@ -60,6 +60,10 @@ export default function Workload() {
+   const todayKey = localDateKey(new Date());
+   const grid = data ? buildWorkloadGrid(data.tasks, data.milestones, data.windowStart, todayKey) : null;
+   const openTotal = grid ? grid.rows.reduce((sum, r) => sum + r.open, 0) : 0;
++  // v151: the subtitle used to claim all open tasks sat "across the next
++  // four weeks" -- the Open column counts undated and overdue work too.
++  // Say both numbers with their real scopes.
++  const datedInWindow = grid ? grid.rows.reduce((sum, r) => sum + r.weeks.reduce((a, b) => a + b, 0), 0) : 0;
+   const milestoneCount = data ? data.milestones.length : 0;
+ 
+   return (
+@@ -69,7 +73,7 @@ export default function Workload() {
+         <PageHeader
+           title="Workload"
+           subtitle={grid
+-            ? `${grid.rows.length} ${plural(grid.rows.length, "owner", "owners")} · ${openTotal} open ${plural(openTotal, "task", "tasks")} across the next four weeks`
++            ? `${grid.rows.length} ${plural(grid.rows.length, "owner", "owners")} · ${openTotal} open ${plural(openTotal, "task", "tasks")} · ${datedInWindow} due in the next four weeks`
+             : "Loading your workload..."}
+         />
+         {error && <p className="form-error" role="alert">{error}</p>}
+@@ -94,7 +98,10 @@ export default function Workload() {
+                         {grid.weekStarts.map((start, i) => (
+                           <th scope="col" key={start}>
+                             {shortKey(start)}
+-                            {i === 0 && <span className="wl-this-week">This week</span>}
++                            {/* v151 (Part F9): tag the week that CONTAINS
++                                today, not always the first column -- the
++                                window can start in the past. */}
++                            {todayKey >= start && todayKey < addDays(start, 7) && <span className="wl-this-week">This week</span>}
+                           </th>
+                         ))}
+                         <th scope="col">Open</th>

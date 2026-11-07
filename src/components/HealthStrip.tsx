@@ -49,15 +49,21 @@ export function HealthStrip({ projectId, refreshKey, onOpenTab }: { projectId: s
       </div>
     );
   }
-  const parts = projectReasonParts(summary);
+  const allParts = projectReasonParts(summary);
   const isNew = summary.totalTasks === 0 && summary.health === "on_track";
-  const nextUp = summary.nextUp && !parts.some((p) => p.text.startsWith("Next up")) ? summary.nextUp : null;
+  // v151 (Part A2): the stage-checklist hint does not belong in the health
+  // strip -- inside the project it read as a second, disagreeing task list
+  // (the Next Step card owns "what's next" here). The hint stays on the
+  // Dashboard rows, where it names its stage. If it was the only part, the
+  // strip falls back to a plain "Nothing flagged".
+  const parts = allParts.filter((p) => !p.nextUp);
+  const shownParts = parts.length > 0 ? parts : [{ text: "Nothing flagged" }];
 
   return (
     <div className="hs-strip" role="status" aria-label="Project health">
       <span className={`pill ${isNew ? "hs-new" : PILL[summary.health]}`}>{isNew ? "New" : LABEL[summary.health]}</span>
       <span className="hs-why">
-        {parts.map((p, i) => (
+        {shownParts.map((p, i) => (
           <span key={p.text}>
             {i > 0 && ", "}
             {p.tab ? (
@@ -82,7 +88,6 @@ export function HealthStrip({ projectId, refreshKey, onOpenTab }: { projectId: s
           <span className="muted">No status stated yet</span>
         )}
       </span>
-      {nextUp && <span className="hs-next muted" title={nextUp}><span>Next up:</span> {nextUp}</span>}
     </div>
   );
 }

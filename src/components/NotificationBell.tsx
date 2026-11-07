@@ -65,6 +65,12 @@ export function NotificationBell() {
   // Reading the What's new page counts as seeing every entry on it.
   useEffect(() => {
     if (pathname === "/app/whats-new" && LATEST_VERSION && newEntries.length > 0) {
+      // v151 (Part E2): remember WHICH entries this visit just marked seen,
+      // so the page can flag exactly those "New" instead of the badge
+      // vanishing with no trace of what was new.
+      try {
+        sessionStorage.setItem("tasketra.whatsNewJustSeen", JSON.stringify(newEntries.map((c) => c.version)));
+      } catch { /* the pills are a nicety; losing them is fine */ }
       setSeenVersion(LATEST_VERSION);
       api.setWhatsNewSeen(LATEST_VERSION).catch(() => {});
     }
@@ -171,7 +177,7 @@ export function NotificationBell() {
             <ul className="notif-list">
               {shownEntries.map((c) => (
                 <li key={c.version}>
-                  <Link to="/app/whats-new" className="notif-item notif-unread">
+                  <Link to={`/app/whats-new#${c.version}`} className="notif-item notif-unread">
                     <span className="notif-dot" aria-hidden="true" />
                     <span className="notif-text">New in Tasketra: {c.title}</span>
                     <span className="notif-when muted">{c.version}</span>

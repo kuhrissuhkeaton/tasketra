@@ -37,7 +37,7 @@ export default withSentry(async (req: Request) => {
     UNION ALL
 
     SELECT 'decision_record' AS type, dr.title AS title,
-      (rec.chosen_option || ' -- ' || rec.responder_name) AS body, rec.responded_at AS ts,
+      (rec.chosen_option || ' · ' || rec.responder_name) AS body, rec.responded_at AS ts,
       jsonb_build_object('chosenOption', rec.chosen_option, 'responderName', rec.responder_name) AS meta, NULL AS health
     FROM decision_records rec
     JOIN decision_requests dr ON dr.id = rec.decision_request_id
@@ -75,6 +75,18 @@ export default withSentry(async (req: Request) => {
       -- (stakeholders, roadmap items, documents...) have no derived branch
       -- and keep their activity row.
       AND NOT (a.action = 'created' AND a.entity_type IN ('decision', 'task', 'issue', 'risk'))
+      -- v151 (Part C2): updates of tasks, issues and risks double the same
+      -- way -- the derived branch re-surfaces the entity at its updated_at
+      -- carrying its new status, so the activity "updated" row is the copy.
+      -- (The diff text still lives in My activity.) Decisions are NOT in
+      -- this list: a decision confirm is an 'updated' activity row and the
+      -- derived decision_request row stays at its created_at, so the
+      -- activity row is the only feed trace of the confirmation.
+      AND NOT (a.action = 'updated' AND a.entity_type IN ('task', 'issue', 'risk'))
+      -- v151 (Part C3): check-ins write an activity row now (for My
+      -- activity); the derived status_update branch above already carries
+      -- them here, so the activity copy would double every check-in.
+      AND NOT (a.action = 'created' AND a.entity_type = 'status_update')
 
     ORDER BY ts DESC
     LIMIT 200

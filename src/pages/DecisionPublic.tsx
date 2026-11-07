@@ -14,6 +14,10 @@ export default function DecisionPublic() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  // v151: a just-submitted RESPONSE is not the decision yet -- the project
+  // owner confirms the outcome. The thanks state says so; only a record
+  // loaded already-resolved shows the decided state.
+  const [justSubmitted, setJustSubmitted] = useState(false);
 
   useDocumentTitle(decision?.title ?? "Decision request");
   useEffect(() => {
@@ -36,6 +40,7 @@ export default function DecisionPublic() {
     try {
       const { record } = await api.respondToDecision(token, chosen, name.trim());
       setRecord(record);
+      setJustSubmitted(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
@@ -65,16 +70,27 @@ export default function DecisionPublic() {
       {decision.deadline && <p className="muted">Requested by: {decision.deadline}</p>}
 
       {record ? (
-        <div className="decision-record-card">
-          <p>
-            <strong>{record.chosen_option}</strong> -- recorded for <strong>{record.responder_name}</strong>
-          </p>
-          <p className="muted">{fmtDateTime(record.responded_at)}</p>
-          <p className="muted">This decision has been recorded. You can close this page.</p>
-        </div>
+        justSubmitted ? (
+          <div className="decision-record-card">
+            <p>
+              <strong>{record.chosen_option}</strong> · recorded for <strong>{record.responder_name}</strong>
+            </p>
+            <p className="muted">{fmtDateTime(record.responded_at)}</p>
+            <p className="muted">Thanks, your response was recorded. The project owner will confirm the final decision.</p>
+          </div>
+        ) : (
+          <div className="decision-record-card">
+            <p>
+              <strong>{record.chosen_option}</strong> · decided · response by <strong>{record.responder_name}</strong>
+            </p>
+            <p className="muted">{fmtDateTime(record.responded_at)}</p>
+            <p className="muted">This decision has been decided. You can close this page.</p>
+          </div>
+        )
       ) : (
         <form className="stacked-form" onSubmit={submit}>
           <label>Your response</label>
+          <p className="muted">Your response is recorded for the project team. The owner confirms the final decision.</p>
           <div className="option-list">
             {decision.options.map((opt) => (
               <label key={opt} className="option-row">

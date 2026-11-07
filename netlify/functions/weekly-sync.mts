@@ -58,7 +58,11 @@ export default withSentry(async (req: Request) => {
     `,
     // The portfolio's own per-project task rollup (its overdue count feeds
     // projectHealth unchanged), plus the leaf-only overdue count the sync
-    // lines quote: open leaf tasks whose due date has passed.
+    // lines quote: open leaf tasks whose due date has passed. NOTE (v151):
+    // these leaf counts are health inputs, deliberately narrower than the
+    // shared "open task" display definition (status != 'done', not deleted,
+    // every row counts -- see today.mts). Nothing here is labeled "open
+    // tasks" to a user, so the two never appear side by side as if equal.
     database.sql`
       SELECT t.project_id,
         count(*) FILTER (WHERE t.status != 'done' AND t.due_date IS NOT NULL AND t.due_date < now()::date)::int AS overdue_tasks,

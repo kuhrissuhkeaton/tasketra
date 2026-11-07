@@ -120,7 +120,7 @@ function planItems(c: StageCounts, size: ProjectSize): ChecklistItem[] {
   } else if (c.datedTasks > 0) {
     schedule = {
       id: "schedule", title: "Schedule dates set",
-      meta: `${c.datedTasks} of ${c.tasks} tasks have dates. ${c.tasks - c.datedTasks} still need one.`,
+      meta: `${c.datedTasks} of ${c.tasks} tasks have dates. ${c.tasks - c.datedTasks} still ${c.tasks - c.datedTasks === 1 ? "needs" : "need"} one.`,
       status: "partial", tab: "tasks", action: "Add dates",
     };
   } else {

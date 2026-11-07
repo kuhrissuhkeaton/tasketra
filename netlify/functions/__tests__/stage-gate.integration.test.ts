@@ -18,6 +18,14 @@ const answer = (token: string, chosenOption: string) =>
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ token, chosenOption, responderName: "Dana Reyes" }),
   }));
+// v151: a public answer is now a RESPONSE, not the outcome. The gate only
+// lands once the owner confirms the response in the Decisions tab.
+const confirmFirstResponse = async (user: { cookie: string }, projectId: string) => {
+  const { decisions } = await jsonBody<{ decisions: any[] }>(await decisionsHandler(asUser(user, { method: "GET", url: `https://tasketra.com/api/decisions?projectId=${projectId}` })));
+  const recordId = decisions[0].records[0].id;
+  const res = await decisionsHandler(asUser(user, { method: "PATCH", url: "https://tasketra.com/api/decisions", body: { id: decisions[0].id, action: "confirm", recordId } }));
+  expect(res.status).toBe(200);
+};
 
 describe("stage gates", () => {
   beforeAll(async () => { await setupTestDb(); }, 30000);
@@ -55,6 +63,10 @@ describe("stage gates", () => {
     expect(decisions.decisions[0].context).toContain("Open a clinic");
 
     await answer(gate.publicToken, "Approve");
+    // v151: the answer alone no longer approves the gate -- it collects.
+    gate = await read(owner, project.id);
+    expect(gate.status).toBe("pending");
+    await confirmFirstResponse(owner, project.id);
     gate = await read(owner, project.id);
     expect(gate.status).toBe("approved");
     expect(gate.responderName).toBe("Dana Reyes");
@@ -66,6 +78,9 @@ describe("stage gates", () => {
     expect((await ask(owner, { projectId: project.id, from: "initiate", to: "plan" })).status).toBe(201);
     const { publicToken } = await read(owner, project.id);
     await answer(publicToken, "Request changes");
+    // v151: still pending until the owner confirms the response.
+    expect((await read(owner, project.id)).status).toBe("pending");
+    await confirmFirstResponse(owner, project.id);
     expect((await read(owner, project.id)).status).toBe("changes_requested");
   });
 

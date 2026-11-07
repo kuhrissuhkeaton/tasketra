@@ -179,7 +179,7 @@ export default function Account() {
             <input id="f-account-172" type="text" value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} placeholder="e.g. Senior PM" />
             <label htmlFor="f-account-174">Timezone</label>
             <select id="f-account-174" value={timezone} onChange={(e) => setTimezone(e.target.value)}>
-              <option value="">Not set</option>
+              <option value="">Set timezone…</option>
               {TIMEZONES.map((tz) => (
                 <option key={tz} value={tz}>{tz}</option>
               ))}

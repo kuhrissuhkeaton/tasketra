@@ -3,6 +3,7 @@ import { db } from "../lib/db.ts";
 import { getUserIdFromRequest } from "../lib/auth.ts";
 import { hasProjectAccess } from "../lib/ownership.ts";
 import { json } from "../lib/http.ts";
+import { logActivity } from "../lib/activity.ts";
 import { withSentry } from "../lib/sentry.ts";
 
 // The stated-status vocabulary a check-in can carry (v143) -- the same words
@@ -34,6 +35,21 @@ export default withSentry(async (req: Request) => {
     INSERT INTO status_updates (project_id, body, health) VALUES (${projectId}, ${text}, ${health})
     RETURNING id, body, health, created_at
   `;
+  // v151 (Part C3): a check-in is the poster's own work, so it belongs in
+  // their My activity -- which reads only activity_log. status_updates has
+  // no author column; the author lives on this row's actor_id. The project
+  // Feed excludes status_update 'created' activity rows (its derived branch
+  // already carries the check-in), so nothing doubles there.
+  const HEALTH_LABEL: Record<string, string> = { on_track: "On track", at_risk: "At risk", off_track: "Off track" };
+  const summary = text ? text.slice(0, 120) : (health ? HEALTH_LABEL[health] : null);
+  await logActivity(database, {
+    projectId,
+    entityType: "status_update",
+    entityId: update.id,
+    entityTitle: null,
+    action: "created",
+    summary,
+  });
   return json({ statusUpdate: update }, { status: 201 });
 });
 

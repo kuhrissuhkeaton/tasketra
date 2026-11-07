@@ -37,6 +37,9 @@ describe("plan checklist", () => {
     const i = item("plan", { ...EMPTY, tasks: 12, datedTasks: 9 }, "schedule");
     expect(i.status).toBe("partial");
     expect(i.meta).toBe("9 of 12 tasks have dates. 3 still need one.");
+    // v151 (Part F4): the singular agrees -- "1 still needs one."
+    expect(item("plan", { ...EMPTY, tasks: 2, datedTasks: 1 }, "schedule").meta)
+      .toBe("1 of 2 tasks have dates. 1 still needs one.");
   });
 
   it("marks the schedule done only when every task is dated", () => {

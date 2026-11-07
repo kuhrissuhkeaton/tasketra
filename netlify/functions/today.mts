@@ -19,7 +19,7 @@ export default withSentry(async (req: Request) => {
   if (!projectId) return json({ error: "projectId required" }, { status: 400 });
   if (!(await hasProjectAccess(userId, projectId))) return json({ error: "Not found" }, { status: 404 });
 
-  const [blockedTasks, staleTasks, awaitingDecisions, urgentIssues, urgentRisks, taskCountRows, overdueTasks, datedTaskCountRows, stakeholderCountRows, lastCheckInRows] = await Promise.all([
+  const [blockedTasks, staleTasks, awaitingDecisions, urgentIssues, urgentRisks, taskCountRows, overdueTasks, datedTaskCountRows, stakeholderCountRows, lastCheckInRows, openTasks, openTaskCountRows] = await Promise.all([
     database.sql`
       SELECT id, title, owner_name, due_date, updated_at
       FROM tasks WHERE project_id = ${projectId} AND status = 'blocked' AND deleted_at IS NULL
@@ -78,14 +78,35 @@ export default withSentry(async (req: Request) => {
       SELECT max(created_at) AS last_check_in_at
       FROM status_updates WHERE project_id = ${projectId}
     `,
+    // v151: the open-work list the Next Step card points at when nothing is
+    // wrong but work remains. "Open task" has ONE definition across the app
+    // (written here, shared with weekly-sync / weekly-report): a task whose
+    // status is not 'done' and that is not deleted. Every task row counts,
+    // subtasks included -- a subtask is a task. Ordering: dated first by due
+    // date, then in-progress before not-started, then oldest first.
+    database.sql`
+      SELECT id, title, status, due_date
+      FROM tasks
+      WHERE project_id = ${projectId} AND status != 'done' AND deleted_at IS NULL
+      ORDER BY (due_date IS NULL) ASC, due_date ASC,
+        CASE status WHEN 'in_progress' THEN 0 ELSE 1 END, created_at ASC
+      LIMIT 10
+    `,
+    database.sql`
+      SELECT count(*)::int AS count
+      FROM tasks WHERE project_id = ${projectId} AND status != 'done' AND deleted_at IS NULL
+    `,
   ]);
 
-  const taskCount = taskCountRows[0]?.count ?? 0;
+  // Renamed in v151: this counts ALL non-deleted tasks (done included). It is
+  // only a "has anything ever been added" gate -- never read it as "open".
+  const totalTaskCount = taskCountRows[0]?.count ?? 0;
+  const openTaskCount = openTaskCountRows[0]?.count ?? 0;
   const datedTaskCount = datedTaskCountRows[0]?.count ?? 0;
   const stakeholderCount = stakeholderCountRows[0]?.count ?? 0;
   const lastCheckInAt = lastCheckInRows[0]?.last_check_in_at ?? null;
 
-  return json({ blockedTasks, staleTasks, awaitingDecisions, urgentIssues, urgentRisks, taskCount, overdueTasks, datedTaskCount, stakeholderCount, lastCheckInAt });
+  return json({ blockedTasks, staleTasks, awaitingDecisions, urgentIssues, urgentRisks, totalTaskCount, overdueTasks, datedTaskCount, stakeholderCount, lastCheckInAt, openTasks, openTaskCount });
 });
 
 export const config: Config = { path: "/api/today" };

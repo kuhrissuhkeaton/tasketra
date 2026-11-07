@@ -3,7 +3,7 @@ import { AppSidebar } from "../components/AppSidebar";
 import { api, type WorkloadData } from "../lib/api";
 import { useDocumentTitle } from "../lib/documentTitle";
 import { PageHeader, SoftCard } from "../components/ui";
-import { localDateKey } from "../lib/today";
+import { addDays, localDateKey } from "../lib/today";
 import { buildWorkloadGrid, type WorkloadRow } from "../lib/workloadGrid";
 import { formatDateKey } from "../lib/syncRecap";
 
@@ -60,6 +60,10 @@ export default function Workload() {
   const todayKey = localDateKey(new Date());
   const grid = data ? buildWorkloadGrid(data.tasks, data.milestones, data.windowStart, todayKey) : null;
   const openTotal = grid ? grid.rows.reduce((sum, r) => sum + r.open, 0) : 0;
+  // v151: the subtitle used to claim all open tasks sat "across the next
+  // four weeks" -- the Open column counts undated and overdue work too.
+  // Say both numbers with their real scopes.
+  const datedInWindow = grid ? grid.rows.reduce((sum, r) => sum + r.weeks.reduce((a, b) => a + b, 0), 0) : 0;
   const milestoneCount = data ? data.milestones.length : 0;
 
   return (
@@ -69,7 +73,7 @@ export default function Workload() {
         <PageHeader
           title="Workload"
           subtitle={grid
-            ? `${grid.rows.length} ${plural(grid.rows.length, "owner", "owners")} · ${openTotal} open ${plural(openTotal, "task", "tasks")} across the next four weeks`
+            ? `${grid.rows.length} ${plural(grid.rows.length, "owner", "owners")} · ${openTotal} open ${plural(openTotal, "task", "tasks")} · ${datedInWindow} due in the next four weeks`
             : "Loading your workload..."}
         />
         {error && <p className="form-error" role="alert">{error}</p>}
@@ -94,7 +98,10 @@ export default function Workload() {
                         {grid.weekStarts.map((start, i) => (
                           <th scope="col" key={start}>
                             {shortKey(start)}
-                            {i === 0 && <span className="wl-this-week">This week</span>}
+                            {/* v151 (Part F9): tag the week that CONTAINS
+                                today, not always the first column -- the
+                                window can start in the past. */}
+                            {todayKey >= start && todayKey < addDays(start, 7) && <span className="wl-this-week">This week</span>}
                           </th>
                         ))}
                         <th scope="col">Open</th>

@@ -275,7 +275,7 @@ describe("Dashboard command center", () => {
   }
   afterEach(() => { delete (window as any).matchMedia; });
 
-  async function render(wide: boolean, extra: { overdue?: number; decisions?: number; ms?: number } = {}, entry = "/app?view=dashboard") {
+  async function render(wide: boolean, extra: { overdue?: number; decisions?: number; ms?: number; keepHealth?: boolean } = {}, entry = "/app?view=dashboard") {
     setMatchMedia(wide);
     const projs = [
       { ...project("p1", "Alpha"), open_decisions: extra.decisions ?? 0 },
@@ -286,7 +286,7 @@ describe("Dashboard command center", () => {
     base.projects[0].name = "Alpha"; base.projects[0].overdueTasks = extra.overdue ?? 0; base.projects[0].nextUp = "Add tasks";
     base.projects[1].name = "Beta";
     base.kpis.overdueTasks = extra.overdue ?? 0;
-    if (extra.overdue) { base.kpis.atRiskProjects = 1; base.projects[0].health = "at_risk"; base.kpis.highIssues = 2; base.projects[0].highRisks = 1; }
+    if (extra.overdue && !extra.keepHealth) { base.kpis.atRiskProjects = 1; base.projects[0].health = "at_risk"; base.kpis.highIssues = 2; base.projects[0].highRisks = 1; }
     base.upcomingMilestones = Array.from({ length: extra.ms ?? 0 }, (_, i) => ({ id: `m${i}`, title: `Milestone ${i}`, date: "2026-11-01", status: "planned", projectId: "p1", projectName: "Alpha" }));
     calls.getPortfolio.mockResolvedValue(base);
     await act(async () => {
@@ -370,7 +370,7 @@ describe("Dashboard command center", () => {
       ["Need attention", "0", "Everything is on track"],
       ["Overdue tasks", "0", "Nothing is late"],
       ["High-severity items", "0", "No high issues or risks"],
-      ["Due in 7 days", "0", "No milestones this week"],
+      ["Milestones due in 7 days", "0", "No milestones this week"],
     ]);
     expect(container.querySelectorAll(".kp-bad").length).toBe(0);
   });
@@ -381,7 +381,7 @@ describe("Dashboard command center", () => {
       ["Need attention", "1", "of 2 projects"],
       ["Overdue tasks", "2", "across 1 project"],
       ["High-severity items", "3", "2 issues, 1 risk"],
-      ["Due in 7 days", "0", "No milestones this week"],
+      ["Milestones due in 7 days", "0", "No milestones this week"],
     ]);
     expect(container.querySelectorAll(".kp-bad").length).toBe(3);
     expect(container.querySelector('a.kp-tile')?.getAttribute("href")).toBe("/app");
@@ -389,6 +389,19 @@ describe("Dashboard command center", () => {
     await flush();
     expect(container.querySelector(".pw-row")).toBeTruthy();
     expect(chip("Needs attention").getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("agrees on the needs-attention count everywhere, even for an on-track project with an overdue task", async () => {
+    // v151 (Part A1): the tile used to count at-risk + off-track projects
+    // (0 here) while the section listed this project (1). One definition now.
+    await render(true, { overdue: 1, keepHealth: true });
+    expect(tiles()[0]).toEqual(["Need attention", "1", "of 2 projects"]);
+    expect(container.querySelector(".dash-attention .dash-sec-summary")?.textContent).toBe("1 project");
+    expect(container.querySelectorAll(".dash-attention-row").length).toBe(1);
+    expect(container.querySelector(".tw-sub")?.textContent).toContain("1 needs attention");
+    await act(async () => { (container.querySelector("button.kp-tile") as HTMLButtonElement).click(); });
+    await flush();
+    expect(chip("Needs attention").textContent).toContain("1");
   });
 
   const rowNames = () => [...container.querySelectorAll(".pw-row .pw-name")].map((n) => n.textContent);

@@ -269,6 +269,14 @@ export type RiskTaskLink = { id: string; risk_id: string; task_id: string; risk_
 export type IssueTaskLink = { id: string; issue_id: string; task_id: string; issue_title: string; task_title: string };
 export type TaskTaskLink = { id: string; task_id: string; depends_on_task_id: string; task_title: string; depends_on_title: string };
 
+export type DecisionRecord = {
+  id: string;
+  chosen_option: string;
+  responder_name: string;
+  responded_at: string;
+  confirmed_at: string | null;
+};
+
 export type Decision = {
   id: string;
   title: string;
@@ -278,9 +286,14 @@ export type Decision = {
   public_token: string;
   status: "open" | "resolved";
   created_at: string;
+  // The confirmed outcome (v151): for a resolved decision, the record the
+  // owner confirmed -- or, for pre-v151 decisions, their single record.
   chosen_option: string | null;
   responder_name: string | null;
   responded_at: string | null;
+  outcome_confirmed_at: string | null;
+  // Every response collected so far, oldest first.
+  records: DecisionRecord[];
   recipients: { id: string; name: string }[];
 };
 
@@ -675,12 +688,16 @@ export type TodayData = {
   awaitingDecisions: { id: string; title: string; created_at: string; deadline: string | null; recipients: string[]; public_token: string }[];
   urgentIssues: { id: string; title: string; severity: string; owner_name: string | null; status: Issue["status"] }[];
   urgentRisks: { id: string; title: string; probability: string; impact: string; owner_name: string | null; status: Risk["status"] }[];
-  taskCount: number;
+  totalTaskCount: number;
   // v150: Next Step card inputs (see src/lib/nextStep.ts).
   overdueTasks: { id: string; title: string; due_date: string | null }[];
   datedTaskCount: number;
   stakeholderCount: number;
   lastCheckInAt: string | null;
+  // v151: open work for the Next Step card's "work under way" state. Open =
+  // status != 'done' and not deleted; the shared definition (see today.mts).
+  openTasks: { id: string; title: string; status: string; due_date: string | null }[];
+  openTaskCount: number;
 };
 
 export type WeeklyReport = {
@@ -692,7 +709,7 @@ export type WeeklyReport = {
   issuesResolved: { id: string; title: string; severity: string; resolution: string | null; resolved_at: string }[];
   risksOpened: { id: string; title: string; probability: string; impact: string; owner_name: string | null; created_at: string }[];
   risksResolved: { id: string; title: string; probability: string; impact: string; resolved_at: string }[];
-  decisionsMade: { id: string; title: string; chosen_option: string; responder_name: string; responded_at: string }[];
+  decisionsMade: { id: string; title: string; chosen_option: string; responder_name: string; responded_at: string; confirmed_at: string | null; owner_name: string }[];
   statusUpdates: { id: string; body: string; health: "on_track" | "at_risk" | "off_track" | null; created_at: string }[];
   snapshot: {
     open_tasks: number;
@@ -1093,6 +1110,10 @@ export const api = {
   deleteDecision: (id: string) => request<{ ok: true }>(`/decisions?id=${id}`, { method: "DELETE" }),
   restoreDecision: (id: string) =>
     request<{ ok: true }>("/decisions", { method: "PATCH", body: JSON.stringify({ id, restore: true }) }),
+  // v151 (Part D): confirm an existing response as the outcome, or record
+  // an outcome directly. Only this resolves the decision.
+  confirmDecision: (id: string, confirm: { recordId: string } | { chosenOption: string }) =>
+    request<{ ok: true }>("/decisions", { method: "PATCH", body: JSON.stringify({ id, action: "confirm", ...confirm }) }),
 
   listIssues: (projectId: string) => request<{ issues: Issue[] }>(`/issues?projectId=${projectId}`),
   createIssue: (projectId: string, title: string, description?: string, severity?: Issue["severity"], ownerName?: string, status?: Issue["status"]) =>

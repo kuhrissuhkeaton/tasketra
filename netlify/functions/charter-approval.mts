@@ -21,7 +21,13 @@ async function readApproval(database: ReturnType<typeof db>, projectId: string) 
       rec.chosen_option, rec.responder_name, rec.responded_at
     FROM projects p
     JOIN decision_requests dr ON dr.id = p.charter_decision_id AND dr.deleted_at IS NULL
+    -- v151: join only the OUTCOME record (confirmed, or a pre-v151 single
+    -- record) -- responses that merely collected must not read as approval.
     LEFT JOIN decision_records rec ON rec.decision_request_id = dr.id
+      AND (rec.confirmed_at IS NOT NULL
+           OR (dr.status = 'resolved' AND NOT EXISTS (
+                 SELECT 1 FROM decision_records c
+                 WHERE c.decision_request_id = dr.id AND c.confirmed_at IS NOT NULL)))
     WHERE p.id = ${projectId}
   `;
   if (!row) return null;

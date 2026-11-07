@@ -23,7 +23,9 @@ describe("today next-step fields", () => {
     const res = await handler(asUser(owner, { method: "GET", url: `https://app.tasketra.com/api/today?projectId=${projectId}` }));
     expect(res.status).toBe(200);
     const body = await jsonBody(res);
-    expect(body.taskCount).toBe(0);
+    expect(body.totalTaskCount).toBe(0);
+    expect(body.openTasks).toEqual([]);
+    expect(body.openTaskCount).toBe(0);
     expect(body.datedTaskCount).toBe(0);
     expect(body.stakeholderCount).toBe(0);
     expect(body.lastCheckInAt).toBeNull();
@@ -44,10 +46,31 @@ describe("today next-step fields", () => {
 
     const res = await handler(asUser(owner, { method: "GET", url: `https://app.tasketra.com/api/today?projectId=${projectId}` }));
     const body = await jsonBody(res);
-    expect(body.taskCount).toBe(4);
+    expect(body.totalTaskCount).toBe(4);
     expect(body.datedTaskCount).toBe(3);
     expect(body.stakeholderCount).toBe(1);
     expect(body.overdueTasks.map((t: any) => t.title)).toEqual(["Overdue one"]);
     expect(body.lastCheckInAt).toBeTruthy();
+    // v151: open = status != 'done' and not deleted, every row counts. The
+    // list is dated-first by due date, undated last; done tasks never appear.
+    expect(body.openTaskCount).toBe(3);
+    expect(body.openTasks.map((t: any) => t.title)).toEqual(["Overdue one", "Future one", "Undated one"]);
+  });
+
+  it("orders open tasks dated-first, then in-progress before not-started", async () => {
+    const { owner, projectId } = await setup();
+    await db().sql`
+      INSERT INTO tasks (project_id, title, status, due_date, created_at) VALUES
+        (${projectId}, 'Undated not started', 'not_started', NULL, now() - interval '2 days'),
+        (${projectId}, 'Undated in progress', 'in_progress', NULL, now() - interval '1 day'),
+        (${projectId}, 'Dated later', 'not_started', CURRENT_DATE + 5, now()),
+        (${projectId}, 'Deleted open', 'not_started', CURRENT_DATE + 1, now())
+    `;
+    await db().sql`UPDATE tasks SET deleted_at = now() WHERE title = 'Deleted open'`;
+
+    const res = await handler(asUser(owner, { method: "GET", url: `https://app.tasketra.com/api/today?projectId=${projectId}` }));
+    const body = await jsonBody(res);
+    expect(body.openTaskCount).toBe(3);
+    expect(body.openTasks.map((t: any) => t.title)).toEqual(["Dated later", "Undated in progress", "Undated not started"]);
   });
 });

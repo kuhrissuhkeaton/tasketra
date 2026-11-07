@@ -5,7 +5,7 @@ import { Wordmark } from "./Wordmark";
 import { FeedbackModal } from "./FeedbackModal";
 import { NavIcon } from "./NavIcon";
 import { NotificationBell } from "./NotificationBell";
-import { readSidebarCollapsed, writeSidebarCollapsed } from "../lib/sidebarState";
+import { readSidebarCollapsed, writeSidebarCollapsed, readNavGroupCollapsed, writeNavGroupCollapsed } from "../lib/sidebarState";
 
 /** Collapsible nav section used by both the sidebar's own global group and
  * ProjectHome's secondary (non-pill-bar) groups -- clicking the label
@@ -26,20 +26,30 @@ export function NavGroup({
    * the user's own toggle -- it only ever forces open, never closed. */
   forceExpanded?: boolean;
 }) {
-  const [collapsed, setCollapsed] = useState(defaultCollapsed);
+  // v151 (Part E1): the stored choice for this group wins over the default;
+  // toggling stores the new one. Groups the user never touched start from
+  // defaultCollapsed, exactly as before.
+  const [collapsed, setCollapsed] = useState<boolean>(() => readNavGroupCollapsed(label) ?? defaultCollapsed);
 
   useEffect(() => {
     if (forceExpanded) setCollapsed(false);
   }, [forceExpanded]);
 
+  function toggle() {
+    setCollapsed((c) => {
+      writeNavGroupCollapsed(label, !c);
+      return !c;
+    });
+  }
+
   return (
     <div className={collapsed ? "side-nav-group collapsed" : "side-nav-group"}>
       <div
         className="side-nav-label collapsible"
-        onClick={() => setCollapsed((c) => !c)}
+        onClick={toggle}
         role="button"
         tabIndex={0}
-        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setCollapsed((c) => !c); } }}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } }}
       >
         {label}
         <span className="side-nav-chevron" aria-hidden="true">▾</span>
@@ -166,7 +176,12 @@ export function AppSidebar({ children, menuLabel = "Menu" }: { children?: ReactN
       </div>
 
       <nav className="side-nav" id="sidebar-nav" aria-label="Main">
-        <NavGroup label="Workspace" defaultCollapsed={!!children}>
+        {/* v151 (Part E1): Workspace starts expanded everywhere, project
+            pages included -- the old defaultCollapsed={!!children} hid the
+            global nav behind an unmarked header on exactly the pages where
+            people need it to escape the project. A stored user choice
+            still wins (see NavGroup). */}
+        <NavGroup label="Workspace">
           <Link to="/app" className={pathname === "/app" ? "side-tab active" : "side-tab"}>
             <NavIcon name="today" active={pathname === "/app"} />
             Today

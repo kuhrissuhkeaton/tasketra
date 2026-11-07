@@ -9,7 +9,17 @@ type Health = PortfolioProjectSummary["health"];
 
 const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
 
-export type ReasonPart = { text: string; tab?: string };
+export type ReasonPart = { text: string; tab?: string; nextUp?: boolean };
+
+// v151 (Part A2): nextUp is the first unfinished item on the project's
+// current STAGE checklist -- not a task. Wherever it is shown it names its
+// stage so it cannot be mistaken for one. (Same labels as StageRail.)
+const STAGE_LABEL: Record<PortfolioProjectSummary["stage"], string> = {
+  initiate: "Initiate",
+  plan: "Plan",
+  execute: "Execute",
+  close: "Close",
+};
 
 /** The same reasons as projectReason, as pieces, so a screen can link each one to the place that fixes it. */
 export function projectReasonParts(p: PortfolioProjectSummary, openDecisions = 0): ReasonPart[] {
@@ -23,7 +33,7 @@ export function projectReasonParts(p: PortfolioProjectSummary, openDecisions = 0
   if (p.health === "off_track") return [{ text: "Off track: a critical issue, an off-track objective, or a badly overrun score" }];
   if (p.health === "at_risk") return [{ text: "Health score is at risk" }];
   if (p.totalTasks === 0) return [{ text: "No tasks yet", tab: "tasks" }];
-  return [{ text: p.nextUp ? `Next up: ${p.nextUp}` : "Nothing flagged" }];
+  return [{ text: p.nextUp ? `Next up in ${STAGE_LABEL[p.stage]}: ${p.nextUp}` : "Nothing flagged", ...(p.nextUp ? { nextUp: true } : {}) }];
 }
 
 export function projectReason(p: PortfolioProjectSummary, openDecisions = 0): string {

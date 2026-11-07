@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api, ApiError, type Project, type ProjectStage, type PortfolioData, type PortfolioProjectSummary, type Task, type Issue, type UserTemplate, type MyTodayData, type CalendarItem } from "../lib/api";
 import { AppSidebar } from "../components/AppSidebar";
-import { StageChip, STAGES } from "../components/StageRail";
+import { StageChip, STAGES, STAGE_LABEL } from "../components/StageRail";
 import { ProjectSetupPicker } from "../components/ProjectSetup";
 import type { ProjectSize, ProjectApproach } from "../lib/projectView";
 import { PROJECT_TEMPLATES, getTemplate, isTemplateId, templateSummary } from "../lib/projectTemplates";
@@ -157,9 +157,13 @@ function jumpTo(sectionId: string) {
   document.getElementById(`dash-sec-${sectionId}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-function PortfolioOverview({ data, wide, onShowAttention, glance }: { data: PortfolioData; wide: boolean; onShowAttention: () => void; glance?: ReactNode }) {
+function PortfolioOverview({ data, wide, onShowAttention, glance, attentionCount }: { data: PortfolioData; wide: boolean; onShowAttention: () => void; glance?: ReactNode; attentionCount: number }) {
   const { kpis } = data;
-  const needAttention = kpis.atRiskProjects + kpis.offTrackProjects;
+  // v151 (Part A1): ONE definition of "needs attention" -- the
+  // buildNeedsAttention list the section below renders. The old tile counted
+  // at-risk + off-track projects, which disagreed with the section (an
+  // on-track project with an overdue task was in one and not the other).
+  const needAttention = attentionCount;
   const overdueProjects = data.projects.filter((x) => x.overdueTasks > 0).length;
   const highRisks = data.projects.reduce((n, x) => n + x.highRisks, 0);
   const highItems = kpis.highIssues + highRisks;
@@ -191,7 +195,7 @@ function PortfolioOverview({ data, wide, onShowAttention, glance }: { data: Port
           <span className="kp-sub">{highItems === 0 ? "No high issues or risks" : `${kpis.highIssues} ${kpis.highIssues === 1 ? "issue" : "issues"}, ${highRisks} ${highRisks === 1 ? "risk" : "risks"}`}</span>
         </button>
         <button type="button" className="kp-tile" onClick={() => jumpTo("milestones")}>
-          <span className="kp-label">Due in 7 days</span>
+          <span className="kp-label">Milestones due in 7 days</span>
           <span className="kp-value">{dueSoon}</span>
           <span className="kp-sub">{dueSoon === 0 ? "No milestones this week" : dueSoon === 1 ? "milestone" : "milestones"}</span>
         </button>
@@ -449,6 +453,9 @@ export default function Dashboard() {
         Object.fromEntries(projects.map((p) => [p.id, p.open_decisions ?? 0])),
       )
     : [];
+  // v151 (Part A2): the attention rows' "Next up" hint names its stage --
+  // it is the first unfinished item on that stage's checklist, not a task.
+  const stageById = new Map((portfolio?.projects ?? []).map((p) => [p.id, p.stage]));
 
   // v142 "Needs a look" context: ages and quiet spells per project, each one
   // only claimed when the data behind it is complete (see lib/needsALook.ts).
@@ -667,7 +674,9 @@ export default function Dashboard() {
 
   const totalOpenDecisions = projects.reduce((sum, p) => sum + (p.open_decisions || 0), 0);
 
-  const attentionCount = listSummaries.filter((x) => x.health !== "on_track" && !x.closed_at).length;
+  // v151 (Part A1): the subtitle uses the same single needs-attention
+  // definition as the tile, chip and section heading (the attention list).
+  const attentionCount = attention.length;
   const byId = new Map(listSummaries.map((x) => [x.id, x]));
   const rows = sortByHealth(
     projects.map((p) => {
@@ -693,7 +702,7 @@ export default function Dashboard() {
     ? "Loading your projects..."
     : projects.length === 0
     ? "No projects yet"
-    : `${projects.length} ${projects.length === 1 ? "project" : "projects"} · ${attentionCount === 0 ? "all on track" : `${attentionCount} ${attentionCount === 1 ? "needs" : "need"} attention`}${totalOpenDecisions > 0 ? ` · ${totalOpenDecisions} ${totalOpenDecisions === 1 ? "decision awaits" : "decisions await"} a response` : ""}`;
+    : `${projects.length} ${projects.length === 1 ? "project" : "projects"} · ${attentionCount === 0 ? "all on track" : `${attentionCount} ${attentionCount === 1 ? "needs" : "need"} attention`}${totalOpenDecisions > 0 ? ` · ${totalOpenDecisions} ${totalOpenDecisions === 1 ? "decision" : "decisions"} awaiting a response` : ""}`;
 
   const deletedSection = deletedProjects.length > 0 && (
     <div style={{ marginTop: 32 }}>
@@ -889,7 +898,7 @@ export default function Dashboard() {
               <div className="pw-filters" role="group" aria-label="Filter projects">
                 {([
                   ["all", "All", rows.length],
-                  ["attention", "Needs attention", rows.filter((r) => r.health !== "on_track" && !r.project.closed_at).length],
+                  ["attention", "Needs attention", attention.length],
                   ["on_track", "On track", rows.filter((r) => r.health === "on_track").length],
                 ] as const).map(([key, label, n]) => (
                   <button
@@ -1054,7 +1063,7 @@ export default function Dashboard() {
                           <span key={r.key} className={`pill pill-${r.tone}`} title={r.explain}>{r.label}<span className="sr-only">. {r.explain}</span></span>
                         ))}
                       </span>
-                      {a.nextUp && <span className="dash-attention-next muted"><span>Next up</span> {a.nextUp}</span>}
+                      {a.nextUp && <span className="dash-attention-next muted"><span>Next up{stageById.get(a.id) ? ` in ${STAGE_LABEL[stageById.get(a.id)!]}` : ""}</span> {a.nextUp}</span>}
                     </li>
                   ))}
                 </ul>
@@ -1079,7 +1088,7 @@ export default function Dashboard() {
           </div>
         ) : portfolio && projects.length > 0 ? (
           <div style={{ opacity: portfolioLoading ? 0.6 : 1, transition: "opacity 120ms ease" }}>
-            <PortfolioOverview data={portfolio} wide={wide} onShowAttention={() => { setListFilter("attention"); setView("list"); }} glance={glanceBand} />
+            <PortfolioOverview data={portfolio} wide={wide} onShowAttention={() => { setListFilter("attention"); setView("list"); }} glance={glanceBand} attentionCount={attention.length} />
           </div>
         ) : null}
 

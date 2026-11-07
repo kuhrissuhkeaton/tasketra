@@ -43,15 +43,19 @@ describe("HealthStrip", () => {
     expect(links.map((l) => l.textContent)).toEqual(["3 tasks overdue", "2 high or critical issues"]);
     await act(async () => { (links[1] as HTMLButtonElement).click(); });
     expect(open).toHaveBeenCalledWith("issues");
-    expect(strip()!.querySelector(".hs-next")!.textContent).toContain("Electrical inspection");
+    // v151 (Part A2): the stage-checklist hint no longer renders in the
+    // strip -- inside the project it read as a second task list.
+    expect(strip()!.querySelector(".hs-next")).toBeNull();
+    expect(strip()!.textContent).not.toContain("Electrical inspection");
   });
 
-  it("is calm for a healthy project and shows what is next once", async () => {
+  it("is calm for a healthy project and leaves the stage-checklist hint to the Dashboard", async () => {
     m.getPortfolio.mockResolvedValue({ projects: [summary({ nextUp: "Finalize launch copy" })] });
     await mount();
     expect(strip()!.querySelector(".pill")!.textContent).toBe("On track");
-    expect(strip()!.textContent).toContain("Next up: Finalize launch copy");
-    expect(strip()!.textContent!.match(/Next up/g)!.length).toBe(1);
+    expect(strip()!.textContent).toContain("Nothing flagged");
+    expect(strip()!.textContent).not.toContain("Finalize launch copy");
+    expect(strip()!.textContent).not.toContain("Next up");
     expect(strip()!.querySelector("button")).toBeNull();
   });
 

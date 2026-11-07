@@ -29,9 +29,13 @@ export function parseDateInput(text: string): string | null {
   return `${y}-${pad(m)}-${pad(d)}`;
 }
 
-/** YYYY-MM-DD -> M/D/YYYY for display in the text box. */
+/** YYYY-MM-DD -> M/D/YYYY for display in the text box. Tolerates a full
+ *  ISO timestamp ("2026-11-25T00:00:00.000Z"): the date part is what a date
+ *  field means. Some stored due/start values carry a time component, and
+ *  v150's strict regex passed them through raw -- the walkthrough caught
+ *  the task edit drawer showing the whole timestamp (v151, Part A4). */
 export function formatDateForDisplay(iso: string): string {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso).slice(0, 10));
   if (!m) return iso;
   return `${Number(m[2])}/${Number(m[3])}/${m[1]}`;
 }
@@ -118,7 +122,7 @@ export function DateField({
         tabIndex={-1}
         aria-hidden="true"
         aria-label="Calendar date"
-        value={value}
+        value={String(value).slice(0, 10)}
         onChange={(e) => {
           setError("");
           onChange(e.target.value);

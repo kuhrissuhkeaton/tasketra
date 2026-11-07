@@ -2,7 +2,8 @@
 // home leads with this and nothing else competes with it: problems first
 // (blocked, overdue, waiting, urgent), then the setup path for a young
 // project (first task, first date, first stakeholder, first check-in), then
-// staleness, then a quiet all-set state. Pure: the caller passes `now`.
+// staleness, then the next open task when work is simply under way (v151),
+// then a quiet all-set state. Pure: the caller passes `now`.
 
 export type NextStepAction =
   | { type: "tab"; tab: string; highlightId?: string; button: string }
@@ -10,7 +11,7 @@ export type NextStepAction =
   | null;
 
 export type NextStep = {
-  kind: "blocked" | "overdue" | "awaiting" | "issue" | "risk" | "first-task" | "first-date" | "first-stakeholder" | "checkin" | "stale" | "quiet";
+  kind: "blocked" | "overdue" | "awaiting" | "issue" | "risk" | "first-task" | "first-date" | "first-stakeholder" | "checkin" | "stale" | "next-task" | "quiet";
   title: string;
   meta: string;
   action: NextStepAction;
@@ -24,9 +25,14 @@ export type NextStepInput = {
   urgentIssues: { id: string; title: string }[];
   urgentRisks: { id: string; title: string }[];
   staleTasks: { id: string; title: string; updated_at: string }[];
-  taskCount: number;
+  /** ALL non-deleted tasks, done included (v151 rename of `taskCount`). */
+  totalTaskCount: number;
   datedTaskCount: number;
   stakeholderCount: number;
+  /** Open tasks (status != 'done', not deleted), pre-sorted by the server:
+   * dated first by due date, then in-progress before not-started. */
+  openTasks: { id: string; title: string; status: string; due_date: string | null }[];
+  openTaskCount: number;
   /** Whole days since the newest status update, or null when there has never been one. */
   daysSinceCheckIn: number | null;
 };
@@ -45,6 +51,18 @@ function daysLate(dueDate: string | null, now: Date): number {
 }
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+const MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** "Due today" / "Due tomorrow" / "Due Nov 20" for a YYYY-MM-DD due date. */
+function dueLabel(dueDate: string, now: Date): string {
+  const due = new Date(`${dueDate.slice(0, 10)}T00:00:00`);
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const days = Math.round((due.getTime() - startOfToday.getTime()) / 86_400_000);
+  if (days <= 0) return "Due today";
+  if (days === 1) return "Due tomorrow";
+  return `Due ${MONTHS_SHORT[due.getMonth()]} ${due.getDate()}`;
+}
 
 export function computeNextStep(input: NextStepInput, now: Date = new Date()): NextStep {
   const blocked = input.blockedTasks[0];
@@ -106,7 +124,7 @@ export function computeNextStep(input: NextStepInput, now: Date = new Date()): N
     };
   }
 
-  if (input.taskCount === 0) {
+  if (input.totalTaskCount === 0) {
     return {
       kind: "first-task",
       title: "Add your first task",
@@ -156,6 +174,25 @@ export function computeNextStep(input: NextStepInput, now: Date = new Date()): N
       title: stale.title,
       meta: `No movement in ${plural(days, "day")}`,
       action: { type: "tab", tab: "tasks", highlightId: stale.id, button: "Open" },
+      quiet: false,
+    };
+  }
+
+  // v151: nothing is wrong and the project is set up, but work is under way.
+  // Point at the next open task instead of declaring the project finished --
+  // "quiet" now truly means there is no open task left. A check-in posted
+  // today is acknowledged in the meta rather than being the whole message.
+  const nextTask = input.openTasks[0];
+  if (nextTask) {
+    const checkedIn = input.daysSinceCheckIn === 0 ? "Checked in today · " : "";
+    const count = input.openTaskCount > 1 ? ` · ${plural(input.openTaskCount, "open task")}` : "";
+    return {
+      kind: "next-task",
+      title: nextTask.title,
+      meta: nextTask.due_date
+        ? `${checkedIn}${dueLabel(nextTask.due_date, now)}${count}`
+        : `${checkedIn}${nextTask.status === "in_progress" ? "In progress" : "Not started"}${count}`,
+      action: { type: "tab", tab: "tasks", highlightId: nextTask.id, button: "Open" },
       quiet: false,
     };
   }

@@ -5,12 +5,14 @@ import { db } from "../../lib/db.ts";
 import handler from "../feed.mts";
 
 async function addEntry(projectId: string, actorId: string | null, title: string) {
-  // 'updated', not 'created': creations of tasks (and decisions, issues,
-  // risks) are de-duplicated out of the feed's activity branch since v150.1
-  // because those entities have their own derived feed rows.
+  // 'stakeholder' + 'updated': creations AND updates of tasks, decisions,
+  // issues and risks are de-duplicated out of the feed's activity branch
+  // (v150.1 creations, v151 updates) because those entities have their own
+  // derived feed rows. Stakeholders have no derived branch, so the activity
+  // row itself is what the feed carries -- which is what this suite tests.
   await db().sql`
     INSERT INTO activity_log (project_id, entity_type, entity_id, entity_title, action, actor_id)
-    VALUES (${projectId}, 'task', gen_random_uuid(), ${title}, 'updated', ${actorId})
+    VALUES (${projectId}, 'stakeholder', gen_random_uuid(), ${title}, 'updated', ${actorId})
   `;
 }
 

@@ -23,7 +23,9 @@ describe("every register's quick-add starts collapsed when empty", () => {
 describe("Dashboard polish", () => {
   it("header shows decisions only; overdue stays as a KPI tile", async () => {
     const src = await read("src/pages/Dashboard.tsx");
-    expect(src).toContain("decisions await");
+    // v151 (Part F10): the header's decision fragment converged on
+    // "awaiting a response" everywhere.
+    expect(src).toContain("awaiting a response");
     expect(src).not.toMatch(/overdue tasks<\/div>/);
     expect(src).toContain("Overdue");
   });

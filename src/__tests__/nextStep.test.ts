@@ -11,7 +11,9 @@ function input(overrides: Partial<NextStepInput> = {}): NextStepInput {
     urgentIssues: [],
     urgentRisks: [],
     staleTasks: [],
-    taskCount: 3,
+    totalTaskCount: 3,
+    openTasks: [],
+    openTaskCount: 0,
     datedTaskCount: 1,
     stakeholderCount: 1,
     daysSinceCheckIn: 2,
@@ -21,7 +23,7 @@ function input(overrides: Partial<NextStepInput> = {}): NextStepInput {
 
 describe("computeNextStep", () => {
   it("leads a brand-new project to its first task", () => {
-    const step = computeNextStep(input({ taskCount: 0, datedTaskCount: 0, stakeholderCount: 0, daysSinceCheckIn: null }), NOW);
+    const step = computeNextStep(input({ totalTaskCount: 0, datedTaskCount: 0, stakeholderCount: 0, daysSinceCheckIn: null }), NOW);
     expect(step.kind).toBe("first-task");
     expect(step.action).toMatchObject({ type: "tab", tab: "tasks" });
   });
@@ -52,7 +54,7 @@ describe("computeNextStep", () => {
 
   it("puts a blocked task ahead of setup steps", () => {
     const step = computeNextStep(input({
-      taskCount: 0, datedTaskCount: 0, stakeholderCount: 0, daysSinceCheckIn: null,
+      totalTaskCount: 0, datedTaskCount: 0, stakeholderCount: 0, daysSinceCheckIn: null,
       blockedTasks: [{ id: "t1", title: "Venue contract", updated_at: "2026-11-03T12:00:00Z" }],
     }), NOW);
     expect(step.kind).toBe("blocked");
@@ -89,5 +91,52 @@ describe("computeNextStep", () => {
     expect(step.quiet).toBe(true);
     expect(step.action).toBeNull();
     expect(step.meta).toContain("5 days");
+  });
+
+  // v151: open work used to fall through to "You're all set" -- the card now
+  // points at the next open task, and quiet means no open tasks at all.
+  it("points at the next open task when work is under way", () => {
+    const step = computeNextStep(input({
+      openTasks: [{ id: "t9", title: "Order catering", status: "not_started", due_date: "2026-11-20" }],
+      openTaskCount: 3,
+      daysSinceCheckIn: 2,
+    }), NOW);
+    expect(step.kind).toBe("next-task");
+    expect(step.quiet).toBe(false);
+    expect(step.title).toBe("Order catering");
+    expect(step.meta).toContain("Due Nov 20");
+    expect(step.meta).toContain("3 open tasks");
+    expect(step.action).toMatchObject({ type: "tab", tab: "tasks", highlightId: "t9" });
+  });
+
+  it("prefers the server's order: the first open task wins as returned", () => {
+    const step = computeNextStep(input({
+      openTasks: [
+        { id: "t8", title: "In progress one", status: "in_progress", due_date: null },
+        { id: "t9", title: "Not started one", status: "not_started", due_date: null },
+      ],
+      openTaskCount: 2,
+    }), NOW);
+    expect(step.kind).toBe("next-task");
+    expect(step.title).toBe("In progress one");
+    expect(step.meta).toContain("In progress");
+  });
+
+  it("acknowledges today's check-in in the meta instead of going quiet", () => {
+    const step = computeNextStep(input({
+      openTasks: [{ id: "t9", title: "Verify v150", status: "in_progress", due_date: null }],
+      openTaskCount: 1,
+      daysSinceCheckIn: 0,
+    }), NOW);
+    expect(step.kind).toBe("next-task");
+    expect(step.meta).toContain("Checked in today");
+  });
+
+  it("only goes quiet when there are no open tasks", () => {
+    const step = computeNextStep(input({
+      totalTaskCount: 5, openTasks: [], openTaskCount: 0, daysSinceCheckIn: 0,
+    }), NOW);
+    expect(step.kind).toBe("quiet");
+    expect(step.meta).toContain("You checked in today");
   });
 });

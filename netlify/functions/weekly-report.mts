@@ -68,11 +68,21 @@ export default withSentry(async (req: Request) => {
       ORDER BY resolved_at DESC
     `,
     database.sql`
-      SELECT dr.id, dr.title, rec.chosen_option, rec.responder_name, rec.responded_at
+      SELECT dr.id, dr.title, rec.chosen_option, rec.responder_name, rec.responded_at, rec.confirmed_at,
+        COALESCE(NULLIF(TRIM(u.display_name), ''), u.email) AS owner_name
       FROM decision_records rec
       JOIN decision_requests dr ON dr.id = rec.decision_request_id
-      WHERE dr.project_id = ${projectId} AND dr.deleted_at IS NULL AND rec.responded_at >= now() - interval '7 days'
-      ORDER BY rec.responded_at DESC
+      JOIN projects p ON p.id = dr.project_id
+      JOIN users u ON u.id = p.owner_id
+      WHERE dr.project_id = ${projectId} AND dr.deleted_at IS NULL
+        AND COALESCE(rec.confirmed_at, rec.responded_at) >= now() - interval '7 days'
+        -- v151: only the OUTCOME record is a decision made (confirmed, or a
+        -- pre-v151 single record). Collected responses are not outcomes.
+        AND (rec.confirmed_at IS NOT NULL
+             OR (dr.status = 'resolved' AND NOT EXISTS (
+                   SELECT 1 FROM decision_records c
+                   WHERE c.decision_request_id = dr.id AND c.confirmed_at IS NOT NULL)))
+      ORDER BY COALESCE(rec.confirmed_at, rec.responded_at) DESC
     `,
     database.sql`
       SELECT id, body, health, created_at FROM status_updates
@@ -81,6 +91,10 @@ export default withSentry(async (req: Request) => {
     `,
     database.sql`
       SELECT
+        -- "Open task" (v151, the one shared definition): status != 'done'
+        -- AND deleted_at IS NULL, counting every task row -- subtasks are
+        -- tasks, parents count too. Same words in today.mts / the Next Step
+        -- card, so the numbers a user compares across pages agree.
         (SELECT count(*) FROM tasks WHERE project_id = ${projectId} AND status != 'done' AND deleted_at IS NULL) AS open_tasks,
         (SELECT count(*) FROM tasks WHERE project_id = ${projectId} AND status = 'blocked' AND deleted_at IS NULL) AS blocked_tasks,
         (SELECT count(*) FROM issues WHERE project_id = ${projectId} AND status != 'resolved' AND deleted_at IS NULL) AS open_issues,
@@ -93,6 +107,10 @@ export default withSentry(async (req: Request) => {
       FROM projects p
       LEFT JOIN decision_requests dr ON dr.id = p.charter_decision_id AND dr.deleted_at IS NULL
       LEFT JOIN decision_records rec ON rec.decision_request_id = dr.id
+        AND (rec.confirmed_at IS NOT NULL
+             OR (dr.status = 'resolved' AND NOT EXISTS (
+                   SELECT 1 FROM decision_records c
+                   WHERE c.decision_request_id = dr.id AND c.confirmed_at IS NOT NULL)))
       WHERE p.id = ${projectId}
     `,
     database.sql`SELECT budget_at_completion FROM projects WHERE id = ${projectId}`,

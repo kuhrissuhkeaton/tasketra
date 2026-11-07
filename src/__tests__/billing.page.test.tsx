@@ -78,7 +78,7 @@ describe("Billing page", () => {
       );
     });
     await flush();
-    await act(async () => { button("Upgrade -- $290/year").click(); });
+    await act(async () => { button("Upgrade · $290/year").click(); });
     await flush();
     expect(container.textContent).toContain("CHECKOUT PAGE");
     expect(calls.checkout).not.toHaveBeenCalled();

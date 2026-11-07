@@ -157,7 +157,19 @@ export default withSentry(async (req: Request) => {
             '[]'
           ) AS recipients
         FROM decision_requests dr
-        LEFT JOIN decision_records rec ON rec.decision_request_id = dr.id
+        -- v151: outcome record only (confirmed, or a pre-v151 single
+        -- record), so the snapshot stays one row per decision.
+        LEFT JOIN LATERAL (
+          SELECT r.chosen_option, r.responder_name, r.responded_at
+          FROM decision_records r
+          WHERE r.decision_request_id = dr.id
+            AND (r.confirmed_at IS NOT NULL
+                 OR (dr.status = 'resolved' AND NOT EXISTS (
+                       SELECT 1 FROM decision_records c
+                       WHERE c.decision_request_id = dr.id AND c.confirmed_at IS NOT NULL)))
+          ORDER BY r.confirmed_at DESC NULLS LAST, r.responded_at DESC
+          LIMIT 1
+        ) rec ON true
         WHERE dr.project_id = ${projectId} AND dr.deleted_at IS NULL
         ORDER BY dr.created_at DESC
       `,

@@ -10,6 +10,12 @@ export type ChangeEntry = { version: string; date: string; title: string; body: 
 // they can do.
 export const CHANGES: ChangeEntry[] = [
   {
+    version: "v151",
+    date: "November 2026",
+    title: "Counts that agree, and decisions you confirm",
+    body: "Your counts now agree everywhere, the Next Step card points at your next open task instead of going quiet, and activity reads like people wrote it. Decision links now collect responses for you to confirm, instead of the first reply deciding it: responses gather on the decision card, and nothing counts as decided until you confirm the outcome.",
+  },
+  {
     version: "v150",
     date: "November 2026",
     title: "One clear next step on every project",

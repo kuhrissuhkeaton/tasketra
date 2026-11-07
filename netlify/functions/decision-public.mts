@@ -6,6 +6,12 @@ import { withSentry } from "../lib/sentry.ts";
 
 // Public, unauthenticated endpoint. Only ever exposes the single decision
 // request matching an unguessable token -- never a list, never other project data.
+//
+// v151 (Part D, Option 1): a response is recorded as a RESPONSE. It no
+// longer resolves the request -- the project owner confirms one response
+// as the outcome in the app (see decisions.mts PATCH action "confirm").
+// The GET record is the confirmed outcome, present only once the request
+// is resolved (for pre-v151 decisions, their single record).
 
 export default withSentry(async (req: Request) => {
   const database = db();
@@ -26,8 +32,15 @@ export default withSentry(async (req: Request) => {
     let record = null;
     if (decision.status === "resolved") {
       const [rec] = await database.sql`
-        SELECT chosen_option, responder_name, responded_at
-        FROM decision_records WHERE decision_request_id = ${decision.id}
+        SELECT chosen_option, responder_name, responded_at, confirmed_at
+        FROM decision_records rec
+        WHERE rec.decision_request_id = ${decision.id}
+          AND (rec.confirmed_at IS NOT NULL
+               OR NOT EXISTS (SELECT 1 FROM decision_records c
+                              WHERE c.decision_request_id = rec.decision_request_id
+                                AND c.confirmed_at IS NOT NULL))
+        ORDER BY rec.confirmed_at DESC NULLS LAST, rec.responded_at DESC
+        LIMIT 1
       `;
       record = rec || null;
     }
@@ -62,7 +75,8 @@ export default withSentry(async (req: Request) => {
       VALUES (${decision.id}, ${chosenOption}, ${responderName})
       RETURNING chosen_option, responder_name, responded_at
     `;
-    await database.sql`UPDATE decision_requests SET status = 'resolved' WHERE id = ${decision.id}`;
+    // v151: deliberately NO status flip here. The response collects with
+    // any others until the owner confirms the outcome.
 
     // Best-effort notification to the PM who owns this project. Failure here
     // must never block the stakeholder's response from being recorded.
@@ -77,8 +91,8 @@ export default withSentry(async (req: Request) => {
       if (owner?.owner_email) {
         await sendEmail(
           owner.owner_email,
-          `Decision recorded: ${decision.title}`,
-          `${responderName} responded "${chosenOption}" to "${decision.title}". View it in tasketra's project feed.`
+          `Decision response: ${decision.title}`,
+          `${responderName} responded "${chosenOption}" to "${decision.title}". It stays open until you confirm the outcome in Tasketra's Decisions tab.`
         );
       }
     } catch {
