@@ -10,6 +10,12 @@ export type ChangeEntry = { version: string; date: string; title: string; body: 
 // they can do.
 export const CHANGES: ChangeEntry[] = [
   {
+    version: "v153",
+    date: "November 2026",
+    title: "One name for check-ins, tidier projects, faster tabs",
+    body: "A few things now say what they mean. The status update on your project Feed is called a check-in everywhere, the way it always should have been. Lighter projects no longer show the sections meant for big, regulated ones (OKRs, RACI, quality, compliance, comms plan and saved templates now appear on Full-size projects, and everything is still one click away under Show all sections). The Team section is called Settings, which is what it holds. And moving between sections feels quicker: a section you have already visited opens with its information already there instead of a loading shimmer.",
+  },
+  {
     version: "v151",
     date: "November 2026",
     title: "Counts that agree, and decisions you confirm",

@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, Fragment } from "react";
 import { useParams, useSearchParams, useNavigate, useLocation, Link } from "react-router-dom";
-import { api, ApiError, type Project, type Task, type Stakeholder, type Decision, type Issue, type Risk, type Assumption, type Dependency, type ChangeRequest, type Lesson, type TodayData, type WeeklyReport, type BudgetData, type FeedItem, type TrashItem, type ProjectMember, type Meeting, type MeetingActionItem, type ProjectDocument, type StorageUsage, type RoadmapItem, type RoadmapItemType, type StakeholderInterest, type StakeholderContactMethod, type QualityItem, type ProcurementItem, type CommPlanItem, type ComplianceItem, type Objective, type KeyResult, type RiskTaskLink, type IssueTaskLink, type TaskTaskLink, type ProjectStage, type BaselineData, type CharterApproval } from "../lib/api";
+import { api, ApiError, type Project, type Task, type Stakeholder, type Decision, type Issue, type Risk, type Assumption, type Dependency, type ChangeRequest, type Lesson, type TodayData, type WeeklyReport, type BudgetData, type FeedItem, type TrashItem, type ProjectMember, type Meeting, type MeetingActionItem, type ProjectDocument, type StorageUsage, type RoadmapItem, type RoadmapItemType, type StakeholderInterest, type StakeholderContactMethod, type ProcurementItem, type CommPlanItem, type Objective, type KeyResult, type RiskTaskLink, type IssueTaskLink, type TaskTaskLink, type ProjectStage, type BaselineData, type CharterApproval } from "../lib/api";
 import { RowActionsMenu } from "../components/RowActionsMenu";
 import { QuickAddForm } from "../components/QuickAddForm";
 import { RoadmapTimeline, ROADMAP_TYPE_LABEL, ROADMAP_STATUS_LABEL } from "../components/RoadmapTimeline";
@@ -16,7 +16,7 @@ import { RaciTab } from "../components/RaciTab";
 import { RiskMatrix } from "../components/RiskMatrix";
 import { Drawer } from "../components/ItemDrawer";
 import { tasksToICS, downloadICS } from "../lib/ics";
-import { fmtDate, fmtDateTime, fmtLocalDate } from "../lib/format";
+import { fmtDate, fmtDateTime, fmtLocalDate, fmtMoney, fmtPct, fmtRatio, fmtBytes } from "../lib/format";
 import { capacityLevel, CAPACITY_LABEL, CAPACITY_PILL, type CapacityLevel } from "../lib/capacity";
 import { useAuth } from "../lib/auth-context";
 import { AppSidebar } from "../components/AppSidebar";
@@ -42,6 +42,9 @@ import { EscalationSettings } from "../components/EscalationSettings";
 import { HealthStrip } from "../components/HealthStrip";
 import { isTabHidden, defaultTasksView, hiddenTabLabels, SIZE_LABEL, type ProjectSize, type ProjectApproach } from "../lib/projectView";
 import { useDocumentTitle } from "../lib/documentTitle";
+import { entityLabel } from "../lib/entityLabels";
+import { QualityTab } from "./project/QualityTab";
+import { ComplianceTab } from "./project/ComplianceTab";
 
 
 export type Tab = "home" | "roadmap" | "tasks" | "charter" | "okrs" | "issues" | "risks" | "assumptions" | "dependencies" | "quality" | "compliance" | "budget" | "meetings" | "documents" | "stakeholders" | "decisions" | "team" | "raci" | "procurement" | "comms" | "closure" | "report" | "templates" | "export" | "connections" | "trash";
@@ -58,21 +61,6 @@ function daysAgo(dateStr: string): number {
   return Math.max(0, Math.floor((Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24)));
 }
 
-function fmtMoney(n: number | null | undefined): string {
-  if (n === null || n === undefined || Number.isNaN(n)) return "--";
-  return n.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 });
-}
-
-function fmtPct(n: number | null | undefined): string {
-  if (n === null || n === undefined || Number.isNaN(n)) return "--";
-  return `${Math.round(n * 100)}%`;
-}
-
-function fmtRatio(n: number | null | undefined): string {
-  if (n === null || n === undefined || Number.isNaN(n)) return "--";
-  return n.toFixed(2);
-}
-
 // DATE columns come back from the API as full ISO timestamps
 // ("2026-08-01T00:00:00.000Z"), not bare date strings -- slicing to the
 // first 10 chars before re-appending a time keeps this safe for both that
@@ -81,13 +69,6 @@ function fmtRatio(n: number | null | undefined): string {
 // parses to Invalid Date instead of throwing).
 function toLocalDate(d: string): Date {
   return new Date(`${d.slice(0, 10)}T00:00:00`);
-}
-
-function fmtBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`;
-  return `${(n / (1024 * 1024 * 1024)).toFixed(1)} GB`;
 }
 
 // Flattens a parent/child task list into an ordered, indented row list (a
@@ -684,7 +665,7 @@ function FeedTab({ projectId, focusComposerNonce = 0 }: { projectId: string; foc
     <div>
       <form className="feed-composer" onSubmit={postNote}>
         <h3 className="feed-composer-title">Post a check-in</h3>
-        <p className="muted feed-composer-help">A short status update for this project. Pick how it&apos;s going, say a line or two, and post.</p>
+        <p className="muted feed-composer-help">A short check-in for this project. Pick how it&apos;s going, say a line or two, and post.</p>
         <div className="status-pill-row" role="group" aria-label="Project status">
           {STATED_HEALTH_VALUES.map((h) => (
             <button
@@ -705,7 +686,7 @@ function FeedTab({ projectId, focusComposerNonce = 0 }: { projectId: string; foc
           </p>
         )}
         <div className="inline-form feed-composer-form">
-          <input ref={composerRef} aria-label="Status update" placeholder="How is the project going?" value={note} onChange={(e) => setNote(e.target.value)} />
+          <input ref={composerRef} aria-label="Check-in" placeholder="How is the project going?" value={note} onChange={(e) => setNote(e.target.value)} />
           <button className="btn btn-primary" disabled={posting || (!note.trim() && !selected)}>{posting ? "Posting…" : "Post"}</button>
         </div>
       </form>
@@ -1102,7 +1083,7 @@ function TodayTab({ projectId, onPostCheckIn }: { projectId: string; onPostCheck
 
 function feedLabel(item: FeedItem, myId?: string) {
   switch (item.type) {
-    case "status_update": return "Status update";
+    case "status_update": return entityLabel("status_update");
     case "task": return "Task";
     case "decision_request": return "Decision requested";
     case "decision_record": return "Decision recorded";
@@ -1111,33 +1092,12 @@ function feedLabel(item: FeedItem, myId?: string) {
     case "activity": {
       const entityType = String(item.meta?.entityType || "item");
       const action = String(item.meta?.action || "changed");
-      const entityLabel = entityType.charAt(0).toUpperCase() + entityType.slice(1);
       const mine = !!myId && item.meta?.actorId === myId;
       const who = mine ? " by you" : item.meta?.actorName ? ` by ${String(item.meta.actorName)}` : "";
-      return `${entityLabel} ${action}${who}`;
+      return `${entityLabel(entityType)} ${action}${who}`;
     }
   }
 }
-
-const TRASH_ENTITY_LABEL: Record<TrashItem["entity_type"], string> = {
-  task: "Task",
-  issue: "Issue",
-  risk: "Risk",
-  stakeholder: "Stakeholder",
-  decision: "Decision",
-  assumption: "Assumption",
-  dependency: "Dependency",
-  change_request: "Change request",
-  lesson: "Lesson",
-  meeting: "Meeting",
-  document: "Document",
-  roadmap_item: "Roadmap item",
-  quality_item: "Quality item",
-  procurement_item: "Vendor / procurement item",
-  comm_plan_item: "Comms plan item",
-  compliance_item: "Compliance item",
-  objective: "Objective",
-};
 
 function TrashTab({ projectId }: { projectId: string }) {
   const [items, setItems] = useState<TrashItem[]>([]);
@@ -1179,7 +1139,7 @@ function TrashTab({ projectId }: { projectId: string }) {
             <RegisterRow
               key={`${item.entity_type}-${item.id}`}
               title={item.title || "(untitled)"}
-              pill={<span className="pill pill-navy">{TRASH_ENTITY_LABEL[item.entity_type]}</span>}
+              pill={<span className="pill pill-navy">{entityLabel(item.entity_type)}</span>}
               date={fmtLocalDate(item.deleted_at)}
               dateLabel="Deleted"
               actions={
@@ -3224,529 +3184,6 @@ function DependenciesTab({ projectId }: { projectId: string }) {
     </div>
   );
 }
-const QUALITY_CATEGORY_LABEL: Record<QualityItem["category"], string> = {
-  standard: "Standard",
-  review: "Review",
-  defect: "Defect",
-};
-
-const QUALITY_STATUS_LABEL: Record<QualityItem["status"], string> = {
-  open: "Open",
-  in_progress: "In review",
-  passed: "Passed",
-  failed: "Failed",
-};
-
-function QualityTab({ projectId }: { projectId: string }) {
-  const confirmDialog = useConfirm();
-  const [items, setItems] = useState<QualityItem[]>([]);
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [category, setCategory] = useState<QualityItem["category"]>("review");
-  const [owner, setOwner] = useState("");
-  const [newStatus, setNewStatus] = useState<QualityItem["status"]>("open");
-  const [view, setView] = useState<"list" | "board">("list");
-  const [dragOverStatus, setDragOverStatus] = useState<QualityItem["status"] | null>(null);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editTitle, setEditTitle] = useState("");
-  const [editDescription, setEditDescription] = useState("");
-  const [editCategory, setEditCategory] = useState<QualityItem["category"]>("review");
-  const [editOwner, setEditOwner] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
-  async function load() {
-    const { qualityItems } = await api.listQuality(projectId);
-    setItems(qualityItems);
-    setLoading(false);
-  }
-
-  useEffect(() => {
-    setLoading(true);
-    load();
-  }, [projectId]);
-
-  async function addItem(e: React.FormEvent) {
-    e.preventDefault();
-    if (!title.trim()) return;
-    setError("");
-    try {
-      await api.createQuality(projectId, title.trim(), description || undefined, category, owner || undefined, newStatus);
-      setTitle("");
-      setDescription("");
-      setCategory("review");
-      setOwner("");
-      setNewStatus("open");
-      announce("Quality item added.");
-      load();
-    } catch (err: any) {
-      setError(err.message || "Couldn't log that quality item.");
-    }
-  }
-
-  async function setStatus(id: string, status: QualityItem["status"]) {
-    await api.updateQuality(id, { status });
-    load();
-  }
-
-  function onDropOnColumn(e: React.DragEvent, status: QualityItem["status"]) {
-    e.preventDefault();
-    setDragOverStatus(null);
-    const itemId = e.dataTransfer.getData("text/plain");
-    if (itemId) setStatus(itemId, status);
-  }
-
-  function startEdit(q: QualityItem) {
-    setEditingId(q.id);
-    setEditTitle(q.title);
-    setEditDescription(q.description || "");
-    setEditCategory(q.category);
-    setEditOwner(q.owner_name || "");
-  }
-
-  async function saveEdit(id: string) {
-    if (!editTitle.trim()) return;
-    await api.updateQuality(id, {
-      title: editTitle.trim(), description: editDescription || undefined, category: editCategory, owner_name: editOwner || undefined,
-    } as any);
-    setEditingId(null);
-    load();
-  }
-
-  async function removeItem(id: string, label: string) {
-    if (!(await confirmDialog(`Delete quality item "${label}"? You can restore it from Trash.`))) return;
-    await api.deleteQuality(id);
-    announce("Deleted.");
-    load();
-  }
-
-  if (loading) return <div className="skel-loading-block"><div className="skel skel-text" style={{ width: "45%" }} /><div className="skel skel-text" style={{ width: "80%" }} /><div className="skel skel-text" style={{ width: "60%", marginBottom: 0 }} /></div>;
-
-  return (
-    <div>
-      <p className="muted" style={{ marginBottom: 16, maxWidth: 640 }}>
-        Standards to meet, reviews to run, and defects you've found -- a quality log alongside
-        the rest of RAID, since "is this good enough" is a different question from "is something
-        broken."
-      </p>
-      <QuickAddForm
-        storageKey="quality"
-        hasRows={items.length > 0}
-        startExpanded={false}
-        onSubmit={addItem}
-        quick={
-          <>
-            <label htmlFor="f-projecthome-2769" className="sr-only">Quality item</label>
-            <input className="quick-add-title" aria-required="true" id="f-projecthome-2769" placeholder="What needs to meet a bar, or get reviewed?" value={title} onChange={(e) => setTitle(e.target.value)} />
-            <select aria-label="Category" value={category} onChange={(e) => setCategory(e.target.value as QualityItem["category"])}>
-              {Object.entries(QUALITY_CATEGORY_LABEL).map(([value, label]) => (
-                <option key={value} value={value}>{label}</option>
-              ))}
-            </select>
-            <button className="btn btn-primary">Log quality item</button>
-          </>
-        }
-        more={
-          <>
-            <label htmlFor="f-projecthome-2771">Description (optional)</label>
-            <textarea id="f-projecthome-2771" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
-            <div className="inline-form" style={{ marginTop: 8, marginBottom: 0 }}>
-              <input aria-label="Owner (optional)" placeholder="Owner (optional)" value={owner} onChange={(e) => setOwner(e.target.value)} />
-              <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as QualityItem["status"])} title="Status" aria-label="Status">
-                {Object.entries(QUALITY_STATUS_LABEL).map(([value, label]) => (
-                  <option key={value} value={value}>{label}</option>
-                ))}
-              </select>
-            </div>
-          </>
-        }
-      />
-      {error && <p className="form-error">{error}</p>}
-
-      <div className="view-toggle">
-        <button
-          className={view === "list" ? "btn btn-primary" : "btn btn-ghost"}
-          type="button"
-          onClick={() => setView("list")}
-        >
-          List
-        </button>
-        <button
-          className={view === "board" ? "btn btn-primary" : "btn btn-ghost"}
-          type="button"
-          onClick={() => setView("board")}
-        >
-          Board
-        </button>
-      </div>
-
-      {view === "board" ? (
-        <div className="kanban-board">
-          {(Object.keys(QUALITY_STATUS_LABEL) as QualityItem["status"][]).map((status) => (
-            <div
-              key={status}
-              className={dragOverStatus === status ? "kanban-column kanban-column-over" : "kanban-column"}
-              onDragOver={(e) => { e.preventDefault(); setDragOverStatus(status); }}
-              onDragLeave={() => setDragOverStatus(null)}
-              onDrop={(e) => onDropOnColumn(e, status)}
-            >
-              <div className="kanban-column-head">
-                {QUALITY_STATUS_LABEL[status]}
-                <span className="kanban-column-count">{items.filter((q) => q.status === status).length}</span>
-              </div>
-              {items.filter((q) => q.status === status).map((q) => (
-                <div
-                  key={q.id}
-                  className="kanban-card"
-                  draggable
-                  onDragStart={(e) => e.dataTransfer.setData("text/plain", q.id)}
-                >
-                  <span className="pill pill-navy" style={{ marginBottom: 6, display: "inline-block" }}>
-                    {QUALITY_CATEGORY_LABEL[q.category]}
-                  </span>
-                  <div>{q.title}</div>
-                  <div className="muted">{q.owner_name || "unassigned"}</div>
-                </div>
-              ))}
-              {items.filter((q) => q.status === status).length === 0 && (
-                <div className="muted kanban-empty">Drop quality items here</div>
-              )}
-            </div>
-          ))}
-        </div>
-      ) : (
-      <>
-      <RegisterSummary>
-        {items.filter((q) => q.status === "open" || q.status === "in_progress").length} to do
-        {" \u00b7 "}{items.filter((q) => q.status === "failed").length} failed
-        {" \u00b7 "}{items.filter((q) => q.status === "passed").length} passed
-      </RegisterSummary>
-      {items.length === 0 ? (
-        <RegisterEmpty>No quality items logged yet. Add a standard to meet, a review to run, or a defect you found.</RegisterEmpty>
-      ) : (
-        <ul className="rg-list" aria-label="Quality items">
-          {items.map((q) => (
-            editingId === q.id ? (
-              <li key={q.id} className="rg-edit">
-                <div className="rg-edit-fields">
-                  <input aria-label="Title" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
-                  <textarea aria-label="Description" value={editDescription} onChange={(e) => setEditDescription(e.target.value)} rows={2} placeholder="Description" />
-                  <select aria-label="Category" value={editCategory} onChange={(e) => setEditCategory(e.target.value as QualityItem["category"])}>
-                    {Object.entries(QUALITY_CATEGORY_LABEL).map(([value, label]) => (
-                      <option key={value} value={value}>{label}</option>
-                    ))}
-                  </select>
-                  <input aria-label="Owner" value={editOwner} onChange={(e) => setEditOwner(e.target.value)} />
-                </div>
-                <div className="rg-edit-actions">
-                  <span className="muted">{QUALITY_STATUS_LABEL[q.status]}</span>
-                  <button className="btn btn-primary" type="button" onClick={() => saveEdit(q.id)}>Save</button>
-                  <button className="btn btn-ghost" type="button" onClick={() => setEditingId(null)}>Cancel</button>
-                </div>
-              </li>
-            ) : (
-              <RegisterRow
-                key={q.id}
-                title={q.title}
-                meta={<>{q.owner_name || "No owner"}{q.description ? ` \u00b7 ${q.description}` : ""}</>}
-                pill={<span className="pill pill-navy">{QUALITY_CATEGORY_LABEL[q.category]}</span>}
-                control={
-                  <select aria-label="Status"
-                    className={`status-select status-select-${q.status}`}
-                    value={q.status}
-                    onChange={(e) => setStatus(q.id, e.target.value as QualityItem["status"])}
-                  >
-                    {Object.entries(QUALITY_STATUS_LABEL).map(([value, label]) => (
-                      <option key={value} value={value}>{label}</option>
-                    ))}
-                  </select>
-                }
-                actions={
-                  <>
-                    <button className="btn-link" type="button" onClick={() => startEdit(q)}>Edit</button>
-                    <RowActionsMenu
-                      label={`More actions for ${q.title}`}
-                      items={[{ label: "Delete", danger: true, onSelect: () => removeItem(q.id, q.title) }]}
-                    />
-                  </>
-                }
-              />
-            )
-          ))}
-        </ul>
-      )}
-      </>
-      )}
-    </div>
-  );
-}
-const COMPLIANCE_CATEGORY_LABEL: Record<ComplianceItem["category"], string> = {
-  regulatory: "Regulatory",
-  policy: "Policy",
-  standard: "Standard",
-  contractual: "Contractual",
-};
-
-const COMPLIANCE_STATUS_LABEL: Record<ComplianceItem["status"], string> = {
-  not_started: "Not started",
-  in_progress: "In progress",
-  compliant: "Compliant",
-  non_compliant: "Non-compliant",
-};
-
-function ComplianceTab({ projectId }: { projectId: string }) {
-  const confirmDialog = useConfirm();
-  const [items, setItems] = useState<ComplianceItem[]>([]);
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [category, setCategory] = useState<ComplianceItem["category"]>("regulatory");
-  const [owner, setOwner] = useState("");
-  const [newStatus, setNewStatus] = useState<ComplianceItem["status"]>("not_started");
-  const [dueDate, setDueDate] = useState("");
-  const [view, setView] = useState<"list" | "board">("list");
-  const [dragOverStatus, setDragOverStatus] = useState<ComplianceItem["status"] | null>(null);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editTitle, setEditTitle] = useState("");
-  const [editDescription, setEditDescription] = useState("");
-  const [editCategory, setEditCategory] = useState<ComplianceItem["category"]>("regulatory");
-  const [editOwner, setEditOwner] = useState("");
-  const [editDueDate, setEditDueDate] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
-  async function load() {
-    const { complianceItems } = await api.listCompliance(projectId);
-    setItems(complianceItems);
-    setLoading(false);
-  }
-
-  useEffect(() => {
-    setLoading(true);
-    load();
-  }, [projectId]);
-
-  async function addItem(e: React.FormEvent) {
-    e.preventDefault();
-    if (!title.trim()) return;
-    setError("");
-    try {
-      await api.createCompliance(projectId, title.trim(), description || undefined, category, owner || undefined, newStatus, dueDate || undefined);
-      setTitle("");
-      setDescription("");
-      setCategory("regulatory");
-      setOwner("");
-      setNewStatus("not_started");
-      setDueDate("");
-      announce("Compliance item added.");
-      load();
-    } catch (err: any) {
-      setError(err.message || "Couldn't log that compliance item.");
-    }
-  }
-
-  async function setStatus(id: string, status: ComplianceItem["status"]) {
-    await api.updateCompliance(id, { status });
-    load();
-  }
-
-  function onDropOnColumn(e: React.DragEvent, status: ComplianceItem["status"]) {
-    e.preventDefault();
-    setDragOverStatus(null);
-    const itemId = e.dataTransfer.getData("text/plain");
-    if (itemId) setStatus(itemId, status);
-  }
-
-  function startEdit(c: ComplianceItem) {
-    setEditingId(c.id);
-    setEditTitle(c.title);
-    setEditDescription(c.description || "");
-    setEditCategory(c.category);
-    setEditOwner(c.owner_name || "");
-    setEditDueDate(c.due_date || "");
-  }
-
-  async function saveEdit(id: string) {
-    if (!editTitle.trim()) return;
-    await api.updateCompliance(id, {
-      title: editTitle.trim(), description: editDescription || undefined, category: editCategory,
-      owner_name: editOwner || undefined, due_date: editDueDate || undefined,
-    } as any);
-    setEditingId(null);
-    load();
-  }
-
-  async function removeItem(id: string, label: string) {
-    if (!(await confirmDialog(`Delete compliance item "${label}"? You can restore it from Trash.`))) return;
-    await api.deleteCompliance(id);
-    announce("Deleted.");
-    load();
-  }
-
-  if (loading) return <div className="skel-loading-block"><div className="skel skel-text" style={{ width: "45%" }} /><div className="skel skel-text" style={{ width: "80%" }} /><div className="skel skel-text" style={{ width: "60%", marginBottom: 0 }} /></div>;
-
-  return (
-    <div>
-      <p className="muted" style={{ marginBottom: 16, maxWidth: 640 }}>
-        Regulatory, policy, standard, or contractual obligations this project needs to satisfy --
-        tracked alongside the rest of RAID, since "are we compliant with this" is a different
-        question from "is this good enough" (Quality) or "is something broken" (Issues).
-      </p>
-      <QuickAddForm
-        storageKey="compliance"
-        hasRows={items.length > 0}
-        startExpanded={false}
-        onSubmit={addItem}
-        quick={
-          <>
-            <label htmlFor="f-projecthome-3013" className="sr-only">Compliance item</label>
-            <input className="quick-add-title" aria-required="true" id="f-projecthome-3013" placeholder="What regulation, policy, or standard applies here?" value={title} onChange={(e) => setTitle(e.target.value)} />
-            <select aria-label="Category" value={category} onChange={(e) => setCategory(e.target.value as ComplianceItem["category"])}>
-              {Object.entries(COMPLIANCE_CATEGORY_LABEL).map(([value, label]) => (
-                <option key={value} value={value}>{label}</option>
-              ))}
-            </select>
-            <button className="btn btn-primary">Log compliance item</button>
-          </>
-        }
-        more={
-          <>
-            <label htmlFor="f-projecthome-3015">Description (optional)</label>
-            <textarea id="f-projecthome-3015" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
-            <div className="inline-form" style={{ marginTop: 8, marginBottom: 0 }}>
-              <input aria-label="Owner (optional)" placeholder="Owner (optional)" value={owner} onChange={(e) => setOwner(e.target.value)} />
-              <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as ComplianceItem["status"])} title="Status" aria-label="Status">
-                {Object.entries(COMPLIANCE_STATUS_LABEL).map(([value, label]) => (
-                  <option key={value} value={value}>{label}</option>
-                ))}
-              </select>
-              <input type="date" title="Due date (optional)" aria-label="Due date (optional)" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
-            </div>
-          </>
-        }
-      />
-      {error && <p className="form-error">{error}</p>}
-
-      <div className="view-toggle">
-        <button
-          className={view === "list" ? "btn btn-primary" : "btn btn-ghost"}
-          type="button"
-          onClick={() => setView("list")}
-        >
-          List
-        </button>
-        <button
-          className={view === "board" ? "btn btn-primary" : "btn btn-ghost"}
-          type="button"
-          onClick={() => setView("board")}
-        >
-          Board
-        </button>
-      </div>
-
-      {view === "board" ? (
-        <div className="kanban-board">
-          {(Object.keys(COMPLIANCE_STATUS_LABEL) as ComplianceItem["status"][]).map((status) => (
-            <div
-              key={status}
-              className={dragOverStatus === status ? "kanban-column kanban-column-over" : "kanban-column"}
-              onDragOver={(e) => { e.preventDefault(); setDragOverStatus(status); }}
-              onDragLeave={() => setDragOverStatus(null)}
-              onDrop={(e) => onDropOnColumn(e, status)}
-            >
-              <div className="kanban-column-head">
-                {COMPLIANCE_STATUS_LABEL[status]}
-                <span className="kanban-column-count">{items.filter((c) => c.status === status).length}</span>
-              </div>
-              {items.filter((c) => c.status === status).map((c) => (
-                <div
-                  key={c.id}
-                  className="kanban-card"
-                  draggable
-                  onDragStart={(e) => e.dataTransfer.setData("text/plain", c.id)}
-                >
-                  <span className="pill pill-navy" style={{ marginBottom: 6, display: "inline-block" }}>
-                    {COMPLIANCE_CATEGORY_LABEL[c.category]}
-                  </span>
-                  <div>{c.title}</div>
-                  <div className="muted">{c.owner_name || "unassigned"}{c.due_date ? ` -- due ${fmtLocalDate(c.due_date)}` : ""}</div>
-                </div>
-              ))}
-              {items.filter((c) => c.status === status).length === 0 && (
-                <div className="muted kanban-empty">Drop compliance items here</div>
-              )}
-            </div>
-          ))}
-        </div>
-      ) : (
-      <>
-      <RegisterSummary>
-        {items.filter((c) => c.status === "not_started" || c.status === "in_progress").length} to do
-        {" \u00b7 "}{items.filter((c) => c.status === "non_compliant").length} non-compliant
-        {" \u00b7 "}{items.filter((c) => c.status === "compliant").length} compliant
-      </RegisterSummary>
-      {items.length === 0 ? (
-        <RegisterEmpty>No compliance items logged yet. Add a regulation, policy, or standard this project needs to satisfy.</RegisterEmpty>
-      ) : (
-        <ul className="rg-list" aria-label="Compliance items">
-          {items.map((c) => (
-            editingId === c.id ? (
-              <li key={c.id} className="rg-edit">
-                <div className="rg-edit-fields">
-                  <input aria-label="Title" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
-                  <textarea aria-label="Description" value={editDescription} onChange={(e) => setEditDescription(e.target.value)} rows={2} placeholder="Description" />
-                  <select aria-label="Category" value={editCategory} onChange={(e) => setEditCategory(e.target.value as ComplianceItem["category"])}>
-                    {Object.entries(COMPLIANCE_CATEGORY_LABEL).map(([value, label]) => (
-                      <option key={value} value={value}>{label}</option>
-                    ))}
-                  </select>
-                  <input aria-label="Owner" value={editOwner} onChange={(e) => setEditOwner(e.target.value)} />
-                  <input aria-label="Due date" type="date" value={editDueDate} onChange={(e) => setEditDueDate(e.target.value)} />
-                </div>
-                <div className="rg-edit-actions">
-                  <span className="muted">{COMPLIANCE_STATUS_LABEL[c.status]}</span>
-                  <button className="btn btn-primary" type="button" onClick={() => saveEdit(c.id)}>Save</button>
-                  <button className="btn btn-ghost" type="button" onClick={() => setEditingId(null)}>Cancel</button>
-                </div>
-              </li>
-            ) : (
-              <RegisterRow
-                key={c.id}
-                title={c.title}
-                meta={<>{c.owner_name || "No owner"}{c.description ? ` \u00b7 ${c.description}` : ""}</>}
-                pill={<span className="pill pill-navy">{COMPLIANCE_CATEGORY_LABEL[c.category]}</span>}
-                flag={expiryFlag(c.due_date, c.status !== "compliant")}
-                date={c.due_date ? fmtLocalDate(c.due_date) : null}
-                dateLabel="Due"
-                control={
-                  <select aria-label="Status"
-                    className={`status-select status-select-${c.status}`}
-                    value={c.status}
-                    onChange={(e) => setStatus(c.id, e.target.value as ComplianceItem["status"])}
-                  >
-                    {Object.entries(COMPLIANCE_STATUS_LABEL).map(([value, label]) => (
-                      <option key={value} value={value}>{label}</option>
-                    ))}
-                  </select>
-                }
-                actions={
-                  <>
-                    <button className="btn-link" type="button" onClick={() => startEdit(c)}>Edit</button>
-                    <RowActionsMenu
-                      label={`More actions for ${c.title}`}
-                      items={[{ label: "Delete", danger: true, onSelect: () => removeItem(c.id, c.title) }]}
-                    />
-                  </>
-                }
-              />
-            )
-          ))}
-        </ul>
-      )}
-      </>
-      )}
-    </div>
-  );
-}
 
 const OBJECTIVE_STATUS_LABEL: Record<Objective["status"], string> = {
   on_track: "On track",
@@ -4007,7 +3444,7 @@ function OkrsTab({ projectId }: { projectId: string }) {
                   <div style={{ flex: 1, minWidth: 220 }}>
                     <div style={{ fontWeight: 700, fontSize: 15 }}>{o.title}</div>
                     {o.description && <div className="muted" style={{ marginTop: 2 }}>{o.description}</div>}
-                    <div className="muted" style={{ fontSize: 12.5, marginTop: 6 }}>
+                    <div className="muted" style={{ fontSize: 13, marginTop: 6 }}>
                       {o.owner_name || "Unassigned"}
                       {o.target_date && <> &middot; Target {fmtLocalDate(o.target_date)}</>}
                     </div>
@@ -4031,7 +3468,7 @@ function OkrsTab({ projectId }: { projectId: string }) {
                 </div>
 
                 {o.progress === null || o.progress === undefined ? (
-                  <p className="muted" style={{ fontSize: 12.5, margin: "10px 0 0" }}>No key results yet -- break this down to track real progress.</p>
+                  <p className="muted" style={{ fontSize: 13, margin: "10px 0 0" }}>No key results yet -- break this down to track real progress.</p>
                 ) : (
                   <div style={{ marginTop: 10, maxWidth: 420 }}>
                     <div className="progress-track">
@@ -4069,7 +3506,7 @@ function OkrsTab({ projectId }: { projectId: string }) {
                           <>
                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
                               <div style={{ flex: 1 }}>{kr.title}</div>
-                              <div className="muted" style={{ fontSize: 12.5, whiteSpace: "nowrap" }}>
+                              <div className="muted" style={{ fontSize: 13, whiteSpace: "nowrap" }}>
                                 {kr.metric_type === "boolean"
                                   ? fmtKeyResultValue(kr, kr.current_value)
                                   : `${fmtKeyResultValue(kr, kr.current_value)} of ${fmtKeyResultValue(kr, kr.target_value)}`}
@@ -4097,7 +3534,7 @@ function OkrsTab({ projectId }: { projectId: string }) {
                         ))}
                       </select>
                       {krMetricType === "boolean" ? (
-                        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13.5 }}>
+                        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 14 }}>
                           <input type="checkbox" checked={krAchieved} onChange={(e) => setKrAchieved(e.target.checked)} />
                           Already achieved
                         </label>
@@ -4577,7 +4014,7 @@ function ProcurementTab({ projectId }: { projectId: string }) {
       {items.length === 0 ? (
         <RegisterEmpty>No vendors or contracts logged yet. Add one above when you're sourcing or have an agreement in place.</RegisterEmpty>
       ) : (
-        <ul className="rg-list" aria-label="Vendors and contracts">
+        <ul className="rg-list" aria-label="Vendors">
           {items.map((p) => (
             editingId === p.id ? (
               <li key={p.id} className="rg-edit">
@@ -4713,6 +4150,10 @@ function BudgetTab({ projectId, onOpenTab }: { projectId: string; onOpenTab: (ta
   const { metrics, taskStats, costEntries, budgetAtCompletion, contingencyReserve } = data;
   const favorable = (n: number | null, goodIsPositive = true) =>
     n === null ? "" : (goodIsPositive ? n >= 0 : n >= 1) ? "evm-good" : "evm-bad";
+  // Sparse-project rule (v153): the EVM grid is scaffolding until there is
+  // something to measure -- a budget figure or at least one task. The
+  // "add tasks" hint above stays as the guide in the empty case.
+  const hasEvmData = budgetAtCompletion !== null || taskStats.totalTasks > 0;
 
   return (
     <div>
@@ -4760,6 +4201,8 @@ function BudgetTab({ projectId, onOpenTab }: { projectId: string; onOpenTab: (ta
         <p className="muted" style={{ marginTop: 12 }}>Add tasks with due dates to compute schedule-based metrics (PV, SPI, SV).</p>
       )}
 
+      {hasEvmData && (
+      <>
       <div className="evm-grid">
         <div className="evm-card" title="Planned Value: % of tasks due by today x BAC">
           <div className="evm-label">PV</div>
@@ -4816,6 +4259,8 @@ function BudgetTab({ projectId, onOpenTab }: { projectId: string; onOpenTab: (ta
         <p className="muted" style={{ marginTop: 10 }}>
           Early forecast: only {taskStats.doneTasks} of {taskStats.totalTasks} tasks {taskStats.doneTasks === 1 ? "is" : "are"} done, so EAC and the other forecasts will swing a lot as more work completes. Treat them as a rough guide for now.
         </p>
+      )}
+      </>
       )}
 
       <h2 className="heading-sm" style={{ marginTop: 28 }}>Log actual cost</h2>
@@ -5556,7 +5001,7 @@ function StorageMeter({ storage }: { storage: StorageUsage }) {
   const pct = storage.capBytes > 0 ? Math.min(100, (storage.usedBytes / storage.capBytes) * 100) : 0;
   const atCap = storage.usedBytes >= storage.capBytes;
   const nearCap = pct >= 80;
-  const fillColor = atCap ? "var(--red)" : nearCap ? "var(--gold)" : "var(--navy)";
+  const fillColor = atCap ? "var(--red)" : nearCap ? "var(--lime)" : "var(--navy)";
 
   return (
     <div style={{ maxWidth: 360, marginBottom: 16 }}>
@@ -6442,7 +5887,7 @@ function ChangeRequestsTab({ projectId }: { projectId: string }) {
                   {c.reason ? ` \u00b7 ${c.reason}` : ""}
                   {c.decided_by ? ` \u00b7 Decided by ${c.decided_by}` : ""}
                   {ccbEnabled && (
-                    <span style={{ display: "block", marginTop: 4, fontSize: 12.5 }}>
+                    <span style={{ display: "block", marginTop: 4, fontSize: 13 }}>
                       CCB: {c.ccb_approvals.length}/{reviewers.length} signed
                       {reviewers.length > 0 && c.ccb_approvals.length < reviewers.length && isReviewer && !c.ccb_approvals.some((a) => a.email === user?.email) && (
                         <>
@@ -6754,7 +6199,7 @@ function TeamTab({ projectId, isOwner, onSetupChange }: { projectId: string; isO
               <span className="role-pill">Member</span>
               {project?.ccb_enabled && (
                 isOwner ? (
-                  <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--slate)", marginLeft: 10, cursor: "pointer" }}>
+                  <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--slate)", marginLeft: 10, cursor: "pointer" }}>
                     <input type="checkbox" checked={!!m.is_ccb_reviewer} onChange={() => toggleReviewer(m)} />
                     CCB reviewer
                   </label>

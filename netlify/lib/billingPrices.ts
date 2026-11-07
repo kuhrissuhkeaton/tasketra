@@ -1,12 +1,11 @@
-// Pro plan prices in USD — the single source the Founder Hub (v152) uses
-// to derive MRR from the local subscriptions mirror, which stores plan
-// interval but no amounts. These match the live Stripe prices behind
-// STRIPE_PRICE_MONTHLY / STRIPE_PRICE_ANNUAL and the display strings in
-// create-checkout-session.mts ("$29 per month" / "$290 per year").
-// If pricing ever changes (or a coupon/grandfathered rate appears), this
-// is the second place that has to change — see V152_SPEC.md Flag D4.
-export const PRO_MONTHLY_USD = 29;
-export const PRO_ANNUAL_USD = 290;
+// Server-side billing price helpers. The amounts themselves live in
+// src/lib/pricing.ts (the one source of truth, shared with the app); this
+// module re-exports them and adds the MRR math the Founder Hub needs,
+// because the local subscriptions mirror stores plan interval but no
+// amounts.
+import { PRO_MONTHLY_USD, PRO_ANNUAL_USD } from "../../src/lib/pricing.ts";
+
+export { PRO_MONTHLY_USD, PRO_ANNUAL_USD };
 
 /** Monthly-recurring-revenue contribution of one subscription. */
 export function mrrContributionUsd(status: string | null, billingInterval: string | null): number {

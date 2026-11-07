@@ -8,6 +8,7 @@ import { sanitizeCharter } from "../lib/charter.ts";
 import { approvalStatus } from "../lib/charterApproval.ts";
 import { isStage } from "../lib/stageChecklist.ts";
 import { computeEvmMetrics, round2 } from "../lib/evm.ts";
+import { HEALTH_LABEL } from "../../src/lib/healthLabels.ts";
 
 // One-click weekly status report: everything that moved on a project in the
 // last 7 days, plus a current-state snapshot. Pure aggregation, no new
@@ -158,9 +159,8 @@ export default withSentry(async (req: Request) => {
   // A note that carried a stated status (v143) is prefixed with it in the
   // "Notes posted" list ("At risk — <body>"); plain notes read as before.
   // The raw health rides along on the row for anything that wants it.
-  const HEALTH_LABEL: Record<string, string> = { on_track: "On track", at_risk: "At risk", off_track: "Off track" };
   const reportStatusUpdates = (statusUpdates as any[]).map((s) => {
-    const label = s.health ? HEALTH_LABEL[s.health] : null;
+    const label = s.health ? HEALTH_LABEL[s.health as keyof typeof HEALTH_LABEL] : null;
     if (!label) return s;
     return { ...s, body: s.body ? `${label} — ${s.body}` : label };
   });

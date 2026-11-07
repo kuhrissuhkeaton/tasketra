@@ -3,7 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { api, type AdminProjectSnapshot, type AdminUserProject } from "../lib/api";
 import { AppSidebar } from "../components/AppSidebar";
 import { PageHeader, SoftCard } from "../components/ui";
-import { fmtDate } from "../lib/format";
+import { fmtDate, fmtBytes } from "../lib/format";
 import { useDocumentTitle } from "../lib/documentTitle";
 
 // Admin support view (v149): read-only look at another user's projects, so
@@ -12,12 +12,6 @@ import { useDocumentTitle } from "../lib/documentTitle";
 
 function plural(n: number, word: string) {
   return `${n} ${word}${n === 1 ? "" : "s"}`;
-}
-
-function fmtBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function label(s: string | null | undefined): string {

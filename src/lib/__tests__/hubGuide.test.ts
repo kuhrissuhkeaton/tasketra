@@ -37,6 +37,6 @@ describe("Resource hub guide", () => {
 
   it("marks exactly the steps whose tabs Light hides", () => {
     const flagged = GUIDE_STAGES.flatMap((s) => s.steps.filter((x) => x.lightHides).map((x) => x.tab)).sort();
-    expect(flagged).toEqual(["Budget", "Budget", "Comms plan", "RACI"]);
+    expect(flagged).toEqual(["Budget", "Budget", "Comms Plan", "RACI"]);
   });
 });

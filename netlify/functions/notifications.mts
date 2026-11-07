@@ -1,7 +1,7 @@
 import type { Config } from "@netlify/functions";
 import { db } from "../lib/db.ts";
 import { getUserIdFromRequest } from "../lib/auth.ts";
-import { getEnv } from "../lib/env.ts";
+import { isAdminEmail } from "../lib/adminGate.ts";
 import { json } from "../lib/http.ts";
 import { withSentry } from "../lib/sentry.ts";
 
@@ -59,8 +59,7 @@ export default withSentry(async (req: Request) => {
 
   const [me] = await database.sql`SELECT email, whats_new_seen FROM users WHERE id = ${userId}`;
   if (!me) return json({ error: "Not authenticated" }, { status: 401 });
-  const adminEmail = getEnv("ADMIN_EMAIL");
-  const isAdmin = !!adminEmail && me.email?.toLowerCase() === adminEmail.toLowerCase();
+  const isAdmin = isAdminEmail(me.email);
 
   const items: Item[] = [];
 

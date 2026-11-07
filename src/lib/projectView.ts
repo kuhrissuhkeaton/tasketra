@@ -3,6 +3,11 @@
 // everything with one switch. The server keeps a small mirror of the one rule
 // it needs (Light hides Budget) in netlify/lib/stageChecklist.ts so a stage
 // suggestion never points at a hidden tab.
+//
+// v153 freeze: the governance suite with zero production usage (OKRs, RACI,
+// quality, compliance, comms plan, saved templates) is Full-size only. The
+// tabs, endpoints and data are untouched — they simply stop appearing on
+// Light and Standard projects, where nobody was using them.
 
 export type ProjectSize = "light" | "standard" | "full";
 export type ProjectApproach = "predictive" | "hybrid" | "agile";
@@ -13,7 +18,7 @@ export const APPROACH_LABEL: Record<ProjectApproach, string> = { predictive: "Pr
 export const SIZE_BLURB: Record<ProjectSize, string> = {
   light: "Small or short. Tasks, roadmap, risks and the essentials.",
   standard: "Most projects. Adds budget, meetings, vendors and closure.",
-  full: "Regulated or large. Adds quality, compliance and comms plan.",
+  full: "Regulated or large. Adds OKRs, RACI, quality, compliance, comms plan and templates.",
 };
 
 export const APPROACH_BLURB: Record<ProjectApproach, string> = {
@@ -27,16 +32,16 @@ const HIDDEN: Record<ProjectSize, string[]> = {
   light: [
     "budget", "meetings",
     "okrs", "assumptions", "dependencies", "quality", "compliance",
-    "procurement", "comms", "export", "connections", "raci",
+    "procurement", "comms", "export", "connections", "raci", "templates",
   ],
-  standard: ["quality", "compliance", "comms"],
+  standard: ["quality", "compliance", "comms", "okrs", "raci", "templates"],
   full: [],
 };
 
 const TAB_LABEL: Record<string, string> = {
   budget: "Budget", meetings: "Meetings", okrs: "OKRs", assumptions: "Assumptions",
   dependencies: "Dependencies", quality: "Quality", compliance: "Compliance",
-  procurement: "Vendors", comms: "Comms plan", templates: "Templates", export: "Export",
+  procurement: "Vendors", comms: "Comms Plan", templates: "Templates", export: "Export",
   connections: "Connections", raci: "RACI",
 };
 

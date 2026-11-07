@@ -57,7 +57,7 @@ export function DeleteAccountCard({
             <input type="text" autoComplete="off" value={typed} onChange={(e) => setTyped(e.target.value)} style={{ display: "block", width: "100%" }} />
           </label>
           {error && <p className="form-error" role="alert">{error}</p>}
-          <button type="submit" className="btn" disabled={!ready || busy} style={{ background: "#b3261e", color: "#fff", borderColor: "#b3261e" }}>
+          <button type="submit" className="btn btn-danger" disabled={!ready || busy}>
             {busy ? "Deleting..." : "Permanently delete my account"}
           </button>{" "}
           <button type="button" className="btn" onClick={close} disabled={busy}>Cancel</button>

@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { api, type PortfolioProjectSummary } from "../lib/api";
 import { projectReasonParts } from "../lib/projectReason";
+import { HEALTH_LABEL } from "../lib/healthLabels";
 
-const LABEL: Record<PortfolioProjectSummary["health"], string> = { on_track: "On track", at_risk: "At risk", off_track: "Off track" };
+const LABEL = HEALTH_LABEL;
 const PILL: Record<PortfolioProjectSummary["health"], string> = { on_track: "pill-green", at_risk: "pill-gold", off_track: "pill-red" };
 
 /** Age of a stated status: "today", "yesterday", "3 days ago". */

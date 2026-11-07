@@ -5,6 +5,7 @@ import { Wordmark } from "../components/Wordmark";
 import { RiskDocument } from "../components/RiskDocument";
 import { ShareBox } from "../components/ShareBox";
 import { useDocumentTitle } from "../lib/documentTitle";
+import { fmtLongDate } from "../lib/format";
 
 // Signed-in printable risk page. Anyone with project access can print it;
 // only the owner sees the share-link controls.
@@ -51,7 +52,7 @@ export default function RiskPrint() {
       <RiskDocument
         projectName={project.name}
         risks={shown}
-        dateLabel={new Date().toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })}
+        dateLabel={fmtLongDate(new Date().toISOString())}
       />
     </main>
   );

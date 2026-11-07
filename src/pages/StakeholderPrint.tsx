@@ -4,6 +4,7 @@ import { api, type Project, type Stakeholder } from "../lib/api";
 import { Wordmark } from "../components/Wordmark";
 import { StakeholderGrid } from "../components/StakeholderGrid";
 import { useDocumentTitle } from "../lib/documentTitle";
+import { fmtLongDate } from "../lib/format";
 
 // Signed-in printable Power / Interest grid. There is deliberately no public
 // share link: it lists people by name, and a stakeholder register is often
@@ -37,7 +38,7 @@ export default function StakeholderPrint() {
         <header className="risk-doc-head">
           <p className="muted risk-doc-kicker">Stakeholder power / interest grid</p>
           <h1>{project.name}</h1>
-          <p className="muted">{new Date().toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })}</p>
+          <p className="muted">{fmtLongDate(new Date().toISOString())}</p>
         </header>
         <StakeholderGrid stakeholders={people} />
       </article>

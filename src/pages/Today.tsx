@@ -18,12 +18,8 @@ import {
   wrapUpNote,
   type TodayTask,
 } from "../lib/today";
+import { HEALTH_LABEL } from "../lib/healthLabels";
 
-const HEALTH_LABEL: Record<PortfolioProjectSummary["health"], string> = {
-  on_track: "On track",
-  at_risk: "At risk",
-  off_track: "Off track",
-};
 const HEALTH_PILL: Record<PortfolioProjectSummary["health"], string> = {
   on_track: "pill-green",
   at_risk: "pill-gold",

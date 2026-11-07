@@ -19,12 +19,10 @@
     "@sentry/react": "^10.69.0",
     "bcryptjs": "^3.0.3",
     "docx": "^9.0.0",
-    "lucide-react": "^0.475.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-router-dom": "^7.18.2",
-    "stripe": "^22.4.0",
-    "uuid": "^14.0.1"
+    "stripe": "^22.4.0"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.4",
@@ -35,7 +33,6 @@
     "@types/pg": "^8.20.4",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
-    "@types/uuid": "^10.0.0",
     "@vitejs/plugin-react": "^6.0.3",
     "jsdom": "^30.1.1",
     "oxlint": "^1.71.0",

@@ -7,6 +7,7 @@ import { getSiteUrl, getEnv } from "../lib/env.ts";
 import { withSentry } from "../lib/sentry.ts";
 import { requireVerifiedEmail } from "../lib/emailVerification.ts";
 import { LIVE_SUBSCRIPTION_STATUSES } from "../lib/billing.ts";
+import { proPriceLabel } from "../../src/lib/pricing.ts";
 
 // Starts a Stripe Checkout session for the flat-rate Tasketra Pro plan.
 // 14-day trial on both intervals; Stripe handles the actual card entry,
@@ -65,7 +66,7 @@ export default withSentry(async (req: Request) => {
   // One free trial per person: anyone who has had a subscription before pays
   // from day one.
   const hadSubscriptionBefore = prior.data.some((s) => s.status !== "incomplete_expired") || !!existing?.stripe_subscription_id;
-  const price = interval === "year" ? "$290 per year" : "$29 per month";
+  const price = proPriceLabel(interval);
 
   const siteUrl = getSiteUrl();
   const shared = {

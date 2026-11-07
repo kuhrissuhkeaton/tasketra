@@ -5,6 +5,7 @@ import { AppSidebar } from "../components/AppSidebar";
 import { PageHeader, RegisterRow, RegisterEmpty } from "../components/ui";
 import { fmtDate } from "../lib/format";
 import { useDocumentTitle } from "../lib/documentTitle";
+import { Modal } from "../components/Modal";
 
 type Removal = { account: AdminAccount; mode: "founding" | "delete" };
 
@@ -152,14 +153,6 @@ function RemovalDialog({ removal, onClose, onDone }: { removal: Removal; onClose
     return () => { cancelled = true; };
   }, [account.id, mode]);
 
-  useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape" && !busy) onClose();
-    }
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [busy, onClose]);
-
   const blocked = !!preview && preview.blockers.length > 0;
   const emailMatches = typed.trim().toLowerCase() === account.email.toLowerCase();
   const canConfirm = mode === "founding" ? !busy : !busy && !!preview && !blocked && emailMatches;
@@ -181,12 +174,13 @@ function RemovalDialog({ removal, onClose, onDone }: { removal: Removal; onClose
     }
   }
 
+  // The shared Modal shell (v153): focus trap, Escape, backdrop and focus
+  // return come from there. Closing stays blocked while a removal is in
+  // flight, so every close path goes through this guard.
+  const guardedClose = () => { if (!busy) onClose(); };
+
   return (
-    <div className="confirm-overlay" onClick={() => { if (!busy) onClose(); }}>
-      <div className="confirm-card" role="alertdialog" aria-modal="true" aria-labelledby="removal-title" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 520 }}>
-        <p className="confirm-message" id="removal-title" style={{ fontWeight: 600 }}>
-          {mode === "founding" ? "Remove founding status?" : "Delete this account?"}
-        </p>
+    <Modal title={mode === "founding" ? "Remove founding status?" : "Delete this account?"} onClose={guardedClose}>
         <p className="muted" style={{ wordBreak: "break-all" }}>{account.email}</p>
 
         {mode === "founding" ? (
@@ -213,7 +207,7 @@ function RemovalDialog({ removal, onClose, onDone }: { removal: Removal; onClose
                 <label htmlFor="removal-confirm-email">Type the email address to confirm</label>
                 <input
                   id="removal-confirm-email"
-                  autoFocus
+                  data-autofocus
                   autoComplete="off"
                   value={typed}
                   onChange={(e) => setTyped(e.target.value)}
@@ -227,14 +221,13 @@ function RemovalDialog({ removal, onClose, onDone }: { removal: Removal; onClose
         {error && <div className="form-error">{error}</div>}
 
         <div className="confirm-actions">
-          <button type="button" className="btn btn-ghost" onClick={onClose} disabled={busy} autoFocus={mode === "founding"}>
+          <button type="button" className="btn btn-ghost" onClick={onClose} disabled={busy} data-autofocus={mode === "founding" ? true : undefined}>
             Cancel
           </button>
           <button type="button" className="btn btn-danger" onClick={confirm} disabled={!canConfirm}>
             {busy ? "Working..." : mode === "founding" ? "Remove founding status" : "Delete account"}
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

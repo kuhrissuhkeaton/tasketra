@@ -87,8 +87,8 @@ describe("breadcrumb and page heading", () => {
 
   it("uses the sidebar label for the view (Weekly report, Comms plan)", async () => {
     await mount("comms");
-    expect(crumb()!.querySelector('[aria-current="page"]')!.textContent).toBe("Comms plan");
-    expect(h1()).toBe("Comms plan");
+    expect(crumb()!.querySelector('[aria-current="page"]')!.textContent).toBe("Comms Plan");
+    expect(h1()).toBe("Comms Plan");
   });
 
   it("strip views have no breadcrumb and keep the project name as the heading", async () => {

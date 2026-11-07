@@ -6,6 +6,7 @@ import { getEnv, getSiteUrl } from "../lib/env.ts";
 import { sendEmail } from "../lib/notify.ts";
 import type Stripe from "stripe";
 import { withSentry } from "../lib/sentry.ts";
+import { proPriceLabel } from "../../src/lib/pricing.ts";
 
 // Single entry point for all subscription state changes. Never trusts the
 // client for billing state -- Stripe is the source of truth, this just
@@ -242,7 +243,7 @@ export default withSentry(async (req: Request) => {
       const [user] = await database.sql`SELECT email FROM users WHERE id = ${userId}`;
       if (!user?.email) break;
       const interval = sub.items?.data?.[0]?.price?.recurring?.interval;
-      const amount = interval === "year" ? "$290 per year" : "$29 per month";
+      const amount = proPriceLabel(interval);
       const endsOn = sub.trial_end ? new Date(sub.trial_end * 1000).toUTCString().slice(0, 16) : "soon";
       await sendEmail(
         user.email,

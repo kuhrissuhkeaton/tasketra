@@ -6,13 +6,11 @@
 // known zero is also omitted (there is nothing to point at). This never
 // invents a reason the data does not support.
 
+import { HEALTH_LABEL } from "./healthLabels";
+
 export type StatedHealth = "on_track" | "at_risk" | "off_track";
 
-export const STATED_HEALTH_LABEL: Record<StatedHealth, string> = {
-  on_track: "On track",
-  at_risk: "At risk",
-  off_track: "Off track",
-};
+export const STATED_HEALTH_LABEL: Record<StatedHealth, string> = HEALTH_LABEL;
 
 export const STATED_HEALTH_PILL: Record<StatedHealth, string> = {
   on_track: "pill-green",

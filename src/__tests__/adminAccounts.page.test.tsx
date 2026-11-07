@@ -122,7 +122,7 @@ describe("Founding members admin page", () => {
     await act(async () => { buttons("Delete account")[1].click(); });
     await act(async () => {});
     expect(calls.preview).toHaveBeenCalledWith("u-test");
-    const dialog = document.querySelector('[role="alertdialog"]')!;
+    const dialog = document.querySelector('[role="dialog"]')!;
     const confirm = Array.from(dialog.querySelectorAll("button")).find((b) => b.textContent === "Delete account") as HTMLButtonElement;
     expect(confirm.disabled).toBe(true);
 
@@ -135,7 +135,7 @@ describe("Founding members admin page", () => {
     await act(async () => { confirm.click(); });
     await act(async () => {});
     expect(calls.del).toHaveBeenCalledWith("u-test", "karissa+test@gmail.com");
-    expect(document.querySelector('[role="alertdialog"]')).toBeNull();
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
     expect(host.textContent).toContain("Deleted karissa+test@gmail.com");
     expect(calls.list.mock.calls.length).toBeGreaterThan(1); // list reloaded
   });
@@ -146,7 +146,7 @@ describe("Founding members admin page", () => {
     });
     await act(async () => { buttons("Delete account")[0].click(); });
     await act(async () => {});
-    const dialog = document.querySelector('[role="alertdialog"]')!;
+    const dialog = document.querySelector('[role="dialog"]')!;
     expect(dialog.textContent).toContain("Cancel it in Stripe first");
     expect(dialog.querySelector("input")).toBeNull();
     const confirm = Array.from(dialog.querySelectorAll("button")).find((b) => b.textContent === "Delete account") as HTMLButtonElement;
@@ -155,7 +155,7 @@ describe("Founding members admin page", () => {
 
   it("removing only the founding status keeps the account and calls the right action", async () => {
     await act(async () => { buttons("Remove founding status")[1].click(); });
-    const dialog = document.querySelector('[role="alertdialog"]')!;
+    const dialog = document.querySelector('[role="dialog"]')!;
     expect(dialog.textContent).toContain("keeps working and keeps its data");
     const confirm = Array.from(dialog.querySelectorAll("button")).find((b) => b.textContent === "Remove founding status") as HTMLButtonElement;
     await act(async () => { confirm.click(); });
@@ -166,9 +166,9 @@ describe("Founding members admin page", () => {
 
   it("Escape closes the dialog without doing anything", async () => {
     await act(async () => { buttons("Remove founding status")[0].click(); });
-    expect(document.querySelector('[role="alertdialog"]')).not.toBeNull();
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull();
     await act(async () => { document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); });
-    expect(document.querySelector('[role="alertdialog"]')).toBeNull();
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
     expect(calls.removeFounding).not.toHaveBeenCalled();
   });
 
@@ -176,11 +176,11 @@ describe("Founding members admin page", () => {
     calls.del.mockRejectedValue(new Error("Not authorized"));
     await act(async () => { buttons("Delete account")[1].click(); });
     await act(async () => {});
-    const dialog = document.querySelector('[role="alertdialog"]')!;
+    const dialog = document.querySelector('[role="dialog"]')!;
     await type(dialog.querySelector("input") as HTMLInputElement, "karissa+test@gmail.com");
     const confirm = Array.from(dialog.querySelectorAll("button")).find((b) => b.textContent === "Delete account") as HTMLButtonElement;
     await act(async () => { confirm.click(); });
     await act(async () => {});
-    expect(document.querySelector('[role="alertdialog"]')?.textContent).toContain("Not authorized");
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Not authorized");
   });
 });

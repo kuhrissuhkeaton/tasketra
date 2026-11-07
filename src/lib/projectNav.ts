@@ -34,14 +34,14 @@ export const NAV_GROUPS: NavGroup[] = [
   { id: "people", label: "People and decisions", sections: [
     { id: "decisions", label: "Decisions" },
     { id: "stakeholders", label: "Stakeholders" },
-    { id: "team", label: "Team" },
+    { id: "team", label: "Settings" },
     { id: "raci", label: "RACI" },
     { id: "procurement", label: "Vendors" },
-    { id: "comms", label: "Comms plan" },
+    { id: "comms", label: "Comms Plan" },
   ] },
   { id: "docs", label: "Docs", sections: [
     { id: "documents", label: "Documents" },
-    { id: "report", label: "Weekly report" },
+    { id: "report", label: "Weekly Report" },
     { id: "closure", label: "Closure" },
     { id: "templates", label: "Templates" },
     { id: "export", label: "Export" },

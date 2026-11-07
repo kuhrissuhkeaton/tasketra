@@ -41,3 +41,35 @@ export function fmtLocalDate(d: string | null | undefined): string {
   if (!d) return "--";
   return new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString(undefined, DATE_OPTS);
 }
+
+/** Long form for document/print headers ("November 7, 2026"). */
+export function fmtLongDate(iso: string | null | undefined): string {
+  if (!iso) return "--";
+  return new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+}
+
+/** Whole-dollar USD ("$1,250"); "--" for a missing number. */
+export function fmtMoney(n: number | null | undefined): string {
+  if (n === null || n === undefined || Number.isNaN(n)) return "--";
+  return n.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+}
+
+/** A 0–1 fraction as a whole percent ("42%"); "--" for a missing number. */
+export function fmtPct(n: number | null | undefined): string {
+  if (n === null || n === undefined || Number.isNaN(n)) return "--";
+  return `${Math.round(n * 100)}%`;
+}
+
+/** A ratio to two decimals ("1.25"); "--" for a missing number. */
+export function fmtRatio(n: number | null | undefined): string {
+  if (n === null || n === undefined || Number.isNaN(n)) return "--";
+  return n.toFixed(2);
+}
+
+/** A byte count with units ("812 B", "4.2 KB", "1.3 MB", "2.0 GB"). */
+export function fmtBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(n / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+}

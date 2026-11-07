@@ -5,9 +5,10 @@ import { api, type ActivityItem } from "../lib/api";
 import { useDocumentTitle } from "../lib/documentTitle";
 import { PageHeader, SoftCard, AlignedList, ListGroupHead, ListRow } from "../components/ui";
 import { localDateKey } from "../lib/today";
+import { entityLabel } from "../lib/entityLabels";
 
 const VERB: Record<string, string> = { created: "Created", updated: "Updated", deleted: "Deleted", restored: "Restored" };
-const label = (entityType: string) => entityType.replace(/_/g, " ");
+const label = entityLabel;
 const dayTitle = (iso: string, now: Date) => {
   const key = localDateKey(new Date(iso));
   if (key === localDateKey(now)) return "Today";

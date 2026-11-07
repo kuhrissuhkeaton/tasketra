@@ -181,7 +181,7 @@ export function TourOverlay({
         width: rect.width + pad * 2,
         height: rect.height + pad * 2,
         borderRadius: 10,
-        border: "2px solid var(--gold)",
+        border: "2px solid var(--lime)",
         boxShadow: "0 0 0 9999px rgba(28, 36, 21, 0.6)",
         zIndex: 9999,
         pointerEvents: "none",

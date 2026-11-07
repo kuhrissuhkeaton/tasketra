@@ -5,6 +5,7 @@ import { Wordmark } from "../components/Wordmark";
 import { RiskDocument } from "../components/RiskDocument";
 import { RaciDocument } from "../components/RaciDocument";
 import { useDocumentTitle } from "../lib/documentTitle";
+import { fmtLongDate } from "../lib/format";
 
 // Public, read-only view of a shared document. Works for any signed-out
 // visitor; the server only returns it while the owner's link is active.
@@ -27,7 +28,7 @@ export default function SharePublic() {
     api.getSharedDocument(token).then(setData).catch((e) => setError(e.message));
   }, [token]);
 
-  const dateLabel = `As of ${new Date().toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })}`;
+  const dateLabel = `As of ${fmtLongDate(new Date().toISOString())}`;
 
   return (
     <main className="public-roadmap share-public">

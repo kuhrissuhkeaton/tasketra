@@ -48,9 +48,9 @@ describe("My activity", () => {
     m.getMyActivity.mockResolvedValue({ items: ITEMS });
     await renderPage();
     const list = container.querySelector('ul[aria-label="Your recent activity"]') as HTMLElement;
-    expect(list.textContent).toContain("Created task");
+    expect(list.textContent).toContain("Created Task");
     expect(list.textContent).toContain("Kickoff");
-    expect(list.textContent).toContain("Updated change request");
+    expect(list.textContent).toContain("Updated Change request");
     expect(list.textContent).toContain("status: open -> approved");
     expect(list.textContent).toContain("Oct 6");
     expect(list.querySelector('a[href="/app/projects/p1"]')?.textContent).toBe("Website Relaunch");

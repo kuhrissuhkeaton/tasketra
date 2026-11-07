@@ -9,7 +9,11 @@ async function read(path: string): Promise<string> {
 
 describe("every register's quick-add starts collapsed when empty", () => {
   it("passes startExpanded={false} to all 11 QuickAddForm usages", async () => {
-    const src = await read("src/pages/ProjectHome.tsx");
+    // v153: QualityTab and ComplianceTab live in their own files now; the
+    // count covers ProjectHome plus both extracted tabs.
+    const src = (await read("src/pages/ProjectHome.tsx"))
+      + (await read("src/pages/project/QualityTab.tsx"))
+      + (await read("src/pages/project/ComplianceTab.tsx"));
     const forms = src.split("<QuickAddForm").slice(1);
     expect(forms.length).toBe(11);
     for (const f of forms) {

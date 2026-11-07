@@ -40,7 +40,7 @@ describe("group map", () => {
 
   it("labels sections the way the old nav did", () => {
     expect(sectionLabel("procurement")).toBe("Vendors");
-    expect(sectionLabel("comms")).toBe("Comms plan");
+    expect(sectionLabel("comms")).toBe("Comms Plan");
     expect(sectionLabel("trash")).toBe("Trash");
     expect(sectionLabel("zzz")).toBeNull();
   });

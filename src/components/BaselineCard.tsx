@@ -1,12 +1,9 @@
 import { useEffect, useState } from "react";
 import { api, type BaselineData } from "../lib/api";
-import { fmtDate, fmtLocalDate } from "../lib/format";
+import { fmtDate, fmtLocalDate, fmtMoney } from "../lib/format";
 import { useConfirm } from "./ConfirmDialog";
 
-function money(n: number | null | undefined): string {
-  if (n === null || n === undefined) return "--";
-  return n.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 });
-}
+const money = fmtMoney;
 
 function signedMoney(n: number): string {
   return `${n > 0 ? "+" : n < 0 ? "-" : ""}${money(Math.abs(n))}`;
@@ -52,6 +49,12 @@ export function BaselineCard({ projectId, isOwner, showBudget }: { projectId: st
     ? variance.movedTasks.length + variance.addedTasks + variance.removedTasks + (variance.budget.delta ?? 0) + (variance.reserve.delta ?? 0)
     : 0;
   const hasBudget = current.budget !== null || current.reserve !== null;
+
+  // Sparse-project rule (v153): with no baseline locked and nothing a
+  // baseline could capture yet (no dated tasks, no budget figures), the
+  // card is scaffolding on an empty project -- render nothing. It appears
+  // as soon as there is a plan worth snapshotting.
+  if (!baseline && current.datedTaskCount === 0 && !hasBudget) return null;
 
   return (
     <div className="settings-card baseline-card">

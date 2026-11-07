@@ -5,6 +5,7 @@ import { hasProjectAccess } from "../lib/ownership.ts";
 import { json } from "../lib/http.ts";
 import { logActivity } from "../lib/activity.ts";
 import { withSentry } from "../lib/sentry.ts";
+import { HEALTH_LABEL } from "../../src/lib/healthLabels.ts";
 
 // The stated-status vocabulary a check-in can carry (v143) -- the same words
 // the computed project health uses (netlify/lib/portfolioHealth.ts). A post
@@ -40,8 +41,7 @@ export default withSentry(async (req: Request) => {
   // no author column; the author lives on this row's actor_id. The project
   // Feed excludes status_update 'created' activity rows (its derived branch
   // already carries the check-in), so nothing doubles there.
-  const HEALTH_LABEL: Record<string, string> = { on_track: "On track", at_risk: "At risk", off_track: "Off track" };
-  const summary = text ? text.slice(0, 120) : (health ? HEALTH_LABEL[health] : null);
+  const summary = text ? text.slice(0, 120) : (health ? HEALTH_LABEL[health as keyof typeof HEALTH_LABEL] : null);
   await logActivity(database, {
     projectId,
     entityType: "status_update",

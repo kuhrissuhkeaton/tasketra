@@ -55,7 +55,7 @@ export default function LegalHub() {
           ))}
         </div>
 
-        <p className="muted" style={{ marginTop: 28, fontSize: 13.5 }}>
+        <p className="muted" style={{ marginTop: 28, fontSize: 14 }}>
           Questions about any of this? Reach us at{" "}
           <a href="mailto:info@tasketra.com">info@tasketra.com</a>.
         </p>

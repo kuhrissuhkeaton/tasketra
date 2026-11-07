@@ -4,6 +4,7 @@ import { api, type FounderHubData } from "../lib/api";
 import { AppSidebar } from "../components/AppSidebar";
 import { PageHeader, SoftCard } from "../components/ui";
 import { fmtDate } from "../lib/format";
+import { PRO_MONTHLY_USD, PRO_ANNUAL_USD } from "../lib/pricing";
 import { useDocumentTitle } from "../lib/documentTitle";
 
 // Founder Hub (v152): the admin-only monitoring page. Everything here is
@@ -105,8 +106,8 @@ export default function AdminFounderHub() {
               <p className="muted">
                 Founding subscribers (kept separate from GA): {data.revenue.foundingSubscribers.active} active,{" "}
                 {data.revenue.foundingSubscribers.trialing} in trial, {data.revenue.foundingSubscribers.pastDue} past due ·{" "}
-                {money(data.revenue.foundingSubscribers.mrr)} MRR. MRR is derived from the plan mix ($29 monthly,
-                $290 yearly) in the app's own subscription records, not a live Stripe read.{" "}
+                {money(data.revenue.foundingSubscribers.mrr)} MRR. MRR is derived from the plan mix (${PRO_MONTHLY_USD} monthly,
+                ${PRO_ANNUAL_USD} yearly) in the app's own subscription records, not a live Stripe read.{" "}
                 <a href="https://dashboard.stripe.com" target="_blank" rel="noreferrer">Reconcile in Stripe</a>
               </p>
             </SoftCard>

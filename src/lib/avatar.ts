@@ -2,7 +2,10 @@
  * initial circles instead of image avatars anywhere a person needs a visual
  * marker (member rows, workload tables, task cards). */
 
-const AVATAR_COLORS = ["#F3D8B0", "#D8E4C8", "#E9D8F0", "#CFEA46", "#F6D6C6"];
+/** Avatar pastels are the design tokens, not local hexes: the three --tag-
+ *  colors, the brand lime, and --avatar-peach (defined beside them in
+ *  index.css for exactly this list). */
+const AVATAR_COLORS = ["var(--tag-tan)", "var(--tag-sage)", "var(--tag-lavender)", "var(--lime)", "var(--avatar-peach)"];
 
 export function avatarColor(seed: string): string {
   let hash = 0;

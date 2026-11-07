@@ -14,6 +14,7 @@ import { projectReason, sortByHealth } from "../lib/projectReason";
 import { localDateKey, addDays } from "../lib/today";
 import { buildNeedsAttention } from "../lib/needsAttention";
 import { buildNeedsALook, type LookContext } from "../lib/needsALook";
+import { HEALTH_LABEL } from "../lib/healthLabels";
 import { DashboardCalendar } from "../components/DashboardCalendar";
 import { monthRange, shiftMonth, daysBetween } from "../lib/calendarItems";
 import { ResizableTable } from "../components/ResizableTable";
@@ -33,12 +34,6 @@ const TASK_STATUS_LABEL: Record<Task["status"], string> = {
   in_progress: "In progress",
   blocked: "Blocked",
   done: "Done",
-};
-
-const HEALTH_LABEL: Record<PortfolioProjectSummary["health"], string> = {
-  on_track: "On track",
-  at_risk: "At risk",
-  off_track: "Off track",
 };
 
 const HEALTH_PILL: Record<PortfolioProjectSummary["health"], string> = {
@@ -83,7 +78,7 @@ function TaskStatusChart({ breakdown }: { breakdown: PortfolioData["taskStatusBr
       </div>
       <div style={{ display: "flex", gap: 18, flexWrap: "wrap", marginTop: 10 }}>
         {TASK_STATUS_ORDER.map((status) => (
-          <div key={status} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5 }}>
+          <div key={status} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
             <span className={`gantt-bar-${status}`} style={{ width: 10, height: 10, borderRadius: 3, display: "inline-block" }} />
             <span className="muted">{TASK_STATUS_LABEL[status]}</span>
             <strong>{byStatus[status] || 0}</strong>
@@ -309,7 +304,7 @@ function PortfolioOverview({ data, wide, onShowAttention, glance, attentionCount
             <div className="progress-fill" style={{ width: `${kpis.avgObjectiveProgress ?? 0}%` }} />
           </div>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 10, alignItems: "center" }}>
-            <span className="muted" style={{ fontSize: 12.5 }}>{fmtPct100(kpis.avgObjectiveProgress)} average progress</span>
+            <span className="muted" style={{ fontSize: 13 }}>{fmtPct100(kpis.avgObjectiveProgress)} average progress</span>
             {kpis.objectivesOnTrack > 0 && <span className="pill pill-green">{kpis.objectivesOnTrack} on track</span>}
             {kpis.objectivesAtRisk > 0 && <span className="pill pill-gold">{kpis.objectivesAtRisk} at risk</span>}
             {kpis.objectivesOffTrack > 0 && <span className="pill pill-red">{kpis.objectivesOffTrack} off track</span>}

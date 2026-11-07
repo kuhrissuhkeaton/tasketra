@@ -1,4 +1,5 @@
 import { LegalLayout } from "../../components/LegalLayout";
+import { PRO_MONTHLY_USD, PRO_ANNUAL_USD } from "../../lib/pricing";
 
 export default function Terms() {
   return (
@@ -70,7 +71,7 @@ export default function Terms() {
       <h2>7. Fees and billing</h2>
       <p>
         Tasketra offers a Free plan (up to 3 projects, 2GB of storage) at no cost, forever. The Pro plan unlocks
-        unlimited projects and 25GB of storage for $29/month or $290/year, and starts with a 14-day free trial.
+        unlimited projects and 25GB of storage for ${PRO_MONTHLY_USD}/month or ${PRO_ANNUAL_USD}/year, and starts with a 14-day free trial.
       </p>
       <p>
         <strong>A payment method is required to start a Pro trial.</strong> If you don't cancel before the trial

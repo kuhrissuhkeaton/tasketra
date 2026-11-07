@@ -1,19 +1,10 @@
 import type { Config } from "@netlify/functions";
 import { db } from "../lib/db.ts";
 import { getUserIdFromRequest } from "../lib/auth.ts";
-import { getEnv } from "../lib/env.ts";
+import { getStrictAdmin } from "../lib/adminGate.ts";
 import { json } from "../lib/http.ts";
 import { sendEmail } from "../lib/notify.ts";
 import { withSentry } from "../lib/sentry.ts";
-
-/** Mirrors the admin gate in waitlist.mts / auth-me.mts. */
-async function isAdmin(userId: string): Promise<boolean> {
-  const adminEmail = getEnv("ADMIN_EMAIL");
-  if (!adminEmail) return false; // fail closed: no ADMIN_EMAIL means nobody is admin
-  const database = db();
-  const [user] = await database.sql`SELECT email FROM users WHERE id = ${userId}`;
-  return user?.email?.toLowerCase() === adminEmail.toLowerCase();
-}
 
 const VALID_STATUSES = ["new", "planned", "shipped", "dismissed"];
 
@@ -39,7 +30,7 @@ export default withSentry(async (req: Request) => {
   }
 
   // Everything else is admin-only.
-  if (!(await isAdmin(userId))) return json({ error: "Not authorized" }, { status: 403 });
+  if (!(await getStrictAdmin(database, userId))) return json({ error: "Not authorized" }, { status: 403 });
 
   if (req.method === "GET") {
     const items = await database.sql`

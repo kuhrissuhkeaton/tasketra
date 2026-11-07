@@ -33,7 +33,23 @@ function noteUnauthorized(status: number, path: string) {
   }
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+// Stale-while-revalidate for GETs (v153): a repeat read of the same path
+// resolves instantly with the last response — so revisiting a tab no longer
+// flashes its skeleton — while a fresh copy loads behind it and replaces
+// the cache entry for next time. Any mutation clears the whole cache, so a
+// write can never be followed by a stale read of what it changed. The
+// notifications endpoint is excluded: the bell's counts must never lag a
+// cycle behind. Cache lives in module memory only (per tab session), and
+// /auth/ calls clear it too, so signing out and in as someone else can
+// never surface the previous account's data.
+const getCache = new Map<string, unknown>();
+
+/** Drop every cached GET response (used on sign-out and after mutations). */
+export function clearApiCache() {
+  getCache.clear();
+}
+
+async function fetchAndParse<T>(path: string, options: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     credentials: "include",
     // API data changes with every save; never let the browser serve a
@@ -45,14 +61,37 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     noteUnauthorized(res.status, path);
-    throw new ApiError(data.error || `Request failed (${res.status})`, res.status, !!data.upgradeRequired, typeof data.suggestion === "string" ? data.suggestion : undefined);
+    // The one fallback message (v153): plain words, never a status code.
+    throw new ApiError(data.error || "Something went wrong. Try again?", res.status, !!data.upgradeRequired, typeof data.suggestion === "string" ? data.suggestion : undefined);
   }
   return data as T;
+}
+
+async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const method = (options.method || "GET").toUpperCase();
+  const isGet = method === "GET" && !options.body;
+  if (!isGet || path.startsWith("/auth/")) {
+    // A mutation (or an auth call) invalidates everything cached so far.
+    getCache.clear();
+    return fetchAndParse<T>(path, options);
+  }
+  if (!path.startsWith("/notifications") && getCache.has(path)) {
+    const cached = getCache.get(path) as T;
+    // Revalidate behind the scenes; a failure keeps the cached copy.
+    fetchAndParse<T>(path, options)
+      .then((fresh) => { getCache.set(path, fresh); })
+      .catch(() => {});
+    return cached;
+  }
+  const data = await fetchAndParse<T>(path, options);
+  if (!path.startsWith("/notifications")) getCache.set(path, data);
+  return data;
 }
 
 // Like request(), but for multipart/form-data uploads -- omits the JSON
 // content-type header so the browser can set its own multipart boundary.
 async function uploadRequest<T>(path: string, formData: FormData): Promise<T> {
+  getCache.clear(); // an upload is a mutation: no cached read may survive it
   const res = await fetch(`${BASE}${path}`, {
     method: "POST",
     credentials: "include",
@@ -61,7 +100,7 @@ async function uploadRequest<T>(path: string, formData: FormData): Promise<T> {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     noteUnauthorized(res.status, path);
-    throw new ApiError(data.error || `Request failed (${res.status})`, res.status, !!data.upgradeRequired, typeof data.suggestion === "string" ? data.suggestion : undefined);
+    throw new ApiError(data.error || "Something went wrong. Try again?", res.status, !!data.upgradeRequired, typeof data.suggestion === "string" ? data.suggestion : undefined);
   }
   return data as T;
 }
@@ -1453,7 +1492,7 @@ export const api = {
     const res = await fetch(`${BASE}/templates?projectId=${projectId}&type=${type}`, { credentials: "include" });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
-      throw new Error(data.error || `Failed to generate template (${res.status})`);
+      throw new Error(data.error || "Something went wrong. Try again?");
     }
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);

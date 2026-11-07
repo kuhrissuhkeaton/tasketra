@@ -60,7 +60,11 @@ describe("RegisterRow", () => {
 
 describe("the six registers, Tasks and the Overview use the shared rows", () => {
   it("no register or Tasks list is a table any more, and each keeps its edit and delete actions", async () => {
-    const src = await readText("src/pages/ProjectHome.tsx");
+    // v153: the Quality and Compliance registers live in their own files
+    // now; their labels are asserted against the combined source.
+    const src = (await readText("src/pages/ProjectHome.tsx"))
+      + (await readText("src/pages/project/QualityTab.tsx"))
+      + (await readText("src/pages/project/ComplianceTab.tsx"));
     for (const id of ["raid-issues", "raid-risks", "raid-assumptions", "raid-dependencies", "raid-quality", "raid-compliance"]) {
       expect(src).not.toContain(`ResizableTable id="${id}"`);
     }
@@ -68,7 +72,7 @@ describe("the six registers, Tasks and the Overview use the shared rows", () => 
     for (const id of ["stakeholders", "procurement-vendors", "comms-plan", "budget-costs", "meetings", "documents", "trash", "roadmap-list", "change-requests", "team-workload", "lessons-learned"]) {
       expect(src).not.toContain(`ResizableTable id="${id}"`);
     }
-    for (const label of ["Stakeholders", "Vendors and contracts", "Communications plan", "Logged costs", "Meetings", "Documents", "Deleted items", "Roadmap items", "Change requests", "Workload by owner", "Lessons learned"]) {
+    for (const label of ["Stakeholders", "Vendors", "Communications plan", "Logged costs", "Meetings", "Documents", "Deleted items", "Roadmap items", "Change requests", "Workload by owner", "Lessons learned"]) {
       expect(src).toContain(`aria-label="${label}"`);
     }
     for (const label of ["Issues", "Risks", "Assumptions", "Dependencies", "Quality items", "Compliance items"]) {

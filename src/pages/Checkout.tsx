@@ -4,6 +4,7 @@ import { AppSidebar } from "../components/AppSidebar";
 import { api, ApiError } from "../lib/api";
 import { loadStripeJs, type EmbeddedCheckoutHandle } from "../lib/stripeJs";
 import { useDocumentTitle } from "../lib/documentTitle";
+import { proPriceLabel } from "../lib/pricing";
 import { PageHeader, SoftCard } from "../components/ui";
 
 // Going Pro without leaving Tasketra: the server creates an embedded
@@ -85,7 +86,7 @@ export default function Checkout() {
     }
   }
 
-  const price = interval === "year" ? "$290 per year" : "$29 per month";
+  const price = proPriceLabel(interval);
 
   return (
     <div className="project-shell">

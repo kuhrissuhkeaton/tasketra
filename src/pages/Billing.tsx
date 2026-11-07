@@ -4,6 +4,7 @@ import { AppSidebar } from "../components/AppSidebar";
 import { useAuth } from "../lib/auth-context";
 import { api, type BillingStatus } from "../lib/api";
 import { fmtDate } from "../lib/format";
+import { PRO_MONTHLY_USD, PRO_ANNUAL_USD, proPriceLabel } from "../lib/pricing";
 import { useDocumentTitle } from "../lib/documentTitle";
 import { PageHeader, SoftCard, StatusPill } from "../components/ui";
 import { announce } from "../lib/announce";
@@ -184,14 +185,14 @@ export default function Billing() {
                   Your free trial ends on <strong>{fmtDate(details.trialEnd)}</strong>.
                   {details.cancelAtPeriodEnd
                     ? " You've canceled, so you won't be charged."
-                    : ` After that your card is charged ${details.interval === "year" ? "$290 per year" : "$29 per month"} until you cancel.`}
+                    : ` After that your card is charged ${proPriceLabel(details.interval)} until you cancel.`}
                 </p>
               )}
               {plan === "active" && details?.currentPeriodEnd && (
                 <p>
                   {details.cancelAtPeriodEnd
                     ? <>Canceled. Pro stays on until <strong>{fmtDate(details.currentPeriodEnd)}</strong>, then you move to Free and keep all your projects.</>
-                    : <>Renews on <strong>{fmtDate(details.currentPeriodEnd)}</strong> ({details.interval === "year" ? "$290 per year" : "$29 per month"}).</>}
+                    : <>Renews on <strong>{fmtDate(details.currentPeriodEnd)}</strong> ({proPriceLabel(details.interval)}).</>}
                 </p>
               )}
               <p className="muted">
@@ -223,14 +224,14 @@ export default function Billing() {
                   type="button"
                   onClick={() => upgrade("month")}
                 >
-                  Upgrade · $29/month
+                  Upgrade · ${PRO_MONTHLY_USD}/month
                 </button>
                 <button
                   className="btn btn-ghost"
                   type="button"
                   onClick={() => upgrade("year")}
                 >
-                  Upgrade · $290/year (2 months free)
+                  Upgrade · ${PRO_ANNUAL_USD}/year (2 months free)
                 </button>
               </div>
             </>

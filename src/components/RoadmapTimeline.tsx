@@ -2,6 +2,7 @@ import { useRef } from "react";
 import type { RoadmapItem } from "../lib/api";
 import { useIsScrollable } from "../lib/scrollRegion";
 import { phaseProgress } from "../lib/phaseProgress";
+import { fmtLocalDate } from "../lib/format";
 
 // Shared between the owner-facing Roadmap tab (ProjectHome.tsx) and the
 // public read-only share page (RoadmapPublic.tsx) so the two views can never
@@ -34,7 +35,7 @@ function toLocalDate(d: string): Date {
 
 export function fmtRoadmapDate(d: string | null): string {
   if (!d) return "--";
-  return toLocalDate(d).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  return fmtLocalDate(d);
 }
 
 // A marker (no end date, e.g. most milestones) now draws a visible label,

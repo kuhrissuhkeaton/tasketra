@@ -1,22 +1,9 @@
 import type { Config } from "@netlify/functions";
 import { db } from "../lib/db.ts";
 import { getUserIdFromRequest } from "../lib/auth.ts";
-import { getEnv } from "../lib/env.ts";
+import { getStrictAdmin } from "../lib/adminGate.ts";
 import { json } from "../lib/http.ts";
 import { withSentry } from "../lib/sentry.ts";
-
-/**
- * A single admin gate for reviewing the waitlist. If ADMIN_EMAIL isn't set,
- * any authenticated user can manage it -- reasonable while Tasketra has one
- * real account. Set ADMIN_EMAIL once there's more than one person with a login.
- */
-async function isAdmin(userId: string): Promise<boolean> {
-  const adminEmail = getEnv("ADMIN_EMAIL");
-  if (!adminEmail) return false; // fail closed: no ADMIN_EMAIL means nobody is admin
-  const database = db();
-  const [user] = await database.sql`SELECT email FROM users WHERE id = ${userId}`;
-  return user?.email?.toLowerCase() === adminEmail.toLowerCase();
-}
 
 export default withSentry(async (req: Request) => {
   const database = db();
@@ -38,7 +25,7 @@ export default withSentry(async (req: Request) => {
   // Everything else is admin-only.
   const userId = getUserIdFromRequest(req);
   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
-  if (!(await isAdmin(userId))) return json({ error: "Not authorized" }, { status: 403 });
+  if (!(await getStrictAdmin(database, userId))) return json({ error: "Not authorized" }, { status: 403 });
 
   if (req.method === "GET") {
     const signups = await database.sql`

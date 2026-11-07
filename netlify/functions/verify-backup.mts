@@ -3,7 +3,7 @@ import { GetObjectCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
 import { s3, backupBucketName } from "../lib/s3.ts";
 import { db } from "../lib/db.ts";
 import { getUserIdFromRequest } from "../lib/auth.ts";
-import { getEnv } from "../lib/env.ts";
+import { getStrictAdmin } from "../lib/adminGate.ts";
 import { json } from "../lib/http.ts";
 import { withSentry } from "../lib/sentry.ts";
 
@@ -14,17 +14,9 @@ import { withSentry } from "../lib/sentry.ts";
 // the same read path a real restore would use: list -> get manifest ->
 // get db.json -> get each document, then cross-checks counts.
 //
-// Gated the same way waitlist.mts is: if ADMIN_EMAIL is set, only that
-// account can call this (it can reveal internal row counts and document
-// keys, which is more than a random logged-in user should see).
-
-async function isAdmin(userId: string): Promise<boolean> {
-  const adminEmail = getEnv("ADMIN_EMAIL");
-  if (!adminEmail) return false; // fail closed: no ADMIN_EMAIL means nobody is admin
-  const database = db();
-  const [user] = await database.sql`SELECT email FROM users WHERE id = ${userId}`;
-  return user?.email?.toLowerCase() === adminEmail.toLowerCase();
-}
+// Gated by the strict admin check in adminGate.ts (it can reveal internal
+// row counts and document keys, which is more than a random logged-in user
+// should see).
 
 async function streamToBytes(body: unknown): Promise<Uint8Array> {
   // @ts-expect-error -- AWS SDK v3 body is a web ReadableStream in the Netlify Functions runtime.
@@ -34,7 +26,7 @@ async function streamToBytes(body: unknown): Promise<Uint8Array> {
 export default withSentry(async (req: Request) => {
   const userId = getUserIdFromRequest(req);
   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
-  if (!(await isAdmin(userId))) return json({ error: "Not found" }, { status: 404 });
+  if (!(await getStrictAdmin(db(), userId))) return json({ error: "Not found" }, { status: 404 });
 
   const checks: { name: string; ok: boolean; detail: string }[] = [];
   const record = (name: string, ok: boolean, detail: string) => checks.push({ name, ok, detail });

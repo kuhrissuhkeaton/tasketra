@@ -7,9 +7,12 @@ describe("isTabHidden", () => {
     expect(isTabHidden("quality", "full", false)).toBe(false);
   });
 
-  it("hides quality, compliance and comms plan in Standard", () => {
-    expect(hiddenTabLabels("standard")).toEqual(["Quality", "Compliance", "Comms plan"]);
+  it("hides the frozen governance suite in Standard", () => {
+    expect(hiddenTabLabels("standard")).toEqual(["Quality", "Compliance", "Comms Plan", "OKRs", "RACI", "Templates"]);
     expect(isTabHidden("quality", "standard", false)).toBe(true);
+    expect(isTabHidden("okrs", "standard", false)).toBe(true);
+    expect(isTabHidden("raci", "standard", false)).toBe(true);
+    expect(isTabHidden("templates", "standard", false)).toBe(true);
     expect(isTabHidden("procurement", "standard", false)).toBe(false);
   });
 
