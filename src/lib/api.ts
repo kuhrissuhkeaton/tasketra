@@ -1252,6 +1252,8 @@ export const api = {
     request<{ ok: true }>("/risks", { method: "PATCH", body: JSON.stringify({ id, restore: true }) }),
 
   getTrash: (projectId: string) => request<{ items: TrashItem[] }>(`/trash?projectId=${projectId}`),
+  emptyTrash: (projectId: string) =>
+    request<{ ok: true; deleted: number }>(`/trash?projectId=${projectId}`, { method: "DELETE" }),
   restoreItem: (entityType: TrashItem["entity_type"], id: string) => {
     const path: Record<TrashItem["entity_type"], string> = {
       task: "/tasks", issue: "/issues", risk: "/risks", stakeholder: "/stakeholders", decision: "/decisions",

@@ -1103,9 +1103,11 @@ function feedLabel(item: FeedItem, myId?: string) {
 }
 
 function TrashTab({ projectId }: { projectId: string }) {
+  const confirmDialog = useConfirm();
   const [items, setItems] = useState<TrashItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [restoringId, setRestoringId] = useState<string | null>(null);
+  const [emptying, setEmptying] = useState(false);
 
   async function load() {
     const { items } = await api.getTrash(projectId);
@@ -1126,11 +1128,28 @@ function TrashTab({ projectId }: { projectId: string }) {
     setRestoringId(null);
   }
 
+  async function emptyTrash() {
+    const count = items.length;
+    if (!(await confirmDialog(`Permanently delete all ${count} item${count === 1 ? "" : "s"} in the trash? This can't be undone.`))) return;
+    setEmptying(true);
+    await api.emptyTrash(projectId);
+    announce("Trash emptied.");
+    await load();
+    setEmptying(false);
+  }
+
   return (
     <div>
-      <p className="muted" style={{ marginBottom: 16 }}>
-        Deleted tasks, issues, risks, assumptions, dependencies, change requests, lessons, stakeholders, decisions, meetings, documents, and roadmap items land here. Restore them any time. Nothing is gone for good.
-      </p>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, marginBottom: 16 }}>
+        <p className="muted" style={{ margin: 0 }}>
+          Deleted tasks, issues, risks, assumptions, dependencies, change requests, lessons, stakeholders, decisions, meetings, documents, and roadmap items land here. Restore them any time, or empty the trash to delete them for good.
+        </p>
+        {!loading && items.length > 0 && (
+          <button className="btn btn-danger" type="button" disabled={emptying} onClick={emptyTrash} style={{ flexShrink: 0 }}>
+            {emptying ? "Emptying..." : "Empty trash"}
+          </button>
+        )}
+      </div>
 
       {loading ? (
         <div className="skel-loading-block"><div className="skel skel-text" style={{ width: "45%" }} /><div className="skel skel-text" style={{ width: "80%" }} /><div className="skel skel-text" style={{ width: "60%", marginBottom: 0 }} /></div>

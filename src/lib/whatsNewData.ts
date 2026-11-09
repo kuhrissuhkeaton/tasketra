@@ -10,6 +10,12 @@ export type ChangeEntry = { version: string; date: string; title: string; body: 
 // they can do.
 export const CHANGES: ChangeEntry[] = [
   {
+    version: "v154",
+    date: "November 2026",
+    title: "Empty the trash for good",
+    body: "Deleted items used to sit in a project's Trash forever, restorable but never really gone. The Trash section now has an Empty trash button: one click, a clear warning, and everything in there is permanently deleted, documents and their files included. Restoring still works exactly as before for anything you have not emptied.",
+  },
+  {
     version: "v153",
     date: "November 2026",
     title: "One name for check-ins, tidier projects, faster tabs",
