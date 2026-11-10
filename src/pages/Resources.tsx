@@ -366,6 +366,13 @@ export default function Resources() {
           {replayNotice && <span className="muted" style={{ fontSize: 13 }}>{replayNotice}</span>}
         </div>
 
+        <div className="inline-form" style={{ marginBottom: 20, alignItems: "center" }}>
+          <span style={{ fontSize: 14 }}>
+            <strong>The Tasketra newsletter:</strong> practical project management that fits on one page, twice a week.{" "}
+            <a href="https://tasketra.substack.com" target="_blank" rel="noreferrer">Subscribe free on Substack</a>
+          </span>
+        </div>
+
         <input aria-label="Search this page"
           placeholder="Search everything on this page..."
           value={query}

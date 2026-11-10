@@ -10,6 +10,12 @@ export type ChangeEntry = { version: string; date: string; title: string; body: 
 // they can do.
 export const CHANGES: ChangeEntry[] = [
   {
+    version: "v155",
+    date: "November 2026",
+    title: "The newsletter, now in the Resource hub",
+    body: "The Resource hub now points to the Tasketra newsletter on Substack: practical project management that fits on one page, twice a week, free to subscribe. The welcome email includes the One-Page Weekly Status Report Pack, the same status format the hub's status report tips are based on.",
+  },
+  {
     version: "v154",
     date: "November 2026",
     title: "Empty the trash for good",
