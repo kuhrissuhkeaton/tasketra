@@ -101,7 +101,7 @@ export default withSentry(async (req: Request) => {
     database.sql`
       SELECT r.project_id,
         count(*) FILTER (WHERE r.status = 'open')::int AS open_count,
-        count(*) FILTER (WHERE r.status != 'resolved' AND r.probability = 'high' AND r.impact = 'high')::int AS high_count
+        count(*) FILTER (WHERE r.status != 'resolved' AND (CASE WHEN r.probability_score IS NOT NULL AND r.impact_score IS NOT NULL THEN r.probability_score * r.impact_score >= 12 OR r.impact_score = 5 ELSE r.probability = 'high' AND r.impact = 'high' END))::int AS high_count
       FROM risks r
       WHERE r.deleted_at IS NULL
         AND r.project_id IN (

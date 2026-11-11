@@ -119,13 +119,29 @@ export function RoadmapTimeline({
     toLocalDate(i.start_date!).getTime(),
     toLocalDate(i.end_date || i.start_date!).getTime(),
   ]);
-  const minDate = new Date(Math.min(...times));
-  const maxDate = new Date(Math.max(...times));
+  const minTime = Math.min(...times);
+  const maxTime = Math.max(...times);
+  const spanDays = Math.max(1, Math.round((maxTime - minTime) / 86400000));
+  // The zoom tiers read the padded span, as before (10 days before, 14 after).
+  const pxPerDay = pxPerDayOverride ?? (spanDays + 24 > 400 ? 3 : spanDays + 24 > 200 ? 4.5 : 6);
+  // v157: a marker's label draws rightward from its date, so the end padding
+  // has to fit the longest label reaching the end of the track -- the flat
+  // +14 days clipped the final milestone's label at the container edge
+  // whenever the last item was a marker (the Clinic plan's "Final
+  // completion"). Bar labels live inside their bars, so only markers (no
+  // end date) can overhang.
+  let endPadDays = 14;
+  for (const i of dated) {
+    if (i.end_date) continue;
+    const startDays = Math.round((toLocalDate(i.start_date!).getTime() - minTime) / 86400000);
+    endPadDays = Math.max(endPadDays, startDays + estimateMarkerSpanDays(i.title, pxPerDay) - spanDays + 2);
+  }
+  const minDate = new Date(minTime);
+  const maxDate = new Date(maxTime);
   minDate.setDate(minDate.getDate() - 10);
-  maxDate.setDate(maxDate.getDate() + 14);
+  maxDate.setDate(maxDate.getDate() + endPadDays);
 
   const totalDays = Math.max(1, Math.round((maxDate.getTime() - minDate.getTime()) / 86400000));
-  const pxPerDay = pxPerDayOverride ?? (totalDays > 400 ? 3 : totalDays > 200 ? 4.5 : 6);
   const trackWidth = totalDays * pxPerDay;
 
   function dayOffset(dateStr: string) {

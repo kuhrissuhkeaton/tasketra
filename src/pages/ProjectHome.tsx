@@ -8,7 +8,7 @@ import { DateField } from "../components/DateField";
 import { fmtRoadmapRange } from "../lib/roadmapDates";
 import { phaseProgress } from "../lib/phaseProgress";
 import { mailtoHref, telHref } from "../lib/contactLinks";
-import { LEVEL_LABEL, isHighExposureRisk, riskExposure as riskExposureLevel } from "../lib/riskExposure";
+import { LEVEL_LABEL, SCORE_LABEL, isHighExposureRisk, riskExposureFor, riskScore } from "../lib/riskExposure";
 import { ApplyTemplateDrawer } from "../components/ApplyTemplateDrawer";
 import { SaveTemplateDrawer } from "../components/SaveTemplateDrawer";
 import { StakeholderGrid } from "../components/StakeholderGrid";
@@ -149,8 +149,6 @@ const RISK_STATUS_LABEL: Record<Risk["status"], string> = {
   monitoring: "Monitoring",
   resolved: "Resolved",
 };
-
-const riskExposure = riskExposureLevel;
 
 const EXPOSURE_PILL: Record<"low" | "medium" | "high", string> = {
   low: "pill-green",
@@ -2270,8 +2268,10 @@ function RisksTab({ projectId, highlightId }: { projectId: string; highlightId?:
   const [riskLinks, setRiskLinks] = useState<RiskTaskLink[]>([]);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [probability, setProbability] = useState<Risk["probability"]>("medium");
-  const [impact, setImpact] = useState<Risk["impact"]>("medium");
+  // v157: probability/impact are entered as 1-5 scores ("" = not scored);
+  // the server derives the low/medium/high bands from them on save.
+  const [probabilityScore, setProbabilityScore] = useState("");
+  const [impactScore, setImpactScore] = useState("");
   const [mitigation, setMitigation] = useState("");
   const [owner, setOwner] = useState("");
   const [newStatus, setNewStatus] = useState<Risk["status"]>("open");
@@ -2280,8 +2280,8 @@ function RisksTab({ projectId, highlightId }: { projectId: string; highlightId?:
   const [drawerRiskId, setDrawerRiskId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editDescription, setEditDescription] = useState("");
-  const [editProbability, setEditProbability] = useState<Risk["probability"]>("medium");
-  const [editImpact, setEditImpact] = useState<Risk["impact"]>("medium");
+  const [editProbabilityScore, setEditProbabilityScore] = useState("");
+  const [editImpactScore, setEditImpactScore] = useState("");
   const [editMitigation, setEditMitigation] = useState("");
   const [editOwner, setEditOwner] = useState("");
   const [linkTaskId, setLinkTaskId] = useState("");
@@ -2322,13 +2322,24 @@ function RisksTab({ projectId, highlightId }: { projectId: string; highlightId?:
   async function addRisk(e: React.FormEvent) {
     e.preventDefault();
     if (!title.trim()) return;
+    // Scores come as a pair: a probability with no impact (or the reverse)
+    // is a half-finished rating, so stop here rather than guess.
+    if ((probabilityScore === "") !== (impactScore === "")) {
+      setError("Score both probability and impact, or leave both unscored.");
+      return;
+    }
     setError("");
     try {
-      await api.createRisk(projectId, title.trim(), description || undefined, probability, impact, mitigation || undefined, owner || undefined, newStatus);
+      await api.createRisk(
+        projectId, title.trim(), description || undefined, undefined, undefined,
+        mitigation || undefined, owner || undefined, newStatus,
+        probabilityScore === "" ? null : Number(probabilityScore),
+        impactScore === "" ? null : Number(impactScore)
+      );
       setTitle("");
       setDescription("");
-      setProbability("medium");
-      setImpact("medium");
+      setProbabilityScore("");
+      setImpactScore("");
       setMitigation("");
       setOwner("");
       setNewStatus("open");
@@ -2355,8 +2366,8 @@ function RisksTab({ projectId, highlightId }: { projectId: string; highlightId?:
     setDrawerRiskId(r.id);
     setEditTitle(r.title);
     setEditDescription(r.description || "");
-    setEditProbability(r.probability);
-    setEditImpact(r.impact);
+    setEditProbabilityScore(r.probability_score != null ? String(r.probability_score) : "");
+    setEditImpactScore(r.impact_score != null ? String(r.impact_score) : "");
     setEditMitigation(r.mitigation || "");
     setEditOwner(r.owner_name || "");
     setLinkTaskId("");
@@ -2368,9 +2379,15 @@ function RisksTab({ projectId, highlightId }: { projectId: string; highlightId?:
 
   async function saveDrawer() {
     if (!drawerRiskId || !editTitle.trim()) return;
+    if ((editProbabilityScore === "") !== (editImpactScore === "")) {
+      setError("Score both probability and impact, or leave both unscored.");
+      return;
+    }
     await api.updateRisk(drawerRiskId, {
-      title: editTitle.trim(), description: editDescription || undefined, probability: editProbability,
-      impact: editImpact, mitigation: editMitigation || undefined, owner_name: editOwner || undefined,
+      title: editTitle.trim(), description: editDescription || undefined,
+      probability_score: editProbabilityScore === "" ? null : Number(editProbabilityScore),
+      impact_score: editImpactScore === "" ? null : Number(editImpactScore),
+      mitigation: editMitigation || undefined, owner_name: editOwner || undefined,
     } as any);
     closeDrawer();
     load();
@@ -2406,7 +2423,7 @@ function RisksTab({ projectId, highlightId }: { projectId: string; highlightId?:
   // marks the Risk resolved, instead of a PM having to do both by hand.
   async function promoteToIssue(r: Risk) {
     if (!(await confirmDialog(`Turn risk "${r.title}" into an issue? This creates a new issue with the same details and marks the risk resolved.`))) return;
-    const exposure = riskExposure(r.probability, r.impact);
+    const exposure = riskExposureFor(r);
     const description = ["Promoted from a risk.", r.description, r.mitigation ? `Planned mitigation: ${r.mitigation}` : null]
       .filter(Boolean)
       .join("\n\n");
@@ -2442,14 +2459,16 @@ function RisksTab({ projectId, highlightId }: { projectId: string; highlightId?:
           <>
             <label htmlFor="f-projecthome-1962" className="sr-only">Risk</label>
             <input id="f-projecthome-1962" className="quick-add-title" aria-required="true" placeholder="What could go wrong?" value={title} onChange={(e) => setTitle(e.target.value)} />
-            <select aria-label="Probability" value={probability} onChange={(e) => setProbability(e.target.value as Risk["probability"])}>
-              {Object.entries(LEVEL_LABEL).map(([value, label]) => (
-                <option key={value} value={value}>{label} probability</option>
+            <select aria-label="Probability" value={probabilityScore} onChange={(e) => setProbabilityScore(e.target.value)}>
+              <option value="">Not scored</option>
+              {[1, 2, 3, 4, 5].map((n) => (
+                <option key={n} value={n}>{n} · {SCORE_LABEL[n]} probability</option>
               ))}
             </select>
-            <select aria-label="Impact" value={impact} onChange={(e) => setImpact(e.target.value as Risk["impact"])}>
-              {Object.entries(LEVEL_LABEL).map(([value, label]) => (
-                <option key={value} value={value}>{label} impact</option>
+            <select aria-label="Impact" value={impactScore} onChange={(e) => setImpactScore(e.target.value)}>
+              <option value="">Not scored</option>
+              {[1, 2, 3, 4, 5].map((n) => (
+                <option key={n} value={n}>{n} · {SCORE_LABEL[n]} impact</option>
               ))}
             </select>
             <button className="btn btn-primary">Log risk</button>
@@ -2524,7 +2543,7 @@ function RisksTab({ projectId, highlightId }: { projectId: string; highlightId?:
                 <span className="kanban-column-count">{risks.filter((r) => r.status === status).length}</span>
               </div>
               {risks.filter((r) => r.status === status).map((r) => {
-                const exposure = riskExposure(r.probability, r.impact);
+                const exposure = riskExposureFor(r);
                 return (
                   <div
                     key={r.id}
@@ -2569,9 +2588,19 @@ function RisksTab({ projectId, highlightId }: { projectId: string; highlightId?:
               title={<button type="button" className="row-title-btn" onClick={() => openDrawer(r)}>{r.title}</button>}
               meta={<>{r.owner_name || "No owner"}{r.mitigation ? ` \u00b7 Mitigation: ${r.mitigation}` : ""}</>}
               pill={
-                <span className={`pill ${EXPOSURE_PILL[riskExposure(r.probability, r.impact)]}`}>
-                  {LEVEL_LABEL[riskExposure(r.probability, r.impact)]}
-                </span>
+                <>
+                  {riskScore(r) !== null ? (
+                    <span className="pill pill-navy">P{r.probability_score} · I{r.impact_score} · Score {riskScore(r)}</span>
+                  ) : (
+                    <>
+                      <span className="pill pill-navy">P {LEVEL_LABEL[r.probability]}</span>
+                      <span className="pill pill-navy" style={{ marginLeft: 6 }}>I {LEVEL_LABEL[r.impact]}</span>
+                    </>
+                  )}
+                  <span className={`pill ${EXPOSURE_PILL[riskExposureFor(r)]}`} style={{ marginLeft: 6 }}>
+                    {LEVEL_LABEL[riskExposureFor(r)]}
+                  </span>
+                </>
               }
               date={fmtLocalDate(r.created_at)}
               dateLabel="Logged"
@@ -2630,21 +2659,30 @@ function RisksTab({ projectId, highlightId }: { projectId: string; highlightId?:
             <div className="drawer-field-row">
               <div className="drawer-field">
                 <label htmlFor="f-projecthome-2136">Probability</label>
-                <select id="f-projecthome-2136" value={editProbability} onChange={(e) => setEditProbability(e.target.value as Risk["probability"])}>
-                  {Object.entries(LEVEL_LABEL).map(([value, label]) => (
-                    <option key={value} value={value}>{label}</option>
+                <select id="f-projecthome-2136" value={editProbabilityScore} onChange={(e) => setEditProbabilityScore(e.target.value)}>
+                  <option value="">Not scored</option>
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <option key={n} value={n}>{n} · {SCORE_LABEL[n]}</option>
                   ))}
                 </select>
               </div>
               <div className="drawer-field">
                 <label htmlFor="f-projecthome-2144">Impact</label>
-                <select id="f-projecthome-2144" value={editImpact} onChange={(e) => setEditImpact(e.target.value as Risk["impact"])}>
-                  {Object.entries(LEVEL_LABEL).map(([value, label]) => (
-                    <option key={value} value={value}>{label}</option>
+                <select id="f-projecthome-2144" value={editImpactScore} onChange={(e) => setEditImpactScore(e.target.value)}>
+                  <option value="">Not scored</option>
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <option key={n} value={n}>{n} · {SCORE_LABEL[n]}</option>
                   ))}
                 </select>
               </div>
             </div>
+            {drawerRisk.probability_score == null && (
+              <p className="muted" style={{ fontSize: 13, marginTop: 0 }}>
+                This risk still carries its earlier rating: {LEVEL_LABEL[drawerRisk.probability]} probability,{" "}
+                {LEVEL_LABEL[drawerRisk.impact]} impact. Picking 1-5 scores re-rates it; leaving both
+                unscored keeps that rating.
+              </p>
+            )}
             <div className="drawer-field">
               <label htmlFor="f-projecthome-2153">Mitigation plan</label>
               <textarea id="f-projecthome-2153" rows={3} value={editMitigation} onChange={(e) => setEditMitigation(e.target.value)} />
@@ -2819,7 +2857,7 @@ function AssumptionsTab({ projectId }: { projectId: string }) {
             <textarea id="f-projecthome-2304" value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
             <div className="inline-form" style={{ marginTop: 8, marginBottom: 0 }}>
               <input aria-label="Owner (optional)" placeholder="Owner (optional)" value={owner} onChange={(e) => setOwner(e.target.value)} />
-              <input aria-label="Check by" type="date" value={checkBy} onChange={(e) => setCheckBy(e.target.value)} />
+              <DateField ariaLabel="Check by" value={checkBy} onChange={setCheckBy} />
               <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as Assumption["status"])} title="Status" aria-label="Status">
                 {Object.entries(ASSUMPTION_STATUS_LABEL).map(([value, label]) => (
                   <option key={value} value={value}>{label}</option>
@@ -2899,7 +2937,7 @@ function AssumptionsTab({ projectId }: { projectId: string }) {
                   <input aria-label="Statement" value={editStatement} onChange={(e) => setEditStatement(e.target.value)} />
                   <textarea aria-label="Notes" value={editNotes} onChange={(e) => setEditNotes(e.target.value)} rows={2} placeholder="Notes" />
                   <input aria-label="Owner" value={editOwner} onChange={(e) => setEditOwner(e.target.value)} />
-                  <input aria-label="Check by" type="date" value={editCheckBy} onChange={(e) => setEditCheckBy(e.target.value)} />
+                  <DateField ariaLabel="Check by" value={editCheckBy} onChange={setEditCheckBy} />
                 </div>
                 <div className="rg-edit-actions">
                   <span className="muted">{ASSUMPTION_STATUS_LABEL[a.status]}</span>
@@ -3075,7 +3113,7 @@ function DependenciesTab({ projectId }: { projectId: string }) {
             <textarea id="f-projecthome-2528" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
             <div className="inline-form" style={{ marginTop: 8, marginBottom: 0 }}>
               <input aria-label="Owner (optional)" placeholder="Owner (optional)" value={owner} onChange={(e) => setOwner(e.target.value)} />
-              <input aria-label="Needed by" type="date" value={neededBy} onChange={(e) => setNeededBy(e.target.value)} />
+              <DateField ariaLabel="Needed by" value={neededBy} onChange={setNeededBy} />
               <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as Dependency["status"])} title="Status" aria-label="Status">
                 {Object.entries(DEPENDENCY_STATUS_LABEL).map(([value, label]) => (
                   <option key={value} value={value}>{label}</option>
@@ -3163,7 +3201,7 @@ function DependenciesTab({ projectId }: { projectId: string }) {
                     ))}
                   </select>
                   <input aria-label="Owner" value={editOwner} onChange={(e) => setEditOwner(e.target.value)} />
-                  <input aria-label="Needed by" type="date" value={editNeededBy} onChange={(e) => setEditNeededBy(e.target.value)} />
+                  <DateField ariaLabel="Needed by" value={editNeededBy} onChange={setEditNeededBy} />
                 </div>
                 <div className="rg-edit-actions">
                   <span className="muted">{DEPENDENCY_STATUS_LABEL[d.status]}</span>
@@ -3426,7 +3464,7 @@ function OkrsTab({ projectId }: { projectId: string }) {
             <input id="f-projecthome-3353" className="quick-add-title" aria-required="true" placeholder="What outcome are you driving toward?" value={title} onChange={(e) => setTitle(e.target.value)} />
             <span className="quick-add-datefield">
               <span className="quick-add-datefield-label" aria-hidden="true">Target date</span>
-              <input type="date" title="Target date" aria-label="Target date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} />
+              <DateField title="Target date" ariaLabel="Target date" value={targetDate} onChange={setTargetDate} />
             </span>
             <button className="btn btn-primary">Add objective</button>
           </>
@@ -3459,7 +3497,7 @@ function OkrsTab({ projectId }: { projectId: string }) {
                 <textarea aria-label="Description" value={editDescription} onChange={(e) => setEditDescription(e.target.value)} rows={2} />
                 <div className="inline-form" style={{ marginTop: 8, marginBottom: 0 }}>
                   <input aria-label="Owner (optional)" placeholder="Owner (optional)" value={editOwnerName} onChange={(e) => setEditOwnerName(e.target.value)} />
-                  <input type="date" title="Target date" aria-label="Target date" value={editTargetDate} onChange={(e) => setEditTargetDate(e.target.value)} />
+                  <DateField title="Target date" ariaLabel="Target date" value={editTargetDate} onChange={setEditTargetDate} />
                   <button className="btn btn-primary" type="button" onClick={() => saveEdit(o.id)}>Save</button>
                   <button className="btn btn-ghost" type="button" onClick={() => setEditingId(null)}>Cancel</button>
                 </div>
@@ -3966,11 +4004,11 @@ function ProcurementTab({ projectId }: { projectId: string }) {
             <div className="inline-form" style={{ marginTop: 8, marginBottom: 0 }}>
               <span className="datefield">
                 <span className="datefield-label" aria-hidden="true">Start</span>
-                <input type="date" title="Start date (optional)" aria-label="Start date (optional)" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+                <DateField title="Start date (optional)" ariaLabel="Start date (optional)" value={startDate} onChange={setStartDate} />
               </span>
               <span className="datefield">
                 <span className="datefield-label" aria-hidden="true">End</span>
-                <input type="date" title="End date (optional)" aria-label="End date (optional)" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+                <DateField title="End date (optional)" ariaLabel="End date (optional)" value={endDate} onChange={setEndDate} />
               </span>
             </div>
           </>
@@ -4057,8 +4095,8 @@ function ProcurementTab({ projectId }: { projectId: string }) {
                   <input aria-label="Sub-category" value={editVendorSubcategory} onChange={(e) => setEditVendorSubcategory(e.target.value)} placeholder="Sub-category" />
                   <input aria-label="Owner" value={editOwner} onChange={(e) => setEditOwner(e.target.value)} />
                   <input aria-label="Cost" type="number" step="0.01" value={editCost} onChange={(e) => setEditCost(e.target.value)} />
-                  <input type="date" title="Start date" aria-label="Start date" value={editStartDate} onChange={(e) => setEditStartDate(e.target.value)} />
-                  <input type="date" title="End date" aria-label="End date" value={editEndDate} onChange={(e) => setEditEndDate(e.target.value)} />
+                  <DateField title="Start date" ariaLabel="Start date" value={editStartDate} onChange={setEditStartDate} />
+                  <DateField title="End date" ariaLabel="End date" value={editEndDate} onChange={setEditEndDate} />
                 </div>
                 <div className="rg-edit-actions">
                   <span className="muted">{PROCUREMENT_STATUS_LABEL[p.status]}</span>
@@ -4301,7 +4339,7 @@ function BudgetTab({ projectId, onOpenTab }: { projectId: string; onOpenTab: (ta
       <AddForm className="inline-form inline-form-wide" onSubmit={addCost}>
         <input aria-label="Description" aria-required="true" placeholder="Description" value={desc} onChange={(e) => setDesc(e.target.value)} />
         <input aria-label="Amount" aria-required="true" data-positive="true" placeholder="Amount" type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} />
-        <input aria-label="Incurred date" type="date" value={incurredDate} onChange={(e) => setIncurredDate(e.target.value)} />
+        <DateField ariaLabel="Incurred date" value={incurredDate} onChange={setIncurredDate} />
         <button className="btn btn-primary">Add cost</button>
       </AddForm>
 
@@ -4925,7 +4963,7 @@ function MeetingsTab({ projectId }: { projectId: string }) {
           </select>
           <span className="datefield">
             <span className="datefield-label" aria-hidden="true">Date</span>
-            <input type="date" title="Meeting date" aria-label="Meeting date" value={meetingDate} onChange={(e) => setMeetingDate(e.target.value)} />
+            <DateField title="Meeting date" ariaLabel="Meeting date" value={meetingDate} onChange={setMeetingDate} />
           </span>
           <input aria-label="Attendees (optional)" placeholder="Attendees (optional)" value={attendees} onChange={(e) => setAttendees(e.target.value)} />
           <button
@@ -5199,6 +5237,11 @@ function StakeholdersTab({ projectId }: { projectId: string }) {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [role, setRole] = useState("");
+  // v157: power/interest can be set right in the quick add, not only later
+  // in the Details drawer -- the register header counts high-power
+  // stakeholders, and quick-added people used to be invisible to it.
+  const [power, setPower] = useState<StakeholderInterest | "">("");
+  const [interest, setInterest] = useState<StakeholderInterest | "">("");
   // Details drawer: edits every field of one stakeholder at once.
   const [drawerId, setDrawerId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
@@ -5230,11 +5273,13 @@ function StakeholdersTab({ projectId }: { projectId: string }) {
     if (!name.trim()) return;
     setError("");
     try {
-      await api.createStakeholder(projectId, name.trim(), email || undefined, role || undefined, phone || undefined);
+      await api.createStakeholder(projectId, name.trim(), email || undefined, role || undefined, phone || undefined, power || undefined, interest || undefined);
       setName("");
       setEmail("");
       setPhone("");
       setRole("");
+      setPower("");
+      setInterest("");
       announce("Stakeholder added.");
       load();
     } catch (err: any) {
@@ -5300,6 +5345,18 @@ function StakeholdersTab({ projectId }: { projectId: string }) {
         <input aria-label="Email (optional)" placeholder="Email (optional)" value={email} onChange={(e) => setEmail(e.target.value)} />
         <input aria-label="Phone (optional)" placeholder="Phone (optional)" value={phone} onChange={(e) => setPhone(e.target.value)} />
         <input aria-label="Role (optional)" placeholder="Role (optional)" value={role} onChange={(e) => setRole(e.target.value)} />
+        <select aria-label="Power (optional)" value={power} onChange={(e) => setPower(e.target.value as StakeholderInterest | "")}>
+          <option value="">Power: not set</option>
+          {Object.entries(INTEREST_LABEL).map(([value, label]) => (
+            <option key={value} value={value}>{label} power</option>
+          ))}
+        </select>
+        <select aria-label="Interest (optional)" value={interest} onChange={(e) => setInterest(e.target.value as StakeholderInterest | "")}>
+          <option value="">Interest: not set</option>
+          {Object.entries(INTEREST_LABEL).map(([value, label]) => (
+            <option key={value} value={value}>{label} interest</option>
+          ))}
+        </select>
         <button className="btn btn-primary">Add stakeholder</button>
       </AddForm>
       {error && <p className="form-error">{error}</p>}
@@ -5604,7 +5661,7 @@ function StakeholderDecisionsTab({ projectId }: { projectId: string }) {
           <label htmlFor="f-projecthome-5353">Options (comma separated)</label>
           <input id="f-projecthome-5353" value={options} onChange={(e) => { setOptions(e.target.value); if (error) setError(""); }} aria-required="true" aria-describedby={error ? "decision-error" : undefined} aria-invalid={error ? true : undefined} />
           <label htmlFor="f-projecthome-5355">Deadline (optional)</label>
-          <input id="f-projecthome-5355" type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
+          <DateField id="f-projecthome-5355" value={deadline} onChange={setDeadline} />
           <label>Send to</label>
           <div className="checkbox-list">
             {stakeholders.map((s) => (

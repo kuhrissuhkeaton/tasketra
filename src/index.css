@@ -395,7 +395,7 @@ textarea { resize: vertical; }
 .inline-form input { margin: 0; }
 .inline-form select { min-width: 118px; }
 .inline-form input[type="text"], .inline-form input:not([type]) { min-width: 110px; }
-.inline-form input[type="date"] { min-width: 138px; }
+.inline-form input[type="date"]:not(.date-field-native) { min-width: 138px; }
 /* A date field with a visible short label ("Start", "Due") so two bare mm/dd/yyyy boxes are never ambiguous. */
 .datefield { display: inline-flex; align-items: center; gap: 6px; margin: 0; }
 .datefield-label { font-size: 13px; font-weight: 600; white-space: nowrap; color: var(--navy); }

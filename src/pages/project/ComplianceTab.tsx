@@ -4,6 +4,7 @@ import { useEffect, useState, type DragEvent, type FormEvent } from "react";
 import { api, type ComplianceItem } from "../../lib/api";
 import { RowActionsMenu } from "../../components/RowActionsMenu";
 import { QuickAddForm } from "../../components/QuickAddForm";
+import { DateField } from "../../components/DateField";
 import { useConfirm } from "../../components/ConfirmDialog";
 import { RegisterRow, RegisterSummary, RegisterEmpty } from "../../components/ui";
 import { announce } from "../../lib/announce";
@@ -149,7 +150,7 @@ export function ComplianceTab({ projectId }: { projectId: string }) {
                   <option key={value} value={value}>{label}</option>
                 ))}
               </select>
-              <input type="date" title="Due date (optional)" aria-label="Due date (optional)" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+              <DateField title="Due date (optional)" ariaLabel="Due date (optional)" value={dueDate} onChange={setDueDate} />
             </div>
           </>
         }
@@ -230,7 +231,7 @@ export function ComplianceTab({ projectId }: { projectId: string }) {
                     ))}
                   </select>
                   <input aria-label="Owner" value={editOwner} onChange={(e) => setEditOwner(e.target.value)} />
-                  <input aria-label="Due date" type="date" value={editDueDate} onChange={(e) => setEditDueDate(e.target.value)} />
+                  <DateField ariaLabel="Due date" value={editDueDate} onChange={setEditDueDate} />
                 </div>
                 <div className="rg-edit-actions">
                   <span className="muted">{COMPLIANCE_STATUS_LABEL[c.status]}</span>

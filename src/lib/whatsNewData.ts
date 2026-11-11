@@ -10,6 +10,12 @@ export type ChangeEntry = { version: string; date: string; title: string; body: 
 // they can do.
 export const CHANGES: ChangeEntry[] = [
   {
+    version: "v157",
+    date: "November 2026",
+    title: "Your risks show their scores",
+    body: "Risks can now carry real numbers: rate probability and impact from 1 to 5 and Tasketra shows the score (probability times impact) right in the register, the way project plans actually rank their risks. A risk counts as high exposure when its score reaches 12, or when its impact is a 5, and that one definition is the same everywhere, so the register, the project health line and the Dashboard keep agreeing. Risks you logged earlier keep working exactly as they did, with their low, medium and high ratings, until you edit one and give it numbers. Smaller fixes ride along: every date field now accepts a date typed the way you would write it, like 12/04/2026; /app/today takes you to Today; new stakeholders can get their power and interest ratings as you add them; and the roadmap no longer clips its last milestone's label.",
+  },
+  {
     version: "v156",
     date: "November 2026",
     title: "Your stated status leads, and the counts agree",

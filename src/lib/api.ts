@@ -44,9 +44,21 @@ function noteUnauthorized(status: number, path: string) {
 // never surface the previous account's data.
 const getCache = new Map<string, unknown>();
 
+// v157: clearing also bumps this generation. A background revalidation (see
+// request() below) that started BEFORE a mutation can still be in flight
+// when the mutation clears the cache, and when it lands it would write its
+// pre-mutation response back in -- resurrecting exactly the stale read the
+// clear was meant to prevent. (Seen live: the project header kept showing
+// the pre-check-in health after a check-in was posted, until a reload,
+// whenever a revalidation straddled the save; on another project the timing
+// differed and it updated fine.) A fetch may only cache its result when the
+// generation is unchanged since that fetch started.
+let getCacheGeneration = 0;
+
 /** Drop every cached GET response (used on sign-out and after mutations). */
 export function clearApiCache() {
   getCache.clear();
+  getCacheGeneration += 1;
 }
 
 async function fetchAndParse<T>(path: string, options: RequestInit): Promise<T> {
@@ -72,26 +84,31 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const isGet = method === "GET" && !options.body;
   if (!isGet || path.startsWith("/auth/")) {
     // A mutation (or an auth call) invalidates everything cached so far.
-    getCache.clear();
+    clearApiCache();
     return fetchAndParse<T>(path, options);
   }
   if (!path.startsWith("/notifications") && getCache.has(path)) {
     const cached = getCache.get(path) as T;
-    // Revalidate behind the scenes; a failure keeps the cached copy.
+    // Revalidate behind the scenes; a failure keeps the cached copy. The
+    // write-back is generation-guarded (v157): if a mutation landed while
+    // this fetch was in flight, its response predates the write and must
+    // not re-enter the cache.
+    const generation = getCacheGeneration;
     fetchAndParse<T>(path, options)
-      .then((fresh) => { getCache.set(path, fresh); })
+      .then((fresh) => { if (generation === getCacheGeneration) getCache.set(path, fresh); })
       .catch(() => {});
     return cached;
   }
+  const generation = getCacheGeneration;
   const data = await fetchAndParse<T>(path, options);
-  if (!path.startsWith("/notifications")) getCache.set(path, data);
+  if (!path.startsWith("/notifications") && generation === getCacheGeneration) getCache.set(path, data);
   return data;
 }
 
 // Like request(), but for multipart/form-data uploads -- omits the JSON
 // content-type header so the browser can set its own multipart boundary.
 async function uploadRequest<T>(path: string, formData: FormData): Promise<T> {
-  getCache.clear(); // an upload is a mutation: no cached read may survive it
+  clearApiCache(); // an upload is a mutation: no cached read may survive it
   const res = await fetch(`${BASE}${path}`, {
     method: "POST",
     credentials: "include",
@@ -355,6 +372,10 @@ export type Risk = {
   description: string | null;
   probability: "low" | "medium" | "high";
   impact: "low" | "medium" | "high";
+  // v157: optional 1-5 scores, set together or not at all. Null on every
+  // risk logged before scores existed, until someone edits it.
+  probability_score: number | null;
+  impact_score: number | null;
   mitigation: string | null;
   owner_name: string | null;
   status: "open" | "monitoring" | "resolved";
@@ -1108,10 +1129,10 @@ export const api = {
 
   listStakeholders: (projectId: string) =>
     request<{ stakeholders: Stakeholder[] }>(`/stakeholders?projectId=${projectId}`),
-  createStakeholder: (projectId: string, name: string, email?: string, role?: string, phone?: string) =>
+  createStakeholder: (projectId: string, name: string, email?: string, role?: string, phone?: string, powerLevel?: string, interestLevel?: string) =>
     request<{ stakeholder: Stakeholder }>("/stakeholders", {
       method: "POST",
-      body: JSON.stringify({ projectId, name, email, role, phone }),
+      body: JSON.stringify({ projectId, name, email, role, phone, powerLevel, interestLevel }),
     }),
   updateStakeholder: (id: string, patch: Partial<Pick<Stakeholder, "name" | "role" | "email" | "phone" | "power_level" | "interest_level" | "preferred_contact" | "notes">>) =>
     request<{ stakeholder: Stakeholder }>("/stakeholders", {
@@ -1233,18 +1254,23 @@ export const api = {
     impact?: Risk["impact"],
     mitigation?: string,
     ownerName?: string,
-    status?: Risk["status"]
+    status?: Risk["status"],
+    probabilityScore?: number | null,
+    impactScore?: number | null
   ) =>
     request<{ risk: Risk }>("/risks", {
       method: "POST",
-      body: JSON.stringify({ projectId, title, description, probability, impact, mitigation, ownerName, status }),
+      body: JSON.stringify({ projectId, title, description, probability, impact, mitigation, ownerName, status, probabilityScore, impactScore }),
     }),
-  updateRisk: (id: string, patch: Partial<Pick<Risk, "status" | "probability" | "impact" | "mitigation" | "owner_name" | "title" | "description">>) =>
+  updateRisk: (id: string, patch: Partial<Pick<Risk, "status" | "probability" | "impact" | "mitigation" | "owner_name" | "title" | "description" | "probability_score" | "impact_score">>) =>
     request<{ risk: Risk }>("/risks", {
       method: "PATCH",
       body: JSON.stringify({
         id, status: patch.status, probability: patch.probability, impact: patch.impact,
         mitigation: patch.mitigation, ownerName: patch.owner_name, title: patch.title, description: patch.description,
+        // v157: undefined keys drop out of the JSON, so a status-only patch
+        // leaves the scores alone; an explicit null pair clears them.
+        probabilityScore: patch.probability_score, impactScore: patch.impact_score,
       }),
     }),
   deleteRisk: (id: string) => request<{ ok: true }>(`/risks?id=${id}`, { method: "DELETE" }),
