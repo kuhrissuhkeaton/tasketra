@@ -122,7 +122,10 @@ describe("buildRecap", () => {
     }, TODAY);
     expect(recap).toBe([
       "Weekly sync — November 4, 2026",
-      "1 project: 1 at risk.",
+      // v156: the count line groups by headline health -- Beta stated
+      // on track, so it counts as on track even though the evidence
+      // computes at risk (the per-project line still shows both halves).
+      "1 project: 1 on track.",
       "",
       "- Beta: Stated on track, evidence suggests at risk.",
       "",
@@ -130,5 +133,17 @@ describe("buildRecap", () => {
       "- Pick a vendor (Beta) — needed by Nov 12, 2026",
       "- Hire a designer (Beta) — no date set",
     ].join("\n"));
+  });
+
+  it("counts a stated status as the headline in the group counts (v156)", () => {
+    const recap = buildRecap({
+      projects: [
+        project({ name: "A", health: "off_track", statedHealth: "on_track", statedAt: "2026-11-01T09:00:00Z" }),
+        project({ name: "B", health: "on_track", statedHealth: "off_track", statedAt: "2026-11-01T09:00:00Z" }),
+        project({ name: "C", health: "at_risk" }),
+      ],
+      asks: [],
+    }, TODAY);
+    expect(recap).toContain("3 projects: 1 on track, 1 at risk, 1 off track.");
   });
 });

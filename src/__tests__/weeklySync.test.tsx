@@ -66,7 +66,14 @@ describe("Weekly sync", () => {
   it("renders a status line per project, composed from the payload", async () => {
     m.getWeeklySync.mockResolvedValue(DATA);
     await renderPage();
-    expect(container.textContent).toContain("Stated on track, evidence suggests at risk. 2 tasks past due. 1 decision waiting.");
+    // v156: asserted as two fragments -- the composed line can also carry
+    // a "No update in N days" claim between them once the fixture's
+    // statedAt (2026-11-01) is a week or more in the past, which made the
+    // single-string version fail on the calendar rather than on behavior
+    // (it was already red at the v155 base for exactly that reason; the
+    // quiet claim itself is pinned deterministically in syncRecap.test.ts).
+    expect(container.textContent).toContain("Stated on track, evidence suggests at risk.");
+    expect(container.textContent).toContain("2 tasks past due. 1 decision waiting.");
     expect(container.textContent).toContain("Off track.");
     expect(container.querySelector('a[href="/app/projects/p1"]')?.textContent).toContain("Website Relaunch");
     expect(container.querySelector(".tw-sub")?.textContent).toContain("2 projects · 2 asks waiting");
@@ -92,7 +99,9 @@ describe("Weekly sync", () => {
     await renderPage();
     const pre = container.querySelector(".sync-recap-text");
     expect(pre?.textContent).toContain("Weekly sync —");
-    expect(pre?.textContent).toContain("2 projects: 1 at risk, 1 off track.");
+    // v156: the count line groups by headline health -- Website Relaunch
+    // stated on track, so it counts as on track, not at risk.
+    expect(pre?.textContent).toContain("2 projects: 1 on track, 1 off track.");
     expect(pre?.textContent).toContain("- Website Relaunch: Stated on track, evidence suggests at risk.");
     expect(pre?.textContent).toContain("- Pick a vendor (Website Relaunch) — needed by Nov 12, 2026");
     expect(pre?.textContent).toContain("- Hire a designer (Office Move) — no date set");

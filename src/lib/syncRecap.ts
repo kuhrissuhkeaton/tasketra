@@ -7,6 +7,7 @@
 
 import type { WeeklySyncAsk, WeeklySyncData, WeeklySyncProject } from "./api";
 import { daysBetween } from "./calendarItems";
+import { headlineHealth } from "./healthLabels";
 import { localDateKey } from "./today";
 
 type Health = WeeklySyncProject["health"];
@@ -83,7 +84,9 @@ function askLine(a: WeeklySyncAsk): string {
 
 /**
  * The Recap text for the whole payload: a dated header, a one-line count of
- * projects by computed health, one line per project, then the asks queue.
+ * projects by headline health (v156: the stated status when one was stated,
+ * the computed health otherwise -- the same headline the per-project lines
+ * lead with), one line per project, then the asks queue.
  * A section with nothing in it is omitted rather than padded -- an account
  * with no asks waiting gets no "Asks waiting:" heading over nothing.
  */
@@ -95,9 +98,9 @@ export function buildRecap(payload: WeeklySyncData, todayISO: string): string {
     lines.push("No active projects.");
   } else {
     const counts: [Health, number][] = [
-      ["on_track", projects.filter((p) => p.health === "on_track").length],
-      ["at_risk", projects.filter((p) => p.health === "at_risk").length],
-      ["off_track", projects.filter((p) => p.health === "off_track").length],
+      ["on_track", projects.filter((p) => headlineHealth(p) === "on_track").length],
+      ["at_risk", projects.filter((p) => headlineHealth(p) === "at_risk").length],
+      ["off_track", projects.filter((p) => headlineHealth(p) === "off_track").length],
     ];
     const groups = counts.filter(([, n]) => n > 0).map(([h, n]) => `${n} ${HEALTH_LOWER[h]}`);
     lines.push(`${projects.length} ${plural(projects.length, "project", "projects")}: ${groups.join(", ")}.`);

@@ -51,7 +51,7 @@ export default withSentry(async (req: Request) => {
     database.sql`
       SELECT id, title, probability, impact, owner_name, status
       FROM risks
-      WHERE project_id = ${projectId} AND status = 'open' AND (probability = 'high' OR impact = 'high') AND deleted_at IS NULL
+      WHERE project_id = ${projectId} AND status != 'resolved' AND probability = 'high' AND impact = 'high' AND deleted_at IS NULL
       ORDER BY created_at ASC
     `,
     database.sql`

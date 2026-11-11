@@ -90,6 +90,7 @@ export default function App() {
             <Route path="/verify-email" element={<VerifyEmail />} />
             <Route path="/app" element={<Protected><Today /></Protected>} />
             <Route path="/app/projects" element={<Protected><Dashboard /></Protected>} />
+            <Route path="/app/dashboard" element={<Navigate to="/app/projects?view=dashboard" replace />} />
             <Route path="/app/sync" element={<Protected><WeeklySync /></Protected>} />
             <Route path="/app/workload" element={<Protected><Workload /></Protected>} />
             <Route path="/app/resources" element={<Protected><Resources /></Protected>} />

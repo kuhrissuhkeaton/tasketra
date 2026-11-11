@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, type PortfolioProjectSummary } from "../lib/api";
 import { projectReasonParts } from "../lib/projectReason";
-import { HEALTH_LABEL } from "../lib/healthLabels";
+import { HEALTH_LABEL, evidenceChallenge, headlineHealth } from "../lib/healthLabels";
 
 const LABEL = HEALTH_LABEL;
 const PILL: Record<PortfolioProjectSummary["health"], string> = { on_track: "pill-green", at_risk: "pill-gold", off_track: "pill-red" };
@@ -51,7 +51,13 @@ export function HealthStrip({ projectId, refreshKey, onOpenTab }: { projectId: s
     );
   }
   const allParts = projectReasonParts(summary);
-  const isNew = summary.totalTasks === 0 && summary.health === "on_track";
+  // v156: a stated status (when a check-in stated one) is the headline;
+  // the "New" neutral state yields to it -- a stated status is a real
+  // statement, not a default. The evidence health headlines only when
+  // nothing was stated, and otherwise shows as the challenge line.
+  const isNew = summary.totalTasks === 0 && summary.health === "on_track" && !summary.statedHealth;
+  const headline = headlineHealth(summary);
+  const challenge = evidenceChallenge(summary);
   // v151 (Part A2): the stage-checklist hint does not belong in the health
   // strip -- inside the project it read as a second, disagreeing task list
   // (the Next Step card owns "what's next" here). The hint stays on the
@@ -62,7 +68,7 @@ export function HealthStrip({ projectId, refreshKey, onOpenTab }: { projectId: s
 
   return (
     <div className="hs-strip" role="status" aria-label="Project health">
-      <span className={`pill ${isNew ? "hs-new" : PILL[summary.health]}`}>{isNew ? "New" : LABEL[summary.health]}</span>
+      <span className={`pill ${isNew ? "hs-new" : PILL[headline]}`}>{isNew ? "New" : LABEL[headline]}</span>
       <span className="hs-why">
         {shownParts.map((p, i) => (
           <span key={p.text}>
@@ -78,11 +84,10 @@ export function HealthStrip({ projectId, refreshKey, onOpenTab }: { projectId: s
       <span className="hs-stated">
         {summary.statedHealth ? (
           <>
-            <span className="hs-stated-label">Stated</span>
-            <span className={`pill ${PILL[summary.statedHealth]}`}>{LABEL[summary.statedHealth]}</span>
+            <span className="hs-stated-label">Stated in your check-in</span>
             {summary.statedAt && <span className="muted">· {statedAge(summary.statedAt)}</span>}
-            {summary.statedHealth !== summary.health && (
-              <span className="muted">· Evidence suggests {LABEL[summary.health]}</span>
+            {challenge && (
+              <span className="muted">· Evidence suggests {LABEL[challenge]}</span>
             )}
           </>
         ) : (

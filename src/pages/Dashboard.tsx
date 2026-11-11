@@ -14,7 +14,7 @@ import { projectReason, sortByHealth } from "../lib/projectReason";
 import { localDateKey, addDays } from "../lib/today";
 import { buildNeedsAttention } from "../lib/needsAttention";
 import { buildNeedsALook, type LookContext } from "../lib/needsALook";
-import { HEALTH_LABEL } from "../lib/healthLabels";
+import { HEALTH_LABEL, evidenceChallenge, headlineHealth } from "../lib/healthLabels";
 import { DashboardCalendar } from "../components/DashboardCalendar";
 import { monthRange, shiftMonth, daysBetween } from "../lib/calendarItems";
 import { ResizableTable } from "../components/ResizableTable";
@@ -223,7 +223,10 @@ function PortfolioOverview({ data, wide, onShowAttention, glance, attentionCount
                       <span className="pill pill-neutral">Closed</span>
                     ) : (
                       <>
-                        <span className={`pill ${HEALTH_PILL[p.health]}`}>{HEALTH_LABEL[p.health]}</span>
+                        <span className={`pill ${HEALTH_PILL[headlineHealth(p)]}`}>{HEALTH_LABEL[headlineHealth(p)]}</span>
+                        {evidenceChallenge(p) && (
+                          <span className="muted"> · Evidence suggests {HEALTH_LABEL[evidenceChallenge(p)!]}</span>
+                        )}
                         {p.escalations.length > 0 && (
                           <span className="pill pill-red escalate-pill" title={p.escalations.join(". ")}>Needs escalation</span>
                         )}
@@ -682,6 +685,11 @@ export default function Dashboard() {
       return {
         project: p,
         health,
+        // v156: the row's pill shows the headline health (the stated status
+        // when a check-in stated one); `health` stays the evidence value
+        // the sort, filter and reason text reason over.
+        headline: s2 ? headlineHealth(s2) : health,
+        challenge: s2 ? evidenceChallenge(s2) : null,
         name: p.name,
         overdueTasks: s2?.overdueTasks ?? 0,
         total,
@@ -957,6 +965,9 @@ export default function Dashboard() {
                         <Link to={`/app/projects/${r.project.id}`} className="pw-name">{r.project.name}</Link>
                       )}
                       <span className="pw-reason muted">{r.reason}</span>
+                      {r.challenge && !r.project.closed_at && (
+                        <span className="pw-evidence muted">Evidence suggests {HEALTH_LABEL[r.challenge]}</span>
+                      )}
                       <span className="pw-activity muted">
                         {r.project.last_activity_at
                           ? `Last activity ${fmtDate(r.project.last_activity_at)}`
@@ -966,7 +977,7 @@ export default function Dashboard() {
                       </span>
                     </div>
                     <div className="pw-meta">
-                      <span className="pw-cell pw-cell-health">{r.project.closed_at ? <span className="pill pill-neutral">Closed</span> : <span className={`pill ${HEALTH_PILL[r.health]}`}>{HEALTH_LABEL[r.health]}</span>}</span>
+                      <span className="pw-cell pw-cell-health">{r.project.closed_at ? <span className="pill pill-neutral">Closed</span> : <span className={`pill ${HEALTH_PILL[r.headline]}`}>{HEALTH_LABEL[r.headline]}</span>}</span>
                       <span className="pw-cell pw-cell-stage"><StageChip stage={r.project.stage ?? "initiate"} small /></span>
                       <span className="pw-progress" title={r.total > 0 ? `${r.done} of ${r.total} tasks done` : "No tasks yet"}>
                         <span className="progress-track" aria-hidden="true"><span className="progress-fill" style={{ width: `${r.pct}%` }} /></span>

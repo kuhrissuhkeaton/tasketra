@@ -31,7 +31,7 @@ export async function loadStageInputs(database: ReturnType<typeof db>, projectId
         count(*)::int AS risks,
         count(*) FILTER (WHERE status != 'resolved')::int AS open_risks,
         count(*) FILTER (WHERE status != 'resolved' AND updated_at < now() - interval '30 days')::int AS stale_risks,
-        count(*) FILTER (WHERE status = 'open' AND (probability = 'high' OR impact = 'high'))::int AS high_risks
+        count(*) FILTER (WHERE status != 'resolved' AND probability = 'high' AND impact = 'high')::int AS high_risks
       FROM risks WHERE project_id = ${projectId} AND deleted_at IS NULL
     `,
     database.sql`

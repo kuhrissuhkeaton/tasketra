@@ -10,6 +10,12 @@ export type ChangeEntry = { version: string; date: string; title: string; body: 
 // they can do.
 export const CHANGES: ChangeEntry[] = [
   {
+    version: "v156",
+    date: "November 2026",
+    title: "Your stated status leads, and the counts agree",
+    body: "When you state a status in a check-in, that is now the headline everywhere: the project page, Today, the Dashboard and the Weekly sync all lead with the status you stated, and when the evidence points the other way it appears as a smaller 'Evidence suggests' line instead of overruling you. Some quiet disagreements are fixed too. High-risk counts now match between the risk register, the project health line and the Dashboard. Milestone dates on Today show the day you entered. Decision cards show their Needed by date, and roadmap dates can be typed the way you would write them, like 12/04/2026. In Budget, the approved budget is now called your work budget, and the cost baseline (work budget plus contingency reserve) shows as one number.",
+  },
+  {
     version: "v155",
     date: "November 2026",
     title: "The newsletter, now in the Resource hub",

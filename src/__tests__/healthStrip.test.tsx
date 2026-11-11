@@ -68,6 +68,32 @@ describe("HealthStrip", () => {
     expect(strip()!.textContent).toContain("No tasks yet");
   });
 
+  it("headlines the stated status and demotes the evidence to a challenge line (v156)", async () => {
+    m.getPortfolio.mockResolvedValue({ projects: [summary({ health: "off_track", statedHealth: "on_track", statedAt: "2026-11-10T09:00:00Z", overdueTasks: 3 })] });
+    await mount();
+    // One headline pill only, and it is the stated status, not the evidence.
+    const pills = [...strip()!.querySelectorAll(".pill")];
+    expect(pills.map((p) => p.textContent)).toEqual(["On track"]);
+    expect(strip()!.textContent).toContain("Stated in your check-in");
+    expect(strip()!.textContent).toContain("Evidence suggests Off track");
+  });
+
+  it("shows no challenge line when the stated status and the evidence agree (v156)", async () => {
+    m.getPortfolio.mockResolvedValue({ projects: [summary({ health: "at_risk", statedHealth: "at_risk", statedAt: "2026-11-10T09:00:00Z" })] });
+    await mount();
+    expect(strip()!.querySelector(".pill")!.textContent).toBe("At risk");
+    expect(strip()!.textContent).toContain("Stated in your check-in");
+    expect(strip()!.textContent).not.toContain("Evidence suggests");
+  });
+
+  it("lets a stated status headline even a project with no tasks yet (v156)", async () => {
+    m.getPortfolio.mockResolvedValue({ projects: [summary({ totalTasks: 0, doneTasks: 0, health: "on_track", statedHealth: "at_risk", statedAt: "2026-11-10T09:00:00Z" })] });
+    await mount();
+    const pill = strip()!.querySelector(".pill")!;
+    expect(pill.textContent).toBe("At risk");
+    expect(pill.className).not.toContain("hs-new");
+  });
+
   it("renders nothing when the data cannot load or the project is missing", async () => {
     m.getPortfolio.mockRejectedValue(new Error("nope"));
     await mount();

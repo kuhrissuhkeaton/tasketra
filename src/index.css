@@ -2330,6 +2330,7 @@ a:hover { color: var(--navy); }
 .tw-rail .tw-list > .tw-rail-row:first-child { border-top: 0; }
 .tw-rail-row a { font-weight: 600; color: var(--navy); overflow-wrap: anywhere; }
 .tw-rail-project { flex-direction: row; align-items: center; justify-content: space-between; gap: 8px; }
+.tw-rail-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 @media (max-width: 900px) {
   .tw-grid { grid-template-columns: minmax(0, 1fr); }
 }

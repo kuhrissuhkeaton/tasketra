@@ -5,7 +5,7 @@ import { api, type MyTodayData, type PortfolioData, type PortfolioProjectSummary
 import { useAuth } from "../lib/auth-context";
 import { useDocumentTitle } from "../lib/documentTitle";
 import { announce } from "../lib/announce";
-import { fmtDate } from "../lib/format";
+import { fmtLocalDate } from "../lib/format";
 import {
   addDays,
   bucketTasks,
@@ -18,7 +18,7 @@ import {
   wrapUpNote,
   type TodayTask,
 } from "../lib/today";
-import { HEALTH_LABEL } from "../lib/healthLabels";
+import { HEALTH_LABEL, evidenceChallenge, headlineHealth } from "../lib/healthLabels";
 
 const HEALTH_PILL: Record<PortfolioProjectSummary["health"], string> = {
   on_track: "pill-green",
@@ -387,7 +387,7 @@ export default function Today() {
                       {portfolio.upcomingMilestones.slice(0, 4).map((m) => (
                         <li key={m.id} className="tw-rail-row">
                           <Link to={`/app/projects/${m.projectId}?tab=roadmap`}>{m.title}</Link>
-                          <span className="muted tw-row-meta">{m.projectName} &middot; {fmtDate(m.date)}</span>
+                          <span className="muted tw-row-meta">{m.projectName} &middot; {fmtLocalDate(m.date)}</span>
                         </li>
                       ))}
                     </ul>
@@ -396,16 +396,25 @@ export default function Today() {
                 <div className="tw-card">
                   <h3>Projects at a glance</h3>
                   <ul className="tw-list">
-                    {portfolio.projects.map((p) => (
-                      <li key={p.id} className="tw-rail-row tw-rail-project">
-                        <Link to={`/app/projects/${p.id}`}>{p.name}</Link>
-                        {p.closed_at ? (
-                          <span className="pill pill-neutral">Closed</span>
-                        ) : (
-                          <span className={`pill ${HEALTH_PILL[p.health]}`}>{HEALTH_LABEL[p.health]}</span>
-                        )}
-                      </li>
-                    ))}
+                    {portfolio.projects.map((p) => {
+                      const headline = headlineHealth(p);
+                      const challenge = evidenceChallenge(p);
+                      return (
+                        <li key={p.id} className="tw-rail-row tw-rail-project">
+                          <span className="tw-rail-name">
+                            <Link to={`/app/projects/${p.id}`}>{p.name}</Link>
+                            {challenge && !p.closed_at && (
+                              <span className="muted tw-row-meta">Evidence suggests {HEALTH_LABEL[challenge]}</span>
+                            )}
+                          </span>
+                          {p.closed_at ? (
+                            <span className="pill pill-neutral">Closed</span>
+                          ) : (
+                            <span className={`pill ${HEALTH_PILL[headline]}`}>{HEALTH_LABEL[headline]}</span>
+                          )}
+                        </li>
+                      );
+                    })}
                   </ul>
                 </div>
               </aside>

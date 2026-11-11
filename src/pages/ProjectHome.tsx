@@ -8,7 +8,7 @@ import { DateField } from "../components/DateField";
 import { fmtRoadmapRange } from "../lib/roadmapDates";
 import { phaseProgress } from "../lib/phaseProgress";
 import { mailtoHref, telHref } from "../lib/contactLinks";
-import { LEVEL_LABEL, riskExposure as riskExposureLevel } from "../lib/riskExposure";
+import { LEVEL_LABEL, isHighExposureRisk, riskExposure as riskExposureLevel } from "../lib/riskExposure";
 import { ApplyTemplateDrawer } from "../components/ApplyTemplateDrawer";
 import { SaveTemplateDrawer } from "../components/SaveTemplateDrawer";
 import { StakeholderGrid } from "../components/StakeholderGrid";
@@ -188,6 +188,10 @@ export default function ProjectHome() {
   // banner (content_count / last_activity_at), and work added in one tab must
   // clear that banner when the person moves to another tab. Fetched once on
   // mount, the banner outlived the emptiness it described.
+  // v156: healthNonce joins the deps for the same reason within a tab --
+  // adding the first task (or risk, or check-in) fires the project-changed
+  // event the health strip already listens to, and the banner must clear in
+  // place too, not only after a tab switch.
   useEffect(() => {
     if (id) {
       api.getProject(id).then(({ project }) => setProject(project)).catch((e: unknown) => {
@@ -197,7 +201,7 @@ export default function ProjectHome() {
         else throw e;
       });
     }
-  }, [id, tab]);
+  }, [id, tab, healthNonce]);
 
   // Started by Dashboard's first-project flow, or Resources' "Replay the
   // tour" link, both of which pass startTour via router state rather than
@@ -618,7 +622,7 @@ function FeedTab({ projectId, focusComposerNonce = 0 }: { projectId: string; foc
         ? issuesR.issues.filter((i) => i.status !== "resolved" && (i.severity === "high" || i.severity === "critical")).length
         : null;
       const openHighRisks = risksR
-        ? risksR.risks.filter((r) => r.status === "open" && (r.probability === "high" || r.impact === "high")).length
+        ? risksR.risks.filter((r) => isHighExposureRisk(r)).length
         : null;
       const lastUpdate = feed.find((i) => i.type === "status_update");
       const daysSinceLastUpdate = lastUpdate
@@ -2551,7 +2555,7 @@ function RisksTab({ projectId, highlightId }: { projectId: string; highlightId?:
       <>
       <RegisterSummary>
         {risks.filter((r) => r.status !== "resolved").length} open
-        {" \u00b7 "}{risks.filter((r) => r.status !== "resolved" && riskExposure(r.probability, r.impact) === "high").length} high exposure
+        {" \u00b7 "}{risks.filter((r) => isHighExposureRisk(r)).length} high exposure
         {" \u00b7 "}{risks.filter((r) => r.status === "resolved").length} resolved
       </RegisterSummary>
       {risks.length === 0 ? (
@@ -2769,7 +2773,7 @@ function AssumptionsTab({ projectId }: { projectId: string }) {
     setEditStatement(a.statement);
     setEditNotes(a.notes || "");
     setEditOwner(a.owner_name || "");
-    setEditCheckBy(a.check_by || "");
+    setEditCheckBy(a.check_by ? a.check_by.slice(0, 10) : "");
   }
 
   async function saveEdit(id: string) {
@@ -3020,7 +3024,7 @@ function DependenciesTab({ projectId }: { projectId: string }) {
     setEditDescription(d.description || "");
     setEditDirection(d.direction);
     setEditOwner(d.owner_name || "");
-    setEditNeededBy(d.needed_by || "");
+    setEditNeededBy(d.needed_by ? d.needed_by.slice(0, 10) : "");
   }
 
   async function saveEdit(id: string) {
@@ -3886,8 +3890,8 @@ function ProcurementTab({ projectId }: { projectId: string }) {
     setEditVendorSubcategory(p.vendor_subcategory || "");
     setEditRole(p.role || "");
     setEditCost(p.cost === null ? "" : String(p.cost));
-    setEditStartDate(p.start_date || "");
-    setEditEndDate(p.end_date || "");
+    setEditStartDate(p.start_date ? p.start_date.slice(0, 10) : "");
+    setEditEndDate(p.end_date ? p.end_date.slice(0, 10) : "");
   }
 
   async function saveEdit(id: string) {
@@ -4172,6 +4176,11 @@ function BudgetTab({ projectId, onOpenTab }: { projectId: string; onOpenTab: (ta
   const { metrics, taskStats, costEntries, budgetAtCompletion, contingencyReserve } = data;
   const favorable = (n: number | null, goodIsPositive = true) =>
     n === null ? "" : (goodIsPositive ? n >= 0 : n >= 1) ? "evm-good" : "evm-bad";
+  // v156: with nothing planned due and nothing earned yet (PV and EV both
+  // zero), a $0 variance is arithmetic, not performance -- the CV/SV cards
+  // must not call it "Under budget" / "Ahead of schedule" or paint it
+  // green. Real variances (either figure nonzero) keep their labels.
+  const noEvmSignal = metrics.pv !== null && metrics.ev !== null && metrics.pv === 0 && metrics.ev === 0;
   // Sparse-project rule (v153): the EVM grid is scaffolding until there is
   // something to measure -- a budget figure or at least one task. The
   // "add tasks" hint above stays as the guide in the empty case.
@@ -4182,8 +4191,8 @@ function BudgetTab({ projectId, onOpenTab }: { projectId: string; onOpenTab: (ta
       <div className="evm-baseline">
         {editingBac || budgetAtCompletion === null ? (
           <form className="inline-form" onSubmit={saveBac}>
-            <input aria-label="Total approved budget (BAC), e.g. 50000"
-              placeholder="Total approved budget (BAC), e.g. 50000"
+            <input aria-label="Work budget, e.g. 50000"
+              placeholder="Work budget, e.g. 50000"
               value={bacInput}
               onChange={(e) => setBacInput(e.target.value)}
               type="number" min="0" step="0.01"
@@ -4193,7 +4202,7 @@ function BudgetTab({ projectId, onOpenTab }: { projectId: string; onOpenTab: (ta
               value={reserveInput}
               onChange={(e) => setReserveInput(e.target.value)}
               type="number" min="0" step="0.01"
-              title="Money set aside for known risks -- tracked separately from BAC, not counted in the EVM metrics below."
+              title="Money set aside for known risks -- tracked separately from the work budget, not counted in the EVM metrics below. Work budget plus this reserve is the cost baseline."
             />
             <button className="btn btn-primary">Save budget</button>
             {budgetAtCompletion !== null && (
@@ -4202,9 +4211,12 @@ function BudgetTab({ projectId, onOpenTab }: { projectId: string; onOpenTab: (ta
           </form>
         ) : (
           <div className="stat-row">
-            <div className="stat"><strong>{fmtMoney(budgetAtCompletion)}</strong> approved budget (BAC)</div>
+            <div className="stat"><strong>{fmtMoney(budgetAtCompletion)}</strong> work budget</div>
             {contingencyReserve !== null && (
               <div className="stat"><strong>{fmtMoney(contingencyReserve)}</strong> contingency reserve</div>
+            )}
+            {contingencyReserve !== null && (
+              <div className="stat"><strong>{fmtMoney(budgetAtCompletion + contingencyReserve)}</strong> cost baseline</div>
             )}
             <button className="btn btn-ghost" type="button" onClick={() => setEditingBac(true)}>Edit</button>
           </div>
@@ -4241,15 +4253,15 @@ function BudgetTab({ projectId, onOpenTab }: { projectId: string; onOpenTab: (ta
           <div className="evm-value">{fmtMoney(metrics.ac)}</div>
           <div className="evm-sub">{costEntries.length} logged {costEntries.length === 1 ? "entry" : "entries"}</div>
         </div>
-        <div className={`evm-card ${favorable(metrics.cv)}`} title="Cost Variance: EV - AC. Positive is under budget.">
+        <div className={`evm-card ${favorable(noEvmSignal ? null : metrics.cv)}`} title="Cost Variance: EV - AC. Positive is under budget.">
           <div className="evm-label">CV</div>
           <div className="evm-value">{fmtMoney(metrics.cv)}</div>
-          <div className="evm-sub">{metrics.cv === null ? "--" : metrics.cv >= 0 ? "Under budget" : "Over budget"}</div>
+          <div className="evm-sub">{metrics.cv === null ? "--" : noEvmSignal ? "Not enough data yet" : metrics.cv >= 0 ? "Under budget" : "Over budget"}</div>
         </div>
-        <div className={`evm-card ${favorable(metrics.sv)}`} title="Schedule Variance: EV - PV. Positive is ahead of schedule.">
+        <div className={`evm-card ${favorable(noEvmSignal ? null : metrics.sv)}`} title="Schedule Variance: EV - PV. Positive is ahead of schedule.">
           <div className="evm-label">SV</div>
           <div className="evm-value">{fmtMoney(metrics.sv)}</div>
-          <div className="evm-sub">{metrics.sv === null ? "--" : metrics.sv >= 0 ? "Ahead of schedule" : "Behind schedule"}</div>
+          <div className="evm-sub">{metrics.sv === null ? "--" : noEvmSignal ? "Not enough data yet" : metrics.sv >= 0 ? "Ahead of schedule" : "Behind schedule"}</div>
         </div>
         <div className={`evm-card ${favorable(metrics.cpi, false)}`} title="Cost Performance Index: EV / AC. Above 1.0 is efficient.">
           <div className="evm-label">CPI</div>
@@ -4572,11 +4584,11 @@ function RoadmapTab({ projectId, isOwner, showBudget }: { projectId: string; isO
             </datalist>
             <span className="datefield">
               <span className="datefield-label" aria-hidden="true">Start</span>
-              <input type="date" title="Start date" aria-label="Start date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+              <DateField title="Start date" ariaLabel="Start date" value={startDate} onChange={setStartDate} />
             </span>
             <span className="datefield">
               <span className="datefield-label" aria-hidden="true">End</span>
-              <input type="date" title="End date (optional)" aria-label="End date (optional)" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+              <DateField title="End date (optional)" ariaLabel="End date (optional)" value={endDate} onChange={setEndDate} />
             </span>
             <select value={status} onChange={(e) => setStatus(e.target.value as RoadmapItem["status"])} title="Status" aria-label="Status">
               {Object.entries(ROADMAP_STATUS_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
@@ -4734,8 +4746,14 @@ function RoadmapTab({ projectId, isOwner, showBudget }: { projectId: string; isO
                         </select>
                       </div>
                       <div className="inline-form" style={{ marginTop: 8 }}>
-                        <input type="date" title="Start date" aria-label="Start date" value={editStart} onChange={(e) => setEditStart(e.target.value)} />
-                        <input type="date" title="End date" aria-label="End date" value={editEnd} onChange={(e) => setEditEnd(e.target.value)} />
+                        <span className="datefield">
+                          <span className="datefield-label" aria-hidden="true">Start</span>
+                          <DateField title="Start date" ariaLabel="Start date" value={editStart} onChange={setEditStart} />
+                        </span>
+                        <span className="datefield">
+                          <span className="datefield-label" aria-hidden="true">End</span>
+                          <DateField title="End date" ariaLabel="End date" value={editEnd} onChange={setEditEnd} />
+                        </span>
                       </div>
                       <label style={{ marginTop: 8 }}>Notes</label>
                       <textarea aria-label="Notes" value={editDescription} onChange={(e) => setEditDescription(e.target.value)} rows={3} />
@@ -5638,6 +5656,7 @@ function StakeholderDecisionsTab({ projectId }: { projectId: string }) {
                   {d.recipients?.length
                     ? <>Asked: {d.recipients.map((r) => r.name).join(", ")} · waiting {daysAgo(d.created_at)}d</>
                     : "Not sent to anyone yet. Share the link below to ask."}
+                  {d.deadline && <> · Needed by {fmtLocalDate(d.deadline)}</>}
                 </p>
                 {(d.records ?? []).length > 0 && (
                   <div className="decision-responses">
