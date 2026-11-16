@@ -49,10 +49,10 @@ export default withSentry(async (req: Request) => {
       ORDER BY CASE severity WHEN 'critical' THEN 0 ELSE 1 END
     `,
     database.sql`
-      SELECT id, title, probability, impact, owner_name, status
+      SELECT id, title, probability, impact, probability_score, impact_score, owner_name, status
       FROM risks
       WHERE project_id = ${projectId} AND status != 'resolved' AND (CASE WHEN probability_score IS NOT NULL AND impact_score IS NOT NULL THEN probability_score * impact_score >= 12 OR impact_score = 5 ELSE probability = 'high' AND impact = 'high' END) AND deleted_at IS NULL
-      ORDER BY created_at ASC
+      ORDER BY (CASE WHEN probability_score IS NOT NULL AND impact_score IS NOT NULL THEN probability_score * impact_score END) DESC NULLS LAST, created_at ASC
     `,
     database.sql`
       SELECT count(*)::int AS count

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { riskExposure, isHighExposureRisk, riskExposureFor, riskScore, bandForScore, LEVEL_LABEL, SCORE_LABEL } from "../riskExposure";
+import { riskExposure, isHighExposureRisk, riskExposureFor, riskScore, bandForScore, LEVEL_LABEL, SCORE_LABEL, sortRisks, compareRisksByExposure } from "../riskExposure";
 
 describe("riskExposure", () => {
   it("high only when both are high", () => {
@@ -93,6 +93,69 @@ describe("bandForScore", () => {
   });
   it("has a word hint for every score", () => {
     expect(Object.keys(SCORE_LABEL).map(Number)).toEqual([1, 2, 3, 4, 5]);
+  });
+});
+
+// v158: the register's default order. The panel review caught the table
+// rendering in log order (10, 12, 10, 12, 12, 15, ...) while the site copy
+// promised the highest-exposure risks sort themselves to the top.
+describe("sortRisks by exposure", () => {
+  const mk = (title: string, over: Partial<Parameters<typeof sortRisks>[0][number]> = {}) => ({
+    title,
+    probability: "medium" as const,
+    impact: "medium" as const,
+    status: "open",
+    created_at: "2026-01-01T00:00:00Z",
+    probability_score: null,
+    impact_score: null,
+    ...over,
+  });
+
+  it("puts the highest score first (the Portal register order from the review)", () => {
+    const risks = [
+      mk("score 10", { probability_score: 2, impact_score: 5, probability: "low", impact: "high", created_at: "2026-01-01T00:00:00Z" }),
+      mk("score 12", { probability_score: 3, impact_score: 4, probability: "medium", impact: "high", created_at: "2026-01-02T00:00:00Z" }),
+      mk("score 15", { probability_score: 3, impact_score: 5, probability: "medium", impact: "high", created_at: "2026-01-03T00:00:00Z" }),
+      mk("score 6", { probability_score: 2, impact_score: 3, probability: "low", impact: "medium", created_at: "2026-01-04T00:00:00Z" }),
+    ];
+    expect(sortRisks(risks, "exposure").map((r) => r.title)).toEqual(["score 15", "score 12", "score 10", "score 6"]);
+  });
+
+  it("keeps resolved risks last, however they score", () => {
+    const risks = [
+      mk("resolved 25", { probability_score: 5, impact_score: 5, probability: "high", impact: "high", status: "resolved" }),
+      mk("open 4", { probability_score: 2, impact_score: 2, probability: "low", impact: "low" }),
+    ];
+    expect(sortRisks(risks, "exposure").map((r) => r.title)).toEqual(["open 4", "resolved 25"]);
+  });
+
+  it("orders unscored risks by their bands among the scored ones", () => {
+    const risks = [
+      mk("unscored low/low", { probability: "low", impact: "low" }),
+      mk("unscored high/high", { probability: "high", impact: "high" }),
+      mk("scored 12", { probability_score: 3, impact_score: 4, probability: "medium", impact: "high" }),
+    ];
+    expect(sortRisks(risks, "exposure").map((r) => r.title)).toEqual(["scored 12", "unscored high/high", "unscored low/low"]);
+  });
+
+  it("breaks exact ties by log order and never mutates the input", () => {
+    const risks = [
+      mk("first", { probability_score: 3, impact_score: 4, probability: "medium", impact: "high", created_at: "2026-01-01T00:00:00Z" }),
+      mk("second", { probability_score: 4, impact_score: 3, probability: "high", impact: "medium", created_at: "2026-01-02T00:00:00Z" }),
+    ];
+    const before = [...risks];
+    expect(sortRisks(risks, "exposure").map((r) => r.title)).toEqual(["first", "second"]);
+    expect(risks).toEqual(before);
+    expect(compareRisksByExposure(risks[0], risks[1])).toBeLessThan(0);
+  });
+
+  it("supports newest-first and title orders", () => {
+    const risks = [
+      mk("Beta", { created_at: "2026-01-01T00:00:00Z" }),
+      mk("Alpha", { created_at: "2026-01-03T00:00:00Z" }),
+    ];
+    expect(sortRisks(risks, "newest").map((r) => r.title)).toEqual(["Alpha", "Beta"]);
+    expect(sortRisks(risks, "title").map((r) => r.title)).toEqual(["Alpha", "Beta"]);
   });
 });
 

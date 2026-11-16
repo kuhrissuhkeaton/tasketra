@@ -797,7 +797,7 @@ export type TodayData = {
   staleTasks: { id: string; title: string; status: Task["status"]; owner_name: string | null; updated_at: string }[];
   awaitingDecisions: { id: string; title: string; created_at: string; deadline: string | null; recipients: string[]; public_token: string }[];
   urgentIssues: { id: string; title: string; severity: string; owner_name: string | null; status: Issue["status"] }[];
-  urgentRisks: { id: string; title: string; probability: string; impact: string; owner_name: string | null; status: Risk["status"] }[];
+  urgentRisks: { id: string; title: string; probability: string; impact: string; probability_score?: number | null; impact_score?: number | null; owner_name: string | null; status: Risk["status"] }[];
   totalTaskCount: number;
   // v150: Next Step card inputs (see src/lib/nextStep.ts).
   overdueTasks: { id: string; title: string; due_date: string | null }[];
@@ -884,6 +884,8 @@ export type PortfolioProjectSummary = {
   /** When the project was marked closed; null/absent while it is open. */
   closed_at?: string | null;
   nextUp: string | null;
+  /** v158: the tab the nextUp checklist item lives on, so the hint can link straight to it. */
+  nextUpTab?: string | null;
   escalations: string[];
   totalTasks: number;
   doneTasks: number;

@@ -33,7 +33,7 @@ export function projectReasonParts(p: PortfolioProjectSummary, openDecisions = 0
   if (p.health === "off_track") return [{ text: "Off track: a critical issue, an off-track objective, or a badly overrun score" }];
   if (p.health === "at_risk") return [{ text: "Health score is at risk" }];
   if (p.totalTasks === 0) return [{ text: "No tasks yet", tab: "tasks" }];
-  return [{ text: p.nextUp ? `Next up in ${STAGE_LABEL[p.stage]}: ${p.nextUp}` : "Nothing flagged", ...(p.nextUp ? { nextUp: true } : {}) }];
+  return [{ text: p.nextUp ? `Next up in ${STAGE_LABEL[p.stage]}: ${p.nextUp}` : "Nothing flagged", ...(p.nextUp ? { nextUp: true, ...(p.nextUpTab ? { tab: p.nextUpTab } : {}) } : {}) }];
 }
 
 export function projectReason(p: PortfolioProjectSummary, openDecisions = 0): string {

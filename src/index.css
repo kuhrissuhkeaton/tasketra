@@ -238,6 +238,15 @@ h1 { font-size: 36px; }
 .heading-sm { font-size: 1em; }
 
 .muted { color: var(--slate); font-size: 14px; }
+/* v158: the "Evidence suggests" challenge line is a conclusion the user is
+   meant to weigh against their stated status, so it reads in full body
+   text with a colored dot carrying the health color -- not in the tan
+   muted style, which failed contrast and read as fine print. */
+.evidence-note { color: var(--navy); font-size: 13px; }
+.evidence-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; background: var(--slate); }
+.evidence-dot.evidence-on_track { background: var(--success); }
+.evidence-dot.evidence-at_risk { background: #6B4A1C; }
+.evidence-dot.evidence-off_track { background: var(--red); }
 
 ::selection { background: var(--tint-strong); color: var(--navy); }
 
@@ -2323,6 +2332,14 @@ a:hover { color: var(--navy); }
 .tw-row-done .tw-row-title { text-decoration: line-through; color: var(--slate-text); }
 .tw-date { display: inline-flex; align-items: center; gap: 6px; flex: none; }
 .tw-date input { padding: 3px 6px; border: 1px dashed var(--border); border-radius: var(--radius-sm); background: var(--surface-muted); color: var(--navy); font: inherit; font-size: 12px; font-variant-numeric: tabular-nums; min-height: 32px; }
+/* v158: an undated task shows a quiet "No date" instead of the browser's
+   mm/dd/yyyy placeholder segments; the editor itself appears on hover or
+   keyboard focus, so setting a date is still one click away. */
+.tw-nodate { font-size: 12px; color: var(--slate); padding: 3px 2px; }
+.tw-date.nodate { position: relative; }
+.tw-date.nodate input { position: absolute; opacity: 0; pointer-events: none; width: 1px; }
+.tw-date.nodate:hover .tw-nodate, .tw-date.nodate:focus-within .tw-nodate { display: none; }
+.tw-date.nodate:hover input, .tw-date.nodate:focus-within input { position: static; opacity: 1; pointer-events: auto; width: auto; }
 .tw-date.late input { border-color: var(--red); color: var(--red); }
 .tw-late { font-size: 11px; font-weight: 700; color: var(--red); white-space: nowrap; }
 .tw-later summary { cursor: pointer; padding: 8px 0; font-weight: 600; }

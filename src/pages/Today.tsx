@@ -191,8 +191,9 @@ export default function Today() {
             {mine ? "" : t.owner_name ? ` · ${t.owner_name}` : ""}
           </span>
         </div>
-        <label className={`tw-date${late ? " late" : ""}`}>
+        <label className={`tw-date${late ? " late" : ""}${t.due_date ? "" : " nodate"}`}>
           <span className="sr-only">Due date for {t.title}</span>
+          {!t.due_date && <span className="tw-nodate" aria-hidden="true">No date</span>}
           <input
             type="date"
             value={t.due_date ?? ""}
@@ -285,7 +286,7 @@ export default function Today() {
               ) : (
                 <section className="tw-clear" aria-label="Your day is clear">
                   <h2>Your day is clear</h2>
-                  <p className="muted">Nothing is overdue or due today. Plan ahead from This week, or add a task.</p>
+                  <p className="muted">Nothing is overdue or due today. {buckets.week.length > 0 ? "Plan ahead from This week below, or add a task." : "Add a task below, or open a project to plan ahead."}</p>
                 </section>
               )}
 

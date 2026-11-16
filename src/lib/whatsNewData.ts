@@ -10,6 +10,12 @@ export type ChangeEntry = { version: string; date: string; title: string; body: 
 // they can do.
 export const CHANGES: ChangeEntry[] = [
   {
+    version: "v158",
+    date: "November 2026",
+    title: "Your highest risks sort themselves first, and the next step is a button",
+    body: "Your risk register now opens sorted the way your plan ranks it: highest exposure first, with the score on every row, and a Sort by control when you want a different order. The project Overview lists those same high-exposure risks in the same order, scores included. On the Dashboard and your Projects list, the Next up line for a project is now a link that takes you straight to the screen where you do it, instead of a label you had to go and find. In Budget, the earned value grid stays hidden until there is something to measure (a logged cost or a completed task), so a new project shows one plain sentence instead of ten empty boxes. Smaller fixes ride along: tasks with no due date on Today now say No date instead of showing an empty date box; empty Issues and Budget lists have a button that takes you to the form; the 'Evidence suggests' line reads in full-strength text with a colored dot, so it no longer looks like fine print; and the product tour now points at the Health tab, which is where risks and issues actually live.",
+  },
+  {
     version: "v157",
     date: "November 2026",
     title: "Your risks show their scores",

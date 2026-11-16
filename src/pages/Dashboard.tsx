@@ -10,7 +10,7 @@ import { useConfirm } from "../components/ConfirmDialog";
 import { Modal } from "../components/Modal";
 import { CollapsibleSection } from "../components/CollapsibleSection";
 import { useIsWide } from "../lib/dashPrefs";
-import { projectReason, sortByHealth } from "../lib/projectReason";
+import { projectReason, projectReasonParts, sortByHealth } from "../lib/projectReason";
 import { localDateKey, addDays } from "../lib/today";
 import { buildNeedsAttention } from "../lib/needsAttention";
 import { buildNeedsALook, type LookContext } from "../lib/needsALook";
@@ -225,7 +225,7 @@ function PortfolioOverview({ data, wide, onShowAttention, glance, attentionCount
                       <>
                         <span className={`pill ${HEALTH_PILL[headlineHealth(p)]}`}>{HEALTH_LABEL[headlineHealth(p)]}</span>
                         {evidenceChallenge(p) && (
-                          <span className="muted"> · Evidence suggests {HEALTH_LABEL[evidenceChallenge(p)!]}</span>
+                          <span className="evidence-note"> · <span className={`evidence-dot evidence-${evidenceChallenge(p)!}`} aria-hidden="true" />Evidence suggests {HEALTH_LABEL[evidenceChallenge(p)!]}</span>
                         )}
                         {p.escalations.length > 0 && (
                           <span className="pill pill-red escalate-pill" title={p.escalations.join(". ")}>Needs escalation</span>
@@ -696,6 +696,13 @@ export default function Dashboard() {
         done,
         pct: total > 0 ? Math.round((done / total) * 100) : 0,
         reason: p.closed_at ? `Closed ${fmtDate(p.closed_at)}` : s2 ? projectReason(s2, p.open_decisions ?? 0) : "Loading details...",
+        // v158: when the reason IS the stage checklist's next step, it
+        // links straight to the tab that completes it.
+        reasonTab: (() => {
+          if (!s2 || p.closed_at || !s2.nextUpTab) return null;
+          const parts = projectReasonParts(s2, p.open_decisions ?? 0);
+          return parts.length === 1 && parts[0].nextUp ? s2.nextUpTab : null;
+        })(),
       };
     }),
   );
@@ -964,9 +971,13 @@ export default function Dashboard() {
                       ) : (
                         <Link to={`/app/projects/${r.project.id}`} className="pw-name">{r.project.name}</Link>
                       )}
-                      <span className="pw-reason muted">{r.reason}</span>
+                      {r.reasonTab ? (
+                        <Link className="pw-reason muted" to={`/app/projects/${r.project.id}?tab=${r.reasonTab}`}>{r.reason}</Link>
+                      ) : (
+                        <span className="pw-reason muted">{r.reason}</span>
+                      )}
                       {r.challenge && !r.project.closed_at && (
-                        <span className="pw-evidence muted">Evidence suggests {HEALTH_LABEL[r.challenge]}</span>
+                        <span className="pw-evidence evidence-note"><span className={`evidence-dot evidence-${r.challenge}`} aria-hidden="true" />Evidence suggests {HEALTH_LABEL[r.challenge]}</span>
                       )}
                       <span className="pw-activity muted">
                         {r.project.last_activity_at
@@ -1069,7 +1080,13 @@ export default function Dashboard() {
                           <span key={r.key} className={`pill pill-${r.tone}`} title={r.explain}>{r.label}<span className="sr-only">. {r.explain}</span></span>
                         ))}
                       </span>
-                      {a.nextUp && <span className="dash-attention-next muted"><span>Next up{stageById.get(a.id) ? ` in ${STAGE_LABEL[stageById.get(a.id)!]}` : ""}</span> {a.nextUp}</span>}
+                      {a.nextUp && (
+                        a.nextUpTab ? (
+                          <Link className="dash-attention-next muted" to={`/app/projects/${a.id}?tab=${a.nextUpTab}`}><span>Next up{stageById.get(a.id) ? ` in ${STAGE_LABEL[stageById.get(a.id)!]}` : ""}</span> {a.nextUp}</Link>
+                        ) : (
+                          <span className="dash-attention-next muted"><span>Next up{stageById.get(a.id) ? ` in ${STAGE_LABEL[stageById.get(a.id)!]}` : ""}</span> {a.nextUp}</span>
+                        )
+                      )}
                     </li>
                   ))}
                 </ul>

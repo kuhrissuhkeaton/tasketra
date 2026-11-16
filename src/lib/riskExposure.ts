@@ -94,3 +94,57 @@ export function riskExposureFor(r: { probability: RiskLevel; impact: RiskLevel }
   if (score !== null && (score >= 12 || r.impact_score === 5)) return "high";
   return riskExposure(r.probability, r.impact);
 }
+
+const BAND_VALUE: Record<RiskLevel, number> = { low: 1, medium: 2, high: 3 };
+const STATUS_RANK: Record<string, number> = { open: 0, monitoring: 1, resolved: 2 };
+
+export type RiskSort = "exposure" | "newest" | "title";
+
+export const RISK_SORT_LABEL: Record<RiskSort, string> = {
+  exposure: "Highest exposure",
+  newest: "Newest first",
+  title: "Title A-Z",
+};
+
+export function isRiskSort(v: string | null): v is RiskSort {
+  return v === "exposure" || v === "newest" || v === "title";
+}
+
+type SortableRisk = {
+  title: string;
+  probability: RiskLevel;
+  impact: RiskLevel;
+  status: RiskStatus | string;
+  created_at: string;
+} & RiskScoring;
+
+/**
+ * The register's default order (v158): the risks that can hurt the project
+ * soonest read first. Open before monitoring before resolved; within a
+ * status, high-exposure (the shared definition above) before the rest;
+ * then by score, highest first -- a scored risk uses its real number, an
+ * unscored one falls back to its band product (high/high = 9) so the two
+ * kinds interleave sanely; then impact; then oldest first, matching the
+ * order risks were logged in before v158 within exact ties.
+ */
+export function compareRisksByExposure(a: SortableRisk, b: SortableRisk): number {
+  const statusDiff = (STATUS_RANK[a.status] ?? 0) - (STATUS_RANK[b.status] ?? 0);
+  if (statusDiff !== 0) return statusDiff;
+  const highDiff = Number(isHighExposureRisk(b)) - Number(isHighExposureRisk(a));
+  if (highDiff !== 0) return highDiff;
+  const scoreOf = (r: SortableRisk) => riskScore(r) ?? BAND_VALUE[r.probability] * BAND_VALUE[r.impact];
+  const scoreDiff = scoreOf(b) - scoreOf(a);
+  if (scoreDiff !== 0) return scoreDiff;
+  const impactDiff = (b.impact_score ?? BAND_VALUE[b.impact]) - (a.impact_score ?? BAND_VALUE[a.impact]);
+  if (impactDiff !== 0) return impactDiff;
+  return a.created_at.localeCompare(b.created_at);
+}
+
+/** Sort a copy of the register; the input array is never mutated. */
+export function sortRisks<T extends SortableRisk>(risks: T[], sort: RiskSort): T[] {
+  const out = [...risks];
+  if (sort === "newest") out.sort((a, b) => b.created_at.localeCompare(a.created_at));
+  else if (sort === "title") out.sort((a, b) => a.title.localeCompare(b.title));
+  else out.sort(compareRisksByExposure);
+  return out;
+}

@@ -125,6 +125,16 @@ export function RegisterSummary({ children }: { children: ReactNode }) {
 }
 
 /** The empty state for a register: one sentence. The add form above is the action. */
-export function RegisterEmpty({ children }: { children: ReactNode }) {
-  return <p className="rg-empty muted">{children}</p>;
+export function RegisterEmpty({ children, action }: { children: ReactNode; action?: { label: string; onClick: () => void } }) {
+  return (
+    <p className="rg-empty muted">
+      {children}
+      {action && (
+        <>
+          {" "}
+          <button type="button" className="btn-link" onClick={action.onClick}>{action.label}</button>
+        </>
+      )}
+    </p>
+  );
 }

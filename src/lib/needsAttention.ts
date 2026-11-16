@@ -18,7 +18,7 @@ export type AttentionRule = {
   match: (p: PortfolioProjectSummary, ctx: AttentionContext) => AttentionMatch | null;
 };
 export type AttentionReason = { key: string; label: string; tone: "red" | "gold"; explain: string };
-export type AttentionItem = { id: string; name: string; nextUp: string | null; reasons: AttentionReason[] };
+export type AttentionItem = { id: string; name: string; nextUp: string | null; nextUpTab?: string | null; reasons: AttentionReason[] };
 
 const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
 
@@ -94,7 +94,7 @@ export function buildNeedsAttention(
       }
     }
     if (reasons.length === 0) continue;
-    scored.push({ item: { id: p.id, name: p.name, nextUp: p.nextUp, reasons }, rank });
+    scored.push({ item: { id: p.id, name: p.name, nextUp: p.nextUp, nextUpTab: p.nextUpTab ?? null, reasons }, rank });
   }
   scored.sort((a, b) => {
     for (let i = 0; i < a.rank.length; i++) if (a.rank[i] !== b.rank[i]) return a.rank[i] - b.rank[i];

@@ -252,13 +252,15 @@ export default withSentry(async (req: Request) => {
   // a "Next up" line on Dashboard cards. Capped so a very large portfolio does
   // not fan out into hundreds of count queries on every load.
   const NEXT_UP_LIMIT = 30;
-  const nextUpByProject = new Map<string, string | null>();
+  const nextUpByProject = new Map<string, { title: string; tab: string } | null>();
   await Promise.all((projects as any[]).slice(0, NEXT_UP_LIMIT).map(async (p) => {
     try {
       const inputs = await loadStageInputs(database, p.id);
       if (!inputs) return;
       const item = stageChecklist(inputs.stage, inputs.counts, inputs.size).items.find((i) => i.status !== "done");
-      nextUpByProject.set(p.id, item ? item.title : null);
+      // v158: carry the item's tab alongside its title so the Dashboard can
+      // link the hint straight to the screen that completes it.
+      nextUpByProject.set(p.id, item ? { title: item.title, tab: item.tab } : null);
     } catch {
       // Guidance is optional on the Dashboard; a failed count just hides the line.
     }
@@ -301,7 +303,8 @@ export default withSentry(async (req: Request) => {
       name: p.name,
       stage: p.stage,
       closed_at: p.closed_at ?? null,
-      nextUp: nextUpByProject.get(p.id) ?? null,
+      nextUp: nextUpByProject.get(p.id)?.title ?? null,
+      nextUpTab: nextUpByProject.get(p.id)?.tab ?? null,
       escalations: evaluateTolerances(sanitizeTolerances(p.tolerances), {
         cpi: evm.cpi, spi: evm.spi, overdueTasks: Number(taskRow.overdue_tasks) || 0, highRisks: riskRow.high_count,
       }),

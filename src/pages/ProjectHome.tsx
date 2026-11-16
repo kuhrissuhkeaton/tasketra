@@ -8,7 +8,7 @@ import { DateField } from "../components/DateField";
 import { fmtRoadmapRange } from "../lib/roadmapDates";
 import { phaseProgress } from "../lib/phaseProgress";
 import { mailtoHref, telHref } from "../lib/contactLinks";
-import { LEVEL_LABEL, SCORE_LABEL, isHighExposureRisk, riskExposureFor, riskScore } from "../lib/riskExposure";
+import { LEVEL_LABEL, SCORE_LABEL, isHighExposureRisk, riskExposureFor, riskScore, sortRisks, isRiskSort, RISK_SORT_LABEL, type RiskSort } from "../lib/riskExposure";
 import { ApplyTemplateDrawer } from "../components/ApplyTemplateDrawer";
 import { SaveTemplateDrawer } from "../components/SaveTemplateDrawer";
 import { StakeholderGrid } from "../components/StakeholderGrid";
@@ -686,8 +686,8 @@ function FeedTab({ projectId, focusComposerNonce = 0 }: { projectId: string; foc
           ))}
         </div>
         {suggested && evidence.length > 0 && (
-          <p className="status-evidence muted">
-            Evidence suggests {STATED_HEALTH_LABEL[suggested]}: {evidence.join(" · ")}
+          <p className="status-evidence evidence-note">
+            <span className={`evidence-dot evidence-${suggested}`} aria-hidden="true" />Evidence suggests {STATED_HEALTH_LABEL[suggested]}: {evidence.join(" · ")}
           </p>
         )}
         <div className="inline-form feed-composer-form">
@@ -1048,7 +1048,11 @@ function TodayTab({ projectId, onPostCheckIn }: { projectId: string; onPostCheck
                     {r.title}
                   </button>
                   {" · "}{r.owner_name || "unassigned"}
-                  <span className="muted"> · {r.probability} probability / {r.impact} impact</span>
+                  {riskScore(r) !== null ? (
+                    <span className="pill pill-navy" style={{ marginLeft: 6 }}>P{r.probability_score} · I{r.impact_score} · Score {riskScore(r)}</span>
+                  ) : (
+                    <span className="muted"> · {r.probability} probability / {r.impact} impact</span>
+                  )}
                 </div>
                 {reassignId === r.id ? (
                   <div className="row-actions">
@@ -1888,6 +1892,7 @@ function TimelineView({ tasks }: { tasks: Task[] }) {
 
 function IssuesTab({ projectId, highlightId }: { projectId: string; highlightId?: string | null }) {
   const confirmDialog = useConfirm();
+  const issueTitleRef = useRef<HTMLInputElement>(null);
   const { setRowRef, jumpTo } = useRowHighlight();
   const [, setLocalParams] = useSearchParams();
   const [issues, setIssues] = useState<Issue[]>([]);
@@ -2043,7 +2048,7 @@ function IssuesTab({ projectId, highlightId }: { projectId: string; highlightId?
         quick={
           <>
             <label htmlFor="f-projecthome-1595" className="sr-only">Issue</label>
-            <input id="f-projecthome-1595" className="quick-add-title" aria-required="true" placeholder="What's the issue?" value={title} onChange={(e) => setTitle(e.target.value)} />
+            <input id="f-projecthome-1595" ref={issueTitleRef} className="quick-add-title" aria-required="true" placeholder="What's the issue?" value={title} onChange={(e) => setTitle(e.target.value)} />
             <select aria-label="Severity" value={severity} onChange={(e) => setSeverity(e.target.value as Issue["severity"])}>
               {Object.entries(SEVERITY_LABEL).map(([value, label]) => (
                 <option key={value} value={value}>{label} severity</option>
@@ -2128,7 +2133,7 @@ function IssuesTab({ projectId, highlightId }: { projectId: string; highlightId?
         {" \u00b7 "}{issues.filter((i) => i.status === "resolved").length} resolved
       </RegisterSummary>
       {issues.length === 0 ? (
-        <RegisterEmpty>No issues logged yet. Add one above when something goes wrong or gets in the way.</RegisterEmpty>
+        <RegisterEmpty action={{ label: "Log an issue", onClick: () => { issueTitleRef.current?.scrollIntoView({ block: "center" }); issueTitleRef.current?.focus(); } }}>No issues logged yet. Log one when something goes wrong or gets in the way.</RegisterEmpty>
       ) : (
         <ul className="rg-list" aria-label="Issues">
           {issues.map((i) => {
@@ -2276,6 +2281,21 @@ function RisksTab({ projectId, highlightId }: { projectId: string; highlightId?:
   const [owner, setOwner] = useState("");
   const [newStatus, setNewStatus] = useState<Risk["status"]>("open");
   const [view, setView] = useState<"list" | "board" | "matrix">("list");
+  // v158: the register leads with the highest exposure by default (the
+  // order the site copy already promised); the choice is remembered in
+  // this browser only, like the Tasks sort.
+  const [riskSort, setRiskSort] = useState<RiskSort>(() => {
+    try {
+      const v = window.localStorage.getItem("tasketra.risks.sort");
+      return isRiskSort(v) ? v : "exposure";
+    } catch { return "exposure"; }
+  });
+  function changeRiskSort(v: string) {
+    if (!isRiskSort(v)) return;
+    setRiskSort(v);
+    try { window.localStorage.setItem("tasketra.risks.sort", v); } catch { /* storage unavailable: the choice just won't be remembered */ }
+  }
+  const sortedRisks = sortRisks(risks, riskSort);
   const [dragOverStatus, setDragOverStatus] = useState<Risk["status"] | null>(null);
   const [drawerRiskId, setDrawerRiskId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
@@ -2515,6 +2535,16 @@ function RisksTab({ projectId, highlightId }: { projectId: string; highlightId?:
         >
           Matrix
         </button>
+        {view !== "matrix" && (
+          <label className="rg-sort" style={{ marginLeft: 12 }}>
+            <span>Sort by</span>
+            <select aria-label="Sort risks by" value={riskSort} onChange={(e) => changeRiskSort(e.target.value)}>
+              {(Object.keys(RISK_SORT_LABEL) as RiskSort[]).map((k) => (
+                <option key={k} value={k}>{RISK_SORT_LABEL[k]}</option>
+              ))}
+            </select>
+          </label>
+        )}
       </div>
 
       {view === "matrix" ? (
@@ -2523,7 +2553,7 @@ function RisksTab({ projectId, highlightId }: { projectId: string; highlightId?:
             Open and monitoring risks only, placed by probability and impact. Exposure (low/medium/high)
             is the same read used everywhere else in RAID.
           </p>
-          <RiskMatrix risks={risks.filter((r) => r.status !== "resolved")} />
+          <RiskMatrix risks={sortedRisks.filter((r) => r.status !== "resolved")} />
           <p style={{ marginTop: 12 }}>
             <Link to={`/app/projects/${projectId}/print/risks`}>Print or share the matrix and register →</Link>
           </p>
@@ -2542,7 +2572,7 @@ function RisksTab({ projectId, highlightId }: { projectId: string; highlightId?:
                 {RISK_STATUS_LABEL[status]}
                 <span className="kanban-column-count">{risks.filter((r) => r.status === status).length}</span>
               </div>
-              {risks.filter((r) => r.status === status).map((r) => {
+              {sortedRisks.filter((r) => r.status === status).map((r) => {
                 const exposure = riskExposureFor(r);
                 return (
                   <div
@@ -2576,12 +2606,18 @@ function RisksTab({ projectId, highlightId }: { projectId: string; highlightId?:
         {risks.filter((r) => r.status !== "resolved").length} open
         {" \u00b7 "}{risks.filter((r) => isHighExposureRisk(r)).length} high exposure
         {" \u00b7 "}{risks.filter((r) => r.status === "resolved").length} resolved
+        {(() => {
+          const open = risks.filter((r) => r.status !== "resolved");
+          return open.length > 0 && open.every((r) => riskScore(r) !== null && (r.owner_name ?? "").trim() !== "")
+            ? <>{" \u00b7 "}Fully loaded register</>
+            : null;
+        })()}
       </RegisterSummary>
       {risks.length === 0 ? (
         <RegisterEmpty>No risks logged yet. Add one above if something's worth tracking.</RegisterEmpty>
       ) : (
         <ul className="rg-list" aria-label="Risks">
-          {risks.map((r) => (
+          {sortedRisks.map((r) => (
             <RegisterRow
               key={r.id}
               rowRef={(el) => setRowRef(r.id, el)}
@@ -4157,6 +4193,7 @@ function ProcurementTab({ projectId }: { projectId: string }) {
 
 function BudgetTab({ projectId, onOpenTab }: { projectId: string; onOpenTab: (tab: string) => void }) {
   const confirmDialog = useConfirm();
+  const costDescRef = useRef<HTMLInputElement>(null);
   const [baseline, setBaseline] = useState<BaselineData | null>(null);
   const [data, setData] = useState<BudgetData | null>(null);
   const [bacInput, setBacInput] = useState("");
@@ -4223,6 +4260,11 @@ function BudgetTab({ projectId, onOpenTab }: { projectId: string; onOpenTab: (ta
   // something to measure -- a budget figure or at least one task. The
   // "add tasks" hint above stays as the guide in the empty case.
   const hasEvmData = budgetAtCompletion !== null || taskStats.totalTasks > 0;
+  // v158: a budget and a task list alone are not EVM data. Until a cost is
+  // logged or a task is completed, every index computes to $0 or "--" (and
+  // TCPI to a meaningless 1.00), so the grid stays hidden behind one
+  // sentence saying what unlocks it.
+  const hasEvmActivity = costEntries.length > 0 || taskStats.doneTasks > 0;
 
   return (
     <div>
@@ -4273,7 +4315,11 @@ function BudgetTab({ projectId, onOpenTab }: { projectId: string; onOpenTab: (ta
         <p className="muted" style={{ marginTop: 12 }}>Add tasks with due dates to compute schedule-based metrics (PV, SPI, SV).</p>
       )}
 
-      {hasEvmData && (
+      {hasEvmData && !hasEvmActivity && (
+        <p className="muted" style={{ marginTop: 12 }}>Earned value appears here once you log a cost below or complete a task. Until then there is nothing to measure, so the grid stays hidden instead of showing zeros.</p>
+      )}
+
+      {hasEvmData && hasEvmActivity && (
       <>
       <div className="evm-grid">
         <div className="evm-card" title="Planned Value: % of tasks due by today x BAC">
@@ -4337,7 +4383,7 @@ function BudgetTab({ projectId, onOpenTab }: { projectId: string; onOpenTab: (ta
 
       <h2 className="heading-sm" style={{ marginTop: 28 }}>Log actual cost</h2>
       <AddForm className="inline-form inline-form-wide" onSubmit={addCost}>
-        <input aria-label="Description" aria-required="true" placeholder="Description" value={desc} onChange={(e) => setDesc(e.target.value)} />
+        <input ref={costDescRef} aria-label="Description" aria-required="true" placeholder="Description" value={desc} onChange={(e) => setDesc(e.target.value)} />
         <input aria-label="Amount" aria-required="true" data-positive="true" placeholder="Amount" type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} />
         <DateField ariaLabel="Incurred date" value={incurredDate} onChange={setIncurredDate} />
         <button className="btn btn-primary">Add cost</button>
@@ -4348,7 +4394,7 @@ function BudgetTab({ projectId, onOpenTab }: { projectId: string; onOpenTab: (ta
         {" \u00b7 "}{fmtMoney(costEntries.reduce((n, c) => n + Number(c.amount), 0))} total
       </RegisterSummary>
       {costEntries.length === 0 ? (
-        <RegisterEmpty>No costs logged yet. Add one above to start tracking spend.</RegisterEmpty>
+        <RegisterEmpty action={{ label: "Log a cost", onClick: () => { costDescRef.current?.scrollIntoView({ block: "center" }); costDescRef.current?.focus(); } }}>No costs logged yet. Log one to start tracking spend.</RegisterEmpty>
       ) : (
         <ul className="rg-list" aria-label="Logged costs">
           {costEntries.map((c) => (

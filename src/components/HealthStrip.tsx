@@ -87,7 +87,7 @@ export function HealthStrip({ projectId, refreshKey, onOpenTab }: { projectId: s
             <span className="hs-stated-label">Stated in your check-in</span>
             {summary.statedAt && <span className="muted">· {statedAge(summary.statedAt)}</span>}
             {challenge && (
-              <span className="muted">· Evidence suggests {LABEL[challenge]}</span>
+              <span className="evidence-note"> · <span className={`evidence-dot evidence-${challenge}`} aria-hidden="true" />Evidence suggests {LABEL[challenge]}</span>
             )}
           </>
         ) : (
