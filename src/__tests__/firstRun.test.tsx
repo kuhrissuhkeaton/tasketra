@@ -330,7 +330,7 @@ describe("Dashboard command center", () => {
     expect(order.indexOf("Upcoming milestones")).toBeLessThan(order.indexOf("Charts and analytics"));
   });
 
-  it("lists projects that need attention with reasons, and says so when none do", async () => {
+  it("lists projects that need attention with reasons, with the needs-a-look sentences merged into the same list", async () => {
     await render(true, { overdue: 2, decisions: 1 });
     const row = container.querySelector(".dash-attention-row")!;
     expect(row.textContent).toContain("Alpha");
@@ -340,7 +340,13 @@ describe("Dashboard command center", () => {
     act(() => root.unmount());
     root = createRoot(container);
     await render(true);
-    expect(container.querySelector(".dash-attention-empty")?.textContent).toBe("Nothing needs attention right now.");
+    // v159 (F-12): nothing needs attention here, but the fixture projects
+    // have been quiet since October, so the section carries their merged
+    // "Needs a look" sentences instead of the empty line (the empty line
+    // now requires no attention rows AND no look sentences).
+    expect(container.querySelector(".dash-attention-empty")).toBeNull();
+    const lookRow = container.querySelector(".dash-look-row")!;
+    expect(lookRow.textContent).toContain("no activity in");
   });
 
   it("toggles with the button, keeps the choice, and wires aria-controls", async () => {
@@ -362,45 +368,37 @@ describe("Dashboard command center", () => {
     expect(container.querySelector("table")).toBeNull();
   });
 
-  const tiles = () => [...container.querySelectorAll(".kp-tile")].map((t) => [t.querySelector(".kp-label")?.textContent, t.querySelector(".kp-value")?.textContent, t.querySelector(".kp-sub")?.textContent]);
+  // v159 (F-12): the four stat tiles are gone; the morning band (the page
+  // subline) carries the day's numbers in one line of text.
+  const band = () => container.querySelector(".tw-sub")?.textContent ?? "";
 
-  it("shows four summary tiles that read plainly, calm when everything is fine", async () => {
+  it("morning band reads plainly, calm when everything is fine, and there are no stat tiles", async () => {
     await render(true, {});
-    expect(tiles()).toEqual([
-      ["Need attention", "0", "Everything is on track"],
-      ["Overdue tasks", "0", "Nothing is late"],
-      ["High-severity items", "0", "No high issues or risks"],
-      ["Milestones due in 7 days", "0", "No milestones this week"],
-    ]);
-    expect(container.querySelectorAll(".kp-bad").length).toBe(0);
+    expect(container.querySelector(".kp-tile")).toBeNull();
+    expect(band()).toContain("2 projects");
+    expect(band()).toContain("all on track");
+    // Weekday-proof: on a Monday with nothing overdue the band says
+    // "Clean sheet Monday." (Egg 8) instead of the zero.
+    expect(band()).toMatch(/0 overdue|Clean sheet Monday/);
   });
 
-  it("counts problems, turns them red, and Need attention opens the filtered list", async () => {
+  it("morning band counts problems once, in words", async () => {
     await render(true, { overdue: 2 });
-    expect(tiles()).toEqual([
-      ["Need attention", "1", "of 2 projects"],
-      ["Overdue tasks", "2", "across 1 project"],
-      ["High-severity items", "3", "2 issues, 1 risk"],
-      ["Milestones due in 7 days", "0", "No milestones this week"],
-    ]);
-    expect(container.querySelectorAll(".kp-bad").length).toBe(3);
-    expect(container.querySelector('a.kp-tile')?.getAttribute("href")).toBe("/app");
-    await act(async () => { (container.querySelector("button.kp-tile") as HTMLButtonElement).click(); });
-    await flush();
-    expect(container.querySelector(".pw-row")).toBeTruthy();
-    expect(chip("Needs attention").getAttribute("aria-pressed")).toBe("true");
+    expect(band()).toContain("1 needs attention");
+    expect(band()).toContain("2 overdue");
+    expect(container.querySelector(".dash-attention .dash-sec-summary")?.textContent).toBe("1 project");
   });
 
   it("agrees on the needs-attention count everywhere, even for an on-track project with an overdue task", async () => {
-    // v151 (Part A1): the tile used to count at-risk + off-track projects
-    // (0 here) while the section listed this project (1). One definition now.
+    // v151 (Part A1): one definition of "needs attention" -- the band, the
+    // section and the list filter all read the same buildNeedsAttention list.
     await render(true, { overdue: 1, keepHealth: true });
-    expect(tiles()[0]).toEqual(["Need attention", "1", "of 2 projects"]);
+    expect(band()).toContain("1 needs attention");
     expect(container.querySelector(".dash-attention .dash-sec-summary")?.textContent).toBe("1 project");
     expect(container.querySelectorAll(".dash-attention-row").length).toBe(1);
-    expect(container.querySelector(".tw-sub")?.textContent).toContain("1 needs attention");
-    await act(async () => { (container.querySelector("button.kp-tile") as HTMLButtonElement).click(); });
-    await flush();
+    act(() => root.unmount());
+    root = createRoot(container);
+    await render(true, { overdue: 1, keepHealth: true }, "/app");
     expect(chip("Needs attention").textContent).toContain("1");
   });
 

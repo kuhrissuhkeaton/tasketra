@@ -1007,6 +1007,16 @@ export type WeeklySyncData = {
   asks: WeeklySyncAsk[];
 };
 
+/** Global search (v159): name/title matches across everything the user can
+ * see, grouped by type. Non-project hits carry their project so the palette
+ * can say where each one lives and link to the right tab. */
+export type SearchResults = {
+  projects: { id: string; name: string }[];
+  tasks: { id: string; title: string; projectId: string; projectName: string }[];
+  decisions: { id: string; title: string; projectId: string; projectName: string }[];
+  risks: { id: string; title: string; projectId: string; projectName: string }[];
+};
+
 /** One open leaf task in the Workload grid, from /api/workload. */
 export type WorkloadTask = {
   /** The task's owner: its trimmed owner_name, else the linked stakeholder's
@@ -1663,6 +1673,8 @@ export const api = {
 
   /** Read-only: per-project status lines and the open-decisions queue across every visible project (Weekly sync). */
   getWeeklySync: () => request<WeeklySyncData>("/weekly-sync"),
+  /** Read-only: global search across projects, tasks, decisions and risks (v159). */
+  search: (q: string) => request<SearchResults>(`/search?q=${encodeURIComponent(q)}`),
   getWorkload: () => request<WorkloadData>("/workload"),
 
   getPortfolio: (projectId?: string, stage?: ProjectStage) => {

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { AppSidebar } from "../components/AppSidebar";
+import { TodayCheckIn } from "../components/TodayCheckIn";
+import { StatusExplainer } from "../components/StatusExplainer";
 import { api, type MyTodayData, type PortfolioData, type PortfolioProjectSummary } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
 import { useDocumentTitle } from "../lib/documentTitle";
@@ -170,6 +172,13 @@ export default function Today() {
   const firstName = (user?.display_name ?? "").trim().split(/\s+/)[0];
   const openCount = buckets.overdue.length + buckets.today.length + buckets.week.length;
   const loaded = data !== null;
+  // v159 (F-06): when every open task has no owner, the header says so in
+  // words and points at the assign path, instead of a bare count of work
+  // "for you" that nobody actually owns.
+  const allUnassigned = loaded && tasks.length > 0 && tasks.every((t) => !(t.owner_name ?? "").trim());
+  const reloadPortfolio = useCallback(() => {
+    api.getPortfolio().then(setPortfolio).catch(() => {});
+  }, []);
   const noProjects = loaded && portfolio !== null && portfolio.projects.length === 0 && tasks.length === 0;
 
   function renderRow(t: TodayTask) {
@@ -230,7 +239,12 @@ export default function Today() {
               {noProjects
                 ? "Nothing on your plate yet."
                 : loaded
-                ? `${openCount} open for you · ${buckets.overdue.length} overdue · ${now.toLocaleDateString(undefined, WEEKDAY_FMT)}`
+                ? allUnassigned
+                  ? <>
+                      {`${tasks.length} open ${tasks.length === 1 ? "task" : "tasks"}, none assigned yet · ${buckets.overdue.length} overdue · ${now.toLocaleDateString(undefined, WEEKDAY_FMT)} `}
+                      <Link to="/app/projects">Assign owners in each project's Tasks tab</Link>
+                    </>
+                  : `${openCount} open for you · ${buckets.overdue.length} overdue · ${now.toLocaleDateString(undefined, WEEKDAY_FMT)}`
                 : "Loading your tasks..."}
             </p>
           </div>
@@ -319,7 +333,7 @@ export default function Today() {
                     You closed <strong>{closed}</strong>, <strong>{buckets.today.length}</strong> still due today,{" "}
                     <strong>{buckets.waiting.length}</strong> waiting on others.
                   </p>
-                  <label htmlFor="tw-note" className="tw-note-label">Status note you can paste anywhere</label>
+                  <label htmlFor="tw-note" className="tw-note-label">Check-in note you can paste anywhere</label>
                   <textarea id="tw-note" readOnly rows={2} value={note} />
                   <div className="tw-wrap-actions">
                     <button type="button" className="btn btn-ghost" onClick={copyNote}>{copied ? "Copied" : "Copy note"}</button>
@@ -396,12 +410,16 @@ export default function Today() {
                 </div>
                 <div className="tw-card">
                   <h3>Projects at a glance</h3>
+                  {/* v159 (F-03): the first time a stated status meets a
+                      disagreeing evidence line here, explain the model in
+                      one dismissible line. */}
+                  {portfolio.projects.some((p) => evidenceChallenge(p)) && <StatusExplainer />}
                   <ul className="tw-list">
                     {portfolio.projects.map((p) => {
                       const headline = headlineHealth(p);
                       const challenge = evidenceChallenge(p);
                       return (
-                        <li key={p.id} className="tw-rail-row tw-rail-project">
+                        <li key={p.id} className="tw-rail-row tw-rail-project tw-rail-checkin-host">
                           <span className="tw-rail-name">
                             <Link to={`/app/projects/${p.id}`}>{p.name}</Link>
                             {challenge && !p.closed_at && (
@@ -413,6 +431,9 @@ export default function Today() {
                           ) : (
                             <span className={`pill ${HEALTH_PILL[headline]}`}>{HEALTH_LABEL[headline]}</span>
                           )}
+                          {/* v159 (F-15): post the weekly check-in from
+                              right here, per project. */}
+                          {!p.closed_at && <TodayCheckIn project={p} onPosted={reloadPortfolio} />}
                         </li>
                       );
                     })}

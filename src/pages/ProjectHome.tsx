@@ -671,7 +671,7 @@ function FeedTab({ projectId, focusComposerNonce = 0 }: { projectId: string; foc
       <form className="feed-composer" onSubmit={postNote}>
         <h3 className="feed-composer-title">Post a check-in</h3>
         <p className="muted feed-composer-help">A short check-in for this project. Pick how it&apos;s going, say a line or two, and post.</p>
-        <div className="status-pill-row" role="group" aria-label="Project status">
+        <div className="status-pill-row" role="group" aria-label="Check-in status">
           {STATED_HEALTH_VALUES.map((h) => (
             <button
               key={h}

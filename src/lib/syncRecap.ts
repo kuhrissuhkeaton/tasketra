@@ -112,6 +112,11 @@ export function buildRecap(payload: WeeklySyncData, todayISO: string): string {
     lines.push("");
     lines.push("Asks waiting:");
     for (const a of asks) lines.push(askLine(a));
+  } else if (projects.length > 0) {
+    // Egg 2 (v159): a week with projects and zero open asks earns one
+    // quiet line at the end of the recap. Text-only, never blocks.
+    lines.push("");
+    lines.push("Clean sweep: nobody is waiting on anybody.");
   }
 
   return lines.join("\n");

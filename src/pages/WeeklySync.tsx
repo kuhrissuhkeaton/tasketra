@@ -4,9 +4,13 @@ import { AppSidebar } from "../components/AppSidebar";
 import { api, type WeeklySyncData } from "../lib/api";
 import { useDocumentTitle } from "../lib/documentTitle";
 import { PageHeader, SoftCard } from "../components/ui";
+import { StatusExplainer } from "../components/StatusExplainer";
 import { localDateKey } from "../lib/today";
 import { daysBetween } from "../lib/calendarItems";
+import { evidenceChallenge, headlineHealth, type HealthValue } from "../lib/healthLabels";
 import { buildRecap, formatDateKey, projectStatusLine } from "../lib/syncRecap";
+
+const HEALTH_LOWER: Record<HealthValue, string> = { on_track: "on track", at_risk: "at risk", off_track: "off track" };
 
 const CONTEXT_LIMIT = 140;
 
@@ -41,6 +45,15 @@ export default function WeeklySync() {
 
   const todayKey = localDateKey(new Date());
   const recap = data ? buildRecap(data, todayKey) : "";
+  // v159 (F-03): the header states the counts the way the recap counts
+  // them -- by the headline (stated) health -- so the two never disagree.
+  const statedCounts = data
+    ? (["on_track", "at_risk", "off_track"] as HealthValue[])
+        .map((h) => ({ h, n: data.projects.filter((p) => headlineHealth(p) === h).length }))
+        .filter(({ n }) => n > 0)
+        .map(({ h, n }) => `${n} ${HEALTH_LOWER[h]}`)
+    : [];
+  const anyChallenged = data?.projects.some((p) => evidenceChallenge(p)) ?? false;
 
   async function copyRecap() {
     try {
@@ -59,25 +72,32 @@ export default function WeeklySync() {
         <PageHeader
           title="Weekly sync"
           subtitle={data
-            ? `${data.projects.length} ${plural(data.projects.length, "project", "projects")} · ${data.asks.length} ${plural(data.asks.length, "ask", "asks")} waiting`
+            ? `${data.projects.length} ${plural(data.projects.length, "project", "projects")} · ${data.asks.length} ${plural(data.asks.length, "ask", "asks")} waiting${statedCounts.length > 0 ? ` · as stated: ${statedCounts.join(", ")}` : ""}`
             : "Loading your sync..."}
         />
         {error && <p className="form-error" role="alert">{error}</p>}
         {data && (
           <>
-            <SoftCard title="Project status" className="ui-narrow">
+            <SoftCard title="Check-ins" className="ui-narrow">
+              {anyChallenged && <StatusExplainer />}
               {data.projects.length === 0 ? (
                 <p className="muted">No active projects.</p>
               ) : (
                 <ul className="sync-list">
-                  {data.projects.map((p) => (
-                    <li className="sync-row" key={p.id}>
-                      <Link className="sync-link" to={`/app/projects/${p.id}`}>
-                        <span className="sync-name">{p.name}</span>
-                        <span className="sync-line">{projectStatusLine(p, todayKey)}</span>
-                      </Link>
-                    </li>
-                  ))}
+                  {data.projects.map((p) => {
+                    const challenge = evidenceChallenge(p);
+                    return (
+                      <li className="sync-row" key={p.id}>
+                        <Link className="sync-link" to={`/app/projects/${p.id}`}>
+                          <span className="sync-name">{p.name}</span>
+                          <span className="sync-line">
+                            {challenge && <span className={`evidence-dot evidence-${challenge}`} aria-hidden="true" />}
+                            {projectStatusLine(p, todayKey)}
+                          </span>
+                        </Link>
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </SoftCard>

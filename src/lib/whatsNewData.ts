@@ -10,6 +10,12 @@ export type ChangeEntry = { version: string; date: string; title: string; body: 
 // they can do.
 export const CHANGES: ChangeEntry[] = [
   {
+    version: "v159",
+    date: "November 2026",
+    title: "Search everything, and post your check-in from Today",
+    body: "Press Cmd-K (or Ctrl-K) anywhere, or use the Search box in the sidebar, and you can jump straight to any project, task, decision or risk by name. Your weekly check-in no longer lives only inside a project: each project in Today's Projects at a glance card has a Post a check-in link, with the status the evidence suggests already picked, ready to adjust and post. The Dashboard is calmer too: one morning line at the top carries the day's numbers, the four summary tiles are gone, and Needs a look items now sit inside the one Needs attention list instead of repeating the same projects twice. Project health shows task progress as a bar with the count in words. Weekly sync calls its first section Check-ins, its header counts your projects the way you stated them, and the first time a stated status disagrees with the evidence, a one-line note explains how the two fit together. Your account, billing and sign out now live in one menu under your initials at the bottom of the sidebar, next to a new Help section with the tour, the guides and feedback.",
+  },
+  {
     version: "v158",
     date: "November 2026",
     title: "Your highest risks sort themselves first, and the next step is a button",

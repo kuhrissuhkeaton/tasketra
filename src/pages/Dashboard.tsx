@@ -11,7 +11,7 @@ import { Modal } from "../components/Modal";
 import { CollapsibleSection } from "../components/CollapsibleSection";
 import { useIsWide } from "../lib/dashPrefs";
 import { projectReason, projectReasonParts, sortByHealth } from "../lib/projectReason";
-import { localDateKey, addDays } from "../lib/today";
+import { localDateKey } from "../lib/today";
 import { buildNeedsAttention } from "../lib/needsAttention";
 import { buildNeedsALook, type LookContext } from "../lib/needsALook";
 import { HEALTH_LABEL, evidenceChallenge, headlineHealth } from "../lib/healthLabels";
@@ -148,54 +148,13 @@ function IssueSeverityDonut({ breakdown }: { breakdown: PortfolioData["issueSeve
   );
 }
 
-function jumpTo(sectionId: string) {
-  document.getElementById(`dash-sec-${sectionId}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
-}
-
-function PortfolioOverview({ data, wide, onShowAttention, glance, attentionCount }: { data: PortfolioData; wide: boolean; onShowAttention: () => void; glance?: ReactNode; attentionCount: number }) {
+function PortfolioOverview({ data, wide, glance }: { data: PortfolioData; wide: boolean; glance?: ReactNode }) {
   const { kpis } = data;
-  // v151 (Part A1): ONE definition of "needs attention" -- the
-  // buildNeedsAttention list the section below renders. The old tile counted
-  // at-risk + off-track projects, which disagreed with the section (an
-  // on-track project with an overdue task was in one and not the other).
-  const needAttention = attentionCount;
-  const overdueProjects = data.projects.filter((x) => x.overdueTasks > 0).length;
-  const highRisks = data.projects.reduce((n, x) => n + x.highRisks, 0);
-  const highItems = kpis.highIssues + highRisks;
-  const todayKey = localDateKey(new Date());
-  const weekKey = addDays(todayKey, 7);
-  const dueSoon = data.upcomingMilestones.filter((m) => {
-    const k = String(m.date).slice(0, 10);
-    return k >= todayKey && k <= weekKey;
-  }).length;
   const [showAllMs, setShowAllMs] = useState(false);
   const MS_CAP = 5;
   const milestones = showAllMs ? data.upcomingMilestones : data.upcomingMilestones.slice(0, MS_CAP);
   return (
     <div className="dash-reporting">
-      <div className="kp-grid" role="group" aria-label="Portfolio summary">
-        <button type="button" className={`kp-tile${needAttention > 0 ? " kp-bad" : ""}`} onClick={onShowAttention}>
-          <span className="kp-label">Need attention</span>
-          <span className="kp-value">{needAttention}</span>
-          <span className="kp-sub">{needAttention === 0 ? "Everything is on track" : `of ${kpis.activeProjects} ${kpis.activeProjects === 1 ? "project" : "projects"}`}</span>
-        </button>
-        <Link to="/app" className={`kp-tile${kpis.overdueTasks > 0 ? " kp-bad" : ""}`}>
-          <span className="kp-label">Overdue tasks</span>
-          <span className="kp-value">{kpis.overdueTasks}</span>
-          <span className="kp-sub">{kpis.overdueTasks === 0 ? "Nothing is late" : `across ${overdueProjects} ${overdueProjects === 1 ? "project" : "projects"}`}</span>
-        </Link>
-        <button type="button" className={`kp-tile${highItems > 0 ? " kp-bad" : ""}`} onClick={() => jumpTo("health")}>
-          <span className="kp-label">High-severity items</span>
-          <span className="kp-value">{highItems}</span>
-          <span className="kp-sub">{highItems === 0 ? "No high issues or risks" : `${kpis.highIssues} ${kpis.highIssues === 1 ? "issue" : "issues"}, ${highRisks} ${highRisks === 1 ? "risk" : "risks"}`}</span>
-        </button>
-        <button type="button" className="kp-tile" onClick={() => jumpTo("milestones")}>
-          <span className="kp-label">Milestones due in 7 days</span>
-          <span className="kp-value">{dueSoon}</span>
-          <span className="kp-sub">{dueSoon === 0 ? "No milestones this week" : dueSoon === 1 ? "milestone" : "milestones"}</span>
-        </button>
-      </div>
-
       {glance}
 
       <CollapsibleSection
@@ -233,7 +192,18 @@ function PortfolioOverview({ data, wide, onShowAttention, glance, attentionCount
                       </>
                     )}
                   </td>
-                  <td className="muted">{p.doneTasks}/{p.totalTasks}</td>
+                  {/* v159 (F-13): task completion as a real progress bar plus
+                      "x of y tasks" -- the same rendering the Projects list
+                      uses -- instead of a bare fraction. (The panel's
+                      "0 of 3 projects" column does not exist in code; this
+                      bare fraction was the progress column that failed to
+                      render as progress. See V159_FIXES.md.) */}
+                  <td>
+                    <span className="pw-progress" title={p.totalTasks > 0 ? `${p.doneTasks} of ${p.totalTasks} tasks done` : "No tasks yet"}>
+                      <span className="progress-track" aria-hidden="true"><span className="progress-fill" style={{ width: `${p.totalTasks > 0 ? Math.round((p.doneTasks / p.totalTasks) * 100) : 0}%` }} /></span>
+                      <span className="muted">{p.totalTasks > 0 ? `${p.doneTasks} of ${p.totalTasks} tasks` : "No tasks"}</span>
+                    </span>
+                  </td>
                   <td className="muted" style={p.overdueTasks > 0 ? { color: "var(--red)" } : undefined}>{p.overdueTasks}</td>
                   <td className="muted nowrap-cell">{p.openRisks}{p.highRisks > 0 ? ` (${p.highRisks} high)` : ""}</td>
                   <td className="muted nowrap-cell">{p.openIssues}{p.highIssues > 0 ? ` (${p.highIssues} high)` : ""}</td>
@@ -503,36 +473,25 @@ export default function Dashboard() {
   const visibleCalItems = calItems.filter(
     (i) => visibleIds.has(i.project_id) && (!selectedProjectId || i.project_id === selectedProjectId),
   );
+  // v159 (F-12): the "Needs a look" sentences no longer live in their own
+  // glance section -- they merge into the one Needs attention list (see
+  // lookOnly below), so the glance band is the calendar on its own.
   const glanceBand = (
-    <div className="dash-glance">
-      <section className="dash-look" aria-labelledby="dash-look-title">
-        <h3 className="dash-look-title" id="dash-look-title">Needs a look</h3>
-        {look.length === 0 ? (
-          <p className="muted dash-look-empty">Nothing needs a look right now.</p>
-        ) : (
-          <ul className="dash-look-list">
-            {look.map((s) => (
-              <li key={`${s.id}-${s.key}`} className="dash-look-row">
-                <Link className="dash-look-link" to={`/app/projects/${s.id}`}>
-                  <strong>{s.name}</strong>
-                  {s.rest}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-      <div className="dash-glance-cal">
-        <DashboardCalendar
-          items={visibleCalItems}
-          month={calMonth}
-          todayKey={todayKey}
-          loading={calLoading}
-          onShiftMonth={(d) => setCalMonth((m) => shiftMonth(m, d))}
-        />
-      </div>
+    <div className="dash-glance-cal">
+      <DashboardCalendar
+        items={visibleCalItems}
+        month={calMonth}
+        todayKey={todayKey}
+        loading={calLoading}
+        onShiftMonth={(d) => setCalMonth((m) => shiftMonth(m, d))}
+      />
     </div>
   );
+  // Look sentences for projects the attention list does not already carry:
+  // the two lists read the same signals, so a project appears once, in the
+  // richer attention row when it qualifies for both.
+  const attentionIds = new Set(attention.map((a) => a.id));
+  const lookOnly = look.filter((s) => !attentionIds.has(s.id));
   const visibleProjects = selectedStage ? projects.filter((p) => p.stage === selectedStage) : projects;
   const stageCount = (stage: ProjectStage) => projects.filter((p) => p.stage === stage).length;
 
@@ -708,11 +667,31 @@ export default function Dashboard() {
   );
   const shownRows = rows.filter((r) => (listFilter === "all" ? true : listFilter === "attention" ? r.health !== "on_track" && !r.project.closed_at : r.health === "on_track"))
     .filter((r) => !listSearch.trim() || r.project.name.toLowerCase().includes(listSearch.trim().toLowerCase()));
+  // v159 (F-12 + Egg 8): the page subline IS the morning band now -- one
+  // line of text carrying the day's five numbers, replacing the repeated
+  // "N need attention" statements and the four stat cards (removed below).
+  // Egg 8: on a Monday with nothing overdue anywhere, the overdue segment
+  // reads "Clean sheet Monday." instead of a zero.
+  const oldestDecisionDays = Math.max(
+    0,
+    ...Object.values(lookContext).map((c) => c.oldestDecisionDays ?? 0),
+  );
+  const overdueTotal = portfolio?.kpis.overdueTasks ?? null;
+  const isMonday = new Date().getDay() === 1;
   const summaryLine = loading
     ? "Loading your projects..."
     : projects.length === 0
     ? "No projects yet"
-    : `${projects.length} ${projects.length === 1 ? "project" : "projects"} · ${attentionCount === 0 ? "all on track" : `${attentionCount} ${attentionCount === 1 ? "needs" : "need"} attention`}${totalOpenDecisions > 0 ? ` · ${totalOpenDecisions} ${totalOpenDecisions === 1 ? "decision" : "decisions"} awaiting a response` : ""}`;
+    : [
+        new Date().toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" }),
+        `${projects.length} ${projects.length === 1 ? "project" : "projects"} · ${attentionCount === 0 ? "all on track" : `${attentionCount} ${attentionCount === 1 ? "needs" : "need"} attention`}`,
+        ...(totalOpenDecisions > 0
+          ? [`${totalOpenDecisions} ${totalOpenDecisions === 1 ? "decision" : "decisions"} awaiting a response${oldestDecisionDays > 0 ? `, oldest ${oldestDecisionDays} ${oldestDecisionDays === 1 ? "day" : "days"}` : ""}`]
+          : []),
+        ...(overdueTotal !== null
+          ? [overdueTotal === 0 && isMonday ? "Clean sheet Monday." : `${overdueTotal} overdue`]
+          : []),
+      ].join(" · ");
 
   const deletedSection = deletedProjects.length > 0 && (
     <div style={{ marginTop: 32 }}>
@@ -1066,7 +1045,7 @@ export default function Dashboard() {
               <span className="dash-sec-title">Needs attention</span>
               {attention.length > 0 && <span className="dash-sec-summary">{attention.length} project{attention.length === 1 ? "" : "s"}</span>}
             </h2>
-            {attention.length === 0 ? (
+            {attention.length === 0 && lookOnly.length === 0 ? (
               <p className="dash-attention-empty">Nothing needs attention right now.</p>
             ) : (
               <>
@@ -1095,6 +1074,21 @@ export default function Dashboard() {
                     {showAllAttention ? "Show fewer" : `Show all ${attention.length}`}
                   </button>
                 )}
+                {/* v159 (F-12): the old "Needs a look" sentences, merged
+                    into this one list for projects the rows above do not
+                    already cover. */}
+                {lookOnly.length > 0 && (
+                  <ul className="dash-attention-list dash-look-list">
+                    {lookOnly.map((s) => (
+                      <li key={`${s.id}-${s.key}`} className="dash-look-row">
+                        <Link className="dash-look-link" to={`/app/projects/${s.id}`}>
+                          <strong>{s.name}</strong>
+                          {s.rest}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </>
             )}
           </section>
@@ -1111,7 +1105,7 @@ export default function Dashboard() {
           </div>
         ) : portfolio && projects.length > 0 ? (
           <div style={{ opacity: portfolioLoading ? 0.6 : 1, transition: "opacity 120ms ease" }}>
-            <PortfolioOverview data={portfolio} wide={wide} onShowAttention={() => { setListFilter("attention"); setView("list"); }} glance={glanceBand} attentionCount={attention.length} />
+            <PortfolioOverview data={portfolio} wide={wide} glance={glanceBand} />
           </div>
         ) : null}
 

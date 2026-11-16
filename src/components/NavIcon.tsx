@@ -48,7 +48,10 @@ export type NavIconName =
   | "templates"
   | "export"
   | "connections"
-  | "trash";
+  | "trash"
+  | "help"
+  | "tour"
+  | "signout";
 
 type Shape = { tag: "path" | "rect" | "circle"; attrs: SVGProps<SVGElement> };
 
@@ -205,6 +208,20 @@ const SHAPES: Record<NavIconName, Shape[]> = {
     { tag: "path", attrs: { d: "M8 6V4.5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1V6" } },
     { tag: "path", attrs: { d: "M6 6l.8 10a1 1 0 0 0 1 .9h4.4a1 1 0 0 0 1-.9L14 6" } },
     { tag: "path", attrs: { d: "M9 9v5M11 9v5" } },
+  ],
+  help: [
+    { tag: "circle", attrs: { cx: 10, cy: 10, r: 7 } },
+    { tag: "path", attrs: { d: "M7.6 7.4a2.5 2.5 0 1 1 3.3 2.4c-.7.3-.9.7-.9 1.5" } },
+    { tag: "path", attrs: { d: "M10 14.6v.01" } },
+  ],
+  tour: [
+    { tag: "circle", attrs: { cx: 10, cy: 10, r: 7 } },
+    { tag: "path", attrs: { d: "M13.2 6.8l-1.7 4.5-4.5 1.7 1.7-4.5Z" } },
+  ],
+  signout: [
+    { tag: "path", attrs: { d: "M8.5 4H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3.5" } },
+    { tag: "path", attrs: { d: "M9.5 10H17" } },
+    { tag: "path", attrs: { d: "M14.2 6.8 17.4 10l-3.2 3.2" } },
   ],
 };
 

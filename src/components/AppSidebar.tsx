@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../lib/auth-context";
+import { api } from "../lib/api";
+import { avatarColor, initials } from "../lib/avatar";
 import { Wordmark } from "./Wordmark";
 import { FeedbackModal } from "./FeedbackModal";
 import { NavIcon } from "./NavIcon";
 import { NotificationBell } from "./NotificationBell";
+import { GlobalSearch } from "./GlobalSearch";
 import { readSidebarCollapsed, writeSidebarCollapsed, readNavGroupCollapsed, writeNavGroupCollapsed } from "../lib/sidebarState";
 
 /** Collapsible nav section used by both the sidebar's own global group and
@@ -69,7 +72,12 @@ export function NavGroup({
 export function AppSidebar({ children, menuLabel = "Menu" }: { children?: ReactNode; menuLabel?: string }) {
   const { user, logout } = useAuth();
   const { pathname, search } = useLocation();
+  const navigate = useNavigate();
   const [feedbackOpen, setFeedbackOpen] = useState(false);
+  // v159 (F-19): the footer account rows became a compact user menu.
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [tourBusy, setTourBusy] = useState(false);
+  const [helpNotice, setHelpNotice] = useState<string | null>(null);
   // Phone-width menu. On desktop the sidebar is always open and this does nothing;
   // below 860px the navigation sits behind a Menu button instead of a strip you
   // had to know to scroll sideways.
@@ -79,8 +87,27 @@ export function AppSidebar({ children, menuLabel = "Menu" }: { children?: ReactN
   const [collapsed, setCollapsed] = useState<boolean>(() => readSidebarCollapsed());
   const asideRef = useRef<HTMLElement>(null);
 
-  // Going somewhere closes the menu.
-  useEffect(() => { setMenuOpen(false); }, [pathname, search]);
+  // Going somewhere closes the menus.
+  useEffect(() => { setMenuOpen(false); setUserMenuOpen(false); }, [pathname, search]);
+
+  // The Help group's Tour entry: the same replay the Resource hub offers --
+  // the tour walks through a real project, so it opens the first one.
+  async function replayTour() {
+    setTourBusy(true);
+    setHelpNotice(null);
+    try {
+      const { projects } = await api.listProjects();
+      if (projects.length === 0) {
+        setHelpNotice("Create a project first, the tour walks through a real one.");
+        return;
+      }
+      navigate(`/app/projects/${projects[0].id}`, { state: { startTour: true, forceReplay: true } });
+    } catch {
+      setHelpNotice("Couldn't load your projects. Try again from the Resource hub.");
+    } finally {
+      setTourBusy(false);
+    }
+  }
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -175,6 +202,8 @@ export function AppSidebar({ children, menuLabel = "Menu" }: { children?: ReactN
         </div>
       </div>
 
+      <GlobalSearch />
+
       <nav className="side-nav" id="sidebar-nav" aria-label="Main">
         {/* v151 (Part E1): Workspace starts expanded everywhere, project
             pages included -- the old defaultCollapsed={!!children} hid the
@@ -255,47 +284,89 @@ export function AppSidebar({ children, menuLabel = "Menu" }: { children?: ReactN
             </Link>
           </NavGroup>
         )}
+
+        {/* v159 (F-07/F-19): a persistent Help entry at the bottom of the
+            nav -- the tour is no longer reachable only from the Resource
+            hub, and the guides and feedback live beside it. */}
+        <NavGroup label="Help">
+          <button type="button" className="side-tab sidebar-help-item" disabled={tourBusy} onClick={() => void replayTour()}>
+            <NavIcon name="tour" active={false} />
+            {tourBusy ? "Loading..." : "Tour"}
+          </button>
+          <Link to="/app/resources" className={pathname === "/app/resources" ? "side-tab active" : "side-tab"}>
+            <NavIcon name="resources" active={pathname === "/app/resources"} />
+            Guides
+          </Link>
+          <button type="button" className="side-tab sidebar-help-item" onClick={() => setFeedbackOpen(true)}>
+            <NavIcon name="feedback" active={false} />
+            Feedback
+          </button>
+          {helpNotice && <p className="sidebar-help-note">{helpNotice}</p>}
+        </NavGroup>
       </nav>
 
       <div className="sidebar-footer">
-        <Link
-          to="/app/account"
-          className={pathname === "/app/account" ? "side-tab active" : "side-tab"}
-          style={{ marginBottom: 4 }}
-        >
-          <NavIcon name="account" active={pathname === "/app/account"} />
-          Account
-        </Link>
-        {user?.plan === "founding" && (
-          <Link
-            to="/app/founding"
-            className={pathname === "/app/founding" ? "side-tab active" : "side-tab"}
-            style={{ marginBottom: 4 }}
+        {/* v159 (F-19): one compact user menu -- initials, Account, Billing,
+            Sign out -- instead of a stack of plain account rows. The panel
+            stays in the DOM while closed (hidden) so the entries are always
+            reachable by keyboard and assistive tech through the button. */}
+        <div className="user-menu">
+          <div className="user-menu-panel" hidden={!userMenuOpen}>
+            <Link
+              to="/app/account"
+              className={pathname === "/app/account" ? "side-tab active" : "side-tab"}
+              style={{ marginBottom: 4 }}
+              onClick={() => setUserMenuOpen(false)}
+            >
+              <NavIcon name="account" active={pathname === "/app/account"} />
+              Account
+            </Link>
+            {user?.plan === "founding" && (
+              <Link
+                to="/app/founding"
+                className={pathname === "/app/founding" ? "side-tab active" : "side-tab"}
+                style={{ marginBottom: 4 }}
+                onClick={() => setUserMenuOpen(false)}
+              >
+                <NavIcon name="founding" active={pathname === "/app/founding"} />
+                Founder hub
+              </Link>
+            )}
+            {/* Founding members have Pro for free: nothing to bill, so no Billing entry. */}
+            {user?.plan !== "founding" && (
+              <Link
+                to="/app/billing"
+                className={pathname === "/app/billing" ? "side-tab active" : "side-tab"}
+                style={{ marginBottom: 4 }}
+                onClick={() => setUserMenuOpen(false)}
+              >
+                <NavIcon name="billing" active={pathname === "/app/billing"} />
+                Billing
+              </Link>
+            )}
+            <button type="button" className="side-tab user-menu-signout" onClick={() => logout()}>
+              <NavIcon name="signout" active={false} />
+              Sign out
+            </button>
+          </div>
+          <button
+            type="button"
+            className="user-menu-btn"
+            aria-haspopup="menu"
+            aria-expanded={userMenuOpen}
+            onClick={() => setUserMenuOpen((o) => !o)}
           >
-            <NavIcon name="founding" active={pathname === "/app/founding"} />
-            Founder hub
-          </Link>
-        )}
-        {/* Founding members have Pro for free: nothing to bill, so no Billing entry. */}
-        {user?.plan !== "founding" && (
-          <Link
-            to="/app/billing"
-            className={pathname === "/app/billing" ? "side-tab active" : "side-tab"}
-            style={{ marginBottom: 4 }}
-          >
-            <NavIcon name="billing" active={pathname === "/app/billing"} />
-            Billing
-          </Link>
-        )}
-        <button
-          type="button"
-          className="side-tab sidebar-feedback"
-          style={{ marginBottom: 4 }}
-          onClick={() => setFeedbackOpen(true)}
-        >
-          <NavIcon name="feedback" active={false} />
-          Feedback
-        </button>
+            {user?.has_avatar ? (
+              <img src={api.avatarUrl(user.id)} alt="" width={28} height={28} className="user-menu-avatar" />
+            ) : (
+              <span className="member-avatar user-menu-avatar-initials" style={{ background: avatarColor(user?.email ?? "") }} aria-hidden="true">
+                {initials(user?.display_name || user?.email || "")}
+              </span>
+            )}
+            <span className="user-menu-name" title={user?.email}>{user?.display_name || user?.email}</span>
+            <span className="user-menu-chev" aria-hidden="true">▾</span>
+          </button>
+        </div>
         <a
           href="https://discord.gg/R66gSFz9d"
           target="_blank"
@@ -310,10 +381,6 @@ export function AppSidebar({ children, menuLabel = "Menu" }: { children?: ReactN
           <NavIcon name="legal" active={false} />
           Legal
         </Link>
-        <div className="sidebar-user muted" title={user?.email}>{user?.email}</div>
-        <button className="btn btn-ghost btn-block" type="button" onClick={() => logout()}>
-          Sign out
-        </button>
       </div>
 
       {feedbackOpen && <FeedbackModal onClose={() => setFeedbackOpen(false)} />}

@@ -112,6 +112,20 @@ describe("buildRecap", () => {
     expect(recap).not.toContain("Asks waiting:");
   });
 
+  it("ends with the Clean sweep line when projects exist and nobody is waiting (Egg 2)", () => {
+    const recap = buildRecap({ projects: [project({})], asks: [] }, TODAY);
+    expect(recap.endsWith("\n\nClean sweep: nobody is waiting on anybody.")).toBe(true);
+  });
+
+  it("no Clean sweep line when asks are waiting or there are no projects", () => {
+    const withAsks = buildRecap({
+      projects: [project({})],
+      asks: [{ id: "a1", projectId: "p1", projectName: "Alpha", title: "Pick a vendor", context: null, deadline: null, createdAt: "2026-10-29T09:00:00Z", recipients: [] }],
+    }, TODAY);
+    expect(withAsks).not.toContain("Clean sweep");
+    expect(buildRecap({ projects: [], asks: [] }, TODAY)).not.toContain("Clean sweep");
+  });
+
   it("lists asks with their project and needed-by date, or 'no date set'", () => {
     const recap = buildRecap({
       projects: [project({ name: "Beta", health: "at_risk", statedHealth: "on_track", statedAt: "2026-11-01T09:00:00Z" })],
