@@ -274,8 +274,8 @@ describe("project page smoke test", () => {
   it("shows the six main tabs, and every section reachable when all tabs are shown", async () => {
     await mountProject("full", "issues");
     const main = [...host.querySelectorAll('nav[aria-label="Project views"] .project-tab')].map((b) => b.textContent);
-    expect(main).toEqual(["Overview", "Tasks", "Plan", "Health", "People and decisions", "Docs"]);
-    expect(host.querySelector('nav[aria-label="Project views"] .is-active')?.textContent).toBe("Health");
+    expect(main).toEqual(["Overview", "Tasks", "Plan", "Risks & issues", "People and decisions", "Docs"]);
+    expect(host.querySelector('nav[aria-label="Project views"] .is-active')?.textContent).toBe("Risks & issues");
     const sections = [...host.querySelectorAll('.section-tabs .section-tab')].map((b) => b.textContent);
     expect(sections).toEqual(["Issues", "Risks", "Assumptions", "Dependencies", "Quality", "Compliance"]);
   });
@@ -283,5 +283,54 @@ describe("project page smoke test", () => {
   it("the sidebar no longer lists project tabs, only the project name", async () => {
     await mountProject("full", "home");
     expect(host.querySelectorAll(".side-nav .side-tab[data-tour^='tab-']").length).toBe(0);
+  });
+
+  it("decision cards lead with the wait, and Nudge copies a ready reminder (v160, F-16)", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    const fiveDaysAgo = new Date(Date.now() - 5 * 86400000).toISOString();
+    await mountProject("full", "decisions", (url) => {
+      if (/\/api\/decisions\?projectId=/.test(url)) {
+        return {
+          decisions: [
+            {
+              id: "d1", title: "Approve the charter", context: "", options: ["Approve", "Reject"],
+              status: "open", deadline: "2026-12-04", created_at: fiveDaysAgo, public_token: "tok123",
+              recipients: [{ id: "s1", name: "Sponsor (VP Customer Success)" }], records: [],
+            },
+            {
+              id: "d2", title: "Pick the venue", context: "", options: ["A", "B"],
+              status: "open", deadline: null, created_at: fiveDaysAgo, public_token: "tok456",
+              recipients: [], records: [],
+            },
+          ],
+        };
+      }
+      if (/\/api\/stakeholders\?projectId=/.test(url)) return { stakeholders: [] };
+      return undefined;
+    });
+    const cards = [...host.querySelectorAll(".decision-card")];
+    expect(cards).toHaveLength(2);
+    const wait = cards[0].querySelector(".decision-wait")?.textContent ?? "";
+    expect(wait).toContain("Waiting on");
+    expect(wait).toContain("Sponsor (VP Customer Success)");
+    expect(wait).toContain("waiting 5 days");
+    expect(wait).toContain("Needed by");
+    expect(host.textContent).not.toContain("Asked:");
+    // Copy link is the primary button; Nudge sits beside it.
+    const actions = cards[0].querySelector(".decision-actions")!;
+    expect(actions.querySelector(".btn-primary")?.textContent).toBe("Copy link");
+    const nudge = [...actions.querySelectorAll("button")].find((b) => b.textContent === "Nudge")!;
+    expect(nudge).toBeTruthy();
+    await act(async () => { nudge.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
+    const copied = String(writeText.mock.calls[0][0]);
+    expect(copied).toContain('a quick nudge on "Approve the charter"');
+    expect(copied).toContain("waiting 5 days");
+    expect(copied).toContain("/d/tok123");
+    expect(nudge.textContent).toBe("Nudge copied");
+    // The unsent decision says so in its lead line and offers no Nudge.
+    expect(cards[1].querySelector(".decision-wait")?.textContent).toContain("Not sent to anyone yet");
+    expect(cards[1].querySelector(".decision-actions")?.textContent).not.toContain("Nudge");
+    expect(errors, errors.join("\n---\n")).toEqual([]);
   });
 });

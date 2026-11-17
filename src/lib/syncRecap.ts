@@ -83,14 +83,77 @@ function askLine(a: WeeklySyncAsk): string {
 }
 
 /**
+ * The three narrative sections of the sync (v160, F-23): Wins, Blockers,
+ * Next week, as editable plain text (one item per line). They live only
+ * in the copy-out flow: the page pre-fills them from the payload, the PM
+ * edits them in place, and Copy recap carries the edited words. Nothing
+ * is persisted per week -- there is deliberately no storage behind them.
+ */
+export type SyncSections = { wins: string; blockers: string; nextWeek: string };
+
+/** How far ahead "next week" reaches for an ask's needed-by date. */
+const NEXT_WEEK_DAYS = 7;
+
+/**
+ * The pre-fill for the three sections, claimed from the same payload
+ * facts the recap itself may use and nothing else:
+ * - Wins: each project whose headline health is on track.
+ * - Blockers: each project off its headline, and each past-due count.
+ * - Next week: asks needed within the coming week (earliest first), and
+ *   a check-in owed on each project quiet for a week or more (the same
+ *   "last sign of life" rule projectStatusLine uses).
+ * A section with no facts behind it starts empty rather than padded.
+ */
+export function buildSyncSections(payload: WeeklySyncData, todayKey: string): SyncSections {
+  const { projects, asks } = payload;
+  const wins: string[] = [];
+  const blockers: string[] = [];
+  const nextWeek: string[] = [];
+
+  for (const p of projects) {
+    const headline = headlineHealth(p);
+    if (headline === "on_track") wins.push(`${p.name} is on track`);
+    const bits: string[] = [];
+    if (headline !== "on_track") bits.push(HEALTH_LOWER[headline]);
+    if (p.overdueTasks > 0) bits.push(`${p.overdueTasks} ${plural(p.overdueTasks, "task", "tasks")} past due`);
+    if (bits.length > 0) blockers.push(`${p.name}: ${bits.join(" · ")}`);
+    const lastSign = [p.lastActivityAt, p.statedAt]
+      .filter((t): t is string => !!t)
+      .map((t) => localDateKey(new Date(t)))
+      .sort()
+      .pop();
+    if (lastSign) {
+      const quietDays = daysBetween(lastSign, todayKey);
+      if (quietDays >= 7) {
+        nextWeek.push(`Post a check-in on ${p.name} (no update in ${quietDays} ${plural(quietDays, "day", "days")})`);
+      }
+    }
+  }
+
+  const dueSoon = asks
+    .filter((a) => {
+      if (!a.deadline) return false;
+      const away = daysBetween(todayKey, a.deadline);
+      return away >= 0 && away <= NEXT_WEEK_DAYS;
+    })
+    .sort((a, b) => (a.deadline! < b.deadline! ? -1 : 1));
+  for (const a of dueSoon) nextWeek.push(`${a.title} (${a.projectName}) — needed by ${formatDateKey(a.deadline!)}`);
+
+  return { wins: wins.join("\n"), blockers: blockers.join("\n"), nextWeek: nextWeek.join("\n") };
+}
+
+/**
  * The Recap text for the whole payload: a dated header, a one-line count of
  * projects by headline health (v156: the stated status when one was stated,
  * the computed health otherwise -- the same headline the per-project lines
  * lead with), one line per project, then the asks queue.
  * A section with nothing in it is omitted rather than padded -- an account
  * with no asks waiting gets no "Asks waiting:" heading over nothing.
+ * When the page passes its (possibly edited) narrative sections (v160,
+ * F-23), each non-empty one is emitted between the project lines and the
+ * asks queue, one "- " line per line of text.
  */
-export function buildRecap(payload: WeeklySyncData, todayISO: string): string {
+export function buildRecap(payload: WeeklySyncData, todayISO: string, sections?: SyncSections): string {
   const lines: string[] = [`Weekly sync — ${formatDateKeyLong(todayISO)}`];
   const { projects, asks } = payload;
 
@@ -106,6 +169,21 @@ export function buildRecap(payload: WeeklySyncData, todayISO: string): string {
     lines.push(`${projects.length} ${plural(projects.length, "project", "projects")}: ${groups.join(", ")}.`);
     lines.push("");
     for (const p of projects) lines.push(`- ${p.name}: ${statusHeadline(p)}`);
+  }
+
+  if (sections && projects.length > 0) {
+    const blocks: [string, string][] = [
+      ["Wins", sections.wins],
+      ["Blockers", sections.blockers],
+      ["Next week", sections.nextWeek],
+    ];
+    for (const [label, text] of blocks) {
+      const items = text.split("\n").map((l) => l.trim()).filter(Boolean);
+      if (items.length === 0) continue;
+      lines.push("");
+      lines.push(`${label}:`);
+      for (const item of items) lines.push(`- ${item}`);
+    }
   }
 
   if (asks.length > 0) {

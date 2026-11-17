@@ -1,7 +1,7 @@
 import { useRef } from "react";
 import { RiskMatrix } from "./RiskMatrix";
 import { useIsScrollable } from "../lib/scrollRegion";
-import { LEVEL_LABEL, riskExposure, type RiskLevel } from "../lib/riskExposure";
+import { LEVEL_LABEL, riskExposure, type RiskLevel, type RiskScoring } from "../lib/riskExposure";
 
 export type DocRisk = {
   title: string;
@@ -10,7 +10,7 @@ export type DocRisk = {
   mitigation: string | null;
   owner_name: string | null;
   status: "open" | "monitoring" | "resolved";
-};
+} & RiskScoring;
 
 const STATUS_LABEL = { open: "Open", monitoring: "Monitoring", resolved: "Resolved" } as const;
 const EXPOSURE_PILL = { low: "pill-green", medium: "pill-gold", high: "pill-red" } as const;

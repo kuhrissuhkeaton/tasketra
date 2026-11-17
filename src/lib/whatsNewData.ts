@@ -10,6 +10,12 @@ export type ChangeEntry = { version: string; date: string; title: string; body: 
 // they can do.
 export const CHANGES: ChangeEntry[] = [
   {
+    version: "v160",
+    date: "November 2026",
+    title: "Decisions show who you're waiting on, and your Weekly sync tells the whole story",
+    body: "A decision request now leads with the chase: who you are waiting on, how many days they have had it, and the date you need it by. Copy link is the card's main button, and Nudge copies a short reminder with the link included, ready to paste into an email or a message. Recording a decision yourself stays on the card, below any responses, for the calls that are yours to make. The risk matrix now agrees with the register: every chip carries its probability, impact and score, the grid's bands are labelled with the 1-to-5 ranges they cover, and chips no longer cut a title off mid-word (hover a chip to see the full title). Weekly sync gains three short sections, Wins, Blockers and Next week, pre-filled from the week's activity and editable before you copy; they travel with the recap text and are not saved. And the project tab that holds risks, issues, assumptions and dependencies is now called Risks & issues, which is what is in it.",
+  },
+  {
     version: "v159",
     date: "November 2026",
     title: "Search everything, and post your check-in from Today",

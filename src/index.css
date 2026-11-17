@@ -1266,6 +1266,10 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
 .date-field-picker { font-size: 15px; line-height: 1; padding: 2px; }
 .date-field-error { color: var(--red); font-size: 13px; flex-basis: 100%; }
 .decision-asked { margin: 4px 0 6px; }
+/* v160 (F-16): the lead line on an open decision card -- who it waits on,
+   the wait, the needed-by date -- reads at full strength, not muted. */
+.decision-wait { margin: 6px 0 4px; font-size: 15px; }
+.decision-actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0 4px; }
 .decision-card {
   padding: 16px;
   transition: box-shadow var(--ease);
@@ -2582,6 +2586,11 @@ a:hover { color: var(--navy); }
 .sync-context { display: block; margin-top: 2px; font-size: 13px; color: var(--slate-text); }
 .sync-recap-text { margin: 0 0 10px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-muted); font: inherit; font-size: 14px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: break-word; }
 .sync-recap-actions { display: flex; justify-content: flex-end; }
+/* v160 (F-23): the Wins / Blockers / Next week editors on Weekly sync. */
+.sync-sections { display: flex; flex-direction: column; gap: 6px; }
+.sync-sections label { font-weight: 600; font-size: 13px; margin-top: 8px; }
+.sync-sections label:first-child { margin-top: 0; }
+.sync-sections textarea { width: 100%; line-height: 1.5; }
 
 /* Workload page (v147): owner x week grid, darker cells as the load grows. */
 .wl-scroll { overflow-x: auto; }
@@ -2609,8 +2618,13 @@ a:hover { color: var(--navy); }
 .wl-ms-items { color: var(--navy); }
 
 /* --- v159: global search palette --- */
+/* v160: bottom margin 2px -> 12px (Kk-reported on live v159: the search
+   button sat ~2px above the WORKSPACE group label). 12px matches the
+   button's own side margins and reads with the sidebar rhythm (nav groups
+   use 18px bottom margins). The collapsed variant overrides only
+   justify-content/padding, so it inherits this margin unchanged. */
 .sidebar-search-btn {
-  display: flex; align-items: center; gap: 8px; width: calc(100% - 24px); margin: 10px 12px 2px;
+  display: flex; align-items: center; gap: 8px; width: calc(100% - 24px); margin: 10px 12px 12px;
   padding: 8px 12px; border-radius: var(--radius-pill); border: 1px solid rgba(255, 255, 255, 0.18);
   background: rgba(255, 255, 255, 0.06); color: #B9C2A3; font: inherit; font-size: 14px; font-weight: 600;
   cursor: pointer; box-sizing: border-box; text-align: left;

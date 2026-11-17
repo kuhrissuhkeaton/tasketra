@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { buildRecap, projectStatusLine, statusHeadline } from "../lib/syncRecap";
-import type { WeeklySyncProject } from "../lib/api";
+import { buildRecap, buildSyncSections, projectStatusLine, statusHeadline } from "../lib/syncRecap";
+import type { WeeklySyncAsk, WeeklySyncProject } from "../lib/api";
 
 // v146: the Weekly sync page's words. The recap and the status lines may
 // only claim what the /api/weekly-sync payload establishes; these tests pin
@@ -149,6 +149,40 @@ describe("buildRecap", () => {
     ].join("\n"));
   });
 
+  it("emits the edited narrative sections between the project lines and the asks (v160, F-23)", () => {
+    const recap = buildRecap({
+      projects: [project({ name: "Beta", health: "on_track" })],
+      asks: [
+        { id: "a1", projectId: "p1", projectName: "Beta", title: "Pick a vendor", context: null, deadline: null, createdAt: "2026-10-29T09:00:00Z", recipients: [] },
+      ],
+    }, TODAY, { wins: "Beta is on track\nShipped the beta", blockers: "", nextWeek: "Kick off onboarding" });
+    expect(recap).toBe([
+      "Weekly sync — November 4, 2026",
+      "1 project: 1 on track.",
+      "",
+      "- Beta: On track.",
+      "",
+      "Wins:",
+      "- Beta is on track",
+      "- Shipped the beta",
+      "",
+      "Next week:",
+      "- Kick off onboarding",
+      "",
+      "Asks waiting:",
+      "- Pick a vendor (Beta) — no date set",
+    ].join("\n"));
+  });
+
+  it("omits narrative sections that are empty or whitespace, and all of them when there are no projects", () => {
+    const recap = buildRecap({ projects: [project({})], asks: [] }, TODAY, { wins: "  \n", blockers: "", nextWeek: "" });
+    expect(recap).not.toContain("Wins:");
+    expect(recap).not.toContain("Blockers:");
+    expect(recap).not.toContain("Next week:");
+    const empty = buildRecap({ projects: [], asks: [] }, TODAY, { wins: "A win", blockers: "", nextWeek: "" });
+    expect(empty).not.toContain("Wins:");
+  });
+
   it("counts a stated status as the headline in the group counts (v156)", () => {
     const recap = buildRecap({
       projects: [
@@ -159,5 +193,69 @@ describe("buildRecap", () => {
       asks: [],
     }, TODAY);
     expect(recap).toContain("3 projects: 1 on track, 1 at risk, 1 off track.");
+  });
+});
+
+describe("buildSyncSections (v160, F-23)", () => {
+  const ask = (over: Partial<WeeklySyncAsk> = {}): WeeklySyncAsk => ({
+    id: "a1", projectId: "p1", projectName: "Alpha", title: "Pick a vendor",
+    context: null, deadline: null, createdAt: "2026-10-29T09:00:00Z", recipients: [],
+    ...over,
+  });
+
+  it("wins are the projects on their headline, stated included", () => {
+    const s = buildSyncSections({
+      projects: [
+        project({ name: "A", health: "on_track" }),
+        project({ name: "B", health: "at_risk", statedHealth: "on_track", statedAt: "2026-11-01T09:00:00Z" }),
+        project({ name: "C", health: "off_track" }),
+      ],
+      asks: [],
+    }, TODAY);
+    expect(s.wins).toBe("A is on track\nB is on track");
+  });
+
+  it("blockers combine a project's headline and its past-due count on one line", () => {
+    const s = buildSyncSections({
+      projects: [
+        project({ name: "A", health: "at_risk", overdueTasks: 2 }),
+        project({ name: "B", health: "on_track", overdueTasks: 1 }),
+        project({ name: "C", health: "on_track" }),
+      ],
+      asks: [],
+    }, TODAY);
+    expect(s.blockers).toBe("A: at risk · 2 tasks past due\nB: 1 task past due");
+  });
+
+  it("next week takes asks due within seven days, earliest first, and skips past or undated ones", () => {
+    const s = buildSyncSections({
+      projects: [project({})],
+      asks: [
+        ask({ id: "a1", title: "Later", deadline: "2026-11-09" }),
+        ask({ id: "a2", title: "Sooner", deadline: "2026-11-06" }),
+        ask({ id: "a3", title: "Too far out", deadline: "2026-11-20" }),
+        ask({ id: "a4", title: "Already past", deadline: "2026-11-02" }),
+        ask({ id: "a5", title: "Undated", deadline: null }),
+      ],
+    }, TODAY);
+    expect(s.nextWeek).toBe(
+      "Sooner (Alpha) — needed by Nov 6, 2026\nLater (Alpha) — needed by Nov 9, 2026",
+    );
+  });
+
+  it("next week asks for a check-in on a project quiet for a week or more, and only then", () => {
+    const s = buildSyncSections({
+      projects: [
+        project({ name: "Quiet", lastActivityAt: "2026-10-15T10:00:00Z" }),
+        project({ name: "Fresh", lastActivityAt: "2026-11-02T10:00:00Z" }),
+        project({ name: "Unknown" }),
+      ],
+      asks: [],
+    }, TODAY);
+    expect(s.nextWeek).toBe("Post a check-in on Quiet (no update in 20 days)");
+  });
+
+  it("an empty payload pre-fills nothing", () => {
+    expect(buildSyncSections({ projects: [], asks: [] }, TODAY)).toEqual({ wins: "", blockers: "", nextWeek: "" });
   });
 });

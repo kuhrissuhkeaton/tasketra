@@ -14,7 +14,7 @@ const TAB_TYPE = async () => {
 
 describe("group map", () => {
   it("there are six groups, in order", () => {
-    expect(NAV_GROUPS.map((g) => g.label)).toEqual(["Overview", "Tasks", "Plan", "Health", "People and decisions", "Docs"]);
+    expect(NAV_GROUPS.map((g) => g.label)).toEqual(["Overview", "Tasks", "Plan", "Risks & issues", "People and decisions", "Docs"]);
   });
 
   it("every one of the 26 existing tab ids lands in exactly one group, so every old ?tab= link still works", async () => {
@@ -38,6 +38,13 @@ describe("group map", () => {
     expect(groupOf("nope")).toBeNull();
   });
 
+  it("the risks group keeps its 'health' id under its new label, so ?tab= links and bookmarks survive the rename (v160, F-24)", () => {
+    const g = NAV_GROUPS.find((x) => x.label === "Risks & issues")!;
+    expect(g.id).toBe("health");
+    expect(groupOf("risks")).toBe("health");
+    expect(groupOf("issues")).toBe("health");
+  });
+
   it("labels sections the way the old nav did", () => {
     expect(sectionLabel("procurement")).toBe("Vendors");
     expect(sectionLabel("comms")).toBe("Comms Plan");
@@ -47,7 +54,7 @@ describe("group map", () => {
 });
 
 describe("size hiding is unchanged", () => {
-  it("Light hides the same sections as before, and its Health group keeps just Issues and Risks", () => {
+  it("Light hides the same sections as before, and its Risks & issues group keeps just Issues and Risks", () => {
     const health = NAV_GROUPS.find((g) => g.id === "health")!;
     expect(visibleSections(health, "issues", "light", false).map((s) => s.id)).toEqual(["issues", "risks"]);
     for (const id of hiddenTabIds("light")) {

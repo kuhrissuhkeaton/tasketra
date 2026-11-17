@@ -120,6 +120,32 @@ describe("Weekly sync", () => {
     expect(button!.textContent).toBe("Copied");
   });
 
+  it("pre-fills the Wins / Blockers / Next week editors from the payload, and the edits reach the copied recap (v160, F-23)", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    m.getWeeklySync.mockResolvedValue(DATA);
+    await renderPage();
+    const wins = container.querySelector<HTMLTextAreaElement>("#sync-wins");
+    const blockers = container.querySelector<HTMLTextAreaElement>("#sync-blockers");
+    expect(wins?.value).toContain("Website Relaunch is on track");
+    expect(blockers?.value).toContain("Office Move: off track");
+    expect(blockers?.value).toContain("Website Relaunch: 2 tasks past due");
+    // Edit the wins draft the way a user types: the recap follows the edit.
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")!.set!;
+    await act(async () => {
+      setter.call(wins, "Shipped the beta");
+      wins!.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(container.querySelector(".sync-recap-text")?.textContent).toContain("- Shipped the beta");
+    const button = Array.from(container.querySelectorAll("button")).find((b) => b.textContent === "Copy recap");
+    await act(async () => { button!.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
+    const copied = String(writeText.mock.calls[0][0]);
+    expect(copied).toContain("Wins:");
+    expect(copied).toContain("- Shipped the beta");
+    expect(copied).toContain("Blockers:");
+    expect(copied).not.toContain("Website Relaunch is on track");
+  });
+
   it("explains the empty states when there are no projects and no asks", async () => {
     m.getWeeklySync.mockResolvedValue({ projects: [], asks: [] });
     await renderPage();

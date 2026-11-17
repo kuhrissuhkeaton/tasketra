@@ -40,7 +40,7 @@ export const TOUR_STEPS: TourStep[] = [
     target: "tab-issues",
     tab: "issues",
     title: "Where most PM tools stop, Tasketra doesn't",
-    body: "Risks, assumptions, issues, dependencies, quality, and compliance, tracked in one place in this project's Health tab. This is the stuff that derails a project, not the task list.",
+    body: "Risks, assumptions, issues, dependencies, quality, and compliance, tracked in one place in this project's Risks & issues tab. This is the stuff that derails a project, not the task list.",
   },
   {
     target: "tab-meetings",

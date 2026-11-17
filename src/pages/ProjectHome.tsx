@@ -61,6 +61,14 @@ function daysAgo(dateStr: string): number {
   return Math.max(0, Math.floor((Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24)));
 }
 
+/** The wait on a decision request, in words (v160, F-16): "asked today"
+ *  on day zero, "waiting 1 day" / "waiting 5 days" after that. */
+function waitWords(dateStr: string): string {
+  const n = daysAgo(dateStr);
+  if (n <= 0) return "asked today";
+  return `waiting ${n} day${n === 1 ? "" : "s"}`;
+}
+
 // DATE columns come back from the API as full ISO timestamps
 // ("2026-08-01T00:00:00.000Z"), not bare date strings -- slicing to the
 // first 10 chars before re-appending a time keeps this safe for both that
@@ -240,7 +248,9 @@ export default function ProjectHome() {
     <div className="project-shell">
       <AppSidebar menuLabel="Project tools">
         <div className="side-nav-group">
-          <div className="side-nav-label">{project?.name || "Project"}</div>
+          {/* v160 (F-24): the label truncates in the narrow sidebar; the
+              full project name is on hover. */}
+          <div className="side-nav-label" title={project?.name || "Project"}>{project?.name || "Project"}</div>
         </div>
       </AppSidebar>
 
@@ -5578,6 +5588,7 @@ function StakeholderDecisionsTab({ projectId }: { projectId: string }) {
   const [selectedStakeholders, setSelectedStakeholders] = useState<string[]>([]);
   const [lastShareUrl, setLastShareUrl] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [nudgedId, setNudgedId] = useState<string | null>(null);
   const [ownOption, setOwnOption] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -5596,6 +5607,24 @@ function StakeholderDecisionsTab({ projectId }: { projectId: string }) {
     navigator.clipboard.writeText(url).then(() => {
       setCopiedId(d.id);
       setTimeout(() => setCopiedId((cur) => (cur === d.id ? null : cur)), 2000);
+    });
+  }
+
+  // v160 (F-16): a nudge is a ready-to-paste reminder -- the decider's
+  // name, how long they have had it, the needed-by date and the link --
+  // copied to the clipboard for the PM to send however they reach the
+  // person. There is no outbound channel to stakeholders from the app,
+  // so copying the words is the honest form of the action, the same
+  // pattern as Copy link.
+  function copyNudge(d: Decision) {
+    const url = `${window.location.origin}/d/${d.public_token}`;
+    const names = (d.recipients ?? []).map((r) => r.name).join(", ");
+    const waited = daysAgo(d.created_at);
+    const waitPart = waited <= 0 ? "sent today" : `waiting ${waited} day${waited === 1 ? "" : "s"}`;
+    const text = `Hi ${names}, a quick nudge on "${d.title}" (${waitPart}${d.deadline ? `, needed by ${fmtLocalDate(d.deadline)}` : ""}). You can answer here, no account needed: ${url}`;
+    navigator.clipboard.writeText(text).then(() => {
+      setNudgedId(d.id);
+      setTimeout(() => setNudgedId((cur) => (cur === d.id ? null : cur)), 2000);
     });
   }
 
@@ -5745,6 +5774,18 @@ function StakeholderDecisionsTab({ projectId }: { projectId: string }) {
                 {d.status === "open" ? "Awaiting response" : "Decided"}
               </span>
             </div>
+            {d.status === "open" && (
+              // v160 (F-16): the card leads with who the decision is waiting
+              // on, how long they have had it, and the needed-by date --
+              // the facts a PM chases -- instead of a muted "Asked:" line
+              // under the options.
+              <p className="decision-wait">
+                {d.recipients?.length
+                  ? <>Waiting on <strong>{d.recipients.map((r) => r.name).join(", ")}</strong> · {waitWords(d.created_at)}</>
+                  : "Not sent to anyone yet — copy the link to ask."}
+                {d.deadline && <> · Needed by {fmtLocalDate(d.deadline)}</>}
+              </p>
+            )}
             {d.context && <p className="muted">{d.context}</p>}
             {d.options?.length > 0 && (
               <div className="decision-options" aria-label="Options">
@@ -5755,12 +5796,20 @@ function StakeholderDecisionsTab({ projectId }: { projectId: string }) {
             )}
             {d.status === "open" ? (
               <>
-                <p className="muted decision-asked">
-                  {d.recipients?.length
-                    ? <>Asked: {d.recipients.map((r) => r.name).join(", ")} · waiting {daysAgo(d.created_at)}d</>
-                    : "Not sent to anyone yet. Share the link below to ask."}
-                  {d.deadline && <> · Needed by {fmtLocalDate(d.deadline)}</>}
-                </p>
+                {/* v160 (F-16): the PM's next actions are the primary
+                    buttons on the card. Recording a decision yourself
+                    stays below, as the secondary path it is -- it is for
+                    decisions the user themselves must make. */}
+                <div className="decision-actions">
+                  <button className="btn btn-primary" type="button" onClick={() => copyShareLink(d)}>
+                    {copiedId === d.id ? "Copied" : "Copy link"}
+                  </button>
+                  {d.recipients?.length ? (
+                    <button className="btn btn-ghost" type="button" onClick={() => copyNudge(d)}>
+                      {nudgedId === d.id ? "Nudge copied" : "Nudge"}
+                    </button>
+                  ) : null}
+                </div>
                 {(d.records ?? []).length > 0 && (
                   <div className="decision-responses">
                     <p className="muted">Responses so far. Confirm one to make it the decision:</p>
@@ -5796,9 +5845,6 @@ function StakeholderDecisionsTab({ projectId }: { projectId: string }) {
                     onFocus={(e) => e.target.select()}
                     aria-label="Decision share link"
                   />
-                  <button className="btn btn-ghost" type="button" onClick={() => copyShareLink(d)}>
-                    {copiedId === d.id ? "Copied" : "Copy link"}
-                  </button>
                 </div>
               </>
             ) : (

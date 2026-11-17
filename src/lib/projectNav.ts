@@ -23,7 +23,7 @@ export const NAV_GROUPS: NavGroup[] = [
     { id: "charter", label: "Charter" },
     { id: "okrs", label: "OKRs" },
   ] },
-  { id: "health", label: "Health", sections: [
+  { id: "health", label: "Risks & issues", sections: [
     { id: "issues", label: "Issues" },
     { id: "risks", label: "Risks" },
     { id: "assumptions", label: "Assumptions" },

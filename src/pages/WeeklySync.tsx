@@ -8,7 +8,7 @@ import { StatusExplainer } from "../components/StatusExplainer";
 import { localDateKey } from "../lib/today";
 import { daysBetween } from "../lib/calendarItems";
 import { evidenceChallenge, headlineHealth, type HealthValue } from "../lib/healthLabels";
-import { buildRecap, formatDateKey, projectStatusLine } from "../lib/syncRecap";
+import { buildRecap, buildSyncSections, formatDateKey, projectStatusLine, type SyncSections } from "../lib/syncRecap";
 
 const HEALTH_LOWER: Record<HealthValue, string> = { on_track: "on track", at_risk: "at risk", off_track: "off track" };
 
@@ -32,10 +32,18 @@ export default function WeeklySync() {
   const [data, setData] = useState<WeeklySyncData | null>(null);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
+  // v160 (F-23): the Wins / Blockers / Next week drafts. Pre-filled once
+  // the payload lands, then owned by the page -- they exist only so the
+  // copied recap can carry them; nothing is saved anywhere.
+  const [sections, setSections] = useState<SyncSections | null>(null);
 
   useEffect(() => {
     api.getWeeklySync().then(setData).catch(() => setError("Couldn't load your weekly sync."));
   }, []);
+
+  useEffect(() => {
+    if (data && sections === null) setSections(buildSyncSections(data, localDateKey(new Date())));
+  }, [data, sections]);
 
   useEffect(() => {
     if (!copied) return;
@@ -44,7 +52,7 @@ export default function WeeklySync() {
   }, [copied]);
 
   const todayKey = localDateKey(new Date());
-  const recap = data ? buildRecap(data, todayKey) : "";
+  const recap = data ? buildRecap(data, todayKey, sections ?? undefined) : "";
   // v159 (F-03): the header states the counts the way the recap counts
   // them -- by the headline (stated) health -- so the two never disagree.
   const statedCounts = data
@@ -122,6 +130,41 @@ export default function WeeklySync() {
                     </li>
                   ))}
                 </ul>
+              )}
+            </SoftCard>
+
+            {/* v160 (F-23): the narrative the auto recap cannot write --
+                pre-filled from the week's facts, edited here, and copied
+                as part of the recap below. Deliberately not saved: next
+                week's page pre-fills afresh. */}
+            <SoftCard title="Wins, blockers, next week" className="ui-narrow">
+              <p className="muted" style={{ marginTop: 0 }}>
+                Pre-filled from this week's activity. Edit the words before you copy the recap, one item per line. Nothing here is saved.
+              </p>
+              {sections && (
+                <div className="sync-sections">
+                  <label htmlFor="sync-wins">Wins</label>
+                  <textarea
+                    id="sync-wins"
+                    rows={3}
+                    value={sections.wins}
+                    onChange={(e) => setSections({ ...sections, wins: e.target.value })}
+                  />
+                  <label htmlFor="sync-blockers">Blockers</label>
+                  <textarea
+                    id="sync-blockers"
+                    rows={3}
+                    value={sections.blockers}
+                    onChange={(e) => setSections({ ...sections, blockers: e.target.value })}
+                  />
+                  <label htmlFor="sync-next-week">Next week</label>
+                  <textarea
+                    id="sync-next-week"
+                    rows={3}
+                    value={sections.nextWeek}
+                    onChange={(e) => setSections({ ...sections, nextWeek: e.target.value })}
+                  />
+                </div>
               )}
             </SoftCard>
 
