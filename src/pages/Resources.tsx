@@ -278,21 +278,88 @@ const STATUS_REPORT_TIPS: string[] = [
   "Keep the format identical every time so recipients can scan it in under a minute.",
 ];
 
+type HubSectionDef = { id: string; title: string; blurb: string };
+
+/** v166: the hub is organized by intent -- three doors. Every section
+ *  that was on the old stacked page is still here, behind one door or
+ *  another; sections start collapsed with a one-line summary each and
+ *  open in place. */
+const DOORS: { id: string; title: string; blurb: string; sections: HubSectionDef[] }[] = [
+  {
+    id: "start",
+    title: "Start a project",
+    blurb: "Templates to start from, and how a project runs here.",
+    sections: [
+      { id: "templates", title: "Project templates", blurb: "Start a new project with phases, starter tasks, likely risks and roles already in place." },
+      { id: "how-it-works", title: "How a project runs in Tasketra", blurb: "The four stages every project moves through, and what to do in each one." },
+    ],
+  },
+  {
+    id: "run",
+    title: "Run the week",
+    blurb: "The handouts, meetings and reporting of the weekly rhythm.",
+    sections: [
+      { id: "forms", title: "Forms & downloads", blurb: "Documents built from a project's live data: the charter, the registers and the weekly report." },
+      { id: "meetings", title: "Meeting cadence templates", blurb: "Ready-made agendas and cadences, from kickoff to closeout." },
+      { id: "status-reports", title: "Status reporting -- what good looks like", blurb: "Five rules for a status report people can scan in under a minute." },
+    ],
+  },
+  {
+    id: "reference",
+    title: "Look it up",
+    blurb: "Plain-English reference for the moments you need a definition or a formula.",
+    sections: [
+      { id: "methodologies", title: "Methodologies", blurb: "Agile, Waterfall, Hybrid and the rest, in plain English, with when each one fits." },
+      { id: "formulas", title: "EVM & scheduling formulas", blurb: "CPI, SPI, float, PERT and friends, each with what it actually means." },
+      { id: "raid", title: "RAID log guide", blurb: "Risks, Issues, Assumptions and Dependencies explained, plus Quality and Compliance." },
+      { id: "stakeholder-matrix", title: "Stakeholder engagement matrix", blurb: "Power vs. interest: how much effort each kind of stakeholder deserves." },
+    ],
+  },
+];
+
+function HubSection({ def, open, onToggle, children }: {
+  def: HubSectionDef;
+  open: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="hub-section">
+      <h2 id={def.id} className="hub-h2 hub-section-h2">
+        <button type="button" className="hub-section-toggle" aria-expanded={open} onClick={onToggle}>
+          <span className="hub-section-text">
+            <span className="hub-section-title">{def.title}</span>
+            <span className="hub-section-blurb">{def.blurb}</span>
+          </span>
+          <span className="hub-section-chevron" aria-hidden="true">{open ? "▾" : "▸"}</span>
+        </button>
+      </h2>
+      <div className="hub-section-body" hidden={!open}>
+        {children}
+      </div>
+    </section>
+  );
+}
+
 export default function Resources() {
   useDocumentTitle("Resource hub");
   const [query, setQuery] = useState("");
   const [replaying, setReplaying] = useState(false);
   const [applyTemplateId, setApplyTemplateId] = useState<string | null>(null);
   const [replayNotice, setReplayNotice] = useState<string | null>(null);
+  const [openSections, setOpenSections] = useState<ReadonlySet<string>>(new Set());
   const navigate = useNavigate();
   const { hash } = useLocation();
   const q = query.trim().toLowerCase();
+  const searching = q.length > 0;
 
-  // Arriving with #section in the link (for example from the Dashboard tip)
-  // scrolls to that section; the jump links only handled clicks before.
+  // Arriving with #section in the link (for example from the Dashboard tip
+  // or the first-run footer) opens that section and scrolls to it; sections
+  // start collapsed now, so the jump has to open the door it lands on.
   useEffect(() => {
     if (!hash) return;
     const id = decodeURIComponent(hash.slice(1));
+    setOpenSections((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
     const timer = window.setTimeout(() => {
       const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
       document.getElementById(id)?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
@@ -328,71 +395,50 @@ export default function Resources() {
   const forms = matches("forms", "downloads", "printable", "charter", "risk register", "risk matrix", "raci", "weekly report", "pdf", "share") ? [1] : [];
   const statusTips = STATUS_REPORT_TIPS.filter((t) => matches(t, "status report", "status update"));
 
-  const sections = [
-    { id: "templates", label: "Templates", show: templates.length > 0 },
-    { id: "forms", label: "Forms & downloads", show: forms.length > 0 },
-    { id: "how-it-works", label: "How it works", show: guideStages.length > 0 },
-    { id: "methodologies", label: "Methodologies", show: methodologies.length > 0 },
-    { id: "formulas", label: "EVM formulas", show: formulas.length > 0 },
-    { id: "raid", label: "RAID guide", show: raidItems.length > 0 },
-    { id: "stakeholder-matrix", label: "Stakeholder matrix", show: quadrants.length > 0 },
-    { id: "meetings", label: "Meetings", show: meetings.length > 0 },
-    { id: "status-reports", label: "Status reports", show: statusTips.length > 0 },
-  ].filter((x) => x.show);
+  const showById: Record<string, boolean> = {
+    templates: templates.length > 0,
+    forms: forms.length > 0,
+    "how-it-works": guideStages.length > 0,
+    methodologies: methodologies.length > 0,
+    formulas: formulas.length > 0,
+    raid: raidItems.length > 0,
+    "stakeholder-matrix": quadrants.length > 0,
+    meetings: meetings.length > 0,
+    "status-reports": statusTips.length > 0,
+  };
 
-  function jumpTo(id: string) {
+  // While searching, every section still standing is open -- the results
+  // are the point. Otherwise a section is open only when its header (or
+  // its door, or an incoming #link) opened it.
+  const isOpen = (id: string) => searching || openSections.has(id);
+  function toggleSection(id: string) {
+    setOpenSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+  function openDoor(door: (typeof DOORS)[number]) {
+    setOpenSections((prev) => {
+      const next = new Set(prev);
+      for (const s of door.sections) next.add(s.id);
+      return next;
+    });
     const reduce = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    document.getElementById(id)?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+    window.setTimeout(() => {
+      document.getElementById(`door-${door.id}`)?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+    }, 0);
   }
 
   const nothingMatches =
     templates.length === 0 && forms.length === 0 && guideStages.length === 0 && methodologies.length === 0 && formulas.length === 0 && raidItems.length === 0 &&
     quadrants.length === 0 && meetings.length === 0 && statusTips.length === 0;
 
-  return (
-    <div className="project-shell">
-      <AppSidebar />
-
-      <main id="main-content" className="project-main">
-        <PageHeader
-          title="Resource hub"
-          subtitle="Starting points and plain-English reference for running a project. The reference sections are read-only; your project's own sections hold the live data. Templates are the one exception: starting from one creates a new project for you."
-        />
-
-        <div className="inline-form" style={{ marginBottom: 20, alignItems: "center" }}>
-          <button type="button" className="btn btn-ghost" onClick={replayTour} disabled={replaying}>
-            {replaying ? "Loading..." : "Replay the tour"}
-          </button>
-          {replayNotice && <span className="muted" style={{ fontSize: 13 }}>{replayNotice}</span>}
-        </div>
-
-        <div className="inline-form" style={{ marginBottom: 20, alignItems: "center" }}>
-          <span style={{ fontSize: 14 }}>
-            <strong>The Tasketra newsletter:</strong> practical project management that fits on one page, twice a week.{" "}
-            <a href="https://tasketra.substack.com" target="_blank" rel="noreferrer">Subscribe free on Substack</a>
-          </span>
-        </div>
-
-        <input aria-label="Search this page"
-          placeholder="Search everything on this page..."
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          style={{ marginBottom: 28, maxWidth: 360 }}
-        />
-
-        {sections.length > 1 && (
-          <nav className="hub-jump" aria-label="Jump to a section">
-            {sections.map((x) => (
-              <button key={x.id} type="button" className="hub-chip" onClick={() => jumpTo(x.id)}>{x.label}</button>
-            ))}
-          </nav>
-        )}
-
-        {nothingMatches && <p className="muted">Nothing matches "{query}".</p>}
-
-        {templates.length > 0 && (
+  const sectionBody = (def: HubSectionDef) => {
+    switch (def.id) {
+      case "templates":
+        return (
           <>
-            <h2 id="templates" className="hub-h2">Project templates</h2>
             <p className="muted" style={{ maxWidth: 640, marginTop: 4 }}>
               Start a new project with the skeleton already in place: phases on the roadmap, starter
               tasks tied to those phases, the risks that usually hit this kind of project, and
@@ -442,25 +488,10 @@ export default function Resources() {
               })}
             </div>
           </>
-        )}
-
-        <ApplyTemplateDrawer open={applyTemplateId !== null} onClose={() => setApplyTemplateId(null)} templateId={applyTemplateId ?? undefined} />
-
-        {forms.length > 0 && (
+        );
+      case "how-it-works":
+        return (
           <>
-            <h2 id="forms" className="hub-h2">Forms &amp; downloads</h2>
-            <p className="muted" style={{ maxWidth: 640, marginTop: 4 }}>
-              Documents to hand to a sponsor, client or team, built from a project's live data. Word
-              files download straight away; the risk page and weekly report print or save as PDF from
-              your browser. Pick the project below.
-            </p>
-            <FormsAndDownloads />
-          </>
-        )}
-
-        {guideStages.length > 0 && (
-          <>
-            <h2 id="how-it-works" className="hub-h2">How a project runs in Tasketra</h2>
             <p className="muted" style={{ maxWidth: 640, marginTop: 4 }}>
               Every project moves through four stages. Pick one to see what to do in it and which section to do
               it in. Your project's Overview shows a short checklist for the stage you are in, built from
@@ -468,43 +499,70 @@ export default function Resources() {
             </p>
             <ProjectFlowGuide stages={guideStages} />
           </>
-        )}
-
-        {methodologies.length > 0 && (
+        );
+      case "forms":
+        return (
           <>
-            <h2 id="methodologies" className="hub-h2">Methodologies</h2>
-            <div className="resource-grid">
-              {methodologies.map((m) => (
-                <div className="resource-card" key={m.name}>
-                  <h3 className="heading-sm">{m.name}</h3>
-                  <ul>
-                    {m.points.map((pt, i) => <li key={i}>{pt}</li>)}
-                  </ul>
-                  <div className="callout"><strong>Best when:</strong> {m.bestWhen}</div>
-                </div>
-              ))}
-            </div>
+            <p className="muted" style={{ maxWidth: 640, marginTop: 4 }}>
+              Documents to hand to a sponsor, client or team, built from a project's live data. Word
+              files download straight away; the risk page and weekly report print or save as PDF from
+              your browser. Pick the project below.
+            </p>
+            <FormsAndDownloads />
           </>
-        )}
-
-        {formulas.length > 0 && (
-          <>
-            <h2 id="formulas" className="hub-h2">EVM &amp; scheduling formulas</h2>
-            <ul className="rg-list rg-plain" aria-label="EVM and scheduling formulas">
-              {formulas.map((f) => (
-                <RegisterRow
-                  key={f.code}
-                  title={<><strong>{f.code}</strong> {f.name}</>}
-                  meta={<><span className="rg-formula">{f.formula}</span><br />{f.meaning}</>}
-                />
-              ))}
+        );
+      case "meetings":
+        return (
+          <div className="resource-grid">
+            {meetings.map((m) => (
+              <div className="resource-card" key={m.name}>
+                <h3 className="heading-sm">{m.name}</h3>
+                <p className="muted" style={{ fontSize: 13, marginBottom: 8 }}>{m.cadence}</p>
+                <p>{m.purpose}</p>
+                <ul>
+                  {m.agenda.map((a, i) => <li key={i}>{a}</li>)}
+                </ul>
+              </div>
+            ))}
+          </div>
+        );
+      case "status-reports":
+        return (
+          <div className="resource-card" style={{ maxWidth: 640 }}>
+            <ul>
+              {statusTips.map((t, i) => <li key={i}>{t}</li>)}
             </ul>
-          </>
-        )}
-
-        {raidItems.length > 0 && (
+          </div>
+        );
+      case "methodologies":
+        return (
+          <div className="resource-grid">
+            {methodologies.map((m) => (
+              <div className="resource-card" key={m.name}>
+                <h3 className="heading-sm">{m.name}</h3>
+                <ul>
+                  {m.points.map((pt, i) => <li key={i}>{pt}</li>)}
+                </ul>
+                <div className="callout"><strong>Best when:</strong> {m.bestWhen}</div>
+              </div>
+            ))}
+          </div>
+        );
+      case "formulas":
+        return (
+          <ul className="rg-list rg-plain" aria-label="EVM and scheduling formulas">
+            {formulas.map((f) => (
+              <RegisterRow
+                key={f.code}
+                title={<><strong>{f.code}</strong> {f.name}</>}
+                meta={<><span className="rg-formula">{f.formula}</span><br />{f.meaning}</>}
+              />
+            ))}
+          </ul>
+        );
+      case "raid":
+        return (
           <>
-            <h2 id="raid" className="hub-h2">RAID log guide</h2>
             <p className="muted" style={{ maxWidth: 640, marginBottom: 16 }}>
               Risks, Issues, Assumptions, and Dependencies are the four classic things worth tracking
               separately so nothing quietly falls through the cracks. Quality and Compliance sit
@@ -521,11 +579,10 @@ export default function Resources() {
               ))}
             </div>
           </>
-        )}
-
-        {quadrants.length > 0 && (
+        );
+      case "stakeholder-matrix":
+        return (
           <>
-            <h2 id="stakeholder-matrix" className="hub-h2">Stakeholder engagement matrix</h2>
             <p className="muted" style={{ maxWidth: 640, marginBottom: 16 }}>
               Plot each stakeholder on power vs. interest, then match your effort to the quadrant. Set
               Power and Interest for each person on your project's Stakeholders section and Tasketra draws this
@@ -541,36 +598,76 @@ export default function Resources() {
               ))}
             </div>
           </>
+        );
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <div className="project-shell">
+      <AppSidebar />
+
+      <main id="main-content" className="project-main">
+        <PageHeader
+          title="Resource hub"
+          subtitle="Starting points and plain-English reference for running a project. The reference sections are read-only; your project's own sections hold the live data. Templates are the one exception: starting from one creates a new project for you."
+        />
+
+        <div className="inline-form" style={{ marginBottom: 20, alignItems: "center" }}>
+          <button type="button" className="btn btn-ghost" onClick={replayTour} disabled={replaying}>
+            {replaying ? "Loading..." : "Replay the tour"}
+          </button>
+          {replayNotice && <span className="muted" style={{ fontSize: 13 }}>{replayNotice}</span>}
+        </div>
+
+        <div className="inline-form" style={{ marginBottom: 20, alignItems: "center" }}>
+          <span style={{ fontSize: 14 }}>
+            <strong>The Tasketra newsletter:</strong> practical project management that fits on one page, twice a week.{" "}
+            <a href="https://tasketra.substack.com" target="_blank" rel="noreferrer">Subscribe free on Substack</a>
+          </span>
+        </div>
+
+        <input aria-label="Search this page"
+          placeholder="Search everything on this page..."
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          style={{ marginBottom: 28, maxWidth: 360 }}
+        />
+
+        {!searching && (
+          <div className="hub-doors">
+            {DOORS.map((d) => (
+              <button key={d.id} type="button" className="hub-door" onClick={() => openDoor(d)}>
+                <span className="hub-door-title">{d.title}</span>
+                <span className="hub-door-blurb">{d.blurb}</span>
+                <span className="hub-door-count">{d.sections.length} sections, open them all</span>
+              </button>
+            ))}
+          </div>
         )}
 
-        {meetings.length > 0 && (
-          <>
-            <h2 id="meetings" className="hub-h2">Meeting cadence templates</h2>
-            <div className="resource-grid">
-              {meetings.map((m) => (
-                <div className="resource-card" key={m.name}>
-                  <h3 className="heading-sm">{m.name}</h3>
-                  <p className="muted" style={{ fontSize: 13, marginBottom: 8 }}>{m.cadence}</p>
-                  <p>{m.purpose}</p>
-                  <ul>
-                    {m.agenda.map((a, i) => <li key={i}>{a}</li>)}
-                  </ul>
-                </div>
+        {nothingMatches && <p className="muted">Nothing matches "{query}".</p>}
+
+        {DOORS.map((door) => {
+          const visible = door.sections.filter((s) => showById[s.id]);
+          if (visible.length === 0) return null;
+          return (
+            <div key={door.id} className="hub-door-group" id={`door-${door.id}`}>
+              <div className="hub-door-head">
+                <span className="hub-door-head-title">{door.title}</span>
+                <span className="hub-door-head-blurb">{door.blurb}</span>
+              </div>
+              {visible.map((def) => (
+                <HubSection key={def.id} def={def} open={isOpen(def.id)} onToggle={() => toggleSection(def.id)}>
+                  {sectionBody(def)}
+                </HubSection>
               ))}
             </div>
-          </>
-        )}
+          );
+        })}
 
-        {statusTips.length > 0 && (
-          <>
-            <h2 id="status-reports" className="hub-h2">Status reporting -- what good looks like</h2>
-            <div className="resource-card" style={{ maxWidth: 640 }}>
-              <ul>
-                {statusTips.map((t, i) => <li key={i}>{t}</li>)}
-              </ul>
-            </div>
-          </>
-        )}
+        <ApplyTemplateDrawer open={applyTemplateId !== null} onClose={() => setApplyTemplateId(null)} templateId={applyTemplateId ?? undefined} />
       </main>
     </div>
   );

@@ -10,6 +10,12 @@ export type ChangeEntry = { version: string; date: string; title: string; body: 
 // they can do.
 export const CHANGES: ChangeEntry[] = [
   {
+    version: "v166",
+    date: "November 2026",
+    title: "The Resource hub has three doors now: start a project, run the week, or look something up.",
+    body: "The hub used to be one long page with every section open at once. Everything that was there is still there, organized by what you came to do. Start a project holds the templates and how a project runs here; Run the week holds forms and downloads, meeting agendas and status reporting; Look it up holds the plain-English reference, methodologies, formulas, the RAID guide and the stakeholder matrix. Sections start closed, each with a one-line summary, and open only when you want them. Picking a door opens its sections for you, search still finds everything on the page, and a link that points at one section opens it on arrival.",
+  },
+  {
     version: "v165",
     date: "November 2026",
     title: "Every project opens with the full picture: completion, time, budget, and what needs you.",

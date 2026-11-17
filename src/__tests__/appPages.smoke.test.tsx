@@ -119,7 +119,9 @@ describe("signed-in pages render without errors", () => {
     for (const name of ["Sprint planning", "Risk review", "Stage-gate / phase review", "Sponsor update", "Change control review", "Project closeout"]) {
       expect(host.textContent, name).toContain(name);
     }
-    const raid = host.querySelector("#raid")!.nextElementSibling!.nextElementSibling!;
+    // v166: sections live inside a collapsible shell; the RAID section
+    // element holds the header and the (mounted, possibly closed) body.
+    const raid = host.querySelector("#raid")!.closest("section")!;
     expect(raid.textContent).toContain("Quality");
     expect(raid.textContent).toContain("Compliance");
     expect(errors).toEqual([]);

@@ -1911,15 +1911,36 @@ a.dash-list-title:hover { text-decoration: underline; }
 .resource-card .btn { margin-top: 4px; }
 .template-grid { align-items: start; }
 
-/* Resource Hub: jump links and the "how it works" guide */
-.hub-jump { display: flex; flex-wrap: wrap; gap: 8px; margin: -8px 0 28px; }
-.hub-chip {
-  background: var(--cream); border: 1px solid var(--border); border-radius: var(--radius-pill);
-  padding: 6px 14px; font: inherit; font-size: 13px; font-weight: 600; color: var(--slate); cursor: pointer;
-  transition: background var(--ease), border-color var(--ease);
+/* Resource Hub: the three doors and collapsible sections (v166; the
+   jump-chip nav retired -- the doors and the section rows are the index) */
+.hub-doors { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 4px; }
+.hub-door {
+  display: flex; flex-direction: column; gap: 6px; text-align: left; font: inherit; cursor: pointer;
+  background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px;
+  transition: box-shadow var(--ease), transform var(--ease);
 }
-.hub-chip:hover { background: var(--surface-muted); border-color: var(--slate); }
-.hub-chip:focus-visible { outline: 2px solid var(--navy); outline-offset: 2px; }
+.hub-door:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
+.hub-door:focus-visible { outline: 2px solid var(--navy); outline-offset: 2px; }
+.hub-door-title { font-family: 'Fraunces', serif; font-weight: 700; font-size: 20px; color: var(--navy); }
+.hub-door-blurb { font-size: 13.5px; color: var(--slate); }
+.hub-door-count { font-size: 12px; font-weight: 600; color: var(--slate); }
+.hub-door-group { margin-top: 36px; scroll-margin-top: 16px; }
+.hub-door-head { display: flex; flex-direction: column; gap: 2px; margin-bottom: 6px; }
+.hub-door-head-title { font-family: 'Fraunces', serif; font-weight: 700; font-size: 22px; color: var(--navy); }
+.hub-door-head-blurb { font-size: 13.5px; color: var(--slate); }
+.hub-section-h2.hub-h2 { margin: 14px 0 0; }
+.hub-section-toggle {
+  display: flex; width: 100%; align-items: flex-start; justify-content: space-between; gap: 12px;
+  box-sizing: border-box; text-align: left; font: inherit; cursor: pointer;
+  background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px;
+}
+.hub-section-toggle:hover { box-shadow: var(--shadow-md); }
+.hub-section-toggle:focus-visible { outline: 2px solid var(--navy); outline-offset: 2px; }
+.hub-section-text { display: flex; flex-direction: column; gap: 3px; }
+.hub-section-title { font-family: 'Fraunces', serif; font-weight: 700; font-size: 19px; color: var(--navy); }
+.hub-section-blurb { font-size: 13.5px; color: var(--slate); }
+.hub-section-chevron { color: var(--slate); font-size: 15px; padding-top: 5px; }
+.hub-section-body { margin-top: 16px; }
 .resource-grid ~ h2[id], h2[id] { scroll-margin-top: 16px; }
 
 /* Resource Hub: project flow guide (one stage open at a time) */
