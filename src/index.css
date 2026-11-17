@@ -1006,6 +1006,10 @@ a.dash-list-title:hover { text-decoration: underline; }
 .cockpit-forecast-label { font-size: 13px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--slate); }
 .cockpit-forecast-value { font-size: 30px; font-weight: 800; color: var(--navy); margin: 2px 0; }
 .cockpit-index { text-align: center; font-size: 12.5px; color: var(--slate); margin-top: 2px; }
+/* v165.1: the cockpit's two lower cards size to their own content
+   instead of stretching to the taller one (the Dashboard's grid keeps
+   its stretch; this is scoped to the cockpit only). */
+.cockpit-grid { align-items: start; }
 
 @media (max-width: 860px) {
   .project-shell { flex-direction: column; }

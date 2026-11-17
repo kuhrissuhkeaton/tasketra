@@ -136,6 +136,47 @@ describe("helpers", () => {
     expect(groups).toEqual([{ label: "Phase", total: 3, done: 1 }]);
   });
 
+  it("groups by WBS numbers in the titles when the list carries them (v165.1)", () => {
+    const numbered = [
+      task({ title: "1.1 Initiation and funding", status: "done" }),
+      task({ title: "1.2 Planning and controls", status: "in_progress" }),
+      task({ title: "2.1 Schematic design", status: "done" }),
+      task({ title: "2.2 Design development", status: "done" }),
+      task({ title: "2.3 Construction documents", status: "not_started" }),
+      task({ title: "8 Commissioning and inspections", status: "not_started" }),
+      task({ title: "9.1 Punch list and substantial completion", status: "not_started" }),
+      task({ title: "Loose ends call", status: "done" }),
+    ];
+    const { groups, byStatus } = workGroups(numbered);
+    expect(byStatus).toBe(false);
+    // Plan order (numeric), the bare task names its own phase, and the
+    // one unnumbered task lands in a final group so nothing is lost.
+    expect(groups).toEqual([
+      { label: "Phase 1", total: 2, done: 1 },
+      { label: "Phase 2", total: 3, done: 2 },
+      { label: "Commissioning and inspections", total: 1, done: 0 },
+      { label: "Phase 9", total: 1, done: 0 },
+      { label: "Unnumbered", total: 1, done: 1 },
+    ]);
+  });
+
+  it("does not let a year become a phase, and needs the pattern to be strong (v165.1 guards)", () => {
+    const years = [
+      task({ title: "2026.1 Budget kickoff" }),
+      task({ title: "2026.2 Hiring plan" }),
+      task({ title: "2027.1 Offsite" }),
+      task({ title: "Weekly notes" }),
+    ];
+    expect(workGroups(years).byStatus).toBe(true);
+    const weak = [
+      task({ title: "1.1 Only one numbered" }),
+      task({ title: "1.2 Two numbered" }),
+      task({ title: "Plain a" }), task({ title: "Plain b" }), task({ title: "Plain c" }),
+      task({ title: "Plain d" }), task({ title: "Plain e" }), task({ title: "Plain f" }),
+    ];
+    expect(workGroups(weak).byStatus).toBe(true);
+  });
+
   it("falls back to status groups for a flat task list", () => {
     const flat = [
       task({ status: "done" }), task({ status: "done" }),
@@ -279,6 +320,38 @@ describe("ProjectCockpit", () => {
     await render();
     expect(text()).toContain("Work by status");
     expect(text()).toContain("In progress");
+  });
+
+  it("shows the phase breakdown for a numbered task list, in plan order (v165.1)", async () => {
+    calls.listTasks.mockResolvedValue({
+      tasks: [
+        task({ title: "1.1 Initiation and funding", status: "done" }),
+        task({ title: "1.2 Planning and controls", status: "in_progress" }),
+        task({ title: "2.1 Schematic design", status: "done" }),
+        task({ title: "2.2 Design development", status: "not_started" }),
+        task({ title: "8 Commissioning and inspections", status: "not_started" }),
+      ],
+    });
+    calls.listRoadmapItems.mockResolvedValue({ items: [] });
+    calls.getBudget.mockResolvedValue(budget({
+      taskStats: { totalTasks: 5, doneTasks: 2, dueTasks: 3 },
+    }));
+    await render();
+    expect(text()).toContain("Work breakdown");
+    expect(text()).not.toContain("Work by status");
+    expect(text()).toContain("Phase 1");
+    expect(text()).toContain("Phase 2");
+    expect(text()).toContain("Commissioning and inspections");
+  });
+
+  it("gives a not-yet-started project both dates in the time words (v165.1)", async () => {
+    calls.listTasks.mockResolvedValue({ tasks: wbsTasks() });
+    calls.listRoadmapItems.mockResolvedValue({ items: [roadmapItem({ start_date: "2027-01-01", end_date: "2027-04-10" })] });
+    calls.getBudget.mockResolvedValue(budget({
+      taskStats: { totalTasks: 8, doneTasks: 3, dueTasks: 5 },
+    }));
+    await render();
+    expect(text()).toContain("99 planned days · Jan 1, 2027 to Apr 10, 2027");
   });
 
   it("renders sentences with actions, not charts, for an empty project", async () => {

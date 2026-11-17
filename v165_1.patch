@@ -1,0 +1,198 @@
+--- a/src/components/ProjectCockpit.tsx
++++ b/src/components/ProjectCockpit.tsx
+@@ -20,9 +20,10 @@
+ //     disagree (the v156 "counts agree" rule).
+ //   - The planned window mirrors portfolio.mts exactly: earliest
+ //     roadmap start (or end) to latest roadmap end (or start).
+-//   - The breakdown groups tasks by their top-level WBS parent (the
+-//     phase tasks); a project with a flat task list breaks down by
+-//     status instead. Cost entries carry no category or phase in the
++//   - The breakdown groups tasks by phase from the strongest structure
++//     present: WBS parents first, then WBS numbers in the task titles
++//     (v165.1, guarded -- see workGroups), then status for a flat,
++//     unnumbered list. Cost entries carry no category or phase in the
+ //     data model, so there is no per-phase spend split -- the budget
+ //     card shows the one honest variance (whole project, planned vs
+ //     spent) plus spend by month from the entries' dates.
+@@ -46,13 +47,58 @@
+ 
+ type Group = { label: string; total: number; done: number };
+ 
+-/** Tasks grouped by their top-level WBS ancestor (the phase task), or by
+- *  status when the list is flat. The phase task itself counts toward its
+- *  own group, matching how taskStats counts every task. */
++const TITLE_LEAF = /^(\d{1,2})\.(\d{1,3})\s+(.+)$/;
++const TITLE_BARE = /^(\d{1,2})\s+(.+)$/;
++
++/** Tasks grouped into phases, from the strongest structure the data
++ *  actually carries, in this order:
++ *    1. WBS parents — the top-level ancestor task is the phase (the
++ *       phase task counts toward its own group, matching taskStats).
++ *    2. WBS numbers in the task titles ("1.1 Initiation", "2.3 Permits",
++ *       a bare "8 Commissioning") — how plans built outside the app, or
++ *       pasted from a plan document, carry their phases. Guarded: at
++ *       least 3 numbered tasks, at least 60% of the list numbered, at
++ *       least 2 distinct phase numbers, and the number is at most two
++ *       digits so a year ("2026 …") can never become a phase. A group
++ *       is labelled "Phase N", or with the bare task's own name when
++ *       one provides it. Unnumbered tasks land in a final "Unnumbered"
++ *       group so the segments always sum to the whole list.
++ *    3. Status — the honest fallback for a flat, unnumbered list.
++ */
+ export function workGroups(tasks: Task[]): { groups: Group[]; byStatus: boolean } {
+   const byId = new Map(tasks.map((t) => [t.id, t]));
+   const hasParents = tasks.some((t) => t.parent_task_id && byId.has(t.parent_task_id));
+   if (!hasParents) {
++    type Hit = { major: number; bareName?: string; task: Task };
++    const hits: Hit[] = [];
++    for (const t of tasks) {
++      const leaf = t.title.match(TITLE_LEAF);
++      if (leaf) { hits.push({ major: Number(leaf[1]), task: t }); continue; }
++      const bare = t.title.match(TITLE_BARE);
++      if (bare) hits.push({ major: Number(bare[1]), bareName: bare[2].trim(), task: t });
++    }
++    const majors = new Set(hits.map((h) => h.major));
++    if (hits.length >= 3 && hits.length / tasks.length >= 0.6 && majors.size >= 2) {
++      const hitIds = new Set(hits.map((h) => h.task.id));
++      const map = new Map<number, Group & { bareName?: string }>();
++      for (const h of hits) {
++        const g = map.get(h.major) ?? { label: `Phase ${h.major}`, total: 0, done: 0 };
++        g.total += 1;
++        if (h.task.status === "done") g.done += 1;
++        if (h.bareName) g.bareName = h.bareName;
++        map.set(h.major, g);
++      }
++      const groups: Group[] = [...map.entries()]
++        .sort((a, b) => a[0] - b[0])
++        .map(([, g]) => ({ label: g.bareName ?? g.label, total: g.total, done: g.done }));
++      const rest = tasks.filter((t) => !hitIds.has(t.id));
++      if (rest.length > 0) {
++        groups.push({ label: "Unnumbered", total: rest.length, done: rest.filter((t) => t.status === "done").length });
++      }
++      return { groups, byStatus: false };
++    }
++  }
++  if (!hasParents) {
+     const order: { status: Task["status"]; label: string }[] = [
+       { status: "in_progress", label: "In progress" },
+       { status: "not_started", label: "Not started" },
+@@ -171,7 +217,7 @@
+     const span = daysBetween(window.start, window.end);
+     const elapsed = Math.max(0, Math.min(span, daysBetween(window.start, todayKey())));
+     const words = todayKey() < window.start
+-      ? `Starts ${fmtLocalDate(window.start)} · ${span} planned days`
++      ? `${span} planned days · ${fmtLocalDate(window.start)} to ${fmtLocalDate(window.end)}`
+       : `${elapsed} of ${span} planned days used · finishes ${fmtLocalDate(window.end)}`;
+     return (
+       <div className="dash-viz-card">
+@@ -247,7 +293,7 @@
+       </div>
+ 
+       {(total > 0 || hasBudgetStory) && (
+-        <div className="dash-viz-grid" style={{ marginBottom: 16 }}>
++        <div className="dash-viz-grid cockpit-grid" style={{ marginBottom: 16 }}>
+           {total > 0 && groups.length > 0 && (
+             <div className="dash-viz-card">
+               <h3>{byStatus ? "Work by status" : "Work breakdown"}</h3>
+--- a/src/index.css
++++ b/src/index.css
+@@ -1006,6 +1006,10 @@
+ .cockpit-forecast-label { font-size: 13px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--slate); }
+ .cockpit-forecast-value { font-size: 30px; font-weight: 800; color: var(--navy); margin: 2px 0; }
+ .cockpit-index { text-align: center; font-size: 12.5px; color: var(--slate); margin-top: 2px; }
++/* v165.1: the cockpit's two lower cards size to their own content
++   instead of stretching to the taller one (the Dashboard's grid keeps
++   its stretch; this is scoped to the cockpit only). */
++.cockpit-grid { align-items: start; }
+ 
+ @media (max-width: 860px) {
+   .project-shell { flex-direction: column; }
+--- a/src/__tests__/projectCockpit.test.tsx
++++ b/src/__tests__/projectCockpit.test.tsx
+@@ -136,6 +136,47 @@
+     expect(groups).toEqual([{ label: "Phase", total: 3, done: 1 }]);
+   });
+ 
++  it("groups by WBS numbers in the titles when the list carries them (v165.1)", () => {
++    const numbered = [
++      task({ title: "1.1 Initiation and funding", status: "done" }),
++      task({ title: "1.2 Planning and controls", status: "in_progress" }),
++      task({ title: "2.1 Schematic design", status: "done" }),
++      task({ title: "2.2 Design development", status: "done" }),
++      task({ title: "2.3 Construction documents", status: "not_started" }),
++      task({ title: "8 Commissioning and inspections", status: "not_started" }),
++      task({ title: "9.1 Punch list and substantial completion", status: "not_started" }),
++      task({ title: "Loose ends call", status: "done" }),
++    ];
++    const { groups, byStatus } = workGroups(numbered);
++    expect(byStatus).toBe(false);
++    // Plan order (numeric), the bare task names its own phase, and the
++    // one unnumbered task lands in a final group so nothing is lost.
++    expect(groups).toEqual([
++      { label: "Phase 1", total: 2, done: 1 },
++      { label: "Phase 2", total: 3, done: 2 },
++      { label: "Commissioning and inspections", total: 1, done: 0 },
++      { label: "Phase 9", total: 1, done: 0 },
++      { label: "Unnumbered", total: 1, done: 1 },
++    ]);
++  });
++
++  it("does not let a year become a phase, and needs the pattern to be strong (v165.1 guards)", () => {
++    const years = [
++      task({ title: "2026.1 Budget kickoff" }),
++      task({ title: "2026.2 Hiring plan" }),
++      task({ title: "2027.1 Offsite" }),
++      task({ title: "Weekly notes" }),
++    ];
++    expect(workGroups(years).byStatus).toBe(true);
++    const weak = [
++      task({ title: "1.1 Only one numbered" }),
++      task({ title: "1.2 Two numbered" }),
++      task({ title: "Plain a" }), task({ title: "Plain b" }), task({ title: "Plain c" }),
++      task({ title: "Plain d" }), task({ title: "Plain e" }), task({ title: "Plain f" }),
++    ];
++    expect(workGroups(weak).byStatus).toBe(true);
++  });
++
+   it("falls back to status groups for a flat task list", () => {
+     const flat = [
+       task({ status: "done" }), task({ status: "done" }),
+@@ -281,6 +322,38 @@
+     expect(text()).toContain("In progress");
+   });
+ 
++  it("shows the phase breakdown for a numbered task list, in plan order (v165.1)", async () => {
++    calls.listTasks.mockResolvedValue({
++      tasks: [
++        task({ title: "1.1 Initiation and funding", status: "done" }),
++        task({ title: "1.2 Planning and controls", status: "in_progress" }),
++        task({ title: "2.1 Schematic design", status: "done" }),
++        task({ title: "2.2 Design development", status: "not_started" }),
++        task({ title: "8 Commissioning and inspections", status: "not_started" }),
++      ],
++    });
++    calls.listRoadmapItems.mockResolvedValue({ items: [] });
++    calls.getBudget.mockResolvedValue(budget({
++      taskStats: { totalTasks: 5, doneTasks: 2, dueTasks: 3 },
++    }));
++    await render();
++    expect(text()).toContain("Work breakdown");
++    expect(text()).not.toContain("Work by status");
++    expect(text()).toContain("Phase 1");
++    expect(text()).toContain("Phase 2");
++    expect(text()).toContain("Commissioning and inspections");
++  });
++
++  it("gives a not-yet-started project both dates in the time words (v165.1)", async () => {
++    calls.listTasks.mockResolvedValue({ tasks: wbsTasks() });
++    calls.listRoadmapItems.mockResolvedValue({ items: [roadmapItem({ start_date: "2027-01-01", end_date: "2027-04-10" })] });
++    calls.getBudget.mockResolvedValue(budget({
++      taskStats: { totalTasks: 8, doneTasks: 3, dueTasks: 5 },
++    }));
++    await render();
++    expect(text()).toContain("99 planned days · Jan 1, 2027 to Apr 10, 2027");
++  });
++
+   it("renders sentences with actions, not charts, for an empty project", async () => {
+     calls.listTasks.mockResolvedValue({ tasks: [] });
+     calls.listRoadmapItems.mockResolvedValue({ items: [] });
