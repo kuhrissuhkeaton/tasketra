@@ -1923,12 +1923,17 @@ a.dash-list-title:hover { text-decoration: underline; }
 .hub-door:focus-visible { outline: 2px solid var(--navy); outline-offset: 2px; }
 .hub-door-title { font-family: 'Fraunces', serif; font-weight: 700; font-size: 20px; color: var(--navy); }
 .hub-door-blurb { font-size: 13.5px; color: var(--slate); }
-.hub-door-count { font-size: 12px; font-weight: 600; color: var(--slate); }
+.hub-door-count { font-size: 12px; font-weight: 600; color: var(--slate); margin-top: auto; }
 .hub-door-group { margin-top: 36px; scroll-margin-top: 16px; }
 .hub-door-head { display: flex; flex-direction: column; gap: 2px; margin-bottom: 6px; }
 .hub-door-head-title { font-family: 'Fraunces', serif; font-weight: 700; font-size: 22px; color: var(--navy); }
 .hub-door-head-blurb { font-size: 13.5px; color: var(--slate); }
-.hub-section-h2.hub-h2 { margin: 14px 0 0; }
+/* v166.1: a #section arrival (the first-run footer, Dashboard tips)
+   scrolls the heading to the top of the viewport; the generic 16px
+   scroll margin (h2[id]) left it tucked under the sticky top
+   navigation. 76px lands it clear. The doubled class keeps this
+   ahead of the generic rule's specificity. */
+.hub-section-h2.hub-h2 { margin: 14px 0 0; scroll-margin-top: 76px; }
 .hub-section-toggle {
   display: flex; width: 100%; align-items: flex-start; justify-content: space-between; gap: 12px;
   box-sizing: border-box; text-align: left; font: inherit; cursor: pointer;
