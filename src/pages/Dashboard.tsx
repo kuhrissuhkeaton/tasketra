@@ -336,7 +336,15 @@ function TopRisksList({ risks }: { risks: PortfolioRisk[] }) {
   );
 }
 
-function PortfolioOverview({ data, wide, glance }: { data: PortfolioData; wide: boolean; glance?: ReactNode }) {
+function PortfolioOverview({ data, wide, glance, filtersActive, onClearFilters }: {
+  data: PortfolioData;
+  wide: boolean;
+  glance?: ReactNode;
+  /** True when the header filters are set -- with filters on, an empty
+   *  payload means "nothing matches", not "nothing exists" (v164.1). */
+  filtersActive?: boolean;
+  onClearFilters?: () => void;
+}) {
   const { kpis } = data;
   const [showAllMs, setShowAllMs] = useState(false);
   const MS_CAP = 5;
@@ -349,8 +357,19 @@ function PortfolioOverview({ data, wide, glance }: { data: PortfolioData; wide: 
           summaries (the Project health table is the status donut's table
           of real projects). With no projects at all there is nothing to
           chart, so the whole block steps aside for the sections' own
-          empty states. */}
-      {data.projects.length > 0 && (
+          empty states. v164.1: with filters set, an empty payload is a
+          different case -- the kit's no-chart-from-no-data rule applies,
+          so the block renders its empty state (one sentence + the
+          reset-filters action) instead of vanishing. */}
+      {data.projects.length === 0 && filtersActive ? (
+        <section className="dash-viz-card dash-viz-filter-empty">
+          <p className="dash-viz-empty">No projects match the filters you picked, so there is nothing to chart here.</p>
+          <p className="dash-viz-more">
+            <button type="button" className="btn-link" onClick={onClearFilters}>Clear the filters</button>
+            {" "}to see the whole portfolio again.
+          </p>
+        </section>
+      ) : data.projects.length > 0 && (
         <>
           <PortfolioGauges data={data} />
           <div className="dash-viz-grid">
@@ -389,7 +408,7 @@ function PortfolioOverview({ data, wide, glance }: { data: PortfolioData; wide: 
         {data.projects.length === 0 ? (
           <p className="muted dash-empty">No projects to report on yet.</p>
         ) : (
-          <ResizableTable id="dashboard-health">
+          <ResizableTable id="dashboard-health" className="table dash-health-table">
             <thead>
               <tr><th>Project</th><th>Stage</th><th>Status</th><th>Tasks</th><th>Overdue</th><th>OKR progress</th><th>Next step</th></tr>
             </thead>
@@ -1373,7 +1392,13 @@ export default function Dashboard() {
           </div>
         ) : portfolio && projects.length > 0 ? (
           <div style={{ opacity: portfolioLoading ? 0.6 : 1, transition: "opacity 120ms ease" }}>
-            <PortfolioOverview data={portfolio} wide={wide} glance={glanceBand} />
+            <PortfolioOverview
+              data={portfolio}
+              wide={wide}
+              glance={glanceBand}
+              filtersActive={selectedStage !== null || selectedProjectId !== null}
+              onClearFilters={() => void refreshPortfolio(null, null)}
+            />
           </div>
         ) : null}
 

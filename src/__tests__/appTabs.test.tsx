@@ -60,6 +60,19 @@ describe("AppTabs", () => {
     expect(activeLabels()).toEqual(["Projects"]);
   });
 
+  it("keeps the New project link outside the scrolling tab strip (v164.1)", async () => {
+    await renderAt("/app");
+    const strip = container.querySelector(".app-tabs-scroll");
+    expect(strip).not.toBeNull();
+    // All seven tabs scroll inside the strip...
+    expect(strip?.querySelectorAll("a.app-tab").length).toBe(7);
+    // ...and the button is the nav's own child, so it can never be
+    // scrolled or clipped off the bar's right edge.
+    const newLink = container.querySelector("a.app-tabs-new");
+    expect(newLink?.parentElement?.classList.contains("app-tabs")).toBe(true);
+    expect(strip?.contains(newLink)).toBe(false);
+  });
+
   it("marks the cross-project views active on their routes", async () => {
     await renderAt("/app/decisions");
     expect(activeLabels()).toEqual(["Decisions"]);

@@ -33,7 +33,7 @@ vi.mock("../lib/api", async (importOriginal) => {
       ...actual.api,
       listProjects: () => calls.listProjects(),
       listDeletedProjects: async () => ({ projects: [] }),
-      getPortfolio: () => calls.getPortfolio(),
+      getPortfolio: (id?: string, stage?: string) => calls.getPortfolio(id, stage),
       getMyToday: async () => ({ tasks: [], recentlyDone: [], truncated: false }),
       getCalendarItems: async () => ({ items: [] }),
       listUserTemplates: async () => ({ templates: [] }),
@@ -45,6 +45,7 @@ vi.mock("../lib/analytics", () => ({ track: () => {} }));
 import Dashboard from "../pages/Dashboard";
 import PortfolioDecisions from "../pages/PortfolioDecisions";
 import PortfolioRisks from "../pages/PortfolioRisks";
+import { CHANGES } from "../lib/whatsNewData";
 import { ConfirmProvider } from "../components/ConfirmDialog";
 
 let container: HTMLDivElement;
@@ -208,5 +209,64 @@ describe("Cross-project views (v164)", () => {
     expect(text.indexOf("Vendor slips")).toBeLessThan(text.indexOf("Lease timing"));
     expect(container.querySelector('a[href="/app/projects/p1?tab=risks"]')?.textContent).toBe("Launch date at risk");
     expect(text).toContain("No open issues right now.");
+  });
+});
+
+describe("v164.1 hotfix", () => {
+  function emptyPortfolioFixture(): PortfolioData {
+    const base = portfolioFixture();
+    return {
+      ...base,
+      projects: [],
+      openDecisions: [],
+      openRisks: [],
+      openIssues: [],
+      upcomingMilestones: [],
+      undatedMilestones: 0,
+    } as PortfolioData;
+  }
+
+  it("filtering to a stage with no projects shows the visual block's empty state, and Clear filters brings the visuals back", async () => {
+    await renderAt("/app/projects?view=dashboard", "/app/projects", <Dashboard />);
+    // From here the rollup answers by filter: a stage filter returns the
+    // empty payload, no filter returns the full fixture.
+    calls.getPortfolio.mockImplementation(async (_id?: string, stage?: string) =>
+      stage ? emptyPortfolioFixture() : portfolioFixture()
+    );
+    expect(container.textContent ?? "").toContain("Portfolio completion");
+
+    const stageSelect = container.querySelector<HTMLSelectElement>(".dashboard-filters select");
+    expect(stageSelect).not.toBeNull();
+    const setNativeValue = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, "value")?.set;
+    await act(async () => {
+      setNativeValue?.call(stageSelect, "initiate");
+      stageSelect!.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await flush();
+    await flush();
+
+    const filteredText = container.textContent ?? "";
+    expect(filteredText).toContain("No projects match the filters you picked, so there is nothing to chart here.");
+    expect(filteredText).not.toContain("Portfolio completion");
+
+    const clear = [...container.querySelectorAll("button")].find((b) => b.textContent === "Clear the filters");
+    expect(clear).not.toBeUndefined();
+    await act(async () => { clear!.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
+    await flush();
+    await flush();
+    expect(container.textContent ?? "").toContain("Portfolio completion");
+  });
+
+  it("the health table carries its compact-treatment class", async () => {
+    await renderAt("/app/projects?view=dashboard", "/app/projects", <Dashboard />);
+    expect(container.querySelector("table.dash-health-table")).not.toBeNull();
+  });
+
+  it("the v164 What's New entry promises the budget gauge only once costs are logged", () => {
+    const v164 = CHANGES.find((c) => c.version === "v164");
+    expect(v164).not.toBeUndefined();
+    expect(v164!.body).toContain("once a project starts logging costs");
+    expect(v164!.body).not.toContain("how much of the budget is spent");
+    expect(v164!.title).toBe("Your whole portfolio on one visual dashboard, with decisions and risks across every project.");
   });
 });

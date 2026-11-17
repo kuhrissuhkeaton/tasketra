@@ -34,19 +34,27 @@ export function AppTabs() {
   const view = new URLSearchParams(search).get("view");
   return (
     <nav className="app-tabs" aria-label="Portfolio views">
-      {TABS.map((t) => {
-        const active = t.isActive(pathname, view);
-        return (
-          <Link
-            key={t.label}
-            to={t.to}
-            className={active ? "app-tab app-tab-active" : "app-tab"}
-            aria-current={active ? "page" : undefined}
-          >
-            {t.label}
-          </Link>
-        );
-      })}
+      {/* v164.1: the tabs live in their own scrollable strip and the
+          + New project link sits outside it. As one long row (v164) the
+          button was the last item in the scrolling area, so on any
+          window narrower than the full row it slid off the right edge
+          with the scrollbar hidden and no way to see it was there. Now
+          the strip scrolls under the button, which never moves. */}
+      <div className="app-tabs-scroll">
+        {TABS.map((t) => {
+          const active = t.isActive(pathname, view);
+          return (
+            <Link
+              key={t.label}
+              to={t.to}
+              className={active ? "app-tab app-tab-active" : "app-tab"}
+              aria-current={active ? "page" : undefined}
+            >
+              {t.label}
+            </Link>
+          );
+        })}
+      </div>
       <Link className="app-tabs-new" to="/app/projects?new=1">+ New project</Link>
     </nav>
   );

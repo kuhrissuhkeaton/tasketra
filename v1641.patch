@@ -1,0 +1,320 @@
+diff --git a/src/__tests__/appTabs.test.tsx b/src/__tests__/appTabs.test.tsx
+index 9c94436..8c7e280 100644
+--- a/src/__tests__/appTabs.test.tsx
++++ b/src/__tests__/appTabs.test.tsx
+@@ -60,6 +60,19 @@ describe("AppTabs", () => {
+     expect(activeLabels()).toEqual(["Projects"]);
+   });
+ 
++  it("keeps the New project link outside the scrolling tab strip (v164.1)", async () => {
++    await renderAt("/app");
++    const strip = container.querySelector(".app-tabs-scroll");
++    expect(strip).not.toBeNull();
++    // All seven tabs scroll inside the strip...
++    expect(strip?.querySelectorAll("a.app-tab").length).toBe(7);
++    // ...and the button is the nav's own child, so it can never be
++    // scrolled or clipped off the bar's right edge.
++    const newLink = container.querySelector("a.app-tabs-new");
++    expect(newLink?.parentElement?.classList.contains("app-tabs")).toBe(true);
++    expect(strip?.contains(newLink)).toBe(false);
++  });
++
+   it("marks the cross-project views active on their routes", async () => {
+     await renderAt("/app/decisions");
+     expect(activeLabels()).toEqual(["Decisions"]);
+diff --git a/src/__tests__/portfolioCommand.test.tsx b/src/__tests__/portfolioCommand.test.tsx
+index 05e9ee5..68c3589 100644
+--- a/src/__tests__/portfolioCommand.test.tsx
++++ b/src/__tests__/portfolioCommand.test.tsx
+@@ -33,7 +33,7 @@ vi.mock("../lib/api", async (importOriginal) => {
+       ...actual.api,
+       listProjects: () => calls.listProjects(),
+       listDeletedProjects: async () => ({ projects: [] }),
+-      getPortfolio: () => calls.getPortfolio(),
++      getPortfolio: (id?: string, stage?: string) => calls.getPortfolio(id, stage),
+       getMyToday: async () => ({ tasks: [], recentlyDone: [], truncated: false }),
+       getCalendarItems: async () => ({ items: [] }),
+       listUserTemplates: async () => ({ templates: [] }),
+@@ -45,6 +45,7 @@ vi.mock("../lib/analytics", () => ({ track: () => {} }));
+ import Dashboard from "../pages/Dashboard";
+ import PortfolioDecisions from "../pages/PortfolioDecisions";
+ import PortfolioRisks from "../pages/PortfolioRisks";
++import { CHANGES } from "../lib/whatsNewData";
+ import { ConfirmProvider } from "../components/ConfirmDialog";
+ 
+ let container: HTMLDivElement;
+@@ -210,3 +211,62 @@ describe("Cross-project views (v164)", () => {
+     expect(text).toContain("No open issues right now.");
+   });
+ });
++
++describe("v164.1 hotfix", () => {
++  function emptyPortfolioFixture(): PortfolioData {
++    const base = portfolioFixture();
++    return {
++      ...base,
++      projects: [],
++      openDecisions: [],
++      openRisks: [],
++      openIssues: [],
++      upcomingMilestones: [],
++      undatedMilestones: 0,
++    } as PortfolioData;
++  }
++
++  it("filtering to a stage with no projects shows the visual block's empty state, and Clear filters brings the visuals back", async () => {
++    await renderAt("/app/projects?view=dashboard", "/app/projects", <Dashboard />);
++    // From here the rollup answers by filter: a stage filter returns the
++    // empty payload, no filter returns the full fixture.
++    calls.getPortfolio.mockImplementation(async (_id?: string, stage?: string) =>
++      stage ? emptyPortfolioFixture() : portfolioFixture()
++    );
++    expect(container.textContent ?? "").toContain("Portfolio completion");
++
++    const stageSelect = container.querySelector<HTMLSelectElement>(".dashboard-filters select");
++    expect(stageSelect).not.toBeNull();
++    const setNativeValue = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, "value")?.set;
++    await act(async () => {
++      setNativeValue?.call(stageSelect, "initiate");
++      stageSelect!.dispatchEvent(new Event("change", { bubbles: true }));
++    });
++    await flush();
++    await flush();
++
++    const filteredText = container.textContent ?? "";
++    expect(filteredText).toContain("No projects match the filters you picked, so there is nothing to chart here.");
++    expect(filteredText).not.toContain("Portfolio completion");
++
++    const clear = [...container.querySelectorAll("button")].find((b) => b.textContent === "Clear the filters");
++    expect(clear).not.toBeUndefined();
++    await act(async () => { clear!.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
++    await flush();
++    await flush();
++    expect(container.textContent ?? "").toContain("Portfolio completion");
++  });
++
++  it("the health table carries its compact-treatment class", async () => {
++    await renderAt("/app/projects?view=dashboard", "/app/projects", <Dashboard />);
++    expect(container.querySelector("table.dash-health-table")).not.toBeNull();
++  });
++
++  it("the v164 What's New entry promises the budget gauge only once costs are logged", () => {
++    const v164 = CHANGES.find((c) => c.version === "v164");
++    expect(v164).not.toBeUndefined();
++    expect(v164!.body).toContain("once a project starts logging costs");
++    expect(v164!.body).not.toContain("how much of the budget is spent");
++    expect(v164!.title).toBe("Your whole portfolio on one visual dashboard, with decisions and risks across every project.");
++  });
++});
+diff --git a/src/components/AppTabs.tsx b/src/components/AppTabs.tsx
+index 1f76fd4..08d2e54 100644
+--- a/src/components/AppTabs.tsx
++++ b/src/components/AppTabs.tsx
+@@ -34,19 +34,27 @@ export function AppTabs() {
+   const view = new URLSearchParams(search).get("view");
+   return (
+     <nav className="app-tabs" aria-label="Portfolio views">
+-      {TABS.map((t) => {
+-        const active = t.isActive(pathname, view);
+-        return (
+-          <Link
+-            key={t.label}
+-            to={t.to}
+-            className={active ? "app-tab app-tab-active" : "app-tab"}
+-            aria-current={active ? "page" : undefined}
+-          >
+-            {t.label}
+-          </Link>
+-        );
+-      })}
++      {/* v164.1: the tabs live in their own scrollable strip and the
++          + New project link sits outside it. As one long row (v164) the
++          button was the last item in the scrolling area, so on any
++          window narrower than the full row it slid off the right edge
++          with the scrollbar hidden and no way to see it was there. Now
++          the strip scrolls under the button, which never moves. */}
++      <div className="app-tabs-scroll">
++        {TABS.map((t) => {
++          const active = t.isActive(pathname, view);
++          return (
++            <Link
++              key={t.label}
++              to={t.to}
++              className={active ? "app-tab app-tab-active" : "app-tab"}
++              aria-current={active ? "page" : undefined}
++            >
++              {t.label}
++            </Link>
++          );
++        })}
++      </div>
+       <Link className="app-tabs-new" to="/app/projects?new=1">+ New project</Link>
+     </nav>
+   );
+diff --git a/src/index.css b/src/index.css
+index 55dc6dd..79342f2 100644
+--- a/src/index.css
++++ b/src/index.css
+@@ -789,6 +789,19 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
+   padding: 20px 16px 16px; position: sticky; top: 0; height: 100vh; overflow-y: auto;
+   display: flex; flex-direction: column;
+ }
++/* v164.1: the sidebar's own scrollbar, themed to the sidebar. The aside
++   is the scroll container (100vh, overflow-y: auto above); unstyled it
++   showed the platform's light native bar against the dark green, which
++   read as a foreign object. A slim ivory thumb on a transparent track
++   instead, still a real draggable scrollbar (never display: none), with
++   a stable gutter so the nav content does not shift sideways when the
++   bar appears. Scoped to .sidebar only -- every other scroll region
++   (tables, drawers, panels) keeps its own treatment. */
++.sidebar { scrollbar-width: thin; scrollbar-color: rgba(242, 235, 217, 0.35) transparent; scrollbar-gutter: stable; }
++.sidebar::-webkit-scrollbar { width: 8px; }
++.sidebar::-webkit-scrollbar-track { background: transparent; }
++.sidebar::-webkit-scrollbar-thumb { background: rgba(242, 235, 217, 0.3); border-radius: 4px; }
++.sidebar::-webkit-scrollbar-thumb:hover { background: rgba(242, 235, 217, 0.48); }
+ .sidebar-wordmark { display: block; margin-bottom: 24px; }
+ .sidebar .brand-lockup-name { color: var(--ivory); }
+ .sidebar .brand-lockup-beta { color: var(--ivory); border-color: rgba(242, 235, 217, 0.35); }
+@@ -867,21 +880,34 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
+ .app-tabs {
+   display: flex; align-items: center; gap: 2px; height: 49px; padding: 0 12px;
+   background: var(--panel); border-bottom: 1px solid var(--border);
++}
++/* v164.1: only the tab strip scrolls (sideways, scrollbar hidden as
++   before); the + New project button is a sibling outside the strip with
++   flex-shrink: 0, so it is always fully on screen -- in v164 it was the
++   last item inside the scrolling row and clipped off the right edge on
++   narrower windows, mid-label, with no visible way to scroll to it. */
++.app-tabs-scroll {
++  display: flex; align-items: center; gap: 2px; flex: 1 1 auto; min-width: 0;
+   overflow-x: auto; scrollbar-width: none;
+ }
+-.app-tabs::-webkit-scrollbar { display: none; }
++.app-tabs-scroll::-webkit-scrollbar { display: none; }
+ .app-tab {
+   padding: 7px 12px; border-radius: var(--radius-pill); font-size: 14px; font-weight: 600;
+-  color: var(--navy); text-decoration: none; white-space: nowrap;
+-}
+-.app-tab:hover { background: rgba(127, 127, 127, 0.14); }
++  color: var(--navy); text-decoration: none; white-space: nowrap; flex-shrink: 0;
++}
++/* The hover colors are spelled out on purpose: the global a:hover rule
++   (color: var(--navy), specificity 0-1-1) otherwise beats .app-tab-active's
++   color (0-1-0) and repaints the active tab's label navy on its ink pill --
++   black-on-black until the cursor moves away (v164.1 fix). Same for the
++   New project link, whose ink text the global rule turned navy on hover. */
++.app-tab:hover { background: rgba(127, 127, 127, 0.14); color: var(--navy); }
+ .app-tab-active { background: var(--ink); color: var(--ivory); }
+-.app-tab-active:hover { background: var(--ink); }
++.app-tab-active:hover { background: var(--ink); color: var(--ivory); }
+ .app-tabs-new {
+-  margin-left: auto; padding: 7px 14px; border-radius: var(--radius-pill); white-space: nowrap;
++  margin-left: auto; flex-shrink: 0; padding: 7px 14px; border-radius: var(--radius-pill); white-space: nowrap;
+   background: var(--lime); color: var(--ink); font-size: 14px; font-weight: 700; text-decoration: none;
+ }
+-.app-tabs-new:hover { filter: brightness(0.96); }
++.app-tabs-new:hover { filter: brightness(0.96); color: var(--ink); }
+ @media (min-width: 861px) {
+   .app-tabs { position: fixed; top: 0; left: 264px; right: 0; z-index: 45; }
+   .sidebar-collapsed + .app-tabs { left: 68px; }
+@@ -934,6 +960,20 @@ a.kit-variance-row:hover { background: rgba(127, 127, 127, 0.08); }
+ .dash-viz-card h3 { margin: 0 0 12px; font-size: 16px; color: var(--navy); }
+ .dash-viz-empty { font-size: 14.5px; color: var(--slate); margin: 0; }
+ .dash-viz-more { margin: 10px 0 0; font-size: 14px; }
++/* v164.1: the filtered-to-zero empty state takes the visual block's
++   place as one full-width card (see Dashboard.tsx). */
++.dash-viz-filter-empty { margin-bottom: 20px; }
++/* v164.1: the Project health table's compact treatment. Its seven
++   columns' fitting floors (header labels, the status pill, the task
++   progress row, at the standard 14px cell padding) summed to within
++   ~125px of the whole content column at a 1280px window, so any
++   narrower window -- or a slightly wider font at measure time -- left
++   the table scrolling sideways with Next step off screen. Tighter
++   padding on this table only, plus a narrower task progress track,
++   takes roughly 90px out of those floors; no column or datum is
++   dropped, and the OKR cell was already just its number. */
++.dash-health-table th, .dash-health-table td { padding: 9px 10px; }
++.dash-health-table .pw-progress .progress-track { width: 44px; }
+ .dash-list-rows { display: flex; flex-direction: column; }
+ .dash-list-row { padding: 9px 0; border-bottom: 1px solid var(--border); }
+ .dash-list-row:last-child { border-bottom: none; padding-bottom: 2px; }
+diff --git a/src/lib/whatsNewData.ts b/src/lib/whatsNewData.ts
+index 521e8f0..5eaedcb 100644
+--- a/src/lib/whatsNewData.ts
++++ b/src/lib/whatsNewData.ts
+@@ -13,7 +13,7 @@ export const CHANGES: ChangeEntry[] = [
+     version: "v164",
+     date: "November 2026",
+     title: "Your whole portfolio on one visual dashboard, with decisions and risks across every project.",
+-    body: "The Dashboard now opens with the whole picture: gauges for how much of the work is done, how much of the planned time is used, and how much of the budget is spent, planned vs actual spending for every project, and your projects counted by the status you stated for them. Underneath sit the two lists that used to mean opening every project one by one: the decisions you have waited on longest, and your biggest risks, scored and ordered the same way each project's own register orders them. New tabs across the top open Decisions and Risks & Issues views that span all your projects at once, and the filters at the top redraw every visual together. Clicking a project's bar takes you straight to its Budget tab, and every project in the health table now carries its next step as a link.",
++    body: "The Dashboard now opens with the whole picture: gauges for how much of the work is done and how much of the planned time is used, planned vs actual spending for every project (a budget gauge joins the gauges once a project starts logging costs), and your projects counted by the status you stated for them. Underneath sit the two lists that used to mean opening every project one by one: the decisions you have waited on longest, and your biggest risks, scored and ordered the same way each project's own register orders them. New tabs across the top open Decisions and Risks & Issues views that span all your projects at once, and the filters at the top redraw every visual together. Clicking a project's bar takes you straight to its Budget tab, and every project in the health table now carries its next step as a link.",
+   },
+   {
+     version: "v163",
+diff --git a/src/pages/Dashboard.tsx b/src/pages/Dashboard.tsx
+index 8b5c7bf..39e6e06 100644
+--- a/src/pages/Dashboard.tsx
++++ b/src/pages/Dashboard.tsx
+@@ -336,7 +336,15 @@ function TopRisksList({ risks }: { risks: PortfolioRisk[] }) {
+   );
+ }
+ 
+-function PortfolioOverview({ data, wide, glance }: { data: PortfolioData; wide: boolean; glance?: ReactNode }) {
++function PortfolioOverview({ data, wide, glance, filtersActive, onClearFilters }: {
++  data: PortfolioData;
++  wide: boolean;
++  glance?: ReactNode;
++  /** True when the header filters are set -- with filters on, an empty
++   *  payload means "nothing matches", not "nothing exists" (v164.1). */
++  filtersActive?: boolean;
++  onClearFilters?: () => void;
++}) {
+   const { kpis } = data;
+   const [showAllMs, setShowAllMs] = useState(false);
+   const MS_CAP = 5;
+@@ -349,8 +357,19 @@ function PortfolioOverview({ data, wide, glance }: { data: PortfolioData; wide:
+           summaries (the Project health table is the status donut's table
+           of real projects). With no projects at all there is nothing to
+           chart, so the whole block steps aside for the sections' own
+-          empty states. */}
+-      {data.projects.length > 0 && (
++          empty states. v164.1: with filters set, an empty payload is a
++          different case -- the kit's no-chart-from-no-data rule applies,
++          so the block renders its empty state (one sentence + the
++          reset-filters action) instead of vanishing. */}
++      {data.projects.length === 0 && filtersActive ? (
++        <section className="dash-viz-card dash-viz-filter-empty">
++          <p className="dash-viz-empty">No projects match the filters you picked, so there is nothing to chart here.</p>
++          <p className="dash-viz-more">
++            <button type="button" className="btn-link" onClick={onClearFilters}>Clear the filters</button>
++            {" "}to see the whole portfolio again.
++          </p>
++        </section>
++      ) : data.projects.length > 0 && (
+         <>
+           <PortfolioGauges data={data} />
+           <div className="dash-viz-grid">
+@@ -389,7 +408,7 @@ function PortfolioOverview({ data, wide, glance }: { data: PortfolioData; wide:
+         {data.projects.length === 0 ? (
+           <p className="muted dash-empty">No projects to report on yet.</p>
+         ) : (
+-          <ResizableTable id="dashboard-health">
++          <ResizableTable id="dashboard-health" className="table dash-health-table">
+             <thead>
+               <tr><th>Project</th><th>Stage</th><th>Status</th><th>Tasks</th><th>Overdue</th><th>OKR progress</th><th>Next step</th></tr>
+             </thead>
+@@ -1373,7 +1392,13 @@ export default function Dashboard() {
+           </div>
+         ) : portfolio && projects.length > 0 ? (
+           <div style={{ opacity: portfolioLoading ? 0.6 : 1, transition: "opacity 120ms ease" }}>
+-            <PortfolioOverview data={portfolio} wide={wide} glance={glanceBand} />
++            <PortfolioOverview
++              data={portfolio}
++              wide={wide}
++              glance={glanceBand}
++              filtersActive={selectedStage !== null || selectedProjectId !== null}
++              onClearFilters={() => void refreshPortfolio(null, null)}
++            />
+           </div>
+         ) : null}
+ 
