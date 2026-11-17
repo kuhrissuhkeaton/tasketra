@@ -2035,6 +2035,35 @@ a:hover { color: var(--navy); }
   .first-run-checklist { width: 100%; margin-left: 0; }
 }
 
+/* v161: doing tour + Today getting-started checklist. Both reuse the
+   first-run-checklist card and step styles above; these rules add the
+   pieces that are new: the progress cluster in the card head, the current
+   step's action button and hint line, and the full-width Today variants.
+   Step labels here are static text, not buttons, so the checklist's
+   underlined-link styling comes off. */
+.doing-tour-progress { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--slate); white-space: nowrap; }
+.doing-tour .first-run-step, .getting-started .first-run-step { cursor: default; text-decoration: none; }
+.doing-tour .first-run-steps li { flex-wrap: wrap; }
+.doing-tour-action { margin-left: auto; }
+.doing-tour-hint { flex-basis: 100%; margin-left: 26px; font-size: 13px; color: var(--slate); line-height: 1.35; }
+.doing-tour-done { margin: 0; font-size: 14px; line-height: 1.45; }
+.first-run-checklist.getting-started { width: auto; margin: 0 0 16px; }
+.getting-started .first-run-steps li { flex-wrap: wrap; }
+.getting-started-slim {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  background: var(--tint); border: 1px solid var(--lime); border-radius: var(--radius-sm);
+  padding: 10px 14px; margin-bottom: 16px; font-size: 14px;
+}
+
+/* v161: the decider's-eye preview inside the decision create form. */
+.decision-preview { background: var(--tint); border-radius: var(--radius-sm); padding: 12px 14px; margin: 4px 0 12px; }
+.decision-preview-label { font-size: 12px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--slate); margin: 0 0 6px; }
+.decision-preview-title { font-size: 16px; font-weight: 700; margin: 0 0 4px; }
+.decision-preview-context { color: var(--slate); margin: 0 0 4px; white-space: pre-wrap; }
+.decision-preview .option-list { margin-bottom: 8px; }
+.decision-preview-radio { width: 14px; height: 14px; flex: none; border: 1.5px solid var(--slate-2); border-radius: 50%; }
+.decision-preview-note { margin: 0; }
+
 /* Branded error pages (404, 403, 500, 401) */
 .error-page { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 32px 20px; text-align: center; background: var(--ink); color: var(--ivory); }
 .error-page .brand-lockup { margin-bottom: 36px; }

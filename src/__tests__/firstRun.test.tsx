@@ -122,7 +122,7 @@ describe("isFirstRun", () => {
 describe("Dashboard first run", () => {
   it("shows the first-run screen with 0 projects, without the dashboard pieces", async () => {
     await renderDashboard([], []);
-    expect(container.querySelector("h1")?.textContent).toBe("Start your first project in 30 seconds.");
+    expect(container.querySelector("h1")?.textContent).toBe("What are you running?");
     expect(container.textContent).toContain("WELCOME TO TASKETRA");
     expect(container.textContent).toContain("Fastest. See it working.");
     expect(container.textContent).toContain("I built Tasketra because I was tired of gluing five tools together.");
@@ -139,7 +139,7 @@ describe("Dashboard first run", () => {
 
   it("shows it for one project with no tasks, with a way into that project", async () => {
     await renderDashboard([project("p1", "Alpha")], [{ id: "p1", totalTasks: 0 }]);
-    expect(container.querySelector("h1")?.textContent).toBe("Start your first project in 30 seconds.");
+    expect(container.querySelector("h1")?.textContent).toBe("What are you running?");
     expect(container.querySelector('a[href="/app/projects/p1"]')?.textContent).toBe("open Alpha");
   });
 

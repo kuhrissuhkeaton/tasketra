@@ -10,6 +10,12 @@ export type ChangeEntry = { version: string; date: string; title: string; body: 
 // they can do.
 export const CHANGES: ChangeEntry[] = [
   {
+    version: "v161",
+    date: "November 2026",
+    title: "New here? Your first project walks you through itself.",
+    body: "Signing up now asks one question, what are you running, and your first project opens with three hands-on steps: add a task, send a decision (with a preview of exactly what the decider will see before you send it), and post a check-in. Each step ticks itself off when you actually do it, so the tour teaches the real thing instead of describing it. The longer tour is still there under Help whenever you want the full walkthrough. Today carries a five-step getting-started list that fills in as you go and can be dismissed and picked back up any time. Example projects now start with the sample data already in, and once you are working with your own content, project Settings has a one-click Clear example data that removes only the samples (they land in Trash, in case). Watch the check-in button the first time you post one: it has a small surprise in it.",
+  },
+  {
     version: "v160",
     date: "November 2026",
     title: "Decisions show who you're waiting on, and your Weekly sync tells the whole story",

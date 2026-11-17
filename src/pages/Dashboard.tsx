@@ -23,6 +23,7 @@ import { fmtDate, fmtDateTime, fmtLocalDate } from "../lib/format";
 import { shouldShowHubTip, HUB_TIP_STORAGE_KEY } from "../lib/hubTip";
 import { FirstRunScreen, type FirstRunChoice } from "../components/FirstRun";
 import { isFirstRun, startChecklist } from "../lib/firstRun";
+import { startDoingTour } from "../lib/doingTour";
 import { track } from "../lib/analytics";
 import { useDocumentTitle } from "../lib/documentTitle";
 import { announce } from "../lib/announce";
@@ -572,8 +573,10 @@ export default function Dashboard() {
       setShowSetup(false);
       setSetupSize("standard");
       setSetupApproach("hybrid");
-      const shouldStartTour = isFirstProjectEver && !user?.tour_completed_at;
-      navigate(`/app/projects/${project.id}`, shouldStartTour ? { state: { startTour: true } } : undefined);
+      // v161 (F-09): same as the first-run screen -- a first project gets
+      // the doing tour, and the narration tour no longer auto-starts.
+      if (user && isFirstProjectEver) startDoingTour(user.id, project.id);
+      navigate(`/app/projects/${project.id}`);
     } catch (err) {
       if (err instanceof ApiError && err.upgradeRequired) {
         setUpgradeNotice(err.message);
@@ -587,6 +590,10 @@ export default function Dashboard() {
 
   function openNewProject() {
     setUpgradeNotice(null);
+    // v161: example data is ON by default for a first project only (the
+    // review's F-09 note: "today it is an unchecked box"). Every later
+    // project opens with it off, exactly as before.
+    setSeedExample(projects.length === 0);
     setShowNew(true);
   }
 
@@ -614,8 +621,12 @@ export default function Dashboard() {
       }
       const { project } = created;
       if (user && choice !== "blank") startChecklist(user.id, project.id);
-      const shouldStartTour = isFirstProjectEver && !user?.tour_completed_at;
-      navigate(`/app/projects/${project.id}`, shouldStartTour ? { state: { startTour: true } } : undefined);
+      // v161 (F-09): the doing tour is the first-run guide now -- three
+      // steps completed by doing, on this very project, blank path
+      // included. The 10-step narration tour no longer auto-starts on a
+      // first project; it stays available as the replay (Help, Resources).
+      if (user && isFirstProjectEver) startDoingTour(user.id, project.id);
+      navigate(`/app/projects/${project.id}`);
     } catch (err) {
       setFirstRunError({
         message: err instanceof Error ? err.message : "Couldn't create project.",

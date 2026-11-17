@@ -20,7 +20,12 @@ const CARDS: Card[] = [
 
 /**
  * Shown on /app in place of the Dashboard while someone has nothing to look
- * at yet (see isFirstRun). One decision: how to start the first project.
+ * at yet (see isFirstRun). v161 (F-09): the screen asks exactly ONE
+ * question -- "What are you running?" -- and the cards are its answers,
+ * feeding the existing starter shapes. Project size and approach are not
+ * asked here; they default silently (standard size, the template's own
+ * approach) and are explained later, in project settings, where they can
+ * be changed.
  */
 export function FirstRunScreen({
   onChoose,
@@ -42,9 +47,11 @@ export function FirstRunScreen({
   return (
     <div className="first-run">
       <p className="first-run-eyebrow">WELCOME TO TASKETRA</p>
-      <h1 className="first-run-title">Start your first project in 30 seconds.</h1>
+      <h1 className="first-run-title">What are you running?</h1>
       <p className="first-run-sub">
-        Pick a starting point. WBS, RAID log, budget and roadmap are already set up. Change anything later.
+        Pick the closest match and your first project is set up in about 30 seconds, structure included --
+        work breakdown, RAID log, budget and roadmap. Size and approach are handled for you and explained
+        where they matter. Change anything later.
       </p>
 
       <div className="first-run-name">

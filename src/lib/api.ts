@@ -600,6 +600,18 @@ export type Feedback = {
   submitter_email?: string;
 };
 
+// v161: per-table counts returned by /api/example-data.
+export type ExampleDataCounts = {
+  tasks: number;
+  roadmapItems: number;
+  issues: number;
+  risks: number;
+  assumptions: number;
+  dependencies: number;
+  stakeholders: number;
+  total: number;
+};
+
 export type FeedItem = {
   type: "status_update" | "task" | "decision_request" | "decision_record" | "issue" | "risk" | "activity";
   title: string | null;
@@ -1513,6 +1525,12 @@ export const api = {
     request<{ member: ProjectMember }>("/members", { method: "POST", body: JSON.stringify({ projectId, email }) }),
   removeMember: (projectId: string, id: string) =>
     request<{ ok: true }>(`/members?projectId=${projectId}&id=${id}`, { method: "DELETE" }),
+
+  // v161: "Clear example data" (project settings).
+  getExampleDataStatus: (projectId: string) =>
+    request<{ hasExampleData: boolean; counts: ExampleDataCounts }>(`/example-data?projectId=${projectId}`),
+  clearExampleData: (projectId: string) =>
+    request<{ cleared: ExampleDataCounts }>("/example-data", { method: "POST", body: JSON.stringify({ projectId }) }),
 
   getFeed: (projectId: string) => request<{ feed: FeedItem[] }>(`/feed?projectId=${projectId}`),
   getStage: (projectId: string) => request<StageData>(`/stage?projectId=${projectId}`),

@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, Fragment } from "react";
 import { useParams, useSearchParams, useNavigate, useLocation, Link } from "react-router-dom";
-import { api, ApiError, type Project, type Task, type Stakeholder, type Decision, type Issue, type Risk, type Assumption, type Dependency, type ChangeRequest, type Lesson, type TodayData, type WeeklyReport, type BudgetData, type FeedItem, type TrashItem, type ProjectMember, type Meeting, type MeetingActionItem, type ProjectDocument, type StorageUsage, type RoadmapItem, type RoadmapItemType, type StakeholderInterest, type StakeholderContactMethod, type ProcurementItem, type CommPlanItem, type Objective, type KeyResult, type RiskTaskLink, type IssueTaskLink, type TaskTaskLink, type ProjectStage, type BaselineData, type CharterApproval } from "../lib/api";
+import { api, ApiError, type Project, type Task, type Stakeholder, type Decision, type Issue, type Risk, type Assumption, type Dependency, type ChangeRequest, type Lesson, type TodayData, type WeeklyReport, type BudgetData, type FeedItem, type TrashItem, type ProjectMember, type Meeting, type MeetingActionItem, type ProjectDocument, type StorageUsage, type RoadmapItem, type RoadmapItemType, type StakeholderInterest, type StakeholderContactMethod, type ProcurementItem, type CommPlanItem, type Objective, type KeyResult, type RiskTaskLink, type IssueTaskLink, type TaskTaskLink, type ProjectStage, type BaselineData, type CharterApproval, type ExampleDataCounts } from "../lib/api";
 import { RowActionsMenu } from "../components/RowActionsMenu";
 import { QuickAddForm } from "../components/QuickAddForm";
 import { RoadmapTimeline, ROADMAP_TYPE_LABEL, ROADMAP_STATUS_LABEL } from "../components/RoadmapTimeline";
@@ -30,6 +30,8 @@ import { computeNextStep } from "../lib/nextStep";
 import { avatarColor, initials } from "../lib/avatar";
 import { TourOverlay, useProductTour } from "../components/ProductTour";
 import { FirstRunChecklist } from "../components/FirstRunChecklist";
+import { DoingTour } from "../components/DoingTour";
+import { readDoingTour } from "../lib/doingTour";
 import { noteProjectActivity, noteProjectChanged, PROJECT_CHANGED_EVENT } from "../lib/firstRun";
 import { StageRail, StageChip, STAGE_LABEL } from "../components/StageRail";
 import { ProjectSetupPicker } from "../components/ProjectSetup";
@@ -185,6 +187,10 @@ export default function ProjectHome() {
     return () => window.removeEventListener(PROJECT_CHANGED_EVENT, onChanged);
   }, [id]);
   const { user } = useAuth();
+  // v161: a first project created from v161 on carries a doing-tour record;
+  // when one exists it takes the guide slot in the page head and the older
+  // first-run checklist (pre-v161 accounts) steps aside.
+  const doingTourState = user && id ? readDoingTour(user.id, id) : null;
   const location = useLocation();
   const navigate = useNavigate();
   const tour = useProductTour((tourTab) => setParams({ tab: tourTab }));
@@ -281,15 +287,24 @@ export default function ProjectHome() {
               {NAV_GROUPS.find((g) => g.id === activeGroup)?.label} · {sectionLabel(tab)}
             </p>
           )}
-          {user && (
-            <FirstRunChecklist
-              userId={user.id}
-              projectId={id}
-              tab={tab}
-              hidden={tour.active}
-              onOpenTab={(t) => setParams({ tab: t })}
-            />
-          )}
+          {user &&
+            (doingTourState ? (
+              <DoingTour
+                userId={user.id}
+                projectId={id}
+                hidden={tour.active}
+                refreshKey={tab}
+                onOpenTab={(t) => setParams({ tab: t })}
+              />
+            ) : (
+              <FirstRunChecklist
+                userId={user.id}
+                projectId={id}
+                tab={tab}
+                hidden={tour.active}
+                onOpenTab={(t) => setParams({ tab: t })}
+              />
+            ))}
         </div>
 
         {project && project.content_count === 0 && !project.last_activity_at && (
@@ -568,6 +583,18 @@ function FeedTab({ projectId, focusComposerNonce = 0 }: { projectId: string; foc
   const pickedRef = useRef(false);
   const composerRef = useRef<HTMLInputElement>(null);
   const [evidenceInput, setEvidenceInput] = useState<StatusEvidenceInput | null>(null);
+  // v161, Egg 1: on a project with no check-in yet, the composer's button
+  // briefly reads "First word in." before settling to "Post" -- a small
+  // nod that the first check-in is a moment. Once any status update exists
+  // in the feed (including one just posted), the egg never shows again.
+  const [eggSettled, setEggSettled] = useState(false);
+  const hasCheckin = feed.some((i) => i.type === "status_update");
+  useEffect(() => {
+    if (loading || hasCheckin || eggSettled) return;
+    const t = setTimeout(() => setEggSettled(true), 2400);
+    return () => clearTimeout(t);
+  }, [loading, hasCheckin, eggSettled]);
+  const postLabel = posting ? "Posting…" : !loading && !hasCheckin && !eggSettled ? "First word in." : "Post";
 
   // Arriving via the Next Step card's "Write a check-in" lands with the
   // composer focused, ready to type.
@@ -702,7 +729,7 @@ function FeedTab({ projectId, focusComposerNonce = 0 }: { projectId: string; foc
         )}
         <div className="inline-form feed-composer-form">
           <input ref={composerRef} aria-label="Check-in" placeholder="How is the project going?" value={note} onChange={(e) => setNote(e.target.value)} />
-          <button className="btn btn-primary" disabled={posting || (!note.trim() && !selected)}>{posting ? "Posting…" : "Post"}</button>
+          <button className="btn btn-primary" disabled={posting || (!note.trim() && !selected)}>{postLabel}</button>
         </div>
       </form>
 
@@ -5755,6 +5782,34 @@ function StakeholderDecisionsTab({ projectId }: { projectId: string }) {
             ))}
             {stakeholders.length === 0 && <p className="muted">Add stakeholders first to route this to someone.</p>}
           </div>
+          {/* v161 (F-09): the decider's-eye preview. It mirrors the public
+              decision page (DecisionPublic) field for field -- same title,
+              context, "Requested by" line, and option rows -- and updates
+              live as the form is filled, so the sender sees exactly what
+              the decider will see before the link exists. */}
+          <div className="decision-preview" aria-label="Preview of what the decider sees">
+            <p className="decision-preview-label">What they'll see</p>
+            <p className="decision-preview-title">{title.trim() || "Your decision title"}</p>
+            {context.trim() && <p className="decision-preview-context">{context.trim()}</p>}
+            {deadline && <p className="muted">Requested by: {deadline}</p>}
+            <div className="option-list">
+              {options
+                .split(",")
+                .map((o) => o.trim())
+                .filter(Boolean)
+                .map((opt) => (
+                  <span key={opt} className="option-row decision-preview-option">
+                    {/* A drawn radio dot, not a real input: the preview is
+                        a picture of the decider's page, not a form. */}
+                    <span className="decision-preview-radio" aria-hidden="true" />
+                    {opt}
+                  </span>
+                ))}
+            </div>
+            <p className="muted decision-preview-note">
+              They pick one, add their name, and submit -- no account needed. You confirm the final call.
+            </p>
+          </div>
           <button className="btn btn-primary" type="submit">Create decision request</button>
           {error && <p id="decision-error" className="form-error" role="alert">{error}</p>}
         </AddForm>
@@ -6172,6 +6227,82 @@ function computeWorkload(tasks: Task[]): WorkloadRow[] {
   return unassigned ? [...rows, withCapacity(unassigned)] : rows;
 }
 
+// v161: the "Clear example data" settings card. Renders only while the
+// project still contains seeded example rows (the status endpoint matches
+// them by title + creation window server-side), so ordinary projects never
+// see it. Clearing soft-deletes the rows -- they land in Trash like any
+// other delete and can be restored.
+function ExampleDataCard({ projectId }: { projectId: string }) {
+  const confirmDialog = useConfirm();
+  const [status, setStatus] = useState<{ hasExampleData: boolean; counts: ExampleDataCounts } | null>(null);
+  const [clearing, setClearing] = useState(false);
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    let live = true;
+    api
+      .getExampleDataStatus(projectId)
+      .then((s) => {
+        if (live) setStatus(s);
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [projectId]);
+
+  if (message) {
+    return (
+      <div className="settings-card">
+        <p className="settings-card-label">Example data</p>
+        <p className="muted" style={{ marginBottom: 0 }}>{message}</p>
+      </div>
+    );
+  }
+  if (!status?.hasExampleData) return null;
+
+  const c = status.counts;
+  const parts: string[] = [];
+  if (c.tasks) parts.push(`${c.tasks} ${c.tasks === 1 ? "task" : "tasks"}`);
+  if (c.roadmapItems) parts.push(`${c.roadmapItems} roadmap ${c.roadmapItems === 1 ? "item" : "items"}`);
+  if (c.issues) parts.push(`${c.issues} ${c.issues === 1 ? "issue" : "issues"}`);
+  if (c.risks) parts.push(`${c.risks} ${c.risks === 1 ? "risk" : "risks"}`);
+  if (c.assumptions) parts.push(`${c.assumptions} ${c.assumptions === 1 ? "assumption" : "assumptions"}`);
+  if (c.dependencies) parts.push(`${c.dependencies} ${c.dependencies === 1 ? "dependency" : "dependencies"}`);
+  if (c.stakeholders) parts.push(`${c.stakeholders} ${c.stakeholders === 1 ? "stakeholder" : "stakeholders"}`);
+  const summary = parts.join(", ");
+
+  async function clear() {
+    const ok = await confirmDialog(
+      `Remove the example data (${summary}) from this project? Anything you added yourself stays, and the example items can be restored from Trash.`
+    );
+    if (!ok) return;
+    setClearing(true);
+    try {
+      const { cleared } = await api.clearExampleData(projectId);
+      noteProjectChanged(projectId);
+      setMessage(`Cleared ${cleared.total} example ${cleared.total === 1 ? "item" : "items"}. They're in Trash if you need any of them back.`);
+    } catch {
+      setMessage("Couldn't clear the example data just now. Try again in a moment.");
+    } finally {
+      setClearing(false);
+    }
+  }
+
+  return (
+    <div className="settings-card">
+      <p className="settings-card-label">Example data</p>
+      <p className="muted" style={{ marginBottom: 12 }}>
+        This project still has the sample content it started with ({summary}). Clear it once you're working
+        with your own -- anything you've added or renamed stays.
+      </p>
+      <button className="btn" type="button" onClick={clear} disabled={clearing}>
+        {clearing ? "Clearing..." : "Clear example data"}
+      </button>
+    </div>
+  );
+}
+
 function TeamTab({ projectId, isOwner, onSetupChange }: { projectId: string; isOwner: boolean; onSetupChange: (patch: Partial<Project>) => void }) {
   const confirmDialog = useConfirm();
   const navigate = useNavigate();
@@ -6472,6 +6603,8 @@ function TeamTab({ projectId, isOwner, onSetupChange }: { projectId: string; isO
           <RegisterEmpty>No open tasks to show workload for.</RegisterEmpty>
         )}
       </div>
+
+      {isOwner && <ExampleDataCard projectId={projectId} />}
 
       {isOwner && (
         <div className="settings-card danger-zone">

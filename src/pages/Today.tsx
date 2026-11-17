@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { AppSidebar } from "../components/AppSidebar";
 import { TodayCheckIn } from "../components/TodayCheckIn";
+import { GettingStartedCard } from "../components/GettingStartedCard";
 import { StatusExplainer } from "../components/StatusExplainer";
 import { api, type MyTodayData, type PortfolioData, type PortfolioProjectSummary } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
@@ -259,6 +260,14 @@ export default function Today() {
         </div>
 
         {error && <p className="form-error" role="alert">{error}</p>}
+
+        {/* v161 (F-07): the getting-started checklist lives at the top of
+            Today while an account is new; it renders nothing once there is
+            no first project to point at, and nothing once complete and
+            dismissed. */}
+        {loaded && user && portfolio && (
+          <GettingStartedCard userId={user.id} projects={portfolio.projects} />
+        )}
 
         {noProjects && (
           <div className="tw-empty">
