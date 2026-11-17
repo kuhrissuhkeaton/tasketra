@@ -21,6 +21,7 @@ import { ResizableTable } from "../components/ResizableTable";
 import { useAuth } from "../lib/auth-context";
 import { fmtDate, fmtDateTime, fmtLocalDate } from "../lib/format";
 import { shouldShowHubTip, HUB_TIP_STORAGE_KEY } from "../lib/hubTip";
+import { useDelight } from "../lib/delight";
 import { FirstRunScreen, type FirstRunChoice } from "../components/FirstRun";
 import { isFirstRun, startChecklist } from "../lib/firstRun";
 import { startDoingTour } from "../lib/doingTour";
@@ -682,7 +683,9 @@ export default function Dashboard() {
   // line of text carrying the day's five numbers, replacing the repeated
   // "N need attention" statements and the four stat cards (removed below).
   // Egg 8: on a Monday with nothing overdue anywhere, the overdue segment
-  // reads "Clean sheet Monday." instead of a zero.
+  // reads "Clean sheet Monday." instead of a zero. v163: the egg rides
+  // the Delight toggle -- off, the segment is the plain zero again.
+  const { enabled: delight } = useDelight();
   const oldestDecisionDays = Math.max(
     0,
     ...Object.values(lookContext).map((c) => c.oldestDecisionDays ?? 0),
@@ -700,7 +703,7 @@ export default function Dashboard() {
           ? [`${totalOpenDecisions} ${totalOpenDecisions === 1 ? "decision" : "decisions"} awaiting a response${oldestDecisionDays > 0 ? `, oldest ${oldestDecisionDays} ${oldestDecisionDays === 1 ? "day" : "days"}` : ""}`]
           : []),
         ...(overdueTotal !== null
-          ? [overdueTotal === 0 && isMonday ? "Clean sheet Monday." : `${overdueTotal} overdue`]
+          ? [overdueTotal === 0 && isMonday && delight ? "Clean sheet Monday." : `${overdueTotal} overdue`]
           : []),
       ].join(" · ");
 

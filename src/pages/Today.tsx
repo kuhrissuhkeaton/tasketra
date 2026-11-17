@@ -15,12 +15,15 @@ import {
   closedToday,
   daysLate,
   greeting,
+  isAfterHours,
   isMineOrUnassigned,
   localDateKey,
   startHere,
+  weekendMode,
   wrapUpNote,
   type TodayTask,
 } from "../lib/today";
+import { useDelight } from "../lib/delight";
 import { HEALTH_LABEL, evidenceChallenge, headlineHealth } from "../lib/healthLabels";
 
 const HEALTH_PILL: Record<PortfolioProjectSummary["health"], string> = {
@@ -158,7 +161,11 @@ export default function Today() {
   }
 
   const closed = closedToday(data?.recentlyDone ?? [], todayKey) + justDone.length;
-  const note = wrapUpNote(closed, buckets.today.length, buckets.waiting.length);
+  // v163: Eggs 4 and 5 ride the Delight toggle like every egg. Egg 5:
+  // after 10 PM the wrap-up note gains its after-hours line.
+  const { enabled: delight } = useDelight();
+  const baseNote = wrapUpNote(closed, buckets.today.length, buckets.waiting.length);
+  const note = delight && isAfterHours(now) ? `${baseNote} Logged after hours. It counts double, unofficially.` : baseNote;
 
   async function copyNote() {
     try {
@@ -181,6 +188,11 @@ export default function Today() {
     api.getPortfolio().then(setPortfolio).catch(() => {});
   }, []);
   const noProjects = loaded && portfolio !== null && portfolio.projects.length === 0 && tasks.length === 0;
+  // v163, Egg 4 (Weekend mode): Friday afternoon with nothing left due
+  // before Monday, the header adds its line. The extra condition is the
+  // sign of a week actually worked -- tasks on the list, or something
+  // closed today -- so an untouched account never sees it.
+  const weekend = delight && loaded && !noProjects && weekendMode(now, visible) && (tasks.length > 0 || closed > 0);
 
   function renderRow(t: TodayTask) {
     const late = t.status !== "blocked" && t.due_date && t.due_date < todayKey;
@@ -244,8 +256,9 @@ export default function Today() {
                   ? <>
                       {`${tasks.length} open ${tasks.length === 1 ? "task" : "tasks"}, none assigned yet · ${buckets.overdue.length} overdue · ${now.toLocaleDateString(undefined, WEEKDAY_FMT)} `}
                       <Link to="/app/projects">Assign owners in each project's Tasks tab</Link>
+                      {weekend ? " · Weekend mode: nothing due until Monday." : ""}
                     </>
-                  : `${openCount} open for you · ${buckets.overdue.length} overdue · ${now.toLocaleDateString(undefined, WEEKDAY_FMT)}`
+                  : `${openCount} open for you · ${buckets.overdue.length} overdue · ${now.toLocaleDateString(undefined, WEEKDAY_FMT)}${weekend ? " · Weekend mode: nothing due until Monday." : ""}`
                 : "Loading your tasks..."}
             </p>
           </div>

@@ -4,6 +4,7 @@ import { getUserIdFromRequest } from "../lib/auth.ts";
 import { hasProjectAccess } from "../lib/ownership.ts";
 import { json } from "../lib/http.ts";
 import { logActivity, diffSummary } from "../lib/activity.ts";
+import { ON_THE_NOSE_SUMMARY, isOnTheNose, localDateKeyInZone } from "../lib/delight.ts";
 import { withSentry } from "../lib/sentry.ts";
 
 // Roadmap items are a standalone entity, independent of Tasks -- see the
@@ -118,6 +119,20 @@ export default withSentry(async (req: Request) => {
       status: body.status,
     }, ROADMAP_FIELDS);
     await logActivity(database, { projectId: existing.project_id, entityType: "roadmap_item", entityId: id, entityTitle: item.title, action: "updated", summary });
+
+    // v163, Egg 6 (On the nose): a milestone completed on its planned
+    // date earns a small marker that lives in the Feed -- a second
+    // activity row whose whole summary is the marker, so the completion's
+    // own diff row stays factual and the Feed can hide the egg row when
+    // the reader's Delight setting is off. "Today" is the actor's stored
+    // timezone when they set one (UTC otherwise): the row is written
+    // once, so the actor's clock is the honest one.
+    if (existing.status !== "done" && item.status === "done" && item.type === "milestone" && item.start_date) {
+      const [actor] = await database.sql`SELECT timezone FROM users WHERE id = ${userId}`;
+      if (isOnTheNose({ type: item.type, start_date: item.start_date }, localDateKeyInZone(new Date(), actor?.timezone))) {
+        await logActivity(database, { projectId: existing.project_id, entityType: "roadmap_item", entityId: id, entityTitle: item.title, action: "updated", summary: ON_THE_NOSE_SUMMARY });
+      }
+    }
 
     return json({ item });
   }

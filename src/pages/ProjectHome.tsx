@@ -32,6 +32,7 @@ import { TourOverlay, useProductTour } from "../components/ProductTour";
 import { FirstRunChecklist } from "../components/FirstRunChecklist";
 import { DoingTour } from "../components/DoingTour";
 import { readDoingTour } from "../lib/doingTour";
+import { useDelight, isEggFeedItem, fastAnswerMinutes } from "../lib/delight";
 import { noteProjectActivity, noteProjectChanged, PROJECT_CHANGED_EVENT } from "../lib/firstRun";
 import { StageRail, StageChip, STAGE_LABEL } from "../components/StageRail";
 import { ProjectSetupPicker } from "../components/ProjectSetup";
@@ -587,6 +588,8 @@ function FeedTab({ projectId, focusComposerNonce = 0 }: { projectId: string; foc
   // briefly reads "First word in." before settling to "Post" -- a small
   // nod that the first check-in is a moment. Once any status update exists
   // in the feed (including one just posted), the egg never shows again.
+  // v163: Egg 1 rides the Delight toggle like every egg.
+  const { enabled: delight } = useDelight();
   const [eggSettled, setEggSettled] = useState(false);
   const hasCheckin = feed.some((i) => i.type === "status_update");
   useEffect(() => {
@@ -594,7 +597,7 @@ function FeedTab({ projectId, focusComposerNonce = 0 }: { projectId: string; foc
     const t = setTimeout(() => setEggSettled(true), 2400);
     return () => clearTimeout(t);
   }, [loading, hasCheckin, eggSettled]);
-  const postLabel = posting ? "Posting…" : !loading && !hasCheckin && !eggSettled ? "First word in." : "Post";
+  const postLabel = posting ? "Posting…" : delight && !loading && !hasCheckin && !eggSettled ? "First word in." : "Post";
 
   // Arriving via the Next Step card's "Write a check-in" lands with the
   // composer focused, ready to type.
@@ -703,6 +706,11 @@ function FeedTab({ projectId, focusComposerNonce = 0 }: { projectId: string; foc
     }
   }
 
+  // v163: the two feed eggs (On the nose, Century) are real activity
+  // rows in the project's history; the Delight toggle hides them here,
+  // at read time, and nowhere else.
+  const visibleFeed = delight ? feed : feed.filter((item) => !isEggFeedItem(item));
+
   return (
     <div>
       <form className="feed-composer" onSubmit={postNote}>
@@ -735,11 +743,11 @@ function FeedTab({ projectId, focusComposerNonce = 0 }: { projectId: string; foc
 
       {loading ? (
         <div className="skel-loading-block"><div className="skel skel-text" style={{ width: "45%" }} /><div className="skel skel-text" style={{ width: "80%" }} /><div className="skel skel-text" style={{ width: "60%", marginBottom: 0 }} /></div>
-      ) : feed.length === 0 ? (
+      ) : visibleFeed.length === 0 ? (
         <p className="muted">Nothing here yet. Add a task, request a decision, or post an update.</p>
       ) : (
         <ul className="feed">
-          {feed.map((item, i) => (
+          {visibleFeed.map((item, i) => (
             <li key={i} className={`feed-item feed-${item.type}`}>
               <div className="feed-item-head">
                 <span className="feed-type">{feedLabel(item, user?.id)}</span>
@@ -2428,6 +2436,9 @@ function IssuesTab({ projectId, highlightId }: { projectId: string; highlightId?
 
 function RisksTab({ projectId, highlightId }: { projectId: string; highlightId?: string | null }) {
   const confirmDialog = useConfirm();
+  // v163: Eggs 3 and 11 both live in the register summary below and ride
+  // the Delight toggle like every egg.
+  const { enabled: delight } = useDelight();
   const { setRowRef, jumpTo } = useRowHighlight();
   const [, setLocalParams] = useSearchParams();
   const [risks, setRisks] = useState<Risk[]>([]);
@@ -2770,9 +2781,16 @@ function RisksTab({ projectId, highlightId }: { projectId: string; highlightId?:
         {" \u00b7 "}{risks.filter((r) => r.status === "resolved").length} resolved
         {(() => {
           const open = risks.filter((r) => r.status !== "resolved");
-          return open.length > 0 && open.every((r) => riskScore(r) !== null && (r.owner_name ?? "").trim() !== "")
-            ? <>{" \u00b7 "}Fully loaded register</>
-            : null;
+          // Egg 3 (v158): every open risk scored and owned. Egg 11
+          // (v163): no open risks at all -- the two states are mutually
+          // exclusive, and each line appears and vanishes with its
+          // condition, which is its dismissal.
+          if (!delight) return null;
+          if (open.length > 0 && open.every((r) => riskScore(r) !== null && (r.owner_name ?? "").trim() !== ""))
+            return <>{" \u00b7 "}Fully loaded register</>;
+          if (risks.length > 0 && open.length === 0)
+            return <>{" \u00b7 "}All quiet on the risk front.</>;
+          return null;
         })()}
       </RegisterSummary>
       {risks.length === 0 ? (
@@ -5730,6 +5748,8 @@ function DecisionsTab({ projectId }: { projectId: string }) {
 
 function StakeholderDecisionsTab({ projectId }: { projectId: string }) {
   const confirmDialog = useConfirm();
+  // v163: Egg 7 (answered within the hour) rides the Delight toggle.
+  const { enabled: delight } = useDelight();
   const [decisions, setDecisions] = useState<Decision[]>([]);
   const [stakeholders, setStakeholders] = useState<Stakeholder[]>([]);
   const [showForm, setShowForm] = useState(false);
@@ -6007,6 +6027,17 @@ function StakeholderDecisionsTab({ projectId }: { projectId: string }) {
                 {d.owner.role && d.owner.role !== d.owner.name ? ` (${d.owner.role})` : ""}
               </p>
             )}
+            {/* v163, Egg 7: a first answer inside the hour earns one
+                quiet line. records are oldest first, so records[0] is
+                the answer that beat the clock. */}
+            {delight && (() => {
+              const fast = fastAnswerMinutes(d.created_at, d.records?.[0]?.responded_at);
+              return fast !== null ? (
+                <p className="muted decision-fast">
+                  Answered in {fast} {fast === 1 ? "minute" : "minutes"}. A record worth framing.
+                </p>
+              ) : null;
+            })()}
             {d.options?.length > 0 && (
               <div className="decision-options" aria-label="Options">
                 {d.options.map((o) => (
@@ -6798,6 +6829,8 @@ const CLOSURE_CHECKLIST_ITEMS: { key: string; label: string }[] = [
 
 function ClosureTab({ projectId }: { projectId: string }) {
   const confirmDialog = useConfirm();
+  // v163: Egg 9 (Closed properly) rides the Delight toggle.
+  const { enabled: delight } = useDelight();
   const [project, setProject] = useState<Project | null>(null);
   const [openRisks, setOpenRisks] = useState(0);
   const [openIssues, setOpenIssues] = useState(0);
@@ -6883,6 +6916,13 @@ function ClosureTab({ projectId }: { projectId: string }) {
               This project was marked closed on {fmtDate(project.closed_at)}. Every tab, tool, and
               record stays exactly as it was -- closing is just a status, not an archive or a lock.
             </p>
+            {/* v163, Egg 9: closed with the full checklist done. The
+                checklist is read-only while a project is closed, so
+                this state is exactly "closed properly" -- the line is
+                state-based and needs no latch. */}
+            {delight && checkedCount === CLOSURE_CHECKLIST_ITEMS.length && (
+              <p className="muted" style={{ marginBottom: 12 }}>Closed properly. Future you says thanks.</p>
+            )}
             <button className="btn btn-ghost" type="button" onClick={reopenProject}>Reopen project</button>
           </div>
 

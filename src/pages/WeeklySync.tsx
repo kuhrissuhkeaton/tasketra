@@ -9,6 +9,7 @@ import { localDateKey } from "../lib/today";
 import { daysBetween } from "../lib/calendarItems";
 import { evidenceChallenge, headlineHealth, type HealthValue } from "../lib/healthLabels";
 import { buildRecap, buildSyncSections, formatDateKey, projectStatusLine, type SyncSections } from "../lib/syncRecap";
+import { useDelight } from "../lib/delight";
 
 const HEALTH_LOWER: Record<HealthValue, string> = { on_track: "on track", at_risk: "at risk", off_track: "off track" };
 
@@ -51,8 +52,10 @@ export default function WeeklySync() {
     return () => clearTimeout(t);
   }, [copied]);
 
+  // v163: Egg 2 (Clean sweep) rides the Delight toggle like every egg.
+  const { enabled: delight } = useDelight();
   const todayKey = localDateKey(new Date());
-  const recap = data ? buildRecap(data, todayKey, sections ?? undefined) : "";
+  const recap = data ? buildRecap(data, todayKey, sections ?? undefined, { delight }) : "";
   // v159 (F-03): the header states the counts the way the recap counts
   // them -- by the headline (stated) health -- so the two never disagree.
   const statedCounts = data

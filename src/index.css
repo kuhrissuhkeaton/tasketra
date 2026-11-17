@@ -1275,6 +1275,7 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
    above it; the quick-add is a plain block whose inner inline-form
    carries the forms' own spacing, so it needs only its outer margins. */
 .decision-owner { margin: 4px 0 6px; }
+.decision-fast { margin: 4px 0 6px; }
 .stakeholder-quick-add { margin: 12px 0 16px; }
 .stakeholder-quick-add .muted { margin: 0 0 8px; }
 .decision-actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0 4px; }

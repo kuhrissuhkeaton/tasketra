@@ -153,7 +153,7 @@ export function buildSyncSections(payload: WeeklySyncData, todayKey: string): Sy
  * F-23), each non-empty one is emitted between the project lines and the
  * asks queue, one "- " line per line of text.
  */
-export function buildRecap(payload: WeeklySyncData, todayISO: string, sections?: SyncSections): string {
+export function buildRecap(payload: WeeklySyncData, todayISO: string, sections?: SyncSections, options?: { delight?: boolean }): string {
   const lines: string[] = [`Weekly sync — ${formatDateKeyLong(todayISO)}`];
   const { projects, asks } = payload;
 
@@ -190,9 +190,11 @@ export function buildRecap(payload: WeeklySyncData, todayISO: string, sections?:
     lines.push("");
     lines.push("Asks waiting:");
     for (const a of asks) lines.push(askLine(a));
-  } else if (projects.length > 0) {
+  } else if (projects.length > 0 && options?.delight !== false) {
     // Egg 2 (v159): a week with projects and zero open asks earns one
     // quiet line at the end of the recap. Text-only, never blocks.
+    // v163: the Delight toggle suppresses it (an unset option reads as
+    // on, matching the setting's default).
     lines.push("");
     lines.push("Clean sweep: nobody is waiting on anybody.");
   }

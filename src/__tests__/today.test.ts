@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  addDays, bucketTasks, closedToday, daysLate, greeting, isMineOrUnassigned, localDateKey, startHere, wrapUpNote,
+  addDays, bucketTasks, closedToday, daysLate, greeting, isAfterHours, isMineOrUnassigned, localDateKey, startHere, weekendMode, wrapUpNote,
   type TodayTask,
 } from "../lib/today";
 
@@ -80,5 +80,35 @@ describe("small helpers", () => {
   it("wrapUpNote reads naturally", () => {
     expect(wrapUpNote(1, 0, 0)).toBe("Closed 1 item today.");
     expect(wrapUpNote(3, 2, 1)).toBe("Closed 3 items today. 2 moving to tomorrow. 1 waiting on others.");
+  });
+});
+
+describe("v163 eggs: weekendMode (Egg 4) and isAfterHours (Egg 5)", () => {
+  // 2026-11-13 is a Friday; 2026-11-16 is the following Monday.
+  const fri3pm = new Date(2026, 10, 13, 15, 0);
+  const fri2pm = new Date(2026, 10, 13, 14, 0);
+  const thu4pm = new Date(2026, 10, 12, 16, 0);
+
+  it("is Friday afternoon with nothing due before Monday", () => {
+    expect(weekendMode(fri3pm, [t("a", { due_date: "2026-11-20" }), t("b", { due_date: null })])).toBe(true);
+    expect(weekendMode(fri3pm, [])).toBe(true);
+  });
+
+  it("is not weekend mode before 3 PM, or on another day", () => {
+    expect(weekendMode(fri2pm, [])).toBe(false);
+    expect(weekendMode(thu4pm, [])).toBe(false);
+  });
+
+  it("a task due Saturday, Sunday, or overdue kills it; a done task due Saturday does not", () => {
+    expect(weekendMode(fri3pm, [t("a", { due_date: "2026-11-14" })])).toBe(false);
+    expect(weekendMode(fri3pm, [t("a", { due_date: "2026-11-15" })])).toBe(false);
+    expect(weekendMode(fri3pm, [t("a", { due_date: "2026-11-10" })])).toBe(false);
+    expect(weekendMode(fri3pm, [t("a", { due_date: "2026-11-14", status: "done" })])).toBe(true);
+  });
+
+  it("after hours starts at 10 PM", () => {
+    expect(isAfterHours(new Date(2026, 10, 13, 21, 59))).toBe(false);
+    expect(isAfterHours(new Date(2026, 10, 13, 22, 0))).toBe(true);
+    expect(isAfterHours(new Date(2026, 10, 13, 23, 30))).toBe(true);
   });
 });

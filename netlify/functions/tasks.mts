@@ -4,6 +4,7 @@ import { getUserIdFromRequest } from "../lib/auth.ts";
 import { hasProjectAccess } from "../lib/ownership.ts";
 import { json } from "../lib/http.ts";
 import { logActivity, diffSummary } from "../lib/activity.ts";
+import { CENTURY_COUNT, CENTURY_SUMMARY } from "../lib/delight.ts";
 import { findDescendantIds } from "../lib/taskTree.ts";
 import { withSentry } from "../lib/sentry.ts";
 
@@ -204,6 +205,23 @@ export default withSentry(async (req: Request) => {
       priority: hasPriority ? nextPriority : undefined,
     }, TASK_FIELDS);
     await logActivity(database, { projectId: existing.project_id, entityType: "task", entityId: id, entityTitle: task.title, action: "updated", summary });
+
+    // v163, Egg 10 (Century): the completion that takes a project to
+    // exactly 100 done tasks earns one quiet Feed entry, written as a
+    // project activity row (a task row would be filtered out of the Feed
+    // as a duplicate of the derived task branch). The count is live
+    // tasks currently done, so un-completing and re-completing the 100th
+    // task would write the entry again -- the moment genuinely recurs.
+    if (existing.status !== "done" && task.status === "done") {
+      const [count] = await database.sql`
+        SELECT count(*)::int AS n FROM tasks
+        WHERE project_id = ${existing.project_id} AND status = 'done' AND deleted_at IS NULL
+      `;
+      if (count?.n === CENTURY_COUNT) {
+        const [project] = await database.sql`SELECT name FROM projects WHERE id = ${existing.project_id}`;
+        await logActivity(database, { projectId: existing.project_id, entityType: "project", entityId: existing.project_id, entityTitle: project?.name ?? null, action: "updated", summary: CENTURY_SUMMARY });
+      }
+    }
 
     return json({ task });
   }

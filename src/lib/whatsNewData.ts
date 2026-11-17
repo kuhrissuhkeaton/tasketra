@@ -10,6 +10,12 @@ export type ChangeEntry = { version: string; date: string; title: string; body: 
 // they can do.
 export const CHANGES: ChangeEntry[] = [
   {
+    version: "v163",
+    date: "November 2026",
+    title: "Small rewards for doing project management properly. (There's an off switch in Account.)",
+    body: "Tasketra now notices the moments that usually go unmarked: a milestone that lands exactly on its planned date gets a quiet \"On the nose\" in the Feed, a decision answered within the hour says so on its card, a Friday afternoon with nothing left due wishes you a good weekend, and a project closed with its checklist complete is closed properly. The 100th task finished on a project earns its own line in the record. None of them pop up, animate, or ask for anything -- they are one line of text where you will find it later. If you would rather not have them at all, Account has a Delight switch that turns every one off at once.",
+  },
+  {
     version: "v162",
     date: "November 2026",
     title: "Assign work to the role that's responsible, not just a person.",

@@ -6,6 +6,7 @@ import { avatarColor, initials } from "../lib/avatar";
 import { PageHeader, SoftCard } from "../components/ui";
 import { DeleteAccountCard } from "../components/DeleteAccountCard";
 import { readStoredTheme, setTheme, type Theme } from "../lib/theme";
+import { useDelight } from "../lib/delight";
 import { useDocumentTitle } from "../lib/documentTitle";
 
 const TIMEZONES: string[] = (() => {
@@ -46,6 +47,9 @@ export default function Account() {
     setTheme(t);
     setThemeState(t);
   }
+
+  // v163: the one switch for every easter egg in the app (see lib/delight).
+  const { enabled: delight, setEnabled: setDelight } = useDelight();
 
   useEffect(() => {
     setDisplayName(user?.display_name || "");
@@ -199,6 +203,18 @@ export default function Account() {
             <button type="button" className={theme === "dark" ? "btn btn-primary" : "btn btn-ghost"} onClick={() => chooseTheme("dark")}>Dark</button>
             <button type="button" className={theme === "system" ? "btn btn-primary" : "btn btn-ghost"} onClick={() => chooseTheme("system")}>Match system</button>
           </div>
+        </SoftCard>
+
+        <SoftCard title="Delight" className="ui-narrow billing-card">
+          <p className="muted" style={{ marginTop: 0 }}>
+            Small rewards for doing project management properly: a quiet line when a week ends
+            with nobody waiting, a milestone lands on its date, or a project closes properly.
+            They never block anything, and this one switch turns every one of them off.
+          </p>
+          <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
+            <input type="checkbox" checked={delight} onChange={(e) => setDelight(e.target.checked)} />
+            Delight {delight ? "on" : "off"}
+          </label>
         </SoftCard>
 
         <SoftCard title="Change password" className="ui-narrow billing-card">

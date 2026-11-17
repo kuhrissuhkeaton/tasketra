@@ -99,3 +99,22 @@ export function wrapUpNote(closed: number, movingTomorrow: number, blocked: numb
   if (blocked > 0) parts.push(`${blocked} waiting on others.`);
   return parts.join(" ");
 }
+
+/** v163, Egg 5: working after 10 PM local earns the wrap-up note a line. */
+export function isAfterHours(now: Date): boolean {
+  return now.getHours() >= 22;
+}
+
+/**
+ * v163, Egg 4 (Weekend mode): Friday at or after 3 PM local, with nothing
+ * still open that is due before Monday -- overdue work counts as due, and
+ * so does anything dated over the weekend; undated work has no due date
+ * to break the line. The page additionally requires some sign of a week
+ * actually worked (tasks on the list, or something closed today) so an
+ * empty account doesn't get told its weekend started.
+ */
+export function weekendMode(now: Date, tasks: TodayTask[]): boolean {
+  if (now.getDay() !== 5 || now.getHours() < 15) return false;
+  const mondayKey = addDays(localDateKey(now), 3);
+  return !tasks.some((t) => t.status !== "done" && !!t.due_date && t.due_date < mondayKey);
+}
