@@ -10,6 +10,12 @@ export type ChangeEntry = { version: string; date: string; title: string; body: 
 // they can do.
 export const CHANGES: ChangeEntry[] = [
   {
+    version: "v167",
+    date: "November 2026",
+    title: "Weekly sync is a ritual now: stats up top, asks as cards, and wins you can edit line by line.",
+    body: "The Weekly sync page used to be three plain lists and a block of raw text. It now opens with the week at a glance (how many projects checked in, how many asks are waiting, how old the oldest one is, and how many wins and blockers you have logged), then walks the ritual in four numbered steps. Check-ins carry a health chip per project. Asks are cards with who you are waiting on and for how long, the ones past their date or a week old marked with a red edge. Wins, blockers and next week sit side by side as bullet lists: click any line to rewrite it, add lines, remove lines, and the recap at the end follows your words. The recap itself is a formatted card now, and Copy still puts the plain-text version on your clipboard, ready to paste anywhere.",
+  },
+  {
     version: "v166",
     date: "November 2026",
     title: "The Resource hub has three doors now: start a project, run the week, or look something up.",

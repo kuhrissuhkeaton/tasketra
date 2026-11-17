@@ -1,0 +1,805 @@
+--- a/src/pages/WeeklySync.tsx
++++ b/src/pages/WeeklySync.tsx
+@@ -1,17 +1,19 @@
+ import { useEffect, useState } from "react";
+ import { Link } from "react-router-dom";
+ import { AppSidebar } from "../components/AppSidebar";
+-import { api, type WeeklySyncData } from "../lib/api";
++import { api, type WeeklySyncAsk, type WeeklySyncData, type WeeklySyncProject } from "../lib/api";
+ import { useDocumentTitle } from "../lib/documentTitle";
+-import { PageHeader, SoftCard } from "../components/ui";
++import { PageHeader } from "../components/ui";
+ import { StatusExplainer } from "../components/StatusExplainer";
++import { SyncBulletEditor } from "../components/SyncBulletEditor";
+ import { localDateKey } from "../lib/today";
+ import { daysBetween } from "../lib/calendarItems";
+ import { evidenceChallenge, headlineHealth, type HealthValue } from "../lib/healthLabels";
+-import { buildRecap, buildSyncSections, formatDateKey, projectStatusLine, type SyncSections } from "../lib/syncRecap";
++import { buildRecap, buildSyncSections, formatDateKey, projectStatusLine } from "../lib/syncRecap";
+ import { useDelight } from "../lib/delight";
+ 
+ const HEALTH_LOWER: Record<HealthValue, string> = { on_track: "on track", at_risk: "at risk", off_track: "off track" };
++const HEALTH_LABEL: Record<HealthValue, string> = { on_track: "On track", at_risk: "At risk", off_track: "Off track" };
+ 
+ const CONTEXT_LIMIT = 140;
+ 
+@@ -28,22 +30,89 @@
+   return `waiting ${days} ${plural(days, "day", "days")}`;
+ }
+ 
++/** Whole days an ask has been waiting, never negative. */
++function waitingDays(createdAt: string, todayKey: string): number {
++  return Math.max(0, daysBetween(localDateKey(new Date(createdAt)), todayKey));
++}
++
++/**
++ * The project's last sign of life as a date key: the most recent of its
++ * last recorded activity and its last stated status. The same rule
++ * projectStatusLine and buildSyncSections use for "quiet", shared here
++ * so the stat strip's "checked in" count cannot drift from them.
++ */
++function lastSignKey(p: WeeklySyncProject): string | null {
++  return [p.lastActivityAt, p.statedAt]
++    .filter((t): t is string => !!t)
++    .map((t) => localDateKey(new Date(t)))
++    .sort()
++    .pop() ?? null;
++}
++
++/** The Monday and Friday date keys of the week containing todayKey. */
++function weekKeys(todayKey: string): { mon: string; fri: string } {
++  const [y, m, d] = todayKey.split("-").map(Number);
++  const date = new Date(y, m - 1, d);
++  const monday = new Date(y, m - 1, d - ((date.getDay() + 6) % 7));
++  const friday = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + 4);
++  const keyOf = (dt: Date) =>
++    `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
++  return { mon: keyOf(monday), fri: keyOf(friday) };
++}
++
++/**
++ * The recap card's "Checked in" prose: the projects grouped by headline
++ * health, one sentence per group ("Website Relaunch is on track. Office
++ * Move is off track."). The same grouping the copied recap counts by,
++ * so the card and the clipboard can never disagree.
++ */
++function checkedInProse(projects: WeeklySyncProject[]): string {
++  const sentences: string[] = [];
++  for (const h of ["on_track", "at_risk", "off_track"] as HealthValue[]) {
++    const names = projects.filter((p) => headlineHealth(p) === h).map((p) => p.name);
++    if (names.length === 0) continue;
++    sentences.push(`${names.join(", ")} ${names.length === 1 ? "is" : "are"} ${HEALTH_LOWER[h]}.`);
++  }
++  return sentences.join(" ");
++}
++
++/** One ask as a formatted recap line's tail: who, how long, by when. */
++function askRecapTail(a: WeeklySyncAsk, todayKey: string): string {
++  const parts: string[] = [];
++  if (a.recipients.length > 0) parts.push(a.recipients.join(", "));
++  parts.push(waitingAge(a.createdAt, todayKey));
++  parts.push(a.deadline ? `needed by ${formatDateKey(a.deadline)}` : "no date set");
++  return parts.join(", ");
++}
++
++type SectionLines = { wins: string[]; blockers: string[]; nextWeek: string[] };
++
++const splitLines = (text: string): string[] =>
++  text.split("\n").map((l) => l.trim()).filter(Boolean);
++
+ export default function WeeklySync() {
+   useDocumentTitle("Weekly sync");
+   const [data, setData] = useState<WeeklySyncData | null>(null);
+   const [error, setError] = useState("");
+   const [copied, setCopied] = useState(false);
+-  // v160 (F-23): the Wins / Blockers / Next week drafts. Pre-filled once
+-  // the payload lands, then owned by the page -- they exist only so the
+-  // copied recap can carry them; nothing is saved anywhere.
+-  const [sections, setSections] = useState<SyncSections | null>(null);
++  // v160 (F-23) drafts, v167: the same pre-fill, held as bullet lines for
++  // the click-to-edit editors. They exist only so the recap can carry
++  // them; nothing is saved anywhere.
++  const [sections, setSections] = useState<SectionLines | null>(null);
+ 
+   useEffect(() => {
+     api.getWeeklySync().then(setData).catch(() => setError("Couldn't load your weekly sync."));
+   }, []);
+ 
+   useEffect(() => {
+-    if (data && sections === null) setSections(buildSyncSections(data, localDateKey(new Date())));
++    if (data && sections === null) {
++      const filled = buildSyncSections(data, localDateKey(new Date()));
++      setSections({
++        wins: splitLines(filled.wins),
++        blockers: splitLines(filled.blockers),
++        nextWeek: splitLines(filled.nextWeek),
++      });
++    }
+   }, [data, sections]);
+ 
+   useEffect(() => {
+@@ -55,7 +124,10 @@
+   // v163: Egg 2 (Clean sweep) rides the Delight toggle like every egg.
+   const { enabled: delight } = useDelight();
+   const todayKey = localDateKey(new Date());
+-  const recap = data ? buildRecap(data, todayKey, sections ?? undefined, { delight }) : "";
++  const recapSections = sections
++    ? { wins: sections.wins.join("\n"), blockers: sections.blockers.join("\n"), nextWeek: sections.nextWeek.join("\n") }
++    : undefined;
++  const recap = data ? buildRecap(data, todayKey, recapSections, { delight }) : "";
+   // v159 (F-03): the header states the counts the way the recap counts
+   // them -- by the headline (stated) health -- so the two never disagree.
+   const statedCounts = data
+@@ -66,13 +138,35 @@
+     : [];
+   const anyChallenged = data?.projects.some((p) => evidenceChallenge(p)) ?? false;
+ 
++  // v167 stat strip: every number is counted from the same payload (and
++  // the same editable drafts) the rest of the page shows.
++  const checkedIn = data
++    ? data.projects.filter((p) => {
++        const sign = lastSignKey(p);
++        return sign !== null && daysBetween(sign, todayKey) < 7;
++      }).length
++    : 0;
++  const oldestAsk = data && data.asks.length > 0
++    ? Math.max(...data.asks.map((a) => waitingDays(a.createdAt, todayKey)))
++    : null;
++  const { mon, fri } = weekKeys(todayKey);
++  const weekLabel = `${formatDateKey(mon)} – ${formatDateKey(fri)}`;
++
++  const recapBlocks: { label: string; lines: string[] }[] = sections
++    ? [
++        { label: "Wins", lines: sections.wins },
++        { label: "Blockers", lines: sections.blockers },
++        { label: "Next week", lines: sections.nextWeek },
++      ].filter((b) => b.lines.length > 0)
++    : [];
++
+   async function copyRecap() {
+     try {
+       await navigator.clipboard.writeText(recap);
+       setCopied(true);
+     } catch {
+-      // Clipboard unavailable (permissions, insecure context): the text stays
+-      // on screen to select and copy by hand; saying "Copied" would be a lie.
++      // Clipboard unavailable (permissions, insecure context): the recap
++      // stays on screen in full; saying "Copied" would be a lie.
+     }
+   }
+ 
+@@ -89,39 +183,101 @@
+         {error && <p className="form-error" role="alert">{error}</p>}
+         {data && (
+           <>
+-            <SoftCard title="Check-ins" className="ui-narrow">
+-              {anyChallenged && <StatusExplainer />}
+-              {data.projects.length === 0 ? (
+-                <p className="muted">No active projects.</p>
+-              ) : (
+-                <ul className="sync-list">
+-                  {data.projects.map((p) => {
+-                    const challenge = evidenceChallenge(p);
+-                    return (
+-                      <li className="sync-row" key={p.id}>
+-                        <Link className="sync-link" to={`/app/projects/${p.id}`}>
+-                          <span className="sync-name">{p.name}</span>
+-                          <span className="sync-line">
+-                            {challenge && <span className={`evidence-dot evidence-${challenge}`} aria-hidden="true" />}
+-                            {projectStatusLine(p, todayKey)}
+-                          </span>
+-                        </Link>
+-                      </li>
+-                    );
+-                  })}
+-                </ul>
+-              )}
+-            </SoftCard>
++            <p className="sync-week">
++              <span className="sync-week-chip">Week of {weekLabel}</span>
++            </p>
++
++            <section className="sync-stats" aria-label="This week at a glance">
++              <div className="sync-stat">
++                <span className="sync-stat-value">
++                  {checkedIn}
++                  <span className="sync-stat-of"> / {data.projects.length}</span>
++                </span>
++                <span className="sync-stat-label">Projects checked in</span>
++              </div>
++              <div className="sync-stat">
++                <span className="sync-stat-value">{data.asks.length}</span>
++                <span className="sync-stat-label">Asks waiting</span>
++              </div>
++              <div className="sync-stat">
++                <span className="sync-stat-value">{oldestAsk === null ? "—" : oldestAsk}</span>
++                <span className="sync-stat-label">Oldest ask, in days</span>
++              </div>
++              <div className="sync-stat">
++                <span className="sync-stat-value">{sections?.wins.length ?? 0}</span>
++                <span className="sync-stat-label">Wins logged</span>
++              </div>
++              <div className="sync-stat">
++                <span className="sync-stat-value">{sections?.blockers.length ?? 0}</span>
++                <span className="sync-stat-label">Blockers open</span>
++              </div>
++            </section>
+ 
+-            <SoftCard title="Asks to sort" className="ui-narrow">
++            <section className="sync-step">
++              <div className="sync-step-head">
++                <span className="sync-step-num" aria-hidden="true">1</span>
++                <div>
++                  <h2 className="sync-step-title">Check-ins</h2>
++                  <p className="sync-step-sub">Every active project and where it stands.</p>
++                </div>
++              </div>
++              <div className="sync-card">
++                {anyChallenged && <StatusExplainer />}
++                {data.projects.length === 0 ? (
++                  <p className="muted">No active projects.</p>
++                ) : (
++                  <ul className="sync-checkins">
++                    {data.projects.map((p) => {
++                      const challenge = evidenceChallenge(p);
++                      const headline = headlineHealth(p);
++                      return (
++                        <li className="sync-checkin" key={p.id}>
++                          <Link className="sync-checkin-link" to={`/app/projects/${p.id}`}>
++                            <span className="sync-checkin-main">
++                              <span className="sync-name">{p.name}</span>
++                              <span className="sync-line">
++                                {challenge && <span className={`evidence-dot evidence-${challenge}`} aria-hidden="true" />}
++                                {projectStatusLine(p, todayKey)}
++                              </span>
++                            </span>
++                            <span className={`sync-health-chip tone-${headline}`}>
++                              <span className="sync-health-dot" aria-hidden="true" />
++                              {HEALTH_LABEL[headline]}
++                            </span>
++                          </Link>
++                        </li>
++                      );
++                    })}
++                  </ul>
++                )}
++              </div>
++            </section>
++
++            <section className="sync-step">
++              <div className="sync-step-head">
++                <span className="sync-step-num" aria-hidden="true">2</span>
++                <div>
++                  <h2 className="sync-step-title">Asks waiting</h2>
++                  <p className="sync-step-sub">Decisions you are chasing, soonest needed first.</p>
++                </div>
++              </div>
+               {data.asks.length === 0 ? (
+-                <p className="muted">No asks waiting.</p>
++                <div className="sync-card">
++                  <p className="muted">No asks waiting.</p>
++                </div>
+               ) : (
+-                <ul className="sync-list">
+-                  {data.asks.map((a) => (
+-                    <li className="sync-row" key={a.id}>
+-                      <Link className="sync-link" to={`/app/projects/${a.projectId}?tab=decisions`}>
+-                        <span className="sync-name">{a.title}</span>
++                <div className="sync-ask-grid">
++                  {data.asks.map((a) => {
++                    const hot =
++                      (a.deadline !== null && daysBetween(todayKey, a.deadline) < 0) ||
++                      waitingDays(a.createdAt, todayKey) >= 7;
++                    return (
++                      <Link
++                        className={`sync-ask-card${hot ? " hot" : ""}`}
++                        key={a.id}
++                        to={`/app/projects/${a.projectId}?tab=decisions`}
++                      >
++                        <span className="sync-ask-title">{a.title}</span>
+                         <span className="sync-meta">
+                           {a.projectName} · {a.deadline ? `Needed by ${formatDateKey(a.deadline)}` : "No date set"} · {waitingAge(a.createdAt, todayKey)}
+                         </span>
+@@ -130,55 +286,107 @@
+                         )}
+                         {a.context && <span className="sync-context">{truncate(a.context)}</span>}
+                       </Link>
+-                    </li>
+-                  ))}
+-                </ul>
++                    );
++                  })}
++                </div>
+               )}
+-            </SoftCard>
++            </section>
+ 
+             {/* v160 (F-23): the narrative the auto recap cannot write --
+                 pre-filled from the week's facts, edited here, and copied
+                 as part of the recap below. Deliberately not saved: next
+-                week's page pre-fills afresh. */}
+-            <SoftCard title="Wins, blockers, next week" className="ui-narrow">
+-              <p className="muted" style={{ marginTop: 0 }}>
+-                Pre-filled from this week's activity. Edit the words before you copy the recap, one item per line. Nothing here is saved.
+-              </p>
+-              {sections && (
+-                <div className="sync-sections">
+-                  <label htmlFor="sync-wins">Wins</label>
+-                  <textarea
+-                    id="sync-wins"
+-                    rows={3}
+-                    value={sections.wins}
+-                    onChange={(e) => setSections({ ...sections, wins: e.target.value })}
+-                  />
+-                  <label htmlFor="sync-blockers">Blockers</label>
+-                  <textarea
+-                    id="sync-blockers"
+-                    rows={3}
+-                    value={sections.blockers}
+-                    onChange={(e) => setSections({ ...sections, blockers: e.target.value })}
+-                  />
+-                  <label htmlFor="sync-next-week">Next week</label>
+-                  <textarea
+-                    id="sync-next-week"
+-                    rows={3}
+-                    value={sections.nextWeek}
+-                    onChange={(e) => setSections({ ...sections, nextWeek: e.target.value })}
+-                  />
++                week's page pre-fills afresh. v167: the textareas become
++                click-to-edit bullet lists, per the kit layout. */}
++            <section className="sync-step">
++              <div className="sync-step-head">
++                <span className="sync-step-num" aria-hidden="true">3</span>
++                <div>
++                  <h2 className="sync-step-title">Wins, blockers, next week</h2>
++                  <p className="sync-step-sub">
++                    Pre-filled from this week's activity. Edit the words before you copy the recap. Nothing here is saved.
++                  </p>
+                 </div>
+-              )}
+-            </SoftCard>
++              </div>
++              <div className="sync-card">
++                {sections && (
++                  <div className="sync-editors">
++                    <SyncBulletEditor
++                      title="Wins"
++                      lines={sections.wins}
++                      onChange={(wins) => setSections({ ...sections, wins })}
++                    />
++                    <SyncBulletEditor
++                      title="Blockers"
++                      lines={sections.blockers}
++                      onChange={(blockers) => setSections({ ...sections, blockers })}
++                    />
++                    <SyncBulletEditor
++                      title="Next week"
++                      lines={sections.nextWeek}
++                      onChange={(nextWeek) => setSections({ ...sections, nextWeek })}
++                    />
++                  </div>
++                )}
++              </div>
++            </section>
+ 
+-            <SoftCard title="Recap" className="ui-narrow">
+-              <pre className="sync-recap-text">{recap}</pre>
+-              <div className="sync-recap-actions">
+-                <button type="button" className="btn btn-primary" onClick={copyRecap}>
+-                  {copied ? "Copied" : "Copy recap"}
+-                </button>
++            <section className="sync-step">
++              <div className="sync-step-head">
++                <span className="sync-step-num" aria-hidden="true">4</span>
++                <div>
++                  <h2 className="sync-step-title">Recap</h2>
++                  <p className="sync-step-sub">
++                    Formatted and ready to send. The Copy button puts the plain-text version on your clipboard.
++                  </p>
++                </div>
++              </div>
++              <div className="sync-card sync-recap-card">
++                <div className="sync-recap-head">
++                  <div className="sync-recap-heading">
++                    <span className="sync-recap-name">Weekly sync recap</span>
++                    <span className="sync-recap-meta">
++                      {weekLabel} · {data.projects.length} {plural(data.projects.length, "project", "projects")}
++                    </span>
++                  </div>
++                  <button type="button" className="btn btn-primary" onClick={copyRecap}>
++                    {copied ? "Copied" : "Copy recap"}
++                  </button>
++                </div>
++                <div className="sync-recap-block">
++                  <h3 className="sync-recap-h">Checked in</h3>
++                  {data.projects.length === 0 ? (
++                    <p className="sync-recap-p">No active projects.</p>
++                  ) : (
++                    <p className="sync-recap-p">{checkedInProse(data.projects)}</p>
++                  )}
++                </div>
++                {data.asks.length > 0 && (
++                  <div className="sync-recap-block">
++                    <h3 className="sync-recap-h">Waiting on</h3>
++                    <ul className="sync-recap-list">
++                      {data.asks.map((a) => (
++                        <li key={a.id}>
++                          <strong>{a.title}</strong> ({a.projectName}) — {askRecapTail(a, todayKey)}
++                        </li>
++                      ))}
++                    </ul>
++                  </div>
++                )}
++                {recapBlocks.map((b) => (
++                  <div className="sync-recap-block" key={b.label}>
++                    <h3 className="sync-recap-h">{b.label}</h3>
++                    <ul className="sync-recap-list">
++                      {b.lines.map((line, i) => (
++                        <li key={i}>{line}</li>
++                      ))}
++                    </ul>
++                  </div>
++                ))}
++                {data.asks.length === 0 && data.projects.length > 0 && delight && (
++                  <p className="sync-recap-p sync-recap-clean">Clean sweep: nobody is waiting on anybody.</p>
++                )}
+               </div>
+-            </SoftCard>
++            </section>
+           </>
+         )}
+       </main>
+--- a/src/index.css
++++ b/src/index.css
+@@ -2804,23 +2804,72 @@
+ .rg-accounts .rg-row > .rg-pill .muted { font-size: 12px; }
+ @media (max-width: 760px) { .rg-accounts .rg-row > .rg-actions { flex-direction: row; flex-wrap: wrap; } }
+ 
+-/* Weekly sync page (v146): status lines, asks queue and the recap block. */
+-.sync-list { list-style: none; margin: 0; padding: 0; }
+-.sync-row { border-bottom: 1px solid var(--border); }
+-.sync-row:last-child { border-bottom: none; }
+-.sync-link { display: block; padding: 8px 0; color: var(--navy); text-decoration: none; font-size: 14px; }
+-.sync-link:hover .sync-name { text-decoration: underline; text-underline-offset: 3px; }
++/* Weekly sync page (v146; v167 rebuilt it as the kit layout: a stat
++   strip, the ritual in four numbered steps, asks as cards, the Wins /
++   Blockers / Next week drafts as click-to-edit bullet lists, and the
++   recap as a formatted card). */
+ .sync-name { display: block; font-weight: 600; }
+ .sync-line { display: block; margin-top: 1px; }
+ .sync-meta { display: block; margin-top: 1px; font-size: 13px; color: var(--slate-text); }
+ .sync-context { display: block; margin-top: 2px; font-size: 13px; color: var(--slate-text); }
+-.sync-recap-text { margin: 0 0 10px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-muted); font: inherit; font-size: 14px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: break-word; }
+-.sync-recap-actions { display: flex; justify-content: flex-end; }
+-/* v160 (F-23): the Wins / Blockers / Next week editors on Weekly sync. */
+-.sync-sections { display: flex; flex-direction: column; gap: 6px; }
+-.sync-sections label { font-weight: 600; font-size: 13px; margin-top: 8px; }
+-.sync-sections label:first-child { margin-top: 0; }
+-.sync-sections textarea { width: 100%; line-height: 1.5; }
++.sync-week { margin: 0 0 14px; }
++.sync-week-chip { display: inline-block; padding: 5px 12px; border: 1px solid var(--border); border-radius: 999px; background: var(--panel); font-size: 13px; font-weight: 600; color: var(--navy); }
++.sync-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 6px; }
++.sync-stat { display: flex; flex-direction: column; gap: 2px; padding: 14px 16px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); }
++.sync-stat-value { font-family: 'Fraunces', serif; font-size: 28px; font-weight: 700; line-height: 1.1; color: var(--navy); }
++.sync-stat-of { font-size: 16px; font-weight: 600; color: var(--slate-text); }
++.sync-stat-label { font-size: 12.5px; font-weight: 600; color: var(--slate-text); }
++.sync-step { margin-top: 26px; }
++.sync-step-head { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
++.sync-step-num { flex: none; width: 30px; height: 30px; border-radius: 50%; background: var(--lime); color: var(--navy); font-family: 'Fraunces', serif; font-size: 15px; font-weight: 700; display: flex; align-items: center; justify-content: center; margin-top: 2px; }
++.sync-step-title { margin: 0; font-size: 20px; }
++.sync-step-sub { margin: 2px 0 0; font-size: 13.5px; color: var(--slate-text); }
++.sync-card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; }
++.sync-checkins { list-style: none; margin: 0; padding: 0; }
++.sync-checkin { border-bottom: 1px solid var(--border); }
++.sync-checkin:last-child { border-bottom: none; }
++.sync-checkin-link { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 10px 0; color: var(--navy); text-decoration: none; font-size: 14px; }
++.sync-checkin-link:hover .sync-name { text-decoration: underline; text-underline-offset: 3px; }
++.sync-checkin-main { min-width: 0; }
++.sync-health-chip { flex: none; display: inline-flex; align-items: center; gap: 7px; padding: 4px 11px; border-radius: 999px; font-size: 12.5px; font-weight: 600; color: var(--navy); }
++.sync-health-dot { width: 8px; height: 8px; border-radius: 50%; }
++.sync-health-chip.tone-on_track { background: #DCE8CB; }
++.sync-health-chip.tone-on_track .sync-health-dot { background: var(--chart-good); }
++.sync-health-chip.tone-at_risk { background: #FCEBC8; }
++.sync-health-chip.tone-at_risk .sync-health-dot { background: var(--chart-warn); }
++.sync-health-chip.tone-off_track { background: #F6D9D2; }
++.sync-health-chip.tone-off_track .sync-health-dot { background: var(--chart-crit); }
++.sync-ask-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
++.sync-ask-card { display: block; padding: 14px 16px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); color: var(--navy); text-decoration: none; font-size: 14px; }
++.sync-ask-card.hot { border-top: 3px solid var(--red); }
++.sync-ask-card:hover .sync-ask-title { text-decoration: underline; text-underline-offset: 3px; }
++.sync-ask-title { display: block; font-weight: 600; font-size: 15px; }
++.sync-editors { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
++.sync-editor-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
++.sync-editor-title { margin: 0; font-size: 16px; }
++.sync-editor-hint { font-size: 11.5px; color: var(--slate-text); }
++.sync-editor-empty { margin: 4px 0; font-size: 13.5px; color: var(--slate-text); }
++.sync-bullets { list-style: none; margin: 0; padding: 0; }
++.sync-bullet { display: flex; align-items: flex-start; gap: 6px; padding: 3px 0; }
++.sync-bullet::before { content: "•"; flex: none; color: var(--slate-text); line-height: 1.5; }
++.sync-bullet-text { flex: 1; min-width: 0; padding: 2px 6px; margin: 0; border: none; border-radius: 6px; background: none; font: inherit; font-size: 14px; line-height: 1.5; text-align: left; color: var(--navy); cursor: text; overflow-wrap: break-word; }
++.sync-bullet-text:hover { background: var(--tint); }
++.sync-bullet-input { flex: 1; min-width: 0; padding: 3px 8px; border: 1px solid var(--slate); border-radius: 8px; font: inherit; font-size: 14px; line-height: 1.5; color: var(--navy); background: var(--panel); }
++.sync-bullet-remove { flex: none; width: 22px; height: 22px; margin-top: 2px; padding: 0; border: none; border-radius: 50%; background: none; font-size: 15px; line-height: 1; color: var(--slate-text); cursor: pointer; }
++.sync-bullet-remove:hover { color: var(--red); background: var(--surface-muted); }
++.sync-add-line { margin-top: 8px; padding: 2px 6px; border: none; background: none; font: inherit; font-size: 13.5px; font-weight: 600; color: var(--slate-text); cursor: pointer; }
++.sync-add-line:hover { color: var(--navy); }
++.sync-recap-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
++.sync-recap-name { display: block; font-family: 'Fraunces', serif; font-size: 17px; font-weight: 700; color: var(--navy); }
++.sync-recap-meta { display: block; margin-top: 2px; font-size: 13px; color: var(--slate-text); }
++.sync-recap-block { margin-top: 14px; }
++.sync-recap-h { margin: 0 0 4px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--slate-text); }
++.sync-recap-p { margin: 0; font-size: 14px; line-height: 1.55; }
++.sync-recap-list { margin: 0; padding-left: 18px; font-size: 14px; line-height: 1.55; }
++.sync-recap-list li { margin: 3px 0; }
++.sync-recap-clean { margin-top: 14px; }
++@media (max-width: 900px) { .sync-editors { grid-template-columns: 1fr; } }
++@media (max-width: 760px) { .sync-ask-grid { grid-template-columns: 1fr; } }
+ 
+ /* Workload page (v147): owner x week grid, darker cells as the load grows. */
+ .wl-scroll { overflow-x: auto; }
+--- a/src/lib/whatsNewData.ts
++++ b/src/lib/whatsNewData.ts
+@@ -10,6 +10,12 @@
+ // they can do.
+ export const CHANGES: ChangeEntry[] = [
+   {
++    version: "v167",
++    date: "November 2026",
++    title: "Weekly sync is a ritual now: stats up top, asks as cards, and wins you can edit line by line.",
++    body: "The Weekly sync page used to be three plain lists and a block of raw text. It now opens with the week at a glance (how many projects checked in, how many asks are waiting, how old the oldest one is, and how many wins and blockers you have logged), then walks the ritual in four numbered steps. Check-ins carry a health chip per project. Asks are cards with who you are waiting on and for how long, the ones past their date or a week old marked with a red edge. Wins, blockers and next week sit side by side as bullet lists: click any line to rewrite it, add lines, remove lines, and the recap at the end follows your words. The recap itself is a formatted card now, and Copy still puts the plain-text version on your clipboard, ready to paste anywhere.",
++  },
++  {
+     version: "v166",
+     date: "November 2026",
+     title: "The Resource hub has three doors now: start a project, run the week, or look something up.",
+--- a/src/__tests__/weeklySync.test.tsx
++++ b/src/__tests__/weeklySync.test.tsx
+@@ -94,17 +94,39 @@
+     expect(undated?.textContent).not.toContain("Waiting on:");
+   });
+ 
+-  it("shows the recap text built from the same payload", async () => {
++  it("shows the formatted recap card built from the same payload (v167)", async () => {
+     m.getWeeklySync.mockResolvedValue(DATA);
+     await renderPage();
+-    const pre = container.querySelector(".sync-recap-text");
+-    expect(pre?.textContent).toContain("Weekly sync —");
+-    // v156: the count line groups by headline health -- Website Relaunch
+-    // stated on track, so it counts as on track, not at risk.
+-    expect(pre?.textContent).toContain("2 projects: 1 on track, 1 off track.");
+-    expect(pre?.textContent).toContain("- Website Relaunch: Stated on track, evidence suggests at risk.");
+-    expect(pre?.textContent).toContain("- Pick a vendor (Website Relaunch) — needed by Nov 12, 2026");
+-    expect(pre?.textContent).toContain("- Hire a designer (Office Move) — no date set");
++    const card = container.querySelector(".sync-recap-card");
++    expect(card?.textContent).toContain("Weekly sync recap");
++    // The Checked-in prose groups by headline health -- Website Relaunch
++    // stated on track, so it reads as on track, not at risk (the same
++    // grouping the copied recap counts by, v156).
++    expect(card?.textContent).toContain("Website Relaunch is on track.");
++    expect(card?.textContent).toContain("Office Move is off track.");
++    expect(card?.textContent).toContain("Pick a vendor");
++    expect(card?.textContent).toContain("(Website Relaunch)");
++    expect(card?.textContent).toContain("needed by Nov 12, 2026");
++    expect(card?.textContent).toContain("Hire a designer");
++    expect(card?.textContent).toContain("no date set");
++  });
++
++  it("shows the stat strip counted from the payload and the drafts (v167)", async () => {
++    m.getWeeklySync.mockResolvedValue(DATA);
++    await renderPage();
++    const stats = new Map(
++      Array.from(container.querySelectorAll(".sync-stat")).map((el) => [
++        el.querySelector(".sync-stat-label")?.textContent,
++        el.querySelector(".sync-stat-value")?.textContent,
++      ]),
++    );
++    expect(stats.get("Asks waiting")).toBe("2");
++    // Pre-fill: one win (Website Relaunch's headline is on track), two
++    // blockers (Office Move off track, Website Relaunch's past-due tasks).
++    expect(stats.get("Wins logged")).toBe("1");
++    expect(stats.get("Blockers open")).toBe("2");
++    expect(stats.has("Projects checked in")).toBe(true);
++    expect(stats.has("Oldest ask, in days")).toBe(true);
+   });
+ 
+   it("copies the recap and confirms briefly", async () => {
+@@ -120,23 +142,45 @@
+     expect(button!.textContent).toBe("Copied");
+   });
+ 
+-  it("pre-fills the Wins / Blockers / Next week editors from the payload, and the edits reach the copied recap (v160, F-23)", async () => {
++  it("pre-fills the Wins / Blockers / Next week bullet editors from the payload, and the edits reach the copied recap (v160, F-23; v167 bullets)", async () => {
+     const writeText = vi.fn().mockResolvedValue(undefined);
+     Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+     m.getWeeklySync.mockResolvedValue(DATA);
+     await renderPage();
+-    const wins = container.querySelector<HTMLTextAreaElement>("#sync-wins");
+-    const blockers = container.querySelector<HTMLTextAreaElement>("#sync-blockers");
+-    expect(wins?.value).toContain("Website Relaunch is on track");
+-    expect(blockers?.value).toContain("Office Move: off track");
+-    expect(blockers?.value).toContain("Website Relaunch: 2 tasks past due");
+-    // Edit the wins draft the way a user types: the recap follows the edit.
+-    const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")!.set!;
++    const editorFor = (title: string) =>
++      Array.from(container.querySelectorAll(".sync-editor")).find(
++        (el) => el.querySelector(".sync-editor-title")?.textContent === title,
++      );
++    const wins = editorFor("Wins");
++    const blockers = editorFor("Blockers");
++    expect(wins?.textContent).toContain("Website Relaunch is on track");
++    expect(blockers?.textContent).toContain("Office Move: off track");
++    expect(blockers?.textContent).toContain("Website Relaunch: 2 tasks past due");
++    // Edit the wins line the way a user does: click it, retype, Enter.
++    const line = Array.from(wins!.querySelectorAll<HTMLButtonElement>(".sync-bullet-text")).find(
++      (b) => b.textContent === "Website Relaunch is on track",
++    );
++    await act(async () => { line!.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
++    const input = wins!.querySelector<HTMLInputElement>(".sync-bullet-input");
++    expect(input?.value).toBe("Website Relaunch is on track");
++    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!;
++    await act(async () => {
++      setter.call(input, "Shipped the beta");
++      input!.dispatchEvent(new Event("input", { bubbles: true }));
++    });
+     await act(async () => {
+-      setter.call(wins, "Shipped the beta");
+-      wins!.dispatchEvent(new Event("input", { bubbles: true }));
++      input!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+     });
+-    expect(container.querySelector(".sync-recap-text")?.textContent).toContain("- Shipped the beta");
++    expect(wins!.textContent).toContain("Shipped the beta");
++    expect(container.querySelector(".sync-recap-card")?.textContent).toContain("Shipped the beta");
++    // Remove a blockers line with its × button.
++    const doomed = Array.from(blockers!.querySelectorAll(".sync-bullet")).find(
++      (li) => li.textContent?.includes("Office Move: off track"),
++    );
++    const removeBtn = doomed!.querySelector<HTMLButtonElement>(".sync-bullet-remove");
++    await act(async () => { removeBtn!.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
++    expect(blockers!.textContent).not.toContain("Office Move: off track");
++    // The copied recap carries the edit and the removal.
+     const button = Array.from(container.querySelectorAll("button")).find((b) => b.textContent === "Copy recap");
+     await act(async () => { button!.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
+     const copied = String(writeText.mock.calls[0][0]);
+@@ -144,6 +188,7 @@
+     expect(copied).toContain("- Shipped the beta");
+     expect(copied).toContain("Blockers:");
+     expect(copied).not.toContain("Website Relaunch is on track");
++    expect(copied).not.toContain("- Office Move: off track");
+   });
+ 
+   it("explains the empty states when there are no projects and no asks", async () => {
+--- a/src/components/SyncBulletEditor.tsx
++++ b/src/components/SyncBulletEditor.tsx
+@@ -0,0 +1,132 @@
++import { useEffect, useRef, useState } from "react";
++
++/**
++ * One click-to-edit bullet list (v167, the Weekly Sync kit layout Kk
++ * chose from the mockups): the Wins / Blockers / Next week columns.
++ * A line renders as a button so it is keyboard-reachable; clicking (or
++ * Enter/Space on the focused line) swaps it for an input holding the
++ * same words. Enter or leaving the field commits, Esc cancels, the ×
++ * removes the line, and "+ Add a line" appends a fresh line already
++ * open for typing. Committing an emptied line removes it -- a blank
++ * bullet is never a real bullet. The list is presentation state only:
++ * the parent owns the lines and nothing is persisted anywhere, the
++ * same contract the v160 textareas had.
++ */
++export function SyncBulletEditor({
++  title,
++  lines,
++  onChange,
++}: {
++  title: string;
++  lines: string[];
++  onChange: (lines: string[]) => void;
++}) {
++  const [editing, setEditing] = useState<number | null>(null);
++  const [draft, setDraft] = useState("");
++  const inputRef = useRef<HTMLInputElement | null>(null);
++  // Enter commits and unmounts the input; the blur that follows must not
++  // commit a second time against the already-updated list.
++  const liveRef = useRef(false);
++
++  useEffect(() => {
++    if (editing !== null) {
++      inputRef.current?.focus();
++      inputRef.current?.select();
++    }
++  }, [editing]);
++
++  function startEdit(index: number) {
++    setDraft(lines[index]);
++    setEditing(index);
++    liveRef.current = true;
++  }
++
++  function commit() {
++    if (editing === null || !liveRef.current) return;
++    liveRef.current = false;
++    const text = draft.trim();
++    const next = [...lines];
++    if (text === "") next.splice(editing, 1);
++    else next[editing] = text;
++    setEditing(null);
++    onChange(next);
++  }
++
++  function cancel() {
++    liveRef.current = false;
++    setEditing(null);
++  }
++
++  function remove(index: number) {
++    if (editing === index) {
++      liveRef.current = false;
++      setEditing(null);
++    }
++    onChange(lines.filter((_, i) => i !== index));
++  }
++
++  function addLine() {
++    onChange([...lines, ""]);
++    setDraft("");
++    setEditing(lines.length);
++    liveRef.current = true;
++  }
++
++  return (
++    <div className="sync-editor">
++      <div className="sync-editor-head">
++        <h3 className="sync-editor-title">{title}</h3>
++        <span className="sync-editor-hint">Click to edit</span>
++      </div>
++      {lines.length === 0 && editing === null ? (
++        <p className="sync-editor-empty">Nothing here yet.</p>
++      ) : (
++        <ul className="sync-bullets">
++          {lines.map((line, i) => (
++            <li className="sync-bullet" key={i}>
++              {editing === i ? (
++                <input
++                  ref={inputRef}
++                  className="sync-bullet-input"
++                  value={draft}
++                  aria-label={`${title} line ${i + 1}`}
++                  onChange={(e) => setDraft(e.target.value)}
++                  onBlur={commit}
++                  onKeyDown={(e) => {
++                    if (e.key === "Enter") {
++                      e.preventDefault();
++                      commit();
++                    } else if (e.key === "Escape") {
++                      e.preventDefault();
++                      cancel();
++                    }
++                  }}
++                />
++              ) : (
++                <button
++                  type="button"
++                  className="sync-bullet-text"
++                  onClick={() => startEdit(i)}
++                  title="Click to edit"
++                >
++                  {line}
++                </button>
++              )}
++              <button
++                type="button"
++                className="sync-bullet-remove"
++                aria-label={`Remove this ${title.toLowerCase()} line`}
++                onClick={() => remove(i)}
++              >
++                ×
++              </button>
++            </li>
++          ))}
++        </ul>
++      )}
++      <button type="button" className="sync-add-line" onClick={addLine}>
++        + Add a line
++      </button>
++    </div>
++  );
++}

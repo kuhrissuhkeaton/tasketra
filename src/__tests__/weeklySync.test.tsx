@@ -94,17 +94,39 @@ describe("Weekly sync", () => {
     expect(undated?.textContent).not.toContain("Waiting on:");
   });
 
-  it("shows the recap text built from the same payload", async () => {
+  it("shows the formatted recap card built from the same payload (v167)", async () => {
     m.getWeeklySync.mockResolvedValue(DATA);
     await renderPage();
-    const pre = container.querySelector(".sync-recap-text");
-    expect(pre?.textContent).toContain("Weekly sync —");
-    // v156: the count line groups by headline health -- Website Relaunch
-    // stated on track, so it counts as on track, not at risk.
-    expect(pre?.textContent).toContain("2 projects: 1 on track, 1 off track.");
-    expect(pre?.textContent).toContain("- Website Relaunch: Stated on track, evidence suggests at risk.");
-    expect(pre?.textContent).toContain("- Pick a vendor (Website Relaunch) — needed by Nov 12, 2026");
-    expect(pre?.textContent).toContain("- Hire a designer (Office Move) — no date set");
+    const card = container.querySelector(".sync-recap-card");
+    expect(card?.textContent).toContain("Weekly sync recap");
+    // The Checked-in prose groups by headline health -- Website Relaunch
+    // stated on track, so it reads as on track, not at risk (the same
+    // grouping the copied recap counts by, v156).
+    expect(card?.textContent).toContain("Website Relaunch is on track.");
+    expect(card?.textContent).toContain("Office Move is off track.");
+    expect(card?.textContent).toContain("Pick a vendor");
+    expect(card?.textContent).toContain("(Website Relaunch)");
+    expect(card?.textContent).toContain("needed by Nov 12, 2026");
+    expect(card?.textContent).toContain("Hire a designer");
+    expect(card?.textContent).toContain("no date set");
+  });
+
+  it("shows the stat strip counted from the payload and the drafts (v167)", async () => {
+    m.getWeeklySync.mockResolvedValue(DATA);
+    await renderPage();
+    const stats = new Map(
+      Array.from(container.querySelectorAll(".sync-stat")).map((el) => [
+        el.querySelector(".sync-stat-label")?.textContent,
+        el.querySelector(".sync-stat-value")?.textContent,
+      ]),
+    );
+    expect(stats.get("Asks waiting")).toBe("2");
+    // Pre-fill: one win (Website Relaunch's headline is on track), two
+    // blockers (Office Move off track, Website Relaunch's past-due tasks).
+    expect(stats.get("Wins logged")).toBe("1");
+    expect(stats.get("Blockers open")).toBe("2");
+    expect(stats.has("Projects checked in")).toBe(true);
+    expect(stats.has("Oldest ask, in days")).toBe(true);
   });
 
   it("copies the recap and confirms briefly", async () => {
@@ -120,23 +142,45 @@ describe("Weekly sync", () => {
     expect(button!.textContent).toBe("Copied");
   });
 
-  it("pre-fills the Wins / Blockers / Next week editors from the payload, and the edits reach the copied recap (v160, F-23)", async () => {
+  it("pre-fills the Wins / Blockers / Next week bullet editors from the payload, and the edits reach the copied recap (v160, F-23; v167 bullets)", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
     m.getWeeklySync.mockResolvedValue(DATA);
     await renderPage();
-    const wins = container.querySelector<HTMLTextAreaElement>("#sync-wins");
-    const blockers = container.querySelector<HTMLTextAreaElement>("#sync-blockers");
-    expect(wins?.value).toContain("Website Relaunch is on track");
-    expect(blockers?.value).toContain("Office Move: off track");
-    expect(blockers?.value).toContain("Website Relaunch: 2 tasks past due");
-    // Edit the wins draft the way a user types: the recap follows the edit.
-    const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")!.set!;
+    const editorFor = (title: string) =>
+      Array.from(container.querySelectorAll(".sync-editor")).find(
+        (el) => el.querySelector(".sync-editor-title")?.textContent === title,
+      );
+    const wins = editorFor("Wins");
+    const blockers = editorFor("Blockers");
+    expect(wins?.textContent).toContain("Website Relaunch is on track");
+    expect(blockers?.textContent).toContain("Office Move: off track");
+    expect(blockers?.textContent).toContain("Website Relaunch: 2 tasks past due");
+    // Edit the wins line the way a user does: click it, retype, Enter.
+    const line = Array.from(wins!.querySelectorAll<HTMLButtonElement>(".sync-bullet-text")).find(
+      (b) => b.textContent === "Website Relaunch is on track",
+    );
+    await act(async () => { line!.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
+    const input = wins!.querySelector<HTMLInputElement>(".sync-bullet-input");
+    expect(input?.value).toBe("Website Relaunch is on track");
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!;
     await act(async () => {
-      setter.call(wins, "Shipped the beta");
-      wins!.dispatchEvent(new Event("input", { bubbles: true }));
+      setter.call(input, "Shipped the beta");
+      input!.dispatchEvent(new Event("input", { bubbles: true }));
     });
-    expect(container.querySelector(".sync-recap-text")?.textContent).toContain("- Shipped the beta");
+    await act(async () => {
+      input!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    });
+    expect(wins!.textContent).toContain("Shipped the beta");
+    expect(container.querySelector(".sync-recap-card")?.textContent).toContain("Shipped the beta");
+    // Remove a blockers line with its × button.
+    const doomed = Array.from(blockers!.querySelectorAll(".sync-bullet")).find(
+      (li) => li.textContent?.includes("Office Move: off track"),
+    );
+    const removeBtn = doomed!.querySelector<HTMLButtonElement>(".sync-bullet-remove");
+    await act(async () => { removeBtn!.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
+    expect(blockers!.textContent).not.toContain("Office Move: off track");
+    // The copied recap carries the edit and the removal.
     const button = Array.from(container.querySelectorAll("button")).find((b) => b.textContent === "Copy recap");
     await act(async () => { button!.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
     const copied = String(writeText.mock.calls[0][0]);
@@ -144,6 +188,7 @@ describe("Weekly sync", () => {
     expect(copied).toContain("- Shipped the beta");
     expect(copied).toContain("Blockers:");
     expect(copied).not.toContain("Website Relaunch is on track");
+    expect(copied).not.toContain("- Office Move: off track");
   });
 
   it("explains the empty states when there are no projects and no asks", async () => {

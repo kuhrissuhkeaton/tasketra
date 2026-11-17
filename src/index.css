@@ -2804,23 +2804,72 @@ a.dash-attention-next:hover { text-decoration: underline; text-underline-offset:
 .rg-accounts .rg-row > .rg-pill .muted { font-size: 12px; }
 @media (max-width: 760px) { .rg-accounts .rg-row > .rg-actions { flex-direction: row; flex-wrap: wrap; } }
 
-/* Weekly sync page (v146): status lines, asks queue and the recap block. */
-.sync-list { list-style: none; margin: 0; padding: 0; }
-.sync-row { border-bottom: 1px solid var(--border); }
-.sync-row:last-child { border-bottom: none; }
-.sync-link { display: block; padding: 8px 0; color: var(--navy); text-decoration: none; font-size: 14px; }
-.sync-link:hover .sync-name { text-decoration: underline; text-underline-offset: 3px; }
+/* Weekly sync page (v146; v167 rebuilt it as the kit layout: a stat
+   strip, the ritual in four numbered steps, asks as cards, the Wins /
+   Blockers / Next week drafts as click-to-edit bullet lists, and the
+   recap as a formatted card). */
 .sync-name { display: block; font-weight: 600; }
 .sync-line { display: block; margin-top: 1px; }
 .sync-meta { display: block; margin-top: 1px; font-size: 13px; color: var(--slate-text); }
 .sync-context { display: block; margin-top: 2px; font-size: 13px; color: var(--slate-text); }
-.sync-recap-text { margin: 0 0 10px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-muted); font: inherit; font-size: 14px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: break-word; }
-.sync-recap-actions { display: flex; justify-content: flex-end; }
-/* v160 (F-23): the Wins / Blockers / Next week editors on Weekly sync. */
-.sync-sections { display: flex; flex-direction: column; gap: 6px; }
-.sync-sections label { font-weight: 600; font-size: 13px; margin-top: 8px; }
-.sync-sections label:first-child { margin-top: 0; }
-.sync-sections textarea { width: 100%; line-height: 1.5; }
+.sync-week { margin: 0 0 14px; }
+.sync-week-chip { display: inline-block; padding: 5px 12px; border: 1px solid var(--border); border-radius: 999px; background: var(--panel); font-size: 13px; font-weight: 600; color: var(--navy); }
+.sync-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 6px; }
+.sync-stat { display: flex; flex-direction: column; gap: 2px; padding: 14px 16px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); }
+.sync-stat-value { font-family: 'Fraunces', serif; font-size: 28px; font-weight: 700; line-height: 1.1; color: var(--navy); }
+.sync-stat-of { font-size: 16px; font-weight: 600; color: var(--slate-text); }
+.sync-stat-label { font-size: 12.5px; font-weight: 600; color: var(--slate-text); }
+.sync-step { margin-top: 26px; }
+.sync-step-head { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
+.sync-step-num { flex: none; width: 30px; height: 30px; border-radius: 50%; background: var(--lime); color: var(--navy); font-family: 'Fraunces', serif; font-size: 15px; font-weight: 700; display: flex; align-items: center; justify-content: center; margin-top: 2px; }
+.sync-step-title { margin: 0; font-size: 20px; }
+.sync-step-sub { margin: 2px 0 0; font-size: 13.5px; color: var(--slate-text); }
+.sync-card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; }
+.sync-checkins { list-style: none; margin: 0; padding: 0; }
+.sync-checkin { border-bottom: 1px solid var(--border); }
+.sync-checkin:last-child { border-bottom: none; }
+.sync-checkin-link { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 10px 0; color: var(--navy); text-decoration: none; font-size: 14px; }
+.sync-checkin-link:hover .sync-name { text-decoration: underline; text-underline-offset: 3px; }
+.sync-checkin-main { min-width: 0; }
+.sync-health-chip { flex: none; display: inline-flex; align-items: center; gap: 7px; padding: 4px 11px; border-radius: 999px; font-size: 12.5px; font-weight: 600; color: var(--navy); }
+.sync-health-dot { width: 8px; height: 8px; border-radius: 50%; }
+.sync-health-chip.tone-on_track { background: #DCE8CB; }
+.sync-health-chip.tone-on_track .sync-health-dot { background: var(--chart-good); }
+.sync-health-chip.tone-at_risk { background: #FCEBC8; }
+.sync-health-chip.tone-at_risk .sync-health-dot { background: var(--chart-warn); }
+.sync-health-chip.tone-off_track { background: #F6D9D2; }
+.sync-health-chip.tone-off_track .sync-health-dot { background: var(--chart-crit); }
+.sync-ask-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.sync-ask-card { display: block; padding: 14px 16px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); color: var(--navy); text-decoration: none; font-size: 14px; }
+.sync-ask-card.hot { border-top: 3px solid var(--red); }
+.sync-ask-card:hover .sync-ask-title { text-decoration: underline; text-underline-offset: 3px; }
+.sync-ask-title { display: block; font-weight: 600; font-size: 15px; }
+.sync-editors { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
+.sync-editor-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.sync-editor-title { margin: 0; font-size: 16px; }
+.sync-editor-hint { font-size: 11.5px; color: var(--slate-text); }
+.sync-editor-empty { margin: 4px 0; font-size: 13.5px; color: var(--slate-text); }
+.sync-bullets { list-style: none; margin: 0; padding: 0; }
+.sync-bullet { display: flex; align-items: flex-start; gap: 6px; padding: 3px 0; }
+.sync-bullet::before { content: "•"; flex: none; color: var(--slate-text); line-height: 1.5; }
+.sync-bullet-text { flex: 1; min-width: 0; padding: 2px 6px; margin: 0; border: none; border-radius: 6px; background: none; font: inherit; font-size: 14px; line-height: 1.5; text-align: left; color: var(--navy); cursor: text; overflow-wrap: break-word; }
+.sync-bullet-text:hover { background: var(--tint); }
+.sync-bullet-input { flex: 1; min-width: 0; padding: 3px 8px; border: 1px solid var(--slate); border-radius: 8px; font: inherit; font-size: 14px; line-height: 1.5; color: var(--navy); background: var(--panel); }
+.sync-bullet-remove { flex: none; width: 22px; height: 22px; margin-top: 2px; padding: 0; border: none; border-radius: 50%; background: none; font-size: 15px; line-height: 1; color: var(--slate-text); cursor: pointer; }
+.sync-bullet-remove:hover { color: var(--red); background: var(--surface-muted); }
+.sync-add-line { margin-top: 8px; padding: 2px 6px; border: none; background: none; font: inherit; font-size: 13.5px; font-weight: 600; color: var(--slate-text); cursor: pointer; }
+.sync-add-line:hover { color: var(--navy); }
+.sync-recap-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+.sync-recap-name { display: block; font-family: 'Fraunces', serif; font-size: 17px; font-weight: 700; color: var(--navy); }
+.sync-recap-meta { display: block; margin-top: 2px; font-size: 13px; color: var(--slate-text); }
+.sync-recap-block { margin-top: 14px; }
+.sync-recap-h { margin: 0 0 4px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--slate-text); }
+.sync-recap-p { margin: 0; font-size: 14px; line-height: 1.55; }
+.sync-recap-list { margin: 0; padding-left: 18px; font-size: 14px; line-height: 1.55; }
+.sync-recap-list li { margin: 3px 0; }
+.sync-recap-clean { margin-top: 14px; }
+@media (max-width: 900px) { .sync-editors { grid-template-columns: 1fr; } }
+@media (max-width: 760px) { .sync-ask-grid { grid-template-columns: 1fr; } }
 
 /* Workload page (v147): owner x week grid, darker cells as the load grows. */
 .wl-scroll { overflow-x: auto; }
