@@ -1225,6 +1225,58 @@ function TrashTab({ projectId }: { projectId: string }) {
   );
 }
 
+// v162 (F-11): how a stakeholder reads in an assignee picker -- the name,
+// with the role in parentheses when the stakeholder carries one that is
+// not just the name repeated. A stakeholder can BE a role ("Change
+// control board"), in which case the name alone is the label.
+function stakeholderOptionLabel(s: Stakeholder): string {
+  return s.role && s.role !== s.name ? `${s.name} (${s.role})` : s.name;
+}
+
+// v162 (F-11): the inline stakeholder quick-add the assignment pickers
+// fall back to when a project has no stakeholders yet. Before v162 the
+// decision form dead-ended here ("Add stakeholders first"); now a
+// stakeholder or role added inline joins the register and is assignable
+// in the same breath -- the parent hears about it via onAdded and selects
+// it. Name and role only: power/interest and the rest live in the
+// Stakeholders tab's full form, which stays the register's home.
+function StakeholderQuickAdd({ projectId, onAdded }: { projectId: string; onAdded: (s: Stakeholder) => void }) {
+  const [name, setName] = useState("");
+  const [role, setRole] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function add(e: React.FormEvent) {
+    e.preventDefault();
+    if (!name.trim() || busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      const { stakeholder } = await api.createStakeholder(projectId, name.trim(), undefined, role.trim() || undefined);
+      setName("");
+      setRole("");
+      announce("Stakeholder added.");
+      onAdded(stakeholder);
+    } catch (err: any) {
+      setError(err.message || "Couldn't add that stakeholder.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="stakeholder-quick-add">
+      <p className="muted">No stakeholders yet. Add a person or a role (Sponsor, Change control board) to assign work to them:</p>
+      <form className="inline-form" onSubmit={add}>
+        <input aria-label="New stakeholder name" placeholder="Name or role" value={name} onChange={(e) => setName(e.target.value)} />
+        <input aria-label="New stakeholder role (optional)" placeholder="Role (optional)" value={role} onChange={(e) => setRole(e.target.value)} />
+        <button className="btn btn-ghost" type="submit" disabled={busy}>Add stakeholder</button>
+      </form>
+      {error && <p className="form-error">{error}</p>}
+    </div>
+  );
+}
+
 function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }: { projectId: string; projectName: string; highlightId?: string | null; defaultView?: "list" | "board" }) {
   const confirmDialog = useConfirm();
   const { setRowRef, jumpTo } = useRowHighlight();
@@ -1244,6 +1296,14 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
   const [phases, setPhases] = useState<RoadmapItem[]>([]);
   const [newPhase, setNewPhase] = useState("");
   const [editPhase, setEditPhase] = useState("");
+  // v162 (F-11): the project's stakeholders -- the roles and named people a
+  // task can be assigned to, next to the free-text owner name. The picker
+  // only appears once the project has at least one stakeholder, the same
+  // conditional pattern as the Phase picker.
+  const [stakeholders, setStakeholders] = useState<Stakeholder[]>([]);
+  const [newStakeholder, setNewStakeholder] = useState("");
+  const [subStakeholder, setSubStakeholder] = useState("");
+  const [editStakeholder, setEditStakeholder] = useState("");
   const [editPriority, setEditPriority] = useState("");
   const [view, setView] = useState<"list" | "board" | "timeline">(defaultView);
   const [dragOverStatus, setDragOverStatus] = useState<Task["status"] | null>(null);
@@ -1282,6 +1342,12 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
   }
 
   async function load() {
+    // Stakeholders load off the critical path (v162): the assignee picker
+    // appears when the register arrives, and the tab must render its tasks
+    // even if that read is slow or fails -- it never gates the list.
+    api.listStakeholders(projectId)
+      .then((r) => setStakeholders(r.stakeholders))
+      .catch(() => {});
     const [{ tasks }, { riskLinks, issueLinks }, { links: taskLinks }, roadmap] = await Promise.all([
       api.listTasks(projectId),
       api.listRaidTaskLinks(projectId),
@@ -1323,7 +1389,7 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
     if (!title.trim()) return;
     setError("");
     try {
-      const { task } = await api.createTask(projectId, title.trim(), owner || undefined, due || undefined, undefined, start || undefined, newStatus, undefined, newPhase || undefined);
+      const { task } = await api.createTask(projectId, title.trim(), owner || undefined, due || undefined, undefined, start || undefined, newStatus, undefined, newPhase || undefined, newStakeholder || undefined);
       noteProjectActivity(projectId, "task");
       noteProjectChanged(projectId);
       // v150: the new task joins the list the moment it saves, instead of
@@ -1339,6 +1405,7 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
       setDue("");
       setNewStatus("not_started");
       setNewPhase("");
+      setNewStakeholder("");
       announce("Task added.");
       load();
     } catch (err: any) {
@@ -1349,7 +1416,7 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
   async function addSubtask(e: React.FormEvent, parentId: string) {
     e.preventDefault();
     if (!subTitle.trim()) return;
-    const { task } = await api.createTask(projectId, subTitle.trim(), subOwner || undefined, subDue || undefined, parentId, subStart || undefined);
+    const { task } = await api.createTask(projectId, subTitle.trim(), subOwner || undefined, subDue || undefined, parentId, subStart || undefined, undefined, undefined, undefined, subStakeholder || undefined);
     noteProjectActivity(projectId, "task");
     noteProjectChanged(projectId);
     setTasks((cur) => (cur.some((t) => t.id === task.id) ? cur : [...cur, task]));
@@ -1357,6 +1424,7 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
     setSubOwner("");
     setSubStart("");
     setSubDue("");
+    setSubStakeholder("");
     setAddingSubtaskFor(null);
     announce("Sub-task added.");
     load();
@@ -1384,6 +1452,7 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
     setEditDescription(t.description || "");
     setEditPhase(t.roadmap_item_id || "");
     setEditPriority(t.priority || "");
+    setEditStakeholder(t.stakeholder_id || "");
     setDependsOnPick("");
   }
 
@@ -1398,6 +1467,7 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
     // never disturbs a link (for instance one to a phase that's in Trash).
     const phaseChanged = editPhase !== (taskById.get(drawerTaskId)?.roadmap_item_id || "");
     const priorityChanged = editPriority !== (taskById.get(drawerTaskId)?.priority || "");
+    const stakeholderChanged = editStakeholder !== (taskById.get(drawerTaskId)?.stakeholder_id || "");
     await api.updateTask(drawerTaskId, {
       title: editTitle.trim(), owner_name: editOwner || undefined,
       start_date: editStart || undefined, due_date: editDue || undefined,
@@ -1405,6 +1475,8 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
       ...(phaseChanged ? { roadmap_item_id: editPhase || null } : {}),
       // Only sent when it changed, so saving other fields never touches it.
       ...(priorityChanged ? { priority: (editPriority || null) as Task["priority"] } : {}),
+      // Same rule for the stakeholder owner (v162).
+      ...(stakeholderChanged ? { stakeholder_id: editStakeholder || null } : {}),
     } as any);
     noteProjectActivity(projectId, "task");
     closeDrawer();
@@ -1420,6 +1492,17 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
 
   const taskById = new Map(tasks.map((t) => [t.id, t]));
   const phaseById = new Map(phases.map((p) => [p.id, p]));
+  const stakeholderById = new Map(stakeholders.map((s) => [s.id, s]));
+  // v162 (F-11): the owner a task shows -- the same resolution the
+  // Workload page applies server-side: the free-text owner name, else the
+  // linked stakeholder's name, else nothing (each surface keeps its own
+  // existing fallback wording for the unassigned case).
+  function taskOwnerLabel(t: Task): string | null {
+    const name = (t.owner_name || "").trim();
+    if (name) return name;
+    const s = t.stakeholder_id ? stakeholderById.get(t.stakeholder_id) : undefined;
+    return s ? s.name : null;
+  }
   const taskGroupList = groupTasks(tasks, sortBy);
   const drawerTask = drawerTaskId ? taskById.get(drawerTaskId) || null : null;
   // A task's "blocked by" list -- risks/issues that named this task via the
@@ -1496,9 +1579,26 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
             ))}
           </select>
         )}
+        {stakeholders.length > 0 && (
+          <select value={newStakeholder} onChange={(e) => setNewStakeholder(e.target.value)} title="Stakeholder or role (optional) -- assign this task to a role or a named stakeholder instead of, or as well as, a typed owner name" aria-label="Stakeholder or role (optional)">
+            <option value="">No stakeholder</option>
+            {stakeholders.map((s) => (
+              <option key={s.id} value={s.id}>{stakeholderOptionLabel(s)}</option>
+            ))}
+          </select>
+        )}
         <button className="btn btn-primary">Add task</button>
       </AddForm>
       {error && <p className="form-error">{error}</p>}
+      {stakeholders.length === 0 && (
+        <StakeholderQuickAdd
+          projectId={projectId}
+          onAdded={(s) => {
+            setStakeholders((cur) => [...cur, s]);
+            setNewStakeholder(s.id);
+          }}
+        />
+      )}
 
       <div className="view-toggle">
         <button
@@ -1574,7 +1674,7 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
                         <RegisterRow
                           rowRef={(el) => setRowRef(t.id, el)}
                           title={<button type="button" className="row-title-btn" onClick={() => openDrawer(t)}>{t.title}</button>}
-                          meta={<>{t.priority ? `${t.priority === "high" ? "High" : t.priority === "medium" ? "Medium" : "Low"} priority \u00b7 ` : ""}{t.owner_name || "No owner"}{parent ? ` \u00b7 Sub-task of ${parent.title}` : ""}{t.depends_on_count ? ` \u00b7 Waits on ${t.depends_on_count}` : ""}{t.blocks_count ? ` \u00b7 Blocks ${t.blocks_count}` : ""}</>}
+                          meta={<>{t.priority ? `${t.priority === "high" ? "High" : t.priority === "medium" ? "Medium" : "Low"} priority \u00b7 ` : ""}{taskOwnerLabel(t) || "No owner"}{parent ? ` \u00b7 Sub-task of ${parent.title}` : ""}{t.depends_on_count ? ` \u00b7 Waits on ${t.depends_on_count}` : ""}{t.blocks_count ? ` \u00b7 Blocks ${t.blocks_count}` : ""}</>}
                           pill={phase ? <span className="pill pill-navy task-phase-pill" title={`Roadmap phase: ${phase.title}`}>{phase.title}</span> : null}
                           flag={lateFlag(t.due_date, t.status !== "done")}
                           date={t.due_date ? fmtLocalDate(t.due_date) : null}
@@ -1612,6 +1712,14 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
                             >
                               <input aria-label="Sub-task title" aria-required="true" placeholder="Sub-task title" value={subTitle} onChange={(e) => setSubTitle(e.target.value)} autoFocus />
                               <input aria-label="Owner (optional)" placeholder="Owner (optional)" value={subOwner} onChange={(e) => setSubOwner(e.target.value)} />
+                              {stakeholders.length > 0 && (
+                                <select value={subStakeholder} onChange={(e) => setSubStakeholder(e.target.value)} title="Stakeholder or role (optional) -- assign this sub-task to a role or a named stakeholder" aria-label="Stakeholder or role (optional)">
+                                  <option value="">No stakeholder</option>
+                                  {stakeholders.map((s) => (
+                                    <option key={s.id} value={s.id}>{stakeholderOptionLabel(s)}</option>
+                                  ))}
+                                </select>
+                              )}
                               <span className="datefield">
                                 <span className="datefield-label" aria-hidden="true">Start</span>
                                 <DateField title="Start date (optional)" ariaLabel="Start date (optional)" value={subStart} onChange={setSubStart} />
@@ -1658,7 +1766,7 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
                   >
                     {parent && <div className="kanban-parent muted">&#8627; {parent.title}</div>}
                     <div>{t.title}</div>
-                    <div className="muted">{t.owner_name || "unassigned"}{t.due_date ? ` · ${fmtLocalDate(t.due_date)}` : ""}</div>
+                    <div className="muted">{taskOwnerLabel(t) || "unassigned"}{t.due_date ? ` · ${fmtLocalDate(t.due_date)}` : ""}</div>
                   </div>
                 );
               })}
@@ -1739,6 +1847,23 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
                     <option key={p.id} value={p.id}>{p.title}</option>
                   ))}
                 </select>
+              </div>
+            )}
+            {(stakeholders.length > 0 || !!drawerTask.stakeholder_id) && (
+              <div className="drawer-field">
+                <label htmlFor="f-task-stakeholder">Stakeholder / role</label>
+                <select id="f-task-stakeholder"
+                  value={stakeholderById.has(editStakeholder) ? editStakeholder : ""}
+                  onChange={(e) => setEditStakeholder(e.target.value)}
+                >
+                  <option value="">No stakeholder</option>
+                  {stakeholders.map((s) => (
+                    <option key={s.id} value={s.id}>{stakeholderOptionLabel(s)}</option>
+                  ))}
+                </select>
+                <p className="muted" style={{ fontSize: 13, marginTop: 6 }}>
+                  Assign the work to a role or a named stakeholder. A typed owner name above still wins where both are set.
+                </p>
               </div>
             )}
             <div className="drawer-field">
@@ -5613,6 +5738,9 @@ function StakeholderDecisionsTab({ projectId }: { projectId: string }) {
   const [options, setOptions] = useState("Approve, Reject");
   const [deadline, setDeadline] = useState("");
   const [selectedStakeholders, setSelectedStakeholders] = useState<string[]>([]);
+  // v162 (F-11): the accountable owner -- one stakeholder or role -- next
+  // to the Send-to list. Empty = no owner named, as before v162.
+  const [ownerStakeholder, setOwnerStakeholder] = useState("");
   const [lastShareUrl, setLastShareUrl] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [nudgedId, setNudgedId] = useState<string | null>(null);
@@ -5697,17 +5825,23 @@ function StakeholderDecisionsTab({ projectId }: { projectId: string }) {
     setError("");
     try {
       const { decision, shareUrl } = await api.createDecision(
-        projectId, title.trim(), context.trim(), opts, deadline || undefined, selectedStakeholders
+        projectId, title.trim(), context.trim(), opts, deadline || undefined, selectedStakeholders,
+        ownerStakeholder || undefined
       );
       setLastShareUrl(shareUrl);
       // v150: the new decision appears at the top of the list (newest first)
       // the moment it saves. The create response has no recipients join, so
       // fill it from the stakeholders just picked; load() reconciles after.
+      // v162: the same fill for the owner, from the stakeholder just picked.
+      const ownerFill = ownerStakeholder
+        ? stakeholders.find((s) => s.id === ownerStakeholder)
+        : undefined;
       const withRecipients: Decision = {
         ...decision,
         recipients: decision.recipients?.length
           ? decision.recipients
           : stakeholders.filter((s) => selectedStakeholders.includes(s.id)).map((s) => ({ id: s.id, name: s.name })),
+        owner: decision.owner ?? (ownerFill ? { id: ownerFill.id, name: ownerFill.name, role: ownerFill.role } : null),
       };
       setDecisions((cur) => (cur.some((d) => d.id === withRecipients.id) ? cur : [withRecipients, ...cur]));
       noteProjectChanged(projectId);
@@ -5716,6 +5850,7 @@ function StakeholderDecisionsTab({ projectId }: { projectId: string }) {
       setOptions("Approve, Reject");
       setDeadline("");
       setSelectedStakeholders([]);
+      setOwnerStakeholder("");
       setShowForm(false);
       announce("Decision added.");
       load();
@@ -5782,6 +5917,17 @@ function StakeholderDecisionsTab({ projectId }: { projectId: string }) {
             ))}
             {stakeholders.length === 0 && <p className="muted">Add stakeholders first to route this to someone.</p>}
           </div>
+          {/* v162 (F-11): the accountable owner -- one stakeholder or role --
+              distinct from the Send-to list above: the list is who gets
+              asked, the owner is whose call it is. Optional, as it always
+              was implicitly. */}
+          <label htmlFor="f-decision-owner">Decision owner (optional)</label>
+          <select id="f-decision-owner" value={ownerStakeholder} onChange={(e) => setOwnerStakeholder(e.target.value)}>
+            <option value="">No owner</option>
+            {stakeholders.map((s) => (
+              <option key={s.id} value={s.id}>{stakeholderOptionLabel(s)}</option>
+            ))}
+          </select>
           {/* v161 (F-09): the decider's-eye preview. It mirrors the public
               decision page (DecisionPublic) field for field -- same title,
               context, "Requested by" line, and option rows -- and updates
@@ -5815,6 +5961,16 @@ function StakeholderDecisionsTab({ projectId }: { projectId: string }) {
         </AddForm>
       )}
 
+      {showForm && stakeholders.length === 0 && (
+        <StakeholderQuickAdd
+          projectId={projectId}
+          onAdded={(s) => {
+            setStakeholders((cur) => [...cur, s]);
+            setSelectedStakeholders((cur) => [...cur, s.id]);
+          }}
+        />
+      )}
+
       {decisions.length > 0 && (
         <p className="muted" style={{ marginBottom: 12 }}>
           {decisions.filter((d) => d.status === "open").length} awaiting a response · {decisions.filter((d) => d.status !== "open").length} decided
@@ -5842,6 +5998,15 @@ function StakeholderDecisionsTab({ projectId }: { projectId: string }) {
               </p>
             )}
             {d.context && <p className="muted">{d.context}</p>}
+            {/* v162 (F-11): the accountable owner, when the request named
+                one. Its own line, below the v160 lead: the lead stays
+                about who is being waited on, this says whose call it is. */}
+            {d.owner && (
+              <p className="muted decision-owner">
+                Owner: <strong>{d.owner.name}</strong>
+                {d.owner.role && d.owner.role !== d.owner.name ? ` (${d.owner.role})` : ""}
+              </p>
+            )}
             {d.options?.length > 0 && (
               <div className="decision-options" aria-label="Options">
                 {d.options.map((o) => (

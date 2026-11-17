@@ -10,6 +10,12 @@ export type ChangeEntry = { version: string; date: string; title: string; body: 
 // they can do.
 export const CHANGES: ChangeEntry[] = [
   {
+    version: "v162",
+    date: "November 2026",
+    title: "Assign work to the role that's responsible, not just a person.",
+    body: "Real projects run on roles: the sponsor approves, the change control board decides, a named stakeholder owns the next step. Tasks can now be assigned to any stakeholder or role on the project, as well as to a typed name, from the add-task form, the sub-task form, and the task drawer. Decision requests can name a decision owner, the stakeholder or role whose call it is, alongside the people it is sent to, and the card shows the owner under the waiting-on line. Workload picks role owners up automatically, so a board's work shows under the board's name instead of piling into Unassigned. If a project has no stakeholders yet, the task and decision forms offer a quick add right there: name the person or the role once and they are assignable immediately.",
+  },
+  {
     version: "v161",
     date: "November 2026",
     title: "New here? Your first project walks you through itself.",

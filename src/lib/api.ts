@@ -351,6 +351,11 @@ export type Decision = {
   // Every response collected so far, oldest first.
   records: DecisionRecord[];
   recipients: { id: string; name: string }[];
+  // v162 (F-11): the accountable owner -- one stakeholder or role -- if the
+  // request named one. Optional in the type because older payloads (and
+  // fixtures built before v162) do not carry it; the API always sends both.
+  owner_stakeholder_id?: string | null;
+  owner?: { id: string; name: string; role: string | null } | null;
 };
 
 export type Issue = {
@@ -1177,12 +1182,12 @@ export const api = {
     request<{ ok: true }>("/stakeholders", { method: "PATCH", body: JSON.stringify({ id, restore: true }) }),
 
   listTasks: (projectId: string) => request<{ tasks: Task[] }>(`/tasks?projectId=${projectId}`),
-  createTask: (projectId: string, title: string, ownerName?: string, dueDate?: string, parentTaskId?: string, startDate?: string, status?: Task["status"], description?: string, phaseId?: string) =>
+  createTask: (projectId: string, title: string, ownerName?: string, dueDate?: string, parentTaskId?: string, startDate?: string, status?: Task["status"], description?: string, phaseId?: string, stakeholderId?: string | null) =>
     request<{ task: Task }>("/tasks", {
       method: "POST",
-      body: JSON.stringify({ projectId, title, ownerName, dueDate, parentTaskId, startDate, status, description, phaseId }),
+      body: JSON.stringify({ projectId, title, ownerName, dueDate, parentTaskId, startDate, status, description, phaseId, stakeholderId }),
     }),
-  updateTask: (id: string, patch: Partial<Pick<Task, "status" | "title" | "owner_name" | "due_date" | "parent_task_id" | "start_date" | "description" | "roadmap_item_id" | "priority">>) =>
+  updateTask: (id: string, patch: Partial<Pick<Task, "status" | "title" | "owner_name" | "due_date" | "parent_task_id" | "start_date" | "description" | "roadmap_item_id" | "priority" | "stakeholder_id">>) =>
     request<{ task: Task }>("/tasks", {
       method: "PATCH",
       body: JSON.stringify({
@@ -1193,6 +1198,8 @@ export const api = {
         ...("roadmap_item_id" in patch ? { phaseId: patch.roadmap_item_id } : {}),
         // Same for priority: an explicit null clears it.
         ...("priority" in patch ? { priority: patch.priority } : {}),
+        // Same for the stakeholder owner (v162): an explicit null unassigns it.
+        ...("stakeholder_id" in patch ? { stakeholderId: patch.stakeholder_id } : {}),
       }),
     }),
   deleteTask: (id: string) => request<{ ok: true }>(`/tasks?id=${id}`, { method: "DELETE" }),
@@ -1237,11 +1244,12 @@ export const api = {
     context: string,
     options: string[],
     deadline: string | undefined,
-    stakeholderIds: string[]
+    stakeholderIds: string[],
+    ownerStakeholderId?: string | null
   ) =>
     request<{ decision: Decision; shareUrl: string }>("/decisions", {
       method: "POST",
-      body: JSON.stringify({ projectId, title, context, options, deadline, stakeholderIds }),
+      body: JSON.stringify({ projectId, title, context, options, deadline, stakeholderIds, ownerStakeholderId }),
     }),
   deleteDecision: (id: string) => request<{ ok: true }>(`/decisions?id=${id}`, { method: "DELETE" }),
   restoreDecision: (id: string) =>

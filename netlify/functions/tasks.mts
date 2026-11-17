@@ -31,6 +31,21 @@ async function validatePhase(database: ReturnType<typeof db>, phaseId: string, p
   return null;
 }
 
+// v162 (F-11): a task's optional stakeholder owner -- the role or named
+// stakeholder the work belongs to, via the stakeholder_id column that has
+// existed since the init migration -- must be a live stakeholder of the
+// same project, the same rule validatePhase applies to phases. Until now
+// the column was accepted unvalidated (and the UI never set it at all).
+async function validateStakeholder(database: ReturnType<typeof db>, stakeholderId: string, projectId: string): Promise<string | null> {
+  const [stakeholder] = await database.sql`
+    SELECT project_id FROM stakeholders WHERE id = ${stakeholderId} AND deleted_at IS NULL
+  `;
+  if (!stakeholder || stakeholder.project_id !== projectId) {
+    return "Stakeholder not found in this project.";
+  }
+  return null;
+}
+
 export default withSentry(async (req: Request) => {
   const userId = getUserIdFromRequest(req);
   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
@@ -82,11 +97,17 @@ export default withSentry(async (req: Request) => {
       if (phaseError) return json({ error: phaseError }, { status: 400 });
     }
 
+    const stakeholderId = body?.stakeholderId || null;
+    if (stakeholderId) {
+      const stakeholderError = await validateStakeholder(database, stakeholderId, projectId);
+      if (stakeholderError) return json({ error: stakeholderError }, { status: 400 });
+    }
+
     const status = VALID_STATUSES.includes(body?.status) ? body.status : "not_started";
 
     const [task] = await database.sql`
       INSERT INTO tasks (project_id, title, description, owner_name, start_date, due_date, stakeholder_id, parent_task_id, roadmap_item_id, status, priority)
-      VALUES (${projectId}, ${title}, ${body?.description || null}, ${body?.ownerName || null}, ${body?.startDate || null}, ${body?.dueDate || null}, ${body?.stakeholderId || null}, ${parentTaskId}, ${phaseId}, ${status}, ${body?.priority || null})
+      VALUES (${projectId}, ${title}, ${body?.description || null}, ${body?.ownerName || null}, ${body?.startDate || null}, ${body?.dueDate || null}, ${stakeholderId}, ${parentTaskId}, ${phaseId}, ${status}, ${body?.priority || null})
       RETURNING id, title, description, status, owner_name, start_date, due_date, stakeholder_id, parent_task_id, roadmap_item_id, priority, created_at, updated_at
     `;
     await logActivity(database, { projectId, entityType: "task", entityId: task.id, entityTitle: task.title, action: "created" });
@@ -148,6 +169,18 @@ export default withSentry(async (req: Request) => {
       if (phaseError) return json({ error: phaseError }, { status: 400 });
     }
 
+    // stakeholderId (v162, F-11) is set-or-clear exactly like phaseId: a
+    // string assigns the task to that stakeholder or role, an explicit
+    // null unassigns it, and leaving the key out changes nothing. Before
+    // v162 the PATCH ignored the key entirely, so the link could never be
+    // changed after creation.
+    const hasStakeholder = "stakeholderId" in body;
+    const nextStakeholderId: string | null = hasStakeholder ? (body.stakeholderId || null) : null;
+    if (hasStakeholder && nextStakeholderId) {
+      const stakeholderError = await validateStakeholder(database, nextStakeholderId, existing.project_id);
+      if (stakeholderError) return json({ error: stakeholderError }, { status: 400 });
+    }
+
     const [task] = await database.sql`
       UPDATE tasks SET
         title = COALESCE(${body.title ?? null}, title),
@@ -158,6 +191,7 @@ export default withSentry(async (req: Request) => {
         due_date = COALESCE(${body.dueDate ?? null}, due_date),
         parent_task_id = COALESCE(${body.parentTaskId ?? null}, parent_task_id),
         roadmap_item_id = CASE WHEN ${hasPhase} THEN ${nextPhaseId}::uuid ELSE roadmap_item_id END,
+        stakeholder_id = CASE WHEN ${hasStakeholder} THEN ${nextStakeholderId}::uuid ELSE stakeholder_id END,
         priority = CASE WHEN ${hasPriority} THEN ${nextPriority}::text ELSE priority END,
         updated_at = now()
       WHERE id = ${id}

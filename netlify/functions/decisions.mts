@@ -34,6 +34,14 @@ export default withSentry(async (req: Request) => {
 
     const decisions = await database.sql`
       SELECT dr.id, dr.title, dr.context, dr.options, dr.deadline, dr.public_token, dr.status, dr.created_at,
+        dr.owner_stakeholder_id,
+        -- v162 (F-11): the accountable owner -- a stakeholder or role --
+        -- resolved like the recipients below. A soft-deleted stakeholder
+        -- resolves to NULL: the owner is gone, so the request reads as
+        -- unowned rather than naming someone in the Trash.
+        (SELECT json_build_object('id', s.id, 'name', s.name, 'role', s.role)
+           FROM stakeholders s
+           WHERE s.id = dr.owner_stakeholder_id AND s.deleted_at IS NULL) AS owner,
         outcome.chosen_option, outcome.responder_name, outcome.responded_at, outcome.confirmed_at AS outcome_confirmed_at,
         COALESCE(
           (SELECT json_agg(json_build_object(
@@ -81,12 +89,27 @@ export default withSentry(async (req: Request) => {
     }
     if (!(await hasProjectAccess(userId, projectId))) return json({ error: "Not found" }, { status: 404 });
 
+    // v162 (F-11): the optional accountable owner -- one stakeholder or
+    // role -- must be a live stakeholder of this project, the same rule
+    // tasks apply to their stakeholder owner. Recipients keep their
+    // existing unchecked insert below; the owner is a single named
+    // reference, so it is validated like one.
+    const ownerStakeholderId = body?.ownerStakeholderId || null;
+    if (ownerStakeholderId) {
+      const [owner] = await database.sql`
+        SELECT project_id FROM stakeholders WHERE id = ${ownerStakeholderId} AND deleted_at IS NULL
+      `;
+      if (!owner || owner.project_id !== projectId) {
+        return json({ error: "Stakeholder not found in this project." }, { status: 400 });
+      }
+    }
+
     const publicToken = crypto.randomBytes(24).toString("base64url");
 
     const [decision] = await database.sql`
-      INSERT INTO decision_requests (project_id, title, context, options, deadline, public_token)
-      VALUES (${projectId}, ${title}, ${body?.context || null}, ${JSON.stringify(options)}, ${body?.deadline || null}, ${publicToken})
-      RETURNING id, title, context, options, deadline, public_token, status, created_at
+      INSERT INTO decision_requests (project_id, title, context, options, deadline, public_token, owner_stakeholder_id)
+      VALUES (${projectId}, ${title}, ${body?.context || null}, ${JSON.stringify(options)}, ${body?.deadline || null}, ${publicToken}, ${ownerStakeholderId})
+      RETURNING id, title, context, options, deadline, public_token, status, created_at, owner_stakeholder_id
     `;
 
     for (const stakeholderId of recipientIds) {

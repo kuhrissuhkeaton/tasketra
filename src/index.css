@@ -1269,6 +1269,14 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
 /* v160 (F-16): the lead line on an open decision card -- who it waits on,
    the wait, the needed-by date -- reads at full strength, not muted. */
 .decision-wait { margin: 6px 0 4px; font-size: 15px; }
+/* v162 (F-11): the accountable-owner line on a decision card, and the
+   inline stakeholder quick-add under the task/decision create forms.
+   The owner line keeps the muted paragraph rhythm of the context line
+   above it; the quick-add is a plain block whose inner inline-form
+   carries the forms' own spacing, so it needs only its outer margins. */
+.decision-owner { margin: 4px 0 6px; }
+.stakeholder-quick-add { margin: 12px 0 16px; }
+.stakeholder-quick-add .muted { margin: 0 0 8px; }
 .decision-actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0 4px; }
 .decision-card {
   padding: 16px;

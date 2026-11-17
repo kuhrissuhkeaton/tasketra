@@ -1,0 +1,18 @@
+-- Role ownership for decisions (v162, panel finding F-11 / backlog TA-001):
+-- a decision request can now name the stakeholder or role accountable for
+-- the call -- the Sponsor, the Change control board, a named stakeholder --
+-- as a single owner, alongside the recipients it is sent to. One additive,
+-- nullable column; no row is rewritten, deleted, or backfilled anywhere in
+-- this migration.
+--
+-- Existing decision requests keep a NULL owner and behave exactly as
+-- before -- the recipients list stays the "waiting on" source on every
+-- surface -- until someone sets an owner on a new request.
+--
+-- Tasks deliberately get NO new column here: tasks.stakeholder_id, a
+-- nullable stakeholder reference, has existed since the init migration and
+-- is already the task owner reference the Workload page resolves (owner
+-- name, then the linked stakeholder's name, then Unassigned). v162 wires
+-- that column up in the UI and validates it server-side instead of adding
+-- a second, parallel owner column to the same table.
+ALTER TABLE decision_requests ADD COLUMN IF NOT EXISTS owner_stakeholder_id UUID REFERENCES stakeholders(id);
