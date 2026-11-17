@@ -10,6 +10,12 @@ export type ChangeEntry = { version: string; date: string; title: string; body: 
 // they can do.
 export const CHANGES: ChangeEntry[] = [
   {
+    version: "v165",
+    date: "November 2026",
+    title: "Every project opens with the full picture: completion, time, budget, and what needs you.",
+    body: "Open any project and its Overview now leads with the same visual kit as your Dashboard: gauges for how much of the work is done, how much of the planned time is used, and how much of the budget is spent, a breakdown of the work by phase with the counts underneath, and planned vs spent for the whole project with a forecast of where the budget lands if the current pace holds. Spend is also broken out by month, so you can see when the money actually moved. An Advanced switch on the Overview adds schedule and budget health indexes in plain words for anyone who wants them. Everything underneath, your next step, check-ins and sections, works exactly as before.",
+  },
+  {
     version: "v164.2",
     date: "November 2026",
     title: "Needs attention and Project health, cleaned up.",

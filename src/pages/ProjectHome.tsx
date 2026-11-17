@@ -43,6 +43,7 @@ import { CharterTab } from "../components/CharterTab";
 import { BaselineCard } from "../components/BaselineCard";
 import { EscalationSettings } from "../components/EscalationSettings";
 import { HealthStrip } from "../components/HealthStrip";
+import { ProjectCockpit } from "../components/ProjectCockpit";
 import { isTabHidden, defaultTasksView, hiddenTabLabels, SIZE_LABEL, type ProjectSize, type ProjectApproach } from "../lib/projectView";
 import { useDocumentTitle } from "../lib/documentTitle";
 import { entityLabel } from "../lib/entityLabels";
@@ -481,6 +482,10 @@ function HomeTab({ projectId, isOwner, purpose, stage, size, showAll, onShowAllT
           <button type="button" className="view-banner-link" onClick={() => onOpenTab("roadmap")}>Go to the Roadmap</button>
         </p>
       )}
+      {/* v165: the Project Cockpit leads the Overview -- the shared kit's
+          gauges, work breakdown and budget picture above the day-to-day
+          Today/Feed content, which is unchanged below. */}
+      <ProjectCockpit projectId={projectId} onOpenTab={onOpenTab} />
       <div className="view-toggle">
         <button
           className={view === "today" ? "btn btn-primary" : "btn btn-ghost"}

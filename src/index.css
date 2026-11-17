@@ -989,6 +989,24 @@ a.dash-list-title:hover { text-decoration: underline; }
   .dash-gauges, .dash-gauges-two, .dash-viz-grid { grid-template-columns: 1fr; }
 }
 
+/* v165 Project Cockpit (single-project Overview). The gauges, donut and
+   variance bars reuse the v164 kit classes above; these are only the
+   cockpit's own pieces: the header row with the Advanced toggle, the
+   small tables under the donut / in the budget card, the forecast block
+   and the SPI/CPI small print. */
+.cockpit-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.cockpit-head h3 { margin: 0; font-size: 17px; color: var(--navy); }
+.cockpit-advanced { font-size: 13.5px; color: var(--slate); display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.cockpit-advanced input { accent-color: var(--ink); width: 15px; height: 15px; margin: 0; }
+.cockpit-table { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 13.5px; }
+.cockpit-table th { text-align: left; font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--slate); padding: 6px 8px; border-bottom: 1px solid var(--border); }
+.cockpit-table td { padding: 7px 8px; border-bottom: 1px solid var(--border); color: var(--navy); vertical-align: top; }
+.cockpit-table tr:last-child td { border-bottom: none; }
+.cockpit-forecast { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
+.cockpit-forecast-label { font-size: 13px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--slate); }
+.cockpit-forecast-value { font-size: 30px; font-weight: 800; color: var(--navy); margin: 2px 0; }
+.cockpit-index { text-align: center; font-size: 12.5px; color: var(--slate); margin-top: 2px; }
+
 @media (max-width: 860px) {
   .project-shell { flex-direction: column; }
   /* On a phone the sidebar is a slim top bar (wordmark + Menu button). Tapping
