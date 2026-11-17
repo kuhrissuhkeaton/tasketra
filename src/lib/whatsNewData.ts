@@ -10,6 +10,12 @@ export type ChangeEntry = { version: string; date: string; title: string; body: 
 // they can do.
 export const CHANGES: ChangeEntry[] = [
   {
+    version: "v164.2",
+    date: "November 2026",
+    title: "Needs attention and Project health, cleaned up.",
+    body: "The Needs attention list at the top of your Dashboard is now a proper card: each project carries a severity bar in the color of its most urgent flag, and its next step reads as the action it is instead of grey text at the end of the row. Project health has moved up beside the charts, where it belongs, and its table uses its space better: each project's stage rides under its name instead of taking a whole column, an overdue count stands out as a red pill only when there is one, and the OKR progress column now appears only when at least one of your projects actually has objectives, so the rest of the table gets the room.",
+  },
+  {
     version: "v164",
     date: "November 2026",
     title: "Your whole portfolio on one visual dashboard, with decisions and risks across every project.",

@@ -270,3 +270,79 @@ describe("v164.1 hotfix", () => {
     expect(v164!.title).toBe("Your whole portfolio on one visual dashboard, with decisions and risks across every project.");
   });
 });
+
+describe("v164.2 Dashboard polish (Needs attention card, Project health space)", () => {
+  async function renderWith(fixture: PortfolioData) {
+    calls.listProjects.mockResolvedValue({ projects: PROJECTS });
+    calls.getPortfolio.mockResolvedValue(fixture);
+    await act(async () => {
+      root.render(
+        <MemoryRouter initialEntries={["/app/projects?view=dashboard"]}>
+          <ConfirmProvider>
+            <Routes><Route path="/app/projects" element={<Dashboard />} /></Routes>
+          </ConfirmProvider>
+        </MemoryRouter>
+      );
+    });
+    await flush();
+  }
+
+  function healthRow(name: string) {
+    const table = container.querySelector("table.dash-health-table");
+    expect(table).not.toBeNull();
+    return [...table!.querySelectorAll("tbody tr")].find((tr) => tr.textContent?.includes(name));
+  }
+
+  it("the health table drops the Stage and OKR columns when no project has objectives, and rides the stage under the project name", async () => {
+    await renderAt("/app/projects?view=dashboard", "/app/projects", <Dashboard />);
+    const headers = [...container.querySelectorAll("table.dash-health-table thead th")].map((th) => th.textContent);
+    expect(headers).toEqual(["Project", "Status", "Tasks", "Overdue", "Next step"]);
+    const row = healthRow("Website relaunch");
+    expect(row).not.toBeUndefined();
+    const firstCell = row!.querySelector("td");
+    expect(firstCell?.textContent).toContain("Website relaunch");
+    expect(firstCell?.querySelector(".dash-health-stage")?.textContent).toContain("Execute");
+  });
+
+  it("the health table shows the OKR column once a project has objectives", async () => {
+    const fixture = portfolioFixture();
+    fixture.projects[0] = { ...fixture.projects[0], objectivesCount: 2, avgObjectiveProgress: 50 };
+    await renderWith(fixture);
+    const headers = [...container.querySelectorAll("table.dash-health-table thead th")].map((th) => th.textContent);
+    expect(headers).toEqual(["Project", "Status", "Tasks", "Overdue", "OKR progress", "Next step"]);
+    expect(healthRow("Website relaunch")?.textContent).toContain("50%");
+    expect(healthRow("Office move")?.textContent).toContain("--");
+  });
+
+  it("an overdue count is a red pill only when there is one", async () => {
+    await renderAt("/app/projects?view=dashboard", "/app/projects", <Dashboard />);
+    const p1 = healthRow("Website relaunch");
+    expect(p1?.querySelector(".pill.pill-red")?.textContent).toBe("1");
+    const p2 = healthRow("Office move");
+    expect(p2?.querySelector(".pill.pill-red")).toBeNull();
+    expect(p2?.textContent).toContain("Nothing queued");
+  });
+
+  it("Project health sits above the glance calendar", async () => {
+    await renderAt("/app/projects?view=dashboard", "/app/projects", <Dashboard />);
+    const health = container.querySelector("#dash-sec-health");
+    const glance = container.querySelector(".dash-glance-cal");
+    expect(health).not.toBeNull();
+    expect(glance).not.toBeNull();
+    expect(health!.compareDocumentPosition(glance!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("Needs attention rows carry their worst-tone severity class, and the card takes the worst tone present", async () => {
+    await renderAt("/app/projects?view=dashboard", "/app/projects", <Dashboard />);
+    const section = container.querySelector("section.dash-attention");
+    expect(section).not.toBeNull();
+    expect(section!.classList.contains("dash-attention-red")).toBe(true);
+    const rows = [...container.querySelectorAll(".dash-attention-row")];
+    const p1 = rows.find((r) => r.textContent?.includes("Website relaunch"));
+    const p2 = rows.find((r) => r.textContent?.includes("Office move"));
+    expect(p1?.classList.contains("dash-attention-row-red")).toBe(true);
+    expect(p2?.classList.contains("dash-attention-row-gold")).toBe(true);
+    expect(p1?.textContent).toContain("1 overdue");
+    expect(p2?.textContent).toContain("At risk");
+  });
+});

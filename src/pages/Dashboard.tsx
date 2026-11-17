@@ -347,6 +347,10 @@ function PortfolioOverview({ data, wide, glance, filtersActive, onClearFilters }
 }) {
   const { kpis } = data;
   const [showAllMs, setShowAllMs] = useState(false);
+  // v164.2: the health table's OKR column only earns its space when at
+  // least one project actually has objectives; otherwise it is a wide
+  // column of "--" that pushes Next step off screen.
+  const showOkr = data.projects.some((p) => p.objectivesCount > 0);
   const MS_CAP = 5;
   const milestones = showAllMs ? data.upcomingMilestones : data.upcomingMilestones.slice(0, MS_CAP);
   return (
@@ -355,7 +359,10 @@ function PortfolioOverview({ data, wide, glance, filtersActive, onClearFilters }
           collapsible sections, which keep their order, titles and open
           defaults -- the sections below remain the detail behind these
           summaries (the Project health table is the status donut's table
-          of real projects). With no projects at all there is nothing to
+          of real projects). v164.2: Project health moves up with the
+          visuals, above the calendar -- as the donut's table it belongs
+          with the charts, and below the calendar it was effectively
+          hidden. With no projects at all there is nothing to
           chart, so the whole block steps aside for the sections' own
           empty states. v164.1: with filters set, an empty payload is a
           different case -- the kit's no-chart-from-no-data rule applies,
@@ -395,8 +402,6 @@ function PortfolioOverview({ data, wide, glance, filtersActive, onClearFilters }
         </>
       )}
 
-      {glance}
-
       <CollapsibleSection
         id="health"
         title="Project health"
@@ -410,13 +415,15 @@ function PortfolioOverview({ data, wide, glance, filtersActive, onClearFilters }
         ) : (
           <ResizableTable id="dashboard-health" className="table dash-health-table">
             <thead>
-              <tr><th>Project</th><th>Stage</th><th>Status</th><th>Tasks</th><th>Overdue</th><th>OKR progress</th><th>Next step</th></tr>
+              <tr><th>Project</th><th>Status</th><th>Tasks</th><th>Overdue</th>{showOkr && <th>OKR progress</th>}<th>Next step</th></tr>
             </thead>
             <tbody>
               {data.projects.map((p) => (
                 <tr key={p.id}>
-                  <td><Link to={`/app/projects/${p.id}`}>{p.name}</Link></td>
-                  <td><StageChip stage={p.stage} small /></td>
+                  <td>
+                    <Link to={`/app/projects/${p.id}`}>{p.name}</Link>
+                    <span className="dash-health-stage"><StageChip stage={p.stage} small /></span>
+                  </td>
                   <td>
                     {p.closed_at ? (
                       <span className="pill pill-neutral">Closed</span>
@@ -444,8 +451,8 @@ function PortfolioOverview({ data, wide, glance, filtersActive, onClearFilters }
                       <span className="muted">{p.totalTasks > 0 ? `${p.doneTasks} of ${p.totalTasks} tasks` : "No tasks"}</span>
                     </span>
                   </td>
-                  <td className="muted" style={p.overdueTasks > 0 ? { color: "var(--red)" } : undefined}>{p.overdueTasks}</td>
-                  <td className="muted">{p.objectivesCount > 0 ? fmtPct100(p.avgObjectiveProgress) : "--"}</td>
+                  <td>{p.overdueTasks > 0 ? <span className="pill pill-red">{p.overdueTasks}</span> : <span className="muted">0</span>}</td>
+                  {showOkr && <td className="muted">{p.objectivesCount > 0 ? fmtPct100(p.avgObjectiveProgress) : "--"}</td>}
                   {/* v164: the Next Step deep-link (the v158 pattern) makes
                       this table the status donut's table of real items:
                       project, stated status, next step. The per-project
@@ -472,6 +479,8 @@ function PortfolioOverview({ data, wide, glance, filtersActive, onClearFilters }
           </ResizableTable>
         )}
       </CollapsibleSection>
+
+      {glance}
 
       <CollapsibleSection
         id="milestones"
@@ -1327,7 +1336,7 @@ export default function Dashboard() {
         )}
 
         {!loading && portfolio && (
-          <section className="dash-sec dash-attention" aria-labelledby="dash-attention-title">
+          <section className={`dash-sec dash-attention dash-attention-${attention.some((a) => a.reasons.some((r) => r.tone === "red")) ? "red" : "gold"}`} aria-labelledby="dash-attention-title">
             <h2 className="dash-sec-head dash-sec-head-static" id="dash-attention-title">
               <span className="dash-sec-title">Needs attention</span>
               {attention.length > 0 && <span className="dash-sec-summary">{attention.length} project{attention.length === 1 ? "" : "s"}</span>}
@@ -1338,7 +1347,7 @@ export default function Dashboard() {
               <>
                 <ul className="dash-attention-list">
                   {(showAllAttention ? attention : attention.slice(0, ATTENTION_CAP)).map((a) => (
-                    <li key={a.id} className="dash-attention-row">
+                    <li key={a.id} className={`dash-attention-row dash-attention-row-${a.reasons.some((r) => r.tone === "red") ? "red" : "gold"}`}>
                       <Link to={`/app/projects/${a.id}`} className="dash-attention-name">{a.name}</Link>
                       <span className="dash-attention-reasons">
                         <span className="sr-only">Flagged because: </span>
@@ -1348,9 +1357,9 @@ export default function Dashboard() {
                       </span>
                       {a.nextUp && (
                         a.nextUpTab ? (
-                          <Link className="dash-attention-next muted" to={`/app/projects/${a.id}?tab=${a.nextUpTab}`}><span>Next up{stageById.get(a.id) ? ` in ${STAGE_LABEL[stageById.get(a.id)!]}` : ""}</span> {a.nextUp}</Link>
+                          <Link className="dash-attention-next" to={`/app/projects/${a.id}?tab=${a.nextUpTab}`}><span>Next up{stageById.get(a.id) ? ` in ${STAGE_LABEL[stageById.get(a.id)!]}` : ""}</span> {a.nextUp}<span aria-hidden="true"> →</span></Link>
                         ) : (
-                          <span className="dash-attention-next muted"><span>Next up{stageById.get(a.id) ? ` in ${STAGE_LABEL[stageById.get(a.id)!]}` : ""}</span> {a.nextUp}</span>
+                          <span className="dash-attention-next"><span>Next up{stageById.get(a.id) ? ` in ${STAGE_LABEL[stageById.get(a.id)!]}` : ""}</span> {a.nextUp}</span>
                         )
                       )}
                     </li>
