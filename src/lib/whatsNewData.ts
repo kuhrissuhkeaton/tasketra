@@ -10,6 +10,12 @@ export type ChangeEntry = { version: string; date: string; title: string; body: 
 // they can do.
 export const CHANGES: ChangeEntry[] = [
   {
+    version: "v164",
+    date: "November 2026",
+    title: "Your whole portfolio on one visual dashboard, with decisions and risks across every project.",
+    body: "The Dashboard now opens with the whole picture: gauges for how much of the work is done, how much of the planned time is used, and how much of the budget is spent, planned vs actual spending for every project, and your projects counted by the status you stated for them. Underneath sit the two lists that used to mean opening every project one by one: the decisions you have waited on longest, and your biggest risks, scored and ordered the same way each project's own register orders them. New tabs across the top open Decisions and Risks & Issues views that span all your projects at once, and the filters at the top redraw every visual together. Clicking a project's bar takes you straight to its Budget tab, and every project in the health table now carries its next step as a link.",
+  },
+  {
     version: "v163",
     date: "November 2026",
     title: "Small rewards for doing project management properly. (There's an off switch in Account.)",

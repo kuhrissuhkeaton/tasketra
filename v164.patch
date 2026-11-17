@@ -1,0 +1,1906 @@
+diff --git a/netlify/functions/__tests__/portfolio.integration.test.ts b/netlify/functions/__tests__/portfolio.integration.test.ts
+index 7372034..167d474 100644
+--- a/netlify/functions/__tests__/portfolio.integration.test.ts
++++ b/netlify/functions/__tests__/portfolio.integration.test.ts
+@@ -231,6 +231,87 @@ describe("portfolio", () => {
+     expect(forbidden.status).toBe(404);
+   });
+ 
++  it("v164: carries budget figures and the roadmap window per project, plus the cross-project decisions/risks/issues lists", async () => {
++    const database = db();
++    const owner = await createTestUser("pf-v164@example.com");
++    const outsider = await createTestUser("pf-v164-outsider@example.com");
++
++    const a = await createTestProject(owner.id, "V164 Project A");
++    // Budget at completion + one logged cost.
++    await database.sql`UPDATE projects SET budget_at_completion = 8000 WHERE id = ${a.id}`;
++    await database.sql`INSERT INTO cost_entries (project_id, description, amount) VALUES (${a.id}, 'Deposit', 2000)`;
++    // The planned window comes from the roadmap: earliest start to latest end.
++    await database.sql`
++      INSERT INTO roadmap_items (project_id, type, title, start_date, end_date, status)
++      VALUES (${a.id}, 'phase', 'Phase 1', '2026-11-02', '2026-12-14', 'in_progress')
++    `;
++    await database.sql`
++      INSERT INTO roadmap_items (project_id, type, title, start_date, status)
++      VALUES (${a.id}, 'milestone', 'Undated milestone', NULL, 'not_started')
++    `;
++    // One open ask with a recipient, one resolved ask (must not appear).
++    const [stakeholder] = await database.sql`
++      INSERT INTO stakeholders (project_id, name) VALUES (${a.id}, 'Sam Rivera') RETURNING id
++    `;
++    const [open] = await database.sql`
++      INSERT INTO decision_requests (project_id, title, options, deadline, public_token, status)
++      VALUES (${a.id}, 'Pick the venue', '[]'::jsonb, '2026-11-20', 'tok-open', 'open') RETURNING id
++    `;
++    await database.sql`
++      INSERT INTO decision_request_recipients (decision_request_id, stakeholder_id) VALUES (${open.id}, ${stakeholder.id})
++    `;
++    await database.sql`
++      INSERT INTO decision_requests (project_id, title, options, public_token, status)
++      VALUES (${a.id}, 'Already answered', '[]'::jsonb, 'tok-resolved', 'resolved')
++    `;
++    // One scored open risk, one resolved risk (excluded), one open issue.
++    await database.sql`
++      INSERT INTO risks (project_id, title, probability, impact, probability_score, impact_score, status)
++      VALUES (${a.id}, 'Launch date at risk', 'high', 'high', 3, 5, 'open')
++    `;
++    await insertRisk(a.id, { status: "resolved" });
++    await insertIssue(a.id, { severity: "high", status: "open" });
++
++    // A closed project: its open ask must stay out of the cross-project
++    // lists (the weekly-sync rule), while its summary still reports.
++    const closed = await createTestProject(owner.id, "V164 Closed Project");
++    await database.sql`UPDATE projects SET closed_at = now() WHERE id = ${closed.id}`;
++    await database.sql`
++      INSERT INTO decision_requests (project_id, title, options, public_token, status)
++      VALUES (${closed.id}, 'Closed project ask', '[]'::jsonb, 'tok-closed', 'open')
++    `;
++
++    // An outsider's project never leaks into any list.
++    const notMine = await createTestProject(outsider.id, "Not Mine");
++    await database.sql`
++      INSERT INTO decision_requests (project_id, title, options, public_token, status)
++      VALUES (${notMine.id}, 'Outsider ask', '[]'::jsonb, 'tok-outsider', 'open')
++    `;
++
++    const res = await portfolioHandler(asUser(owner, { method: "GET", url: "https://tasketra.com/api/portfolio" }));
++    expect(res.status).toBe(200);
++    const data = await jsonBody<any>(res);
++
++    const summaryA = data.projects.find((p: any) => p.id === a.id);
++    expect(summaryA.bac).toBe(8000);
++    expect(summaryA.ac).toBe(2000);
++    expect(summaryA.plannedStart).toBe("2026-11-02");
++    expect(summaryA.plannedEnd).toBe("2026-12-14");
++
++    expect(data.openDecisions.map((d: any) => d.title)).toEqual(["Pick the venue"]);
++    expect(data.openDecisions[0].projectName).toBe("V164 Project A");
++    expect(data.openDecisions[0].recipients).toEqual(["Sam Rivera"]);
++    expect(data.openDecisions[0].deadline).toBe("2026-11-20");
++    expect(data.openDecisions[0].publicToken).toBe("tok-open");
++
++    expect(data.openRisks.map((r: any) => r.title)).toEqual(["Launch date at risk"]);
++    expect(data.openRisks[0].probability_score).toBe(3);
++    expect(data.openRisks[0].impact_score).toBe(5);
++
++    expect(data.openIssues.map((i: any) => i.severity)).toEqual(["high"]);
++    expect(data.openIssues[0].projectName).toBe("V164 Project A");
++  });
++
+   it("rejects an unauthenticated request", async () => {
+     const res = await portfolioHandler(new Request("https://tasketra.com/api/portfolio", { method: "GET" }));
+     expect(res.status).toBe(401);
+diff --git a/netlify/functions/portfolio.mts b/netlify/functions/portfolio.mts
+index cbc5319..d5b0c41 100644
+--- a/netlify/functions/portfolio.mts
++++ b/netlify/functions/portfolio.mts
+@@ -39,6 +39,26 @@ import { loadStageInputs } from "../lib/stageData.ts";
+ // Optional `?stage=` filter works the same way, narrowing every aggregate to
+ // projects in one stage (initiate, plan, execute, close). Both filters can
+ // combine.
++//
++// v164 (Portfolio Command) additions, all additive -- every field below is
++// new in the payload; nothing existing changed shape:
++//   - each project summary gains `bac` / `ac` (the budget figures the EVM
++//     math already reads) and `plannedStart` / `plannedEnd` (the project's
++//     roadmap window: earliest and latest roadmap dates), which the
++//     Dashboard's gauges and budget-variance bars draw from;
++//   - `openDecisions`: every still-open decision request across the visible
++//     projects (closed projects excluded -- a closed project's asks are no
++//     longer actionable, the same rule /api/weekly-sync uses), oldest first
++//     so "waiting longest" is the head of the list. Feeds the Dashboard's
++//     Waiting Longest list and the cross-project Decisions view;
++//   - `openRisks` / `openIssues`: the not-resolved risks and issues across
++//     the same projects, for the Dashboard's Top Risks list and the
++//     cross-project Risks & Issues view. Ordering is applied client-side
++//     with the shared exposure comparator, so it cannot drift from the
++//     per-project register's order.
++// All three lists honor the same projectId/stage filters and are capped at
++// 200 rows -- far past any real portfolio's open-item count, and the cap
++// keeps a pathological account from turning this rollup into a full dump.
+ 
+ export default withSentry(async (req: Request) => {
+   const userId = getUserIdFromRequest(req);
+@@ -74,6 +94,10 @@ export default withSentry(async (req: Request) => {
+     milestoneRows,
+     undatedMilestoneRows,
+     statedRows,
++    roadmapWindowRows,
++    openDecisionRows,
++    openRiskRows,
++    openIssueRows,
+   ] = await Promise.all([
+     database.sql`
+       SELECT p.id, p.name, p.created_at, p.stage, p.tolerances, p.closed_at
+@@ -233,9 +257,92 @@ export default withSentry(async (req: Request) => {
+         )
+       ORDER BY su.project_id, su.created_at DESC
+     `,
++    // v164: each project's planned window, from its roadmap -- the earliest
++    // and latest dates anyone has put on the plan. Projects carry no start
++    // or finish columns of their own, so the roadmap is the only honest
++    // source for the Time Used gauge's "planned" span. to_char for the same
++    // DATE-driver reason as the milestone query above.
++    database.sql`
++      SELECT r.project_id,
++        to_char(min(COALESCE(r.start_date, r.end_date)), 'YYYY-MM-DD') AS planned_start,
++        to_char(max(COALESCE(r.end_date, r.start_date)), 'YYYY-MM-DD') AS planned_end
++      FROM roadmap_items r
++      WHERE r.deleted_at IS NULL
++        AND (r.start_date IS NOT NULL OR r.end_date IS NOT NULL)
++        AND r.project_id IN (
++          SELECT p.id FROM projects p
++          WHERE p.archived = false
++            AND (p.owner_id = ${userId} OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = ${userId} AND pm.status = 'active'))
++            AND (${filterProjectId}::uuid IS NULL OR p.id = ${filterProjectId}::uuid) AND (${filterStage}::text IS NULL OR p.stage = ${filterStage}::text)
++        )
++      GROUP BY r.project_id
++    `,
++    // v164: the cross-project asks queue -- the same query /api/weekly-sync
++    // runs (same closed-project exclusion, same recipients shape), plus the
++    // public token so the Decisions view can offer Copy link / Nudge exactly
++    // like the per-project card does. Ordered oldest first: waiting longest
++    // is the head of the list.
++    database.sql`
++      SELECT dr.id, dr.project_id, p.name AS project_name, dr.title, dr.context,
++             to_char(dr.deadline, 'YYYY-MM-DD') AS deadline, dr.created_at, dr.public_token,
++             COALESCE(
++               (SELECT json_agg(s.name ORDER BY s.name)
++                  FROM decision_request_recipients rr
++                  JOIN stakeholders s ON s.id = rr.stakeholder_id
++                  WHERE rr.decision_request_id = dr.id),
++               '[]'
++             ) AS recipients
++      FROM decision_requests dr
++      JOIN projects p ON p.id = dr.project_id
++      WHERE dr.deleted_at IS NULL
++        AND dr.status = 'open'
++        AND p.archived = false
++        AND p.closed_at IS NULL
++        AND (p.owner_id = ${userId}
++          OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = ${userId} AND pm.status = 'active'))
++        AND (${filterProjectId}::uuid IS NULL OR p.id = ${filterProjectId}::uuid) AND (${filterStage}::text IS NULL OR p.stage = ${filterStage}::text)
++      ORDER BY dr.created_at ASC
++      LIMIT 200
++    `,
++    // v164: not-resolved risks across the same projects (closed projects
++    // excluded, as with the asks). The client orders them with the shared
++    // exposure comparator (src/lib/riskExposure.ts), so this list only
++    // needs a stable base order.
++    database.sql`
++      SELECT r.id, r.project_id, p.name AS project_name, r.title, r.probability, r.impact,
++             r.probability_score, r.impact_score, r.status, r.owner_name, r.created_at
++      FROM risks r
++      JOIN projects p ON p.id = r.project_id
++      WHERE r.deleted_at IS NULL
++        AND r.status != 'resolved'
++        AND p.archived = false
++        AND p.closed_at IS NULL
++        AND (p.owner_id = ${userId}
++          OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = ${userId} AND pm.status = 'active'))
++        AND (${filterProjectId}::uuid IS NULL OR p.id = ${filterProjectId}::uuid) AND (${filterStage}::text IS NULL OR p.stage = ${filterStage}::text)
++      ORDER BY r.created_at ASC
++      LIMIT 200
++    `,
++    // v164: not-resolved issues across the same projects, newest first
++    // (the client re-sorts by severity for display).
++    database.sql`
++      SELECT i.id, i.project_id, p.name AS project_name, i.title, i.severity, i.status, i.owner_name, i.created_at
++      FROM issues i
++      JOIN projects p ON p.id = i.project_id
++      WHERE i.deleted_at IS NULL
++        AND i.status != 'resolved'
++        AND p.archived = false
++        AND p.closed_at IS NULL
++        AND (p.owner_id = ${userId}
++          OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = ${userId} AND pm.status = 'active'))
++        AND (${filterProjectId}::uuid IS NULL OR p.id = ${filterProjectId}::uuid) AND (${filterStage}::text IS NULL OR p.stage = ${filterStage}::text)
++      ORDER BY i.created_at DESC
++      LIMIT 200
++    `,
+   ]);
+ 
+   const statedById = new Map((statedRows as any[]).map((r) => [r.project_id, r]));
++  const windowById = new Map((roadmapWindowRows as any[]).map((r) => [r.project_id, r]));
+   const taskById = new Map(perProjectTaskRows.map((r: any) => [r.project_id, r]));
+   const budgetById = new Map(perProjectBudgetRows.map((r: any) => [r.project_id, r]));
+   const riskById = new Map(perProjectRiskRows.map((r: any) => [r.project_id, r]));
+@@ -317,6 +424,14 @@ export default withSentry(async (req: Request) => {
+       highIssues: issueRow.high_count,
+       cpi: evm.cpi,
+       spi: evm.spi,
++      // v164: the raw budget figures behind the EVM ratios, and the
++      // roadmap window, for the Dashboard's variance bars and Time Used
++      // gauge. bac is null when no budget was set; plannedStart/End are
++      // null when the roadmap carries no dates.
++      bac,
++      ac,
++      plannedStart: windowById.get(p.id)?.planned_start ?? null,
++      plannedEnd: windowById.get(p.id)?.planned_end ?? null,
+       objectivesCount: objectives.length,
+       avgObjectiveProgress,
+       health,
+@@ -353,7 +468,48 @@ export default withSentry(async (req: Request) => {
+     projectId: r.project_id, projectName: r.project_name,
+   }));
+ 
+-  return json({ kpis, taskStatusBreakdown, issueSeverityBreakdown, projects: projectSummaries, upcomingMilestones, undatedMilestones: undatedMilestoneRows[0]?.count ?? 0 });
++  // v164: the cross-project lists, mapped to the same camelCase shape the
++  // weekly-sync asks already use so the client reads both the same way.
++  const openDecisions = (openDecisionRows as any[]).map((d) => ({
++    id: d.id,
++    projectId: d.project_id,
++    projectName: d.project_name,
++    title: d.title,
++    context: d.context ?? null,
++    deadline: d.deadline as string | null,
++    createdAt: d.created_at,
++    recipients: (d.recipients as string[] | null) ?? [],
++    publicToken: d.public_token,
++  }));
++  // The score and created_at fields keep their snake_case names here on
++  // purpose: src/lib/riskExposure.ts's comparator reads exactly those
++  // fields, so the client can sort this list with the shared ordering
++  // without an adapter (the same reason the per-project Risk type does).
++  const openRisks = (openRiskRows as any[]).map((r) => ({
++    id: r.id,
++    projectId: r.project_id,
++    projectName: r.project_name,
++    title: r.title,
++    probability: r.probability,
++    impact: r.impact,
++    probability_score: r.probability_score ?? null,
++    impact_score: r.impact_score ?? null,
++    status: r.status,
++    ownerName: r.owner_name ?? null,
++    created_at: r.created_at,
++  }));
++  const openIssues = (openIssueRows as any[]).map((i) => ({
++    id: i.id,
++    projectId: i.project_id,
++    projectName: i.project_name,
++    title: i.title,
++    severity: i.severity,
++    status: i.status,
++    ownerName: i.owner_name ?? null,
++    createdAt: i.created_at,
++  }));
++
++  return json({ kpis, taskStatusBreakdown, issueSeverityBreakdown, projects: projectSummaries, upcomingMilestones, undatedMilestones: undatedMilestoneRows[0]?.count ?? 0, openDecisions, openRisks, openIssues });
+ });
+ 
+ export const config: Config = { path: "/api/portfolio" };
+diff --git a/src/App.tsx b/src/App.tsx
+index 731630c..8ee36ca 100644
+--- a/src/App.tsx
++++ b/src/App.tsx
+@@ -16,6 +16,8 @@ const VerifyEmail = lazy(() => import("./pages/VerifyEmail"));
+ const Dashboard = lazy(() => import("./pages/Dashboard"));
+ const WeeklySync = lazy(() => import("./pages/WeeklySync"));
+ const Workload = lazy(() => import("./pages/Workload"));
++const PortfolioDecisions = lazy(() => import("./pages/PortfolioDecisions"));
++const PortfolioRisks = lazy(() => import("./pages/PortfolioRisks"));
+ const Today = lazy(() => import("./pages/Today"));
+ const ProjectHome = lazy(() => import("./pages/ProjectHome"));
+ const DecisionPublic = lazy(() => import("./pages/DecisionPublic"));
+@@ -94,6 +96,8 @@ export default function App() {
+             <Route path="/app/today" element={<Navigate to="/app" replace />} />
+             <Route path="/app/sync" element={<Protected><WeeklySync /></Protected>} />
+             <Route path="/app/workload" element={<Protected><Workload /></Protected>} />
++        <Route path="/app/decisions" element={<Protected><PortfolioDecisions /></Protected>} />
++        <Route path="/app/risks" element={<Protected><PortfolioRisks /></Protected>} />
+             <Route path="/app/resources" element={<Protected><Resources /></Protected>} />
+             <Route path="/app/whats-new" element={<Protected><WhatsNew /></Protected>} />
+             <Route path="/app/billing" element={<Protected><Billing /></Protected>} />
+diff --git a/src/__tests__/appTabs.test.tsx b/src/__tests__/appTabs.test.tsx
+new file mode 100644
+index 0000000..9c94436
+--- /dev/null
++++ b/src/__tests__/appTabs.test.tsx
+@@ -0,0 +1,73 @@
++// @vitest-environment jsdom
++//
++// The v164 portfolio top tabs (AppTabs, rendered by AppSidebar): the seven
++// cross-project views, the + New project link, and which tab reads active
++// on which route -- Dashboard and Projects are the same page in its two
++// views, so their active split follows the ?view= param.
++import { describe, it, expect, beforeAll, beforeEach, afterEach } from "vitest";
++import { createRoot, type Root } from "react-dom/client";
++import { act } from "react";
++import { MemoryRouter } from "react-router-dom";
++import { AppTabs } from "../components/AppTabs";
++
++let container: HTMLDivElement;
++let root: Root;
++beforeAll(() => { (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true; });
++beforeEach(() => {
++  container = document.createElement("div");
++  document.body.appendChild(container);
++  root = createRoot(container);
++});
++afterEach(() => { act(() => root.unmount()); container.remove(); });
++
++async function renderAt(path: string) {
++  // A fresh root per path: MemoryRouter only reads initialEntries on
++  // mount, so re-rendering into the same root would keep the first route.
++  act(() => root.unmount());
++  root = createRoot(container);
++  await act(async () => { root.render(<MemoryRouter initialEntries={[path]}><AppTabs /></MemoryRouter>); });
++}
++
++const tab = (label: string) => [...container.querySelectorAll("a.app-tab")].find((a) => a.textContent === label);
++const activeLabels = () => [...container.querySelectorAll("a.app-tab-active")].map((a) => a.textContent);
++
++describe("AppTabs", () => {
++  it("renders the seven tabs in plan order plus the New project link", async () => {
++    await renderAt("/app");
++    expect([...container.querySelectorAll("a.app-tab")].map((a) => a.textContent)).toEqual([
++      "Dashboard", "Today", "Projects", "Decisions", "Risks & Issues", "Weekly Sync", "Workload",
++    ]);
++    expect(tab("Dashboard")?.getAttribute("href")).toBe("/app/projects?view=dashboard");
++    expect(tab("Decisions")?.getAttribute("href")).toBe("/app/decisions");
++    expect(tab("Risks & Issues")?.getAttribute("href")).toBe("/app/risks");
++    const newLink = container.querySelector("a.app-tabs-new");
++    expect(newLink?.getAttribute("href")).toBe("/app/projects?new=1");
++    expect(newLink?.textContent).toContain("New project");
++  });
++
++  it("marks Today active on /app and nothing else", async () => {
++    await renderAt("/app");
++    expect(activeLabels()).toEqual(["Today"]);
++    expect(tab("Today")?.getAttribute("aria-current")).toBe("page");
++  });
++
++  it("splits Dashboard and Projects by the view param, and keeps Projects active inside a project", async () => {
++    await renderAt("/app/projects?view=dashboard");
++    expect(activeLabels()).toEqual(["Dashboard"]);
++    await renderAt("/app/projects");
++    expect(activeLabels()).toEqual(["Projects"]);
++    await renderAt("/app/projects/p1");
++    expect(activeLabels()).toEqual(["Projects"]);
++  });
++
++  it("marks the cross-project views active on their routes", async () => {
++    await renderAt("/app/decisions");
++    expect(activeLabels()).toEqual(["Decisions"]);
++    await renderAt("/app/risks");
++    expect(activeLabels()).toEqual(["Risks & Issues"]);
++    await renderAt("/app/sync");
++    expect(activeLabels()).toEqual(["Weekly Sync"]);
++    await renderAt("/app/workload");
++    expect(activeLabels()).toEqual(["Workload"]);
++  });
++});
+diff --git a/src/__tests__/charts.test.tsx b/src/__tests__/charts.test.tsx
+new file mode 100644
+index 0000000..889b2de
+--- /dev/null
++++ b/src/__tests__/charts.test.tsx
+@@ -0,0 +1,109 @@
++// @vitest-environment jsdom
++//
++// The v164 shared visual kit (src/components/charts/): the gauge, donut and
++// variance bars the dashboard phases share. These pin the kit rules --
++// every percent carries words, red/amber only on over items, categorical
++// colors on the donut -- at the component level.
++import { describe, it, expect, beforeAll, beforeEach, afterEach } from "vitest";
++import { createRoot, type Root } from "react-dom/client";
++import { act } from "react";
++import { MemoryRouter } from "react-router-dom";
++import { Gauge } from "../components/charts/Gauge";
++import { Donut } from "../components/charts/Donut";
++import { VarianceBars } from "../components/charts/VarianceBars";
++import { categoricalColor, CATEGORICAL_PALETTE } from "../components/charts/palette";
++
++let container: HTMLDivElement;
++let root: Root;
++beforeAll(() => { (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true; });
++beforeEach(() => {
++  container = document.createElement("div");
++  document.body.appendChild(container);
++  root = createRoot(container);
++});
++afterEach(() => { act(() => root.unmount()); container.remove(); });
++
++async function render(el: React.ReactNode) {
++  await act(async () => { root.render(<MemoryRouter>{el}</MemoryRouter>); });
++}
++
++describe("Gauge", () => {
++  it("shows the label, the big number and the x-of-y words, with the arc at the given percent", async () => {
++    await render(<Gauge label="Portfolio completion" percent={25} tone="brand" value="25%" words="3 of 12 tasks done" />);
++    expect(container.textContent).toContain("Portfolio completion");
++    expect(container.textContent).toContain("25%");
++    expect(container.textContent).toContain("3 of 12 tasks done");
++    const arc = container.querySelectorAll("path")[1];
++    expect(arc.getAttribute("stroke-dasharray")).toBe("25 100");
++    // The accessible name carries the words too, never a bare number.
++    expect(container.querySelector(".kit-gauge")?.getAttribute("aria-label")).toBe("Portfolio completion: 25%, 3 of 12 tasks done");
++  });
++
++  it("clamps the arc at 100 while the number stays honest", async () => {
++    await render(<Gauge label="Budget used" percent={115} tone="crit" value="115%" words="$9,200 of $8,000 spent" />);
++    const arc = container.querySelectorAll("path")[1];
++    expect(arc.getAttribute("stroke-dasharray")).toBe("100 100");
++    expect(arc.getAttribute("stroke")).toBe("var(--chart-crit)");
++    expect(container.textContent).toContain("115%");
++  });
++});
++
++describe("Donut", () => {
++  it("lists every segment with its count and percent in words", async () => {
++    await render(
++      <Donut
++        segments={[{ label: "On track", value: 3 }, { label: "At risk", value: 1 }]}
++        colors={[categoricalColor(0), categoricalColor(1)]}
++        centerValue="4"
++        centerLabel="projects"
++        ariaLabel="Projects by status"
++      />
++    );
++    expect(container.textContent).toContain("3 of 4 · 75%");
++    expect(container.textContent).toContain("1 of 4 · 25%");
++    expect(container.textContent).toContain("projects");
++  });
++
++  it("uses the categorical palette, which shares no color with the status triad", () => {
++    for (const c of CATEGORICAL_PALETTE) {
++      expect(["#0ca30c", "#fab219", "#d03b3b"]).not.toContain(c.toLowerCase());
++    }
++    expect(categoricalColor(CATEGORICAL_PALETTE.length)).toBe(CATEGORICAL_PALETTE[0]);
++  });
++});
++
++describe("VarianceBars", () => {
++  const money = (n: number) => `$${n.toLocaleString("en-US")}`;
++
++  it("words carry planned, actual and the over amount; only over rows get the warning colors", async () => {
++    await render(
++      <VarianceBars
++        formatValue={money}
++        actualWord="Spent"
++        rows={[
++          { id: "a", label: "Under project", planned: 1000, actual: 900, href: "/app/projects/a?tab=budget" },
++          { id: "b", label: "Slightly over", planned: 1000, actual: 1050 },
++          { id: "c", label: "Well over", planned: 1000, actual: 1300 },
++        ]}
++      />
++    );
++    expect(container.textContent).toContain("Planned $1,000 · Spent $900");
++    expect(container.textContent).toContain("Planned $1,000 · Spent $1,050 · $50 over");
++    expect(container.textContent).toContain("Planned $1,000 · Spent $1,300 · $300 over");
++    const bars = [...container.querySelectorAll(".kit-variance-bar-actual")];
++    expect(bars[0].className).not.toContain("kit-variance-over");
++    expect(bars[1].className).toContain("kit-variance-over");
++    expect(bars[1].className).not.toContain("over-hard");
++    expect(bars[2].className).toContain("kit-variance-over-hard");
++  });
++
++  it("a row with an href links through to the owning surface", async () => {
++    await render(
++      <VarianceBars formatValue={money} rows={[{ id: "a", label: "Website", planned: 100, actual: 90, href: "/app/projects/a?tab=budget" }]} />
++    );
++    const link = container.querySelector('a[href="/app/projects/a?tab=budget"]');
++    expect(link).not.toBeNull();
++    expect(link?.getAttribute("aria-label")).toContain("Website");
++    expect(link?.getAttribute("aria-label")).toContain("Planned $100");
++  });
++});
+diff --git a/src/__tests__/portfolioCommand.test.tsx b/src/__tests__/portfolioCommand.test.tsx
+new file mode 100644
+index 0000000..05e9ee5
+--- /dev/null
++++ b/src/__tests__/portfolioCommand.test.tsx
+@@ -0,0 +1,212 @@
++// @vitest-environment jsdom
++//
++// v164 (Portfolio Command): the Dashboard's visual home and the two new
++// cross-project views. Pins the plan's load-bearing behaviors: gauges with
++// their x-of-y words, Budget Used present only once costs exist, variance
++// bars linking to the project's Budget tab, the status donut's words, the
++// health table's Next Step deep link, Waiting Longest leading with the
++// v160 line, Top Risks in v157/v158 exposure order, and the ?new=1 hand-off
++// from the top tabs opening the New project modal.
++import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
++import { createRoot, type Root } from "react-dom/client";
++import { act } from "react";
++import { MemoryRouter, Routes, Route } from "react-router-dom";
++import type { PortfolioData, Project } from "../lib/api";
++import { localDateKey } from "../lib/today";
++
++vi.mock("../lib/auth-context", () => ({
++  useAuth: () => ({
++    user: { id: "u1", email: "owner@example.com", plan: "founding", tour_completed_at: "2026-01-01T00:00:00Z" },
++    loading: false,
++    refresh: async () => {},
++    logout: async () => {},
++  }),
++  AuthProvider: ({ children }: { children: unknown }) => children,
++}));
++
++const calls = { listProjects: vi.fn(), getPortfolio: vi.fn() };
++vi.mock("../lib/api", async (importOriginal) => {
++  const actual = await importOriginal<typeof import("../lib/api")>();
++  return {
++    ...actual,
++    api: {
++      ...actual.api,
++      listProjects: () => calls.listProjects(),
++      listDeletedProjects: async () => ({ projects: [] }),
++      getPortfolio: () => calls.getPortfolio(),
++      getMyToday: async () => ({ tasks: [], recentlyDone: [], truncated: false }),
++      getCalendarItems: async () => ({ items: [] }),
++      listUserTemplates: async () => ({ templates: [] }),
++    },
++  };
++});
++vi.mock("../lib/analytics", () => ({ track: () => {} }));
++
++import Dashboard from "../pages/Dashboard";
++import PortfolioDecisions from "../pages/PortfolioDecisions";
++import PortfolioRisks from "../pages/PortfolioRisks";
++import { ConfirmProvider } from "../components/ConfirmDialog";
++
++let container: HTMLDivElement;
++let root: Root;
++beforeAll(() => {
++  (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
++  (globalThis as any).ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
++  const zero = { width: 0, height: 0, top: 0, left: 0, right: 0, bottom: 0, x: 0, y: 0, toJSON() {} };
++  (Range.prototype as any).getBoundingClientRect = () => zero;
++  (Range.prototype as any).getClientRects = () => [];
++});
++beforeEach(() => {
++  Object.values(calls).forEach((c) => c.mockReset());
++  localStorage.clear();
++  container = document.createElement("div");
++  document.body.appendChild(container);
++  root = createRoot(container);
++});
++afterEach(() => { act(() => root.unmount()); container.remove(); });
++
++const flush = () => act(async () => { await new Promise((r) => setTimeout(r, 0)); });
++const DAY = 86400000;
++const keyIn = (days: number) => localDateKey(new Date(Date.now() + days * DAY));
++const isoAgo = (days: number) => new Date(Date.now() - days * DAY - 3600000).toISOString();
++
++const PROJECTS: Project[] = [
++  { id: "p1", name: "Website relaunch", description: null, created_at: "2026-10-01T00:00:00Z", is_owner: true, stage: "execute" } as Project,
++  { id: "p2", name: "Office move", description: null, created_at: "2026-10-01T00:00:00Z", is_owner: true, stage: "plan" } as Project,
++];
++
++function portfolioFixture(): PortfolioData {
++  return {
++    kpis: {
++      activeProjects: 2, atRiskProjects: 1, offTrackProjects: 0, overdueTasks: 1, openRisks: 3, highRisks: 1,
++      openIssues: 0, highIssues: 0, totalObjectives: 0, objectivesOnTrack: 0, objectivesAtRisk: 0, objectivesOffTrack: 0,
++      objectivesAchieved: 0, avgObjectiveProgress: null,
++    },
++    taskStatusBreakdown: [{ status: "done", count: 6 }, { status: "not_started", count: 8 }],
++    issueSeverityBreakdown: [],
++    upcomingMilestones: [],
++    undatedMilestones: 0,
++    projects: [
++      {
++        id: "p1", name: "Website relaunch", stage: "execute", closed_at: null, health: "on_track", statedHealth: null, statedAt: null,
++        escalations: [], nextUp: "Approve the design", nextUpTab: "decisions",
++        totalTasks: 10, doneTasks: 5, overdueTasks: 1, openRisks: 2, highRisks: 1, openIssues: 0, highIssues: 0,
++        cpi: null, spi: null, bac: 8000, ac: 9200, plannedStart: keyIn(-10), plannedEnd: keyIn(30),
++        objectivesCount: 0, avgObjectiveProgress: null,
++      },
++      {
++        id: "p2", name: "Office move", stage: "plan", closed_at: null, health: "at_risk", statedHealth: null, statedAt: null,
++        escalations: [], nextUp: null, nextUpTab: null,
++        totalTasks: 4, doneTasks: 1, overdueTasks: 0, openRisks: 1, highRisks: 0, openIssues: 0, highIssues: 0,
++        cpi: null, spi: null, bac: null, ac: 0, plannedStart: null, plannedEnd: null,
++        objectivesCount: 0, avgObjectiveProgress: null,
++      },
++    ],
++    openDecisions: [
++      { id: "d2", projectId: "p2", projectName: "Office move", title: "Pick the venue", context: null, deadline: keyIn(3), createdAt: isoAgo(12), recipients: ["Sam Rivera"], publicToken: "tok2" },
++      { id: "d1", projectId: "p1", projectName: "Website relaunch", title: "Approve the design budget", context: null, deadline: null, createdAt: isoAgo(2), recipients: [], publicToken: "tok1" },
++    ],
++    openRisks: [
++      { id: "r1", projectId: "p1", projectName: "Website relaunch", title: "Vendor slips", probability: "low", impact: "low", probability_score: 1, impact_score: 1, status: "open", ownerName: null, created_at: isoAgo(9) },
++      { id: "r2", projectId: "p1", projectName: "Website relaunch", title: "Launch date at risk", probability: "high", impact: "high", probability_score: 3, impact_score: 5, status: "open", ownerName: null, created_at: isoAgo(8) },
++      { id: "r3", projectId: "p2", projectName: "Office move", title: "Lease timing", probability: "high", impact: "high", probability_score: null, impact_score: null, status: "monitoring", ownerName: null, created_at: isoAgo(7) },
++    ],
++    openIssues: [],
++  } as unknown as PortfolioData;
++}
++
++async function renderAt(path: string, routePath: string, element: React.ReactNode) {
++  calls.listProjects.mockResolvedValue({ projects: PROJECTS });
++  calls.getPortfolio.mockResolvedValue(portfolioFixture());
++  await act(async () => {
++    root.render(
++      <MemoryRouter initialEntries={[path]}>
++        <ConfirmProvider>
++          <Routes><Route path={routePath} element={element} /></Routes>
++        </ConfirmProvider>
++      </MemoryRouter>
++    );
++  });
++  await flush();
++  await flush();
++}
++
++describe("Dashboard visual home (v164)", () => {
++  it("gauges carry their x-of-y words; Budget Used appears because costs exist, at 115% and over", async () => {
++    await renderAt("/app/projects?view=dashboard", "/app/projects", <Dashboard />);
++    const text = container.textContent ?? "";
++    expect(text).toContain("Portfolio completion");
++    expect(text).toContain("6 of 14 tasks done across 2 active projects");
++    expect(text).toContain("Time used");
++    expect(text).toContain("10 of 40 planned days used across 1 project with dates");
++    expect(text).toContain("Budget used");
++    expect(text).toContain("115%");
++    expect(text).toContain("$9,200 of $8,000 spent across 1 project with budgets");
++  });
++
++  it("variance bars link to the project's Budget tab with the over amount in words", async () => {
++    await renderAt("/app/projects?view=dashboard", "/app/projects", <Dashboard />);
++    const link = container.querySelector('a[href="/app/projects/p1?tab=budget"]');
++    expect(link).not.toBeNull();
++    expect(link?.textContent).toContain("Website relaunch");
++    expect(link?.textContent).toContain("Planned $8,000 · Spent $9,200 · $1,200 over");
++    // Office move has neither budget nor costs: no bar, per the kit's
++    // no-chart-from-no-data rule.
++    expect(container.querySelectorAll("a.kit-variance-row").length).toBe(1);
++  });
++
++  it("the status donut counts stated statuses with words, and the health table carries the Next Step link", async () => {
++    await renderAt("/app/projects?view=dashboard", "/app/projects", <Dashboard />);
++    const text = container.textContent ?? "";
++    expect(text).toContain("Projects by status");
++    expect(text).toContain("1 of 2 · 50%");
++    const next = [...container.querySelectorAll('a[href="/app/projects/p1?tab=decisions"]')].find((a) => a.textContent === "Approve the design");
++    expect(next).not.toBeUndefined();
++    expect(text).toContain("Nothing queued");
++  });
++
++  it("Waiting Longest leads with the v160 line, longest wait first; Top Risks follows exposure order", async () => {
++    await renderAt("/app/projects?view=dashboard", "/app/projects", <Dashboard />);
++    const text = container.textContent ?? "";
++    expect(text).toContain("Waiting longest");
++    expect(text).toContain("Waiting on Sam Rivera · waiting 12 days · Needed by");
++    expect(text.indexOf("Pick the venue")).toBeLessThan(text.indexOf("Approve the design budget"));
++    expect(text).toContain("Not sent to anyone yet — copy the link to ask.");
++    expect(text).toContain("Top risks");
++    expect(text).toContain("P3 · I5 · Score 15");
++    // Exposure order: scored 15 first, scored 1 next, the unscored
++    // band-only risk last (v158: numeric scores lead).
++    expect(text.indexOf("Launch date at risk")).toBeLessThan(text.indexOf("Vendor slips"));
++    expect(text.indexOf("Vendor slips")).toBeLessThan(text.indexOf("Lease timing"));
++    expect(text).toContain("P High · I High");
++  });
++
++  it("?new=1 from the top tabs opens the New project modal", async () => {
++    await renderAt("/app/projects?new=1", "/app/projects", <Dashboard />);
++    expect(container.querySelector('input[aria-label="New project name"]')).not.toBeNull();
++  });
++});
++
++describe("Cross-project views (v164)", () => {
++  it("Decisions lists every open ask with the lead line, project and working Copy link", async () => {
++    await renderAt("/app/decisions", "/app/decisions", <PortfolioDecisions />);
++    const text = container.textContent ?? "";
++    expect(text).toContain("2 decisions waiting across 2 projects, longest wait first.");
++    expect(text).toContain("Waiting on Sam Rivera · waiting 12 days · Needed by");
++    expect(text.indexOf("Pick the venue")).toBeLessThan(text.indexOf("Approve the design budget"));
++    const copyButtons = [...container.querySelectorAll("button")].filter((b) => b.textContent === "Copy link");
++    expect(copyButtons.length).toBe(2);
++    expect(text).toContain("Open in project");
++  });
++
++  it("Risks & Issues orders risks by exposure and shows the matrix chip", async () => {
++    await renderAt("/app/risks", "/app/risks", <PortfolioRisks />);
++    const text = container.textContent ?? "";
++    expect(text).toContain("3 open risks and 0 open issues across 2 projects.");
++    expect(text).toContain("P3 · I5 · Score 15");
++    expect(text.indexOf("Launch date at risk")).toBeLessThan(text.indexOf("Vendor slips"));
++    expect(text.indexOf("Vendor slips")).toBeLessThan(text.indexOf("Lease timing"));
++    expect(container.querySelector('a[href="/app/projects/p1?tab=risks"]')?.textContent).toBe("Launch date at risk");
++    expect(text).toContain("No open issues right now.");
++  });
++});
+diff --git a/src/components/AppSidebar.tsx b/src/components/AppSidebar.tsx
+index de163c7..c84289c 100644
+--- a/src/components/AppSidebar.tsx
++++ b/src/components/AppSidebar.tsx
+@@ -8,6 +8,7 @@ import { FeedbackModal } from "./FeedbackModal";
+ import { NavIcon } from "./NavIcon";
+ import { NotificationBell } from "./NotificationBell";
+ import { GlobalSearch } from "./GlobalSearch";
++import { AppTabs } from "./AppTabs";
+ import { readSidebarCollapsed, writeSidebarCollapsed, readNavGroupCollapsed, writeNavGroupCollapsed } from "../lib/sidebarState";
+ 
+ /** Collapsible nav section used by both the sidebar's own global group and
+@@ -157,6 +158,7 @@ export function AppSidebar({ children, menuLabel = "Menu" }: { children?: ReactN
+     .join(" ");
+ 
+   return (
++    <>
+     <aside ref={asideRef} className={sidebarClass}>
+       {/* Keyboard shortcut past the navigation: visible only when focused. */}
+       <a
+@@ -385,5 +387,11 @@ export function AppSidebar({ children, menuLabel = "Menu" }: { children?: ReactN
+ 
+       {feedbackOpen && <FeedbackModal onClose={() => setFeedbackOpen(false)} />}
+     </aside>
++    {/* v164: the portfolio top tabs render alongside the sidebar (fixed
++        across the top on desktop, a static strip under the top bar on
++        phones) -- see AppTabs.tsx for why the rail maps onto this
++        sidebar instead of replacing it. */}
++    <AppTabs />
++    </>
+   );
+ }
+diff --git a/src/components/AppTabs.tsx b/src/components/AppTabs.tsx
+new file mode 100644
+index 0000000..1f76fd4
+--- /dev/null
++++ b/src/components/AppTabs.tsx
+@@ -0,0 +1,53 @@
++import { Link, useLocation } from "react-router-dom";
++
++// The portfolio top tabs (v164, Portfolio Command): the cross-project
++// views as a tab bar across the top of every signed-in page -- Dashboard
++// (the visual portfolio home), Today, Projects, and the two NEW
++// cross-project views, Decisions and Risks & Issues, alongside Weekly
++// Sync and Workload. Rendered by AppSidebar next to the sidebar, which
++// keeps everything it already carried (logo, Cmd-K search, Help,
++// Settings/Account, the user avatar menu) -- the plan's slim rail maps
++// onto that sidebar rather than replacing it, so no existing route,
++// deep link or tested sidebar behavior moves. The Dashboard tab and the
++// Projects tab point at the same page in its two views, the split the
++// page's own List/Dashboard toggle has always made.
++const TABS: { label: string; to: string; isActive: (pathname: string, view: string | null) => boolean }[] = [
++  {
++    label: "Dashboard",
++    to: "/app/projects?view=dashboard",
++    isActive: (p, view) => p === "/app/dashboard" || (p === "/app/projects" && view === "dashboard"),
++  },
++  { label: "Today", to: "/app", isActive: (p) => p === "/app" },
++  {
++    label: "Projects",
++    to: "/app/projects",
++    isActive: (p, view) => (p === "/app/projects" && view !== "dashboard") || p.startsWith("/app/projects/"),
++  },
++  { label: "Decisions", to: "/app/decisions", isActive: (p) => p === "/app/decisions" },
++  { label: "Risks & Issues", to: "/app/risks", isActive: (p) => p === "/app/risks" },
++  { label: "Weekly Sync", to: "/app/sync", isActive: (p) => p === "/app/sync" },
++  { label: "Workload", to: "/app/workload", isActive: (p) => p === "/app/workload" },
++];
++
++export function AppTabs() {
++  const { pathname, search } = useLocation();
++  const view = new URLSearchParams(search).get("view");
++  return (
++    <nav className="app-tabs" aria-label="Portfolio views">
++      {TABS.map((t) => {
++        const active = t.isActive(pathname, view);
++        return (
++          <Link
++            key={t.label}
++            to={t.to}
++            className={active ? "app-tab app-tab-active" : "app-tab"}
++            aria-current={active ? "page" : undefined}
++          >
++            {t.label}
++          </Link>
++        );
++      })}
++      <Link className="app-tabs-new" to="/app/projects?new=1">+ New project</Link>
++    </nav>
++  );
++}
+diff --git a/src/components/charts/Donut.tsx b/src/components/charts/Donut.tsx
+new file mode 100644
+index 0000000..0f01092
+--- /dev/null
++++ b/src/components/charts/Donut.tsx
+@@ -0,0 +1,56 @@
++// Donut (v164, dashboard plan Phase 7 -- shared visual kit). Segments use
++// the categorical palette (palette.ts), never status colors: a slice is a
++// category, not a verdict. The legend under the ring lists every segment
++// with its real count and its percent WITH words ("3 of 8 · 38%") -- the
++// kit's every-percent-carries-words rule. Callers put the table of real
++// items the plan asks for underneath the Donut themselves (it belongs to
++// the surface, not the chart). Kit rule: no chart from no data -- when
++// every segment is 0 the caller renders one sentence plus the creating
++// action instead of this component.
++export type DonutSegment = { label: string; value: number };
++
++export function Donut({ segments, colors, centerValue, centerLabel, ariaLabel }: {
++  segments: DonutSegment[];
++  /** Categorical color per segment, same order. */
++  colors: string[];
++  centerValue: string;
++  centerLabel: string;
++  ariaLabel: string;
++}) {
++  const total = segments.reduce((s, x) => s + x.value, 0);
++  let acc = 0;
++  const stops: string[] = [];
++  segments.forEach((s, i) => {
++    if (s.value <= 0 || total <= 0) return;
++    const from = (acc / total) * 360;
++    acc += s.value;
++    const to = (acc / total) * 360;
++    stops.push(`${colors[i]} ${from}deg ${to}deg`);
++  });
++  return (
++    <div className="kit-donut-wrap">
++      <div
++        className="kit-donut"
++        role="img"
++        aria-label={ariaLabel}
++        style={{ background: stops.length ? `conic-gradient(${stops.join(", ")})` : "var(--border)" }}
++      >
++        <div className="kit-donut-hole">
++          <div className="kit-donut-value">{centerValue}</div>
++          <div className="kit-donut-label">{centerLabel}</div>
++        </div>
++      </div>
++      <ul className="kit-donut-legend">
++        {segments.map((s, i) => (
++          <li key={s.label}>
++            <span className="kit-donut-swatch" style={{ background: colors[i] }} aria-hidden="true" />
++            <span className="kit-donut-legend-label">{s.label}</span>
++            <span className="kit-donut-legend-count">
++              {total > 0 ? `${s.value} of ${total} · ${Math.round((s.value / total) * 100)}%` : "0"}
++            </span>
++          </li>
++        ))}
++      </ul>
++    </div>
++  );
++}
+diff --git a/src/components/charts/Gauge.tsx b/src/components/charts/Gauge.tsx
+new file mode 100644
+index 0000000..6d22975
+--- /dev/null
++++ b/src/components/charts/Gauge.tsx
+@@ -0,0 +1,50 @@
++// Gauge (v164, dashboard plan Phase 7 -- shared visual kit, built once for
++// the v164/v165/v166 dashboard phases). A semicircle arc in a status
++// color, a plain-word label, a big number, and the "x of y" words under
++// it. Kit rules, binding on every surface that uses this:
++//   - every percent carries words: the caller passes `words` ("5 of 12
++//     tasks done") and the gauge never shows a bare number without them;
++//   - no chart from no data: when there is nothing to measure, the caller
++//     renders one sentence plus the action that creates the data instead
++//     of a gauge -- this component only draws a real measurement.
++export type GaugeTone = "good" | "warn" | "crit" | "brand";
++
++const TONE_COLOR: Record<GaugeTone, string> = {
++  good: "var(--chart-good)",
++  warn: "var(--chart-warn)",
++  crit: "var(--chart-crit)",
++  // The neutral portfolio tone: the Tasketra ink, for a measurement that
++  // is neither good nor bad on its own (completion, time used).
++  brand: "var(--ink)",
++};
++
++export function Gauge({ label, percent, tone, value, words }: {
++  /** Plain-word label, e.g. "Portfolio completion". */
++  label: string;
++  /** 0-100 (values past 100 clamp the arc but not the number). */
++  percent: number;
++  tone: GaugeTone;
++  /** The big number as displayed, e.g. "42%". */
++  value: string;
++  /** The "x of y" words under the number, e.g. "5 of 12 tasks done". */
++  words: string;
++}) {
++  const clamped = Math.max(0, Math.min(100, percent));
++  // Semicircle from (10, 62) to (110, 62), radius 50. pathLength=100 makes
++  // the dash math read as a plain percent of the arc.
++  const arc = "M 10 62 A 50 50 0 0 1 110 62";
++  return (
++    <div className="kit-gauge" role="img" aria-label={`${label}: ${value}, ${words}`}>
++      <div className="kit-gauge-label">{label}</div>
++      <svg viewBox="0 0 120 68" className="kit-gauge-svg" aria-hidden="true">
++        <path d={arc} fill="none" stroke="var(--border)" strokeWidth="10" strokeLinecap="round" />
++        {clamped > 0 && (
++          <path d={arc} fill="none" stroke={TONE_COLOR[tone]} strokeWidth="10" strokeLinecap="round"
++            pathLength={100} strokeDasharray={`${clamped} 100`} />
++        )}
++      </svg>
++      <div className="kit-gauge-value">{value}</div>
++      <div className="kit-gauge-words">{words}</div>
++    </div>
++  );
++}
+diff --git a/src/components/charts/VarianceBars.tsx b/src/components/charts/VarianceBars.tsx
+new file mode 100644
+index 0000000..c381fb6
+--- /dev/null
++++ b/src/components/charts/VarianceBars.tsx
+@@ -0,0 +1,65 @@
++import { Link } from "react-router-dom";
++
++// Variance bars (v164, dashboard plan Phase 7 -- shared visual kit):
++// Planned vs Actual, one pair of bars per row. Color discipline from the
++// plan: red/amber appear ONLY on over items -- the Actual bar is the
++// neutral ink while a row is at or under plan, amber when it runs over,
++// red when it runs well over (more than 10% past plan). Every row carries
++// its numbers in words ("Planned $8,000 · Spent $9,200 · $1,200 over"),
++// and a row with an `href` is a link through to the surface that owns the
++// numbers. Kit rule: no chart from no data -- with no rows the caller
++// renders one sentence plus the creating action instead.
++export type VarianceRow = {
++  id: string;
++  label: string;
++  planned: number;
++  actual: number;
++  href?: string;
++};
++
++export function VarianceBars({ rows, formatValue, actualWord }: {
++  rows: VarianceRow[];
++  formatValue: (n: number) => string;
++  /** The word for the actual bar in the legend and row text ("Spent" for
++   *  budgets). Defaults to "Actual". */
++  actualWord?: string;
++}) {
++  const actualLabel = actualWord ?? "Actual";
++  const max = Math.max(1, ...rows.flatMap((r) => [r.planned, r.actual]));
++  return (
++    <div className="kit-variance">
++      <div className="kit-variance-legend" aria-hidden="true">
++        <span><span className="kit-variance-key kit-variance-key-planned" /> Planned</span>
++        <span><span className="kit-variance-key kit-variance-key-actual" /> {actualLabel}</span>
++      </div>
++      {rows.map((r) => {
++        const over = r.actual - r.planned;
++        const overClass = over <= 0 ? "" : r.planned > 0 && over / r.planned > 0.1 ? " kit-variance-over-hard" : " kit-variance-over";
++        const words = over > 0
++          ? `Planned ${formatValue(r.planned)} · ${actualLabel} ${formatValue(r.actual)} · ${formatValue(over)} over`
++          : `Planned ${formatValue(r.planned)} · ${actualLabel} ${formatValue(r.actual)}`;
++        const inner = (
++          <>
++            <div className="kit-variance-head">
++              <span className="kit-variance-label">{r.label}</span>
++              <span className="kit-variance-words">{words}</span>
++            </div>
++            <div className="kit-variance-track" aria-hidden="true">
++              <div className="kit-variance-bar kit-variance-bar-planned" style={{ width: `${(r.planned / max) * 100}%` }} />
++            </div>
++            <div className="kit-variance-track" aria-hidden="true">
++              <div className={`kit-variance-bar kit-variance-bar-actual${overClass}`} style={{ width: `${(r.actual / max) * 100}%` }} />
++            </div>
++          </>
++        );
++        return r.href ? (
++          <Link key={r.id} className="kit-variance-row" to={r.href} aria-label={`${r.label}: ${words}`} title={`Open ${r.label}`}>
++            {inner}
++          </Link>
++        ) : (
++          <div key={r.id} className="kit-variance-row">{inner}</div>
++        );
++      })}
++    </div>
++  );
++}
+diff --git a/src/components/charts/palette.ts b/src/components/charts/palette.ts
+new file mode 100644
+index 0000000..ea22f86
+--- /dev/null
++++ b/src/components/charts/palette.ts
+@@ -0,0 +1,23 @@
++// The shared visual kit's categorical palette (v164, dashboard plan
++// Phase 7). These colors mean "a different category", never "a different
++// health" -- status meaning stays with the status colors (--chart-good /
++// --chart-warn / --chart-crit and the pill pastels) everywhere in the app,
++// so a donut slice can never be misread as a health verdict. The hues are
++// deliberately muted and sit comfortably next to the Tasketra dark green
++// and lime without borrowing either.
++export const CATEGORICAL_PALETTE = [
++  "#546A8A", // steel blue
++  "#7D5BA6", // plum
++  "#2E7D74", // teal
++  "#B56545", // rust
++  "#A8577E", // dusty pink
++  "#6B7F59", // gray green
++  "#8A6D3B", // ochre
++  "#4A6FA5", // slate blue
++] as const;
++
++/** The categorical color for the i-th segment, wrapping if a chart ever
++ *  has more categories than palette entries. */
++export function categoricalColor(index: number): string {
++  return CATEGORICAL_PALETTE[index % CATEGORICAL_PALETTE.length];
++}
+diff --git a/src/index.css b/src/index.css
+index ed58def..55dc6dd 100644
+--- a/src/index.css
++++ b/src/index.css
+@@ -858,6 +858,94 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
+    tabs keep 960px. */
+ .project-main.project-main-tables { max-width: 1240px; padding-left: 28px; padding-right: 28px; }
+ 
++/* v164 (Portfolio Command): the portfolio top tabs. On desktop the bar is
++   fixed across the top of the content column (offset by the sidebar's
++   width, which the collapse toggle changes), and .project-main takes a
++   matching top margin so nothing slides under it. On phones the shell is
++   a column, so the bar simply sits in the flow under the sidebar's top
++   bar and scrolls sideways. Print drops it entirely. */
++.app-tabs {
++  display: flex; align-items: center; gap: 2px; height: 49px; padding: 0 12px;
++  background: var(--panel); border-bottom: 1px solid var(--border);
++  overflow-x: auto; scrollbar-width: none;
++}
++.app-tabs::-webkit-scrollbar { display: none; }
++.app-tab {
++  padding: 7px 12px; border-radius: var(--radius-pill); font-size: 14px; font-weight: 600;
++  color: var(--navy); text-decoration: none; white-space: nowrap;
++}
++.app-tab:hover { background: rgba(127, 127, 127, 0.14); }
++.app-tab-active { background: var(--ink); color: var(--ivory); }
++.app-tab-active:hover { background: var(--ink); }
++.app-tabs-new {
++  margin-left: auto; padding: 7px 14px; border-radius: var(--radius-pill); white-space: nowrap;
++  background: var(--lime); color: var(--ink); font-size: 14px; font-weight: 700; text-decoration: none;
++}
++.app-tabs-new:hover { filter: brightness(0.96); }
++@media (min-width: 861px) {
++  .app-tabs { position: fixed; top: 0; left: 264px; right: 0; z-index: 45; }
++  .sidebar-collapsed + .app-tabs { left: 68px; }
++  .project-main { margin-top: 49px; }
++}
++@media print { .app-tabs { display: none; } .project-main { margin-top: 0; } }
++
++/* v164 shared visual kit (src/components/charts/): gauges, donut, variance
++   bars. Categorical colors come from palette.ts; status colors only ever
++   mean status. */
++.kit-gauge { text-align: center; padding: 4px 8px 0; }
++.kit-gauge-label { font-size: 13px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--slate); margin-bottom: 2px; }
++.kit-gauge-svg { width: 168px; max-width: 100%; height: auto; display: block; margin: 0 auto; }
++.kit-gauge-value { font-size: 30px; font-weight: 800; color: var(--navy); margin-top: -34px; }
++.kit-gauge-words { font-size: 13.5px; color: var(--slate); margin-top: 2px; }
++.kit-donut-wrap { display: flex; flex-direction: column; align-items: center; gap: 12px; }
++.kit-donut { width: 150px; height: 150px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
++.kit-donut-hole { width: 96px; height: 96px; border-radius: 50%; background: var(--panel); display: flex; flex-direction: column; align-items: center; justify-content: center; }
++.kit-donut-value { font-size: 26px; font-weight: 800; color: var(--navy); line-height: 1; }
++.kit-donut-label { font-size: 12px; color: var(--slate); margin-top: 3px; }
++.kit-donut-legend { list-style: none; margin: 0; padding: 0; width: 100%; display: flex; flex-direction: column; gap: 6px; }
++.kit-donut-legend li { display: flex; align-items: center; gap: 8px; font-size: 14px; }
++.kit-donut-swatch { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; }
++.kit-donut-legend-label { color: var(--navy); }
++.kit-donut-legend-count { margin-left: auto; color: var(--slate); white-space: nowrap; }
++.kit-variance { display: flex; flex-direction: column; gap: 14px; }
++.kit-variance-legend { display: flex; gap: 16px; font-size: 12.5px; color: var(--slate); }
++.kit-variance-legend > span { display: inline-flex; align-items: center; gap: 6px; }
++.kit-variance-key { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
++.kit-variance-key-planned { background: var(--slate-2); }
++.kit-variance-key-actual { background: var(--ink); }
++.kit-variance-row { display: block; text-decoration: none; padding: 6px 8px; margin: 0 -8px; border-radius: var(--radius-sm); }
++a.kit-variance-row:hover { background: rgba(127, 127, 127, 0.08); }
++.kit-variance-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 5px; }
++.kit-variance-label { font-size: 14.5px; font-weight: 700; color: var(--navy); }
++.kit-variance-words { font-size: 13px; color: var(--slate); text-align: right; }
++.kit-variance-track { height: 9px; border-radius: var(--radius-pill); background: rgba(127, 127, 127, 0.12); margin-bottom: 4px; }
++.kit-variance-track:last-child { margin-bottom: 0; }
++.kit-variance-bar { height: 100%; border-radius: var(--radius-pill); min-width: 3px; }
++.kit-variance-bar-planned { background: var(--slate-2); }
++.kit-variance-bar-actual { background: var(--ink); }
++.kit-variance-bar-actual.kit-variance-over { background: var(--chart-warn); }
++.kit-variance-bar-actual.kit-variance-over-hard { background: var(--chart-crit); }
++
++/* v164 Dashboard visual rows: gauges across, then two-up panels. */
++.dash-gauges { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-bottom: 20px; }
++.dash-gauges-two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
++.dash-viz-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-bottom: 20px; }
++.dash-viz-card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; }
++.dash-viz-card h3 { margin: 0 0 12px; font-size: 16px; color: var(--navy); }
++.dash-viz-empty { font-size: 14.5px; color: var(--slate); margin: 0; }
++.dash-viz-more { margin: 10px 0 0; font-size: 14px; }
++.dash-list-rows { display: flex; flex-direction: column; }
++.dash-list-row { padding: 9px 0; border-bottom: 1px solid var(--border); }
++.dash-list-row:last-child { border-bottom: none; padding-bottom: 2px; }
++.dash-list-row:first-child { padding-top: 2px; }
++.dash-list-title { font-size: 15px; font-weight: 600; color: var(--navy); text-decoration: none; }
++a.dash-list-title:hover { text-decoration: underline; }
++.dash-list-meta { font-size: 13.5px; color: var(--slate); margin-top: 2px; }
++.dash-list-meta a { color: var(--slate); }
++@media (max-width: 860px) {
++  .dash-gauges, .dash-gauges-two, .dash-viz-grid { grid-template-columns: 1fr; }
++}
++
+ @media (max-width: 860px) {
+   .project-shell { flex-direction: column; }
+   /* On a phone the sidebar is a slim top bar (wordmark + Menu button). Tapping
+diff --git a/src/lib/api.ts b/src/lib/api.ts
+index b47cc0e..9559f38 100644
+--- a/src/lib/api.ts
++++ b/src/lib/api.ts
+@@ -913,6 +913,17 @@ export type PortfolioProjectSummary = {
+   highIssues: number;
+   cpi: number | null;
+   spi: number | null;
++  /** v164: the raw budget figures behind the EVM ratios (budget at
++   *  completion, and actual cost logged), for the Dashboard's variance
++   *  bars and Budget Used gauge. Optional: older payloads and fixtures
++   *  built before v164 do not carry them. */
++  bac?: number | null;
++  ac?: number;
++  /** v164: the project's planned window from its roadmap (earliest and
++   *  latest roadmap dates, YYYY-MM-DD), for the Time Used gauge. Null
++   *  when the roadmap carries no dates. */
++  plannedStart?: string | null;
++  plannedEnd?: string | null;
+   objectivesCount: number;
+   avgObjectiveProgress: number | null;
+   health: "on_track" | "at_risk" | "off_track";
+@@ -945,6 +956,60 @@ export type PortfolioData = {
+   upcomingMilestones: { id: string; title: string; date: string; status: RoadmapItem["status"]; projectId: string; projectName: string }[];
+   /** Open milestones with no date set: they exist but can never be "upcoming". */
+   undatedMilestones: number;
++  /** v164: every still-open decision request across the visible projects
++   *  (closed projects excluded), oldest first. Optional in the type for
++   *  the same reason as the summary fields above; the API always sends it. */
++  openDecisions?: PortfolioDecision[];
++  /** v164: not-resolved risks across the visible projects (closed
++   *  projects excluded), in log order; surfaces sort by exposure. */
++  openRisks?: PortfolioRisk[];
++  /** v164: not-resolved issues across the visible projects (closed
++   *  projects excluded), newest first. */
++  openIssues?: PortfolioIssue[];
++};
++
++/** v164: one open decision request in the cross-project portfolio payload
++ *  -- the weekly-sync ask shape, plus the public token so the Decisions
++ *  view can offer Copy link / Nudge like the per-project card. */
++export type PortfolioDecision = {
++  id: string;
++  projectId: string;
++  projectName: string;
++  title: string;
++  context: string | null;
++  deadline: string | null;
++  createdAt: string;
++  recipients: string[];
++  publicToken: string;
++};
++
++/** v164: one not-resolved risk in the cross-project portfolio payload.
++ *  Field names mirror src/lib/riskExposure.ts's SortableRisk (snake_case
++ *  scores) so the shared comparator reads it directly. */
++export type PortfolioRisk = {
++  id: string;
++  projectId: string;
++  projectName: string;
++  title: string;
++  probability: Risk["probability"];
++  impact: Risk["impact"];
++  probability_score: number | null;
++  impact_score: number | null;
++  status: Risk["status"];
++  ownerName: string | null;
++  created_at: string;
++};
++
++/** v164: one not-resolved issue in the cross-project portfolio payload. */
++export type PortfolioIssue = {
++  id: string;
++  projectId: string;
++  projectName: string;
++  title: string;
++  severity: Issue["severity"];
++  status: Issue["status"];
++  ownerName: string | null;
++  createdAt: string;
+ };
+ 
+ export type MyTodayData = {
+diff --git a/src/lib/decisionWait.ts b/src/lib/decisionWait.ts
+new file mode 100644
+index 0000000..a988711
+--- /dev/null
++++ b/src/lib/decisionWait.ts
+@@ -0,0 +1,23 @@
++import { fmtLocalDate } from "./format";
++
++// The decision lead line (v164): the words every surface puts first on an
++// open decision -- who it is waiting on, how long it has waited, and when
++// it is needed by. The phrasing is the v160 per-project card's, verbatim,
++// so the Dashboard's Waiting Longest list, the cross-project Decisions
++// view and the project page all read the same: "Waiting on Sam Rivera ·
++// waiting 5 days · Needed by Nov 20, 2026". A request sent to nobody yet
++// says so and names the action that starts the wait.
++export function decisionWaitWords(createdAt: string, now: Date = new Date()): string {
++  const days = Math.max(0, Math.floor((now.getTime() - new Date(createdAt).getTime()) / 86400000));
++  return days === 0 ? "asked today" : `waiting ${days} day${days === 1 ? "" : "s"}`;
++}
++
++/** The full lead line as one string (for compact list rows). Surfaces that
++ *  can render markup bold the recipient names themselves, as the v160
++ *  card does; the words are identical either way. */
++export function decisionLeadLine(d: { recipients: string[]; createdAt: string; deadline: string | null }, now: Date = new Date()): string {
++  const who = d.recipients.length
++    ? `Waiting on ${d.recipients.join(", ")} · ${decisionWaitWords(d.createdAt, now)}`
++    : "Not sent to anyone yet — copy the link to ask.";
++  return d.deadline ? `${who} · Needed by ${fmtLocalDate(d.deadline)}` : who;
++}
+diff --git a/src/lib/whatsNewData.ts b/src/lib/whatsNewData.ts
+index 0d3b819..521e8f0 100644
+--- a/src/lib/whatsNewData.ts
++++ b/src/lib/whatsNewData.ts
+@@ -9,6 +9,12 @@ export type ChangeEntry = { version: string; date: string; title: string; body:
+ // about; skip pure bug fixes and internal refactors that don't change what
+ // they can do.
+ export const CHANGES: ChangeEntry[] = [
++  {
++    version: "v164",
++    date: "November 2026",
++    title: "Your whole portfolio on one visual dashboard, with decisions and risks across every project.",
++    body: "The Dashboard now opens with the whole picture: gauges for how much of the work is done, how much of the planned time is used, and how much of the budget is spent, planned vs actual spending for every project, and your projects counted by the status you stated for them. Underneath sit the two lists that used to mean opening every project one by one: the decisions you have waited on longest, and your biggest risks, scored and ordered the same way each project's own register orders them. New tabs across the top open Decisions and Risks & Issues views that span all your projects at once, and the filters at the top redraw every visual together. Clicking a project's bar takes you straight to its Budget tab, and every project in the health table now carries its next step as a link.",
++  },
+   {
+     version: "v163",
+     date: "November 2026",
+diff --git a/src/pages/Dashboard.tsx b/src/pages/Dashboard.tsx
+index da5d4ea..8b5c7bf 100644
+--- a/src/pages/Dashboard.tsx
++++ b/src/pages/Dashboard.tsx
+@@ -1,6 +1,6 @@
+ import { useEffect, useState, type ReactNode } from "react";
+ import { Link, useNavigate, useSearchParams } from "react-router-dom";
+-import { api, ApiError, type Project, type ProjectStage, type PortfolioData, type PortfolioProjectSummary, type Task, type Issue, type UserTemplate, type MyTodayData, type CalendarItem } from "../lib/api";
++import { api, ApiError, type Project, type ProjectStage, type PortfolioData, type PortfolioProjectSummary, type PortfolioDecision, type PortfolioRisk, type Task, type Issue, type UserTemplate, type MyTodayData, type CalendarItem } from "../lib/api";
+ import { AppSidebar } from "../components/AppSidebar";
+ import { StageChip, STAGES, STAGE_LABEL } from "../components/StageRail";
+ import { ProjectSetupPicker } from "../components/ProjectSetup";
+@@ -28,6 +28,13 @@ import { startDoingTour } from "../lib/doingTour";
+ import { track } from "../lib/analytics";
+ import { useDocumentTitle } from "../lib/documentTitle";
+ import { announce } from "../lib/announce";
++import { Gauge } from "../components/charts/Gauge";
++import { Donut } from "../components/charts/Donut";
++import { VarianceBars } from "../components/charts/VarianceBars";
++import { categoricalColor } from "../components/charts/palette";
++import { fmtMoney } from "../lib/format";
++import { decisionLeadLine } from "../lib/decisionWait";
++import { sortRisks, riskScore } from "../lib/riskExposure";
+ 
+ const TASK_STATUS_ORDER: Task["status"][] = ["not_started", "in_progress", "blocked", "done"];
+ 
+@@ -91,18 +98,19 @@ function TaskStatusChart({ breakdown }: { breakdown: PortfolioData["taskStatusBr
+   );
+ }
+ 
+-// Donut for open issues by severity. Collapses high + critical into one
+-// visual "High / Critical" arc + legend row, same as ProjectHome.tsx's own
+-// SEVERITY_PILL already collapses high/critical to the same pill-red --
+-// kept consistent with that instead of inventing a 4th on-chart color.
+-// The three fill colors (--chart-good/--chart-warn/--chart-crit) are a
+-// colorblind-safe status triad validated separately from the app's
+-// --tag-*/pill-* pastels, which are tuned for small text badges, not large
+-// chart fills -- see the comment above them in index.css.
+-const DONUT_SEGMENTS: { key: "low" | "medium" | "highCritical"; label: string; color: string }[] = [
+-  { key: "low", label: "Low", color: "var(--chart-good)" },
+-  { key: "medium", label: "Medium", color: "var(--chart-warn)" },
+-  { key: "highCritical", label: "High / Critical", color: "var(--chart-crit)" },
++// Donut for open issues by severity, rebuilt on the shared kit Donut in
++// v164. Collapses high + critical into one "High / Critical" segment, same
++// as ProjectHome.tsx's own SEVERITY_PILL already collapses high/critical
++// to the same pill -- kept consistent with that instead of inventing a 4th
++// category. v164 changes the fills from the status triad to the kit's
++// categorical palette: severity here is a category breakdown (how many of
++// each), and the kit rule is that status colors only ever carry a health
++// verdict, never a category. The legend now also gives each count its
++// "x of y · %" words, per the kit's every-percent-carries-words rule.
++const ISSUE_DONUT_SEGMENTS: { key: "low" | "medium" | "highCritical"; label: string }[] = [
++  { key: "low", label: "Low" },
++  { key: "medium", label: "Medium" },
++  { key: "highCritical", label: "High / Critical" },
+ ];
+ 
+ function IssueSeverityDonut({ breakdown }: { breakdown: PortfolioData["issueSeverityBreakdown"] }) {
+@@ -118,35 +126,213 @@ function IssueSeverityDonut({ breakdown }: { breakdown: PortfolioData["issueSeve
+     return <p className="muted">No open issues right now.</p>;
+   }
+ 
+-  let acc = 0;
+-  const stops: string[] = [];
+-  for (const seg of DONUT_SEGMENTS) {
+-    const count = counts[seg.key];
+-    if (count === 0) continue;
+-    const pct = (count / total) * 100;
+-    stops.push(`${seg.color} ${acc}% ${acc + pct}%`);
+-    acc += pct;
++  const segments = ISSUE_DONUT_SEGMENTS
++    .map((seg, i) => ({ label: seg.label, value: counts[seg.key], color: categoricalColor(i) }))
++    .filter((s) => s.value > 0);
++
++  return (
++    <Donut
++      segments={segments}
++      colors={segments.map((s) => s.color)}
++      centerValue={String(total)}
++      centerLabel="open"
++      ariaLabel={`Open issues by severity: ${segments.map((s) => `${s.value} ${s.label}`).join(", ")}`}
++    />
++  );
++}
++
++// ---------------------------------------------------------------------
++// v164 (Portfolio Command): the visual home. Everything below reads the
++// portfolio payload only -- the gauges, variance bars, status donut and
++// the two bottom lists re-draw from the same filtered data as the tables
++// under them, so the header's Client/Project + Status filters move every
++// visual at once. Kit rules hold throughout: no chart from no data (an
++// empty visual is one sentence plus the action that creates the data),
++// and every percent carries its "x of y" words.
++// ---------------------------------------------------------------------
++
++/** Elapsed vs planned days across the active projects that carry roadmap
++ *  dates. A project's planned span is its roadmap window (first to last
++ *  date); elapsed clamps at the window's end, so a project past its last
++ *  date reads fully used, never more than 100%. */
++function timeUsedStats(projects: PortfolioProjectSummary[]): { elapsed: number; planned: number; count: number } {
++  const today = localDateKey(new Date());
++  let elapsed = 0;
++  let planned = 0;
++  let count = 0;
++  for (const p of projects) {
++    if (p.closed_at || !p.plannedStart || !p.plannedEnd) continue;
++    const span = daysBetween(p.plannedStart, p.plannedEnd);
++    if (span <= 0) continue;
++    const through = today < p.plannedEnd ? today : p.plannedEnd;
++    elapsed += Math.max(0, Math.min(span, daysBetween(p.plannedStart, through)));
++    planned += span;
++    count += 1;
+   }
+-  const gradient = `conic-gradient(${stops.join(", ")})`;
++  return { elapsed, planned, count };
++}
++
++function PortfolioGauges({ data }: { data: PortfolioData }) {
++  const active = data.projects.filter((p) => !p.closed_at);
++  const totalTasks = active.reduce((s, p) => s + p.totalTasks, 0);
++  const doneTasks = active.reduce((s, p) => s + p.doneTasks, 0);
++  const time = timeUsedStats(active);
++  // The Budget Used gauge exists only once money is actually moving: the
++  // plan renders it "only when at least one project logs costs".
++  const anyCosts = active.some((p) => (p.ac ?? 0) > 0);
++  const budgeted = active.filter((p) => (p.bac ?? 0) > 0);
++  const totalBac = budgeted.reduce((s, p) => s + (p.bac ?? 0), 0);
++  const spentOnBudgeted = budgeted.reduce((s, p) => s + (p.ac ?? 0), 0);
++  const budgetPct = totalBac > 0 ? Math.round((spentOnBudgeted / totalBac) * 100) : 0;
++  const firstActive = active[0];
++  const firstWithCosts = active.find((p) => (p.ac ?? 0) > 0);
+ 
+   return (
+-    <div className="dashboard-donut-wrap">
+-      <div className="dashboard-donut" style={{ background: gradient }}>
+-        <div className="dashboard-donut-hole">
+-          <strong>{total}</strong>
+-          <span>open</span>
++    <div className={anyCosts ? "dash-gauges" : "dash-gauges dash-gauges-two"}>
++      <div className="dash-viz-card">
++        {totalTasks > 0 ? (
++          <Gauge
++            label="Portfolio completion"
++            percent={(doneTasks / totalTasks) * 100}
++            tone="brand"
++            value={`${Math.round((doneTasks / totalTasks) * 100)}%`}
++            words={`${doneTasks} of ${totalTasks} tasks done across ${active.length} active project${active.length === 1 ? "" : "s"}`}
++          />
++        ) : (
++          <p className="dash-viz-empty">
++            No tasks yet across your active projects.{" "}
++            {firstActive && <Link to={`/app/projects/${firstActive.id}?tab=tasks`}>Open {firstActive.name} and add its first task</Link>}
++          </p>
++        )}
++      </div>
++      <div className="dash-viz-card">
++        {time.count > 0 ? (
++          <Gauge
++            label="Time used"
++            percent={(time.elapsed / time.planned) * 100}
++            tone="brand"
++            value={`${Math.round((time.elapsed / time.planned) * 100)}%`}
++            words={`${time.elapsed} of ${time.planned} planned days used across ${time.count} project${time.count === 1 ? "" : "s"} with dates`}
++          />
++        ) : (
++          <p className="dash-viz-empty">
++            No project has roadmap dates yet, so there is no planned span to measure time against.{" "}
++            {firstActive && <Link to={`/app/projects/${firstActive.id}?tab=roadmap`}>Add dates on a project's Roadmap</Link>}
++          </p>
++        )}
++      </div>
++      {anyCosts && (
++        <div className="dash-viz-card">
++          {totalBac > 0 ? (
++            <Gauge
++              label="Budget used"
++              percent={budgetPct}
++              tone={budgetPct > 100 ? "crit" : budgetPct >= 85 ? "warn" : "good"}
++              value={`${budgetPct}%`}
++              words={`${fmtMoney(spentOnBudgeted)} of ${fmtMoney(totalBac)} spent across ${budgeted.length} project${budgeted.length === 1 ? "" : "s"} with budgets`}
++            />
++          ) : (
++            <p className="dash-viz-empty">
++              Costs are being logged, but no project has a budget yet, so there is nothing to measure them against.{" "}
++              {firstWithCosts && <Link to={`/app/projects/${firstWithCosts.id}?tab=budget`}>Set a budget on {firstWithCosts.name}</Link>}
++            </p>
++          )}
+         </div>
++      )}
++    </div>
++  );
++}
++
++function BudgetVarianceCard({ projects }: { projects: PortfolioProjectSummary[] }) {
++  const rows = projects
++    .filter((p) => !p.closed_at && ((p.bac ?? 0) > 0 || (p.ac ?? 0) > 0))
++    .map((p) => ({ id: p.id, label: p.name, planned: p.bac ?? 0, actual: p.ac ?? 0, href: `/app/projects/${p.id}?tab=budget` }));
++  if (rows.length === 0) {
++    return <p className="dash-viz-empty">No budgets or costs yet. Set a budget on a project and log its costs, and planned vs actual shows up here.</p>;
++  }
++  return <VarianceBars rows={rows} formatValue={fmtMoney} actualWord="Spent" />;
++}
++
++function ProjectsByStatusCard({ data }: { data: PortfolioData }) {
++  // Stated status leads (v156): the donut counts projects by the health
++  // their owner stated, exactly what headlineHealth resolves everywhere
++  // else -- the evidence view stays in the Project health table below.
++  const categories: { key: string; label: string }[] = [
++    { key: "on_track", label: "On track" },
++    { key: "at_risk", label: "At risk" },
++    { key: "off_track", label: "Off track" },
++    { key: "closed", label: "Closed" },
++  ];
++  const counts: Record<string, number> = { on_track: 0, at_risk: 0, off_track: 0, closed: 0 };
++  for (const p of data.projects) {
++    if (p.closed_at) counts.closed += 1;
++    else counts[headlineHealth(p)] += 1;
++  }
++  const segments = categories
++    .map((c, i) => ({ label: c.label, value: counts[c.key], color: categoricalColor(i) }))
++    .filter((s) => s.value > 0);
++  const total = data.projects.length;
++  return (
++    <Donut
++      segments={segments}
++      colors={segments.map((s) => s.color)}
++      centerValue={String(total)}
++      centerLabel={total === 1 ? "project" : "projects"}
++      ariaLabel={`Projects by status: ${segments.map((s) => `${s.value} ${s.label}`).join(", ")}`}
++    />
++  );
++}
++
++function WaitingLongestList({ decisions }: { decisions: PortfolioDecision[] }) {
++  const top = decisions.slice(0, 5);
++  if (top.length === 0) {
++    return <p className="dash-viz-empty">Nobody is waiting on a decision right now. When you ask someone to decide, the longest waits show up here.</p>;
++  }
++  return (
++    <>
++      <div className="dash-list-rows">
++        {top.map((d) => (
++          <div className="dash-list-row" key={d.id}>
++            <Link className="dash-list-title" to={`/app/projects/${d.projectId}?tab=decisions`}>{d.title}</Link>
++            <div className="dash-list-meta">{decisionLeadLine(d)}</div>
++            <div className="dash-list-meta">in <Link to={`/app/projects/${d.projectId}`}>{d.projectName}</Link></div>
++          </div>
++        ))}
+       </div>
+-      <div className="dashboard-donut-legend">
+-        {DONUT_SEGMENTS.map((seg) => (
+-          <div className="row-item" key={seg.key}>
+-            <span className="sw" style={{ background: seg.color }} />
+-            {seg.label}
+-            <strong>{counts[seg.key]}</strong>
++      <p className="dash-viz-more"><Link to="/app/decisions">See all decisions</Link></p>
++    </>
++  );
++}
++
++const RISK_STATUS_WORD: Record<PortfolioRisk["status"], string> = { open: "Open", monitoring: "Monitoring", resolved: "Resolved" };
++
++function riskPillLabel(r: PortfolioRisk): string {
++  const score = riskScore(r);
++  if (score !== null) return `P${r.probability_score} · I${r.impact_score} · Score ${score}`;
++  const cap = (b: string) => b.charAt(0).toUpperCase() + b.slice(1);
++  return `P ${cap(r.probability)} · I ${cap(r.impact)}`;
++}
++
++function TopRisksList({ risks }: { risks: PortfolioRisk[] }) {
++  // v157/v158 ordering: the shared exposure comparator, highest first --
++  // the same order the per-project register and matrix use.
++  const top = sortRisks(risks, "exposure").slice(0, 5);
++  if (top.length === 0) {
++    return <p className="dash-viz-empty">No open risks across your projects. Risks you log on a project show up here, biggest exposure first.</p>;
++  }
++  return (
++    <>
++      <div className="dash-list-rows">
++        {top.map((r) => (
++          <div className="dash-list-row" key={r.id}>
++            <span className="pill pill-navy">{riskPillLabel(r)}</span>{" "}
++            <Link className="dash-list-title" to={`/app/projects/${r.projectId}?tab=risks`}>{r.title}</Link>
++            <div className="dash-list-meta">in <Link to={`/app/projects/${r.projectId}`}>{r.projectName}</Link> · {RISK_STATUS_WORD[r.status]}</div>
+           </div>
+         ))}
+       </div>
+-    </div>
++      <p className="dash-viz-more"><Link to="/app/risks">See all risks &amp; issues</Link></p>
++    </>
+   );
+ }
+ 
+@@ -157,6 +343,39 @@ function PortfolioOverview({ data, wide, glance }: { data: PortfolioData; wide:
+   const milestones = showAllMs ? data.upcomingMilestones : data.upcomingMilestones.slice(0, MS_CAP);
+   return (
+     <div className="dash-reporting">
++      {/* v164: the visual home sits above the glance calendar and the
++          collapsible sections, which keep their order, titles and open
++          defaults -- the sections below remain the detail behind these
++          summaries (the Project health table is the status donut's table
++          of real projects). With no projects at all there is nothing to
++          chart, so the whole block steps aside for the sections' own
++          empty states. */}
++      {data.projects.length > 0 && (
++        <>
++          <PortfolioGauges data={data} />
++          <div className="dash-viz-grid">
++            <section className="dash-viz-card">
++              <h3>Budget variance by project</h3>
++              <BudgetVarianceCard projects={data.projects} />
++            </section>
++            <section className="dash-viz-card">
++              <h3>Projects by status</h3>
++              <ProjectsByStatusCard data={data} />
++            </section>
++          </div>
++          <div className="dash-viz-grid">
++            <section className="dash-viz-card">
++              <h3>Waiting longest</h3>
++              <WaitingLongestList decisions={data.openDecisions ?? []} />
++            </section>
++            <section className="dash-viz-card">
++              <h3>Top risks</h3>
++              <TopRisksList risks={data.openRisks ?? []} />
++            </section>
++          </div>
++        </>
++      )}
++
+       {glance}
+ 
+       <CollapsibleSection
+@@ -172,7 +391,7 @@ function PortfolioOverview({ data, wide, glance }: { data: PortfolioData; wide:
+         ) : (
+           <ResizableTable id="dashboard-health">
+             <thead>
+-              <tr><th>Project</th><th>Stage</th><th>Health</th><th>Tasks</th><th>Overdue</th><th>Risks</th><th>Issues</th><th>OKR progress</th></tr>
++              <tr><th>Project</th><th>Stage</th><th>Status</th><th>Tasks</th><th>Overdue</th><th>OKR progress</th><th>Next step</th></tr>
+             </thead>
+             <tbody>
+               {data.projects.map((p) => (
+@@ -207,9 +426,27 @@ function PortfolioOverview({ data, wide, glance }: { data: PortfolioData; wide:
+                     </span>
+                   </td>
+                   <td className="muted" style={p.overdueTasks > 0 ? { color: "var(--red)" } : undefined}>{p.overdueTasks}</td>
+-                  <td className="muted nowrap-cell">{p.openRisks}{p.highRisks > 0 ? ` (${p.highRisks} high)` : ""}</td>
+-                  <td className="muted nowrap-cell">{p.openIssues}{p.highIssues > 0 ? ` (${p.highIssues} high)` : ""}</td>
+                   <td className="muted">{p.objectivesCount > 0 ? fmtPct100(p.avgObjectiveProgress) : "--"}</td>
++                  {/* v164: the Next Step deep-link (the v158 pattern) makes
++                      this table the status donut's table of real items:
++                      project, stated status, next step. The per-project
++                      Risks/Issues count columns stepped aside for it --
++                      every open risk and issue now lives one click away
++                      in the cross-project Risks & Issues view and the Top
++                      risks list above. */}
++                  <td>
++                    {p.closed_at ? (
++                      <span className="muted">—</span>
++                    ) : p.nextUp ? (
++                      p.nextUpTab ? (
++                        <Link className="btn-link" to={`/app/projects/${p.id}?tab=${p.nextUpTab}`} aria-label={`Next step for ${p.name}: ${p.nextUp}`}>{p.nextUp}</Link>
++                      ) : (
++                        <span>{p.nextUp}</span>
++                      )
++                    ) : (
++                      <span className="muted">Nothing queued</span>
++                    )}
++                  </td>
+                 </tr>
+               ))}
+             </tbody>
+@@ -641,6 +878,23 @@ export default function Dashboard() {
+   const taskCounts = Object.fromEntries((portfolio?.projects ?? []).map((p) => [p.id, p.totalTasks]));
+   const firstRun = !loading && isFirstRun(projects, taskCounts);
+ 
++  // v164: the top tabs' "+ New project" lands here as ?new=1 (the tabs sit
++  // outside this page, so the link has to carry the intent). Open the same
++  // modal the page's own button opens, then drop the param so a refresh
++  // does not reopen it. On the first-run screen there is no modal -- the
++  // screen itself is the project creator -- so the param is just cleared.
++  const wantsNew = searchParams.get("new") === "1";
++  useEffect(() => {
++    if (!wantsNew || loading) return;
++    const next = new URLSearchParams(searchParams);
++    next.delete("new");
++    setSearchParams(next, { replace: true });
++    if (!firstRun) openNewProject();
++    // openNewProject reads current state only; the param + load state are
++    // the real triggers.
++    // eslint-disable-next-line react-hooks/exhaustive-deps
++  }, [wantsNew, loading, firstRun]);
++
+   const totalOpenDecisions = projects.reduce((sum, p) => sum + (p.open_decisions || 0), 0);
+ 
+   // v151 (Part A1): the subtitle uses the same single needs-attention
+diff --git a/src/pages/PortfolioDecisions.tsx b/src/pages/PortfolioDecisions.tsx
+new file mode 100644
+index 0000000..81c0983
+--- /dev/null
++++ b/src/pages/PortfolioDecisions.tsx
+@@ -0,0 +1,120 @@
++import { useEffect, useState } from "react";
++import { Link } from "react-router-dom";
++import { api, type PortfolioData, type PortfolioDecision } from "../lib/api";
++import { AppSidebar } from "../components/AppSidebar";
++import { useDocumentTitle } from "../lib/documentTitle";
++import { fmtLocalDate } from "../lib/format";
++import { decisionWaitWords } from "../lib/decisionWait";
++
++// Decisions across every project (v164, Portfolio Command): the
++// cross-project view behind the top tab. It reads the portfolio payload's
++// openDecisions -- every still-open ask on every project the user can see
++// (closed projects excluded server-side), oldest first, so the longest
++// wait leads. Rows reuse the v160 per-project card design and lead line
++// (decider, wait time, needed-by), and Copy link / Nudge behave exactly
++// as they do on the project's own Decisions tab. Read-only: answering and
++// confirming still happen on the public page and in the project.
++export default function PortfolioDecisions() {
++  useDocumentTitle("Decisions");
++  const [data, setData] = useState<PortfolioData | null>(null);
++  const [error, setError] = useState("");
++  const [copiedId, setCopiedId] = useState<string | null>(null);
++  const [nudgedId, setNudgedId] = useState<string | null>(null);
++
++  useEffect(() => {
++    let cancelled = false;
++    api.getPortfolio()
++      .then((d) => { if (!cancelled) setData(d); })
++      .catch(() => { if (!cancelled) setError("Couldn't load your decisions. Try refreshing the page."); });
++    return () => { cancelled = true; };
++  }, []);
++
++  // Same behavior as the per-project card (v151/v160): the public link to
++  // the clipboard; a nudge is a ready-to-paste reminder, since the app has
++  // no outbound channel to stakeholders.
++  function copyShareLink(d: PortfolioDecision) {
++    const url = `${window.location.origin}/d/${d.publicToken}`;
++    navigator.clipboard.writeText(url).then(() => {
++      setCopiedId(d.id);
++      setTimeout(() => setCopiedId((cur) => (cur === d.id ? null : cur)), 2000);
++    });
++  }
++
++  function copyNudge(d: PortfolioDecision) {
++    const url = `${window.location.origin}/d/${d.publicToken}`;
++    const names = d.recipients.join(", ");
++    const waited = decisionWaitWords(d.createdAt);
++    const waitPart = waited === "asked today" ? "sent today" : waited;
++    const text = `Hi ${names}, a quick nudge on "${d.title}" (${waitPart}${d.deadline ? `, needed by ${fmtLocalDate(d.deadline)}` : ""}). You can answer here, no account needed: ${url}`;
++    navigator.clipboard.writeText(text).then(() => {
++      setNudgedId(d.id);
++      setTimeout(() => setNudgedId((cur) => (cur === d.id ? null : cur)), 2000);
++    });
++  }
++
++  const decisions = data?.openDecisions ?? [];
++  const projectCount = new Set(decisions.map((d) => d.projectId)).size;
++
++  return (
++    <div className="project-shell">
++      <AppSidebar />
++      <main className="project-main">
++        <div className="page-head">
++          <div>
++            <h1>Decisions</h1>
++            <p className="tw-sub">
++              {!data && !error
++                ? "Loading…"
++                : decisions.length === 0
++                  ? "Nothing is waiting on a decision."
++                  : `${decisions.length} decision${decisions.length === 1 ? "" : "s"} waiting across ${projectCount} project${projectCount === 1 ? "" : "s"}, longest wait first.`}
++            </p>
++          </div>
++        </div>
++
++        {error && <p className="error-text">{error}</p>}
++
++        {data && decisions.length === 0 && !error && (
++          <p className="muted">
++            Decision requests live inside projects. <Link to="/app/projects">Open a project</Link> and use its Decisions tab to ask someone, and the wait will show up here.
++          </p>
++        )}
++
++        <div className="decision-list">
++          {decisions.map((d) => (
++            <div className="decision-card open" key={d.id}>
++              <div className="decision-card-head">
++                <h4>{d.title}</h4>
++              </div>
++              {/* The v160 lead line: decider first, then the wait, then
++                  the needed-by date. */}
++              <p className="decision-wait">
++                {d.recipients.length ? (
++                  <>Waiting on <strong>{d.recipients.join(", ")}</strong> · {decisionWaitWords(d.createdAt)}</>
++                ) : (
++                  "Not sent to anyone yet — copy the link to ask."
++                )}
++                {d.deadline && <> · Needed by {fmtLocalDate(d.deadline)}</>}
++              </p>
++              <p className="muted" style={{ margin: "2px 0 0" }}>
++                in <Link to={`/app/projects/${d.projectId}`}>{d.projectName}</Link>
++              </p>
++              {d.context && <p className="muted" style={{ margin: "6px 0 0" }}>{d.context}</p>}
++              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
++                <button className="btn btn-primary" type="button" onClick={() => copyShareLink(d)}>
++                  {copiedId === d.id ? "Copied" : "Copy link"}
++                </button>
++                {d.recipients.length > 0 && (
++                  <button className="btn btn-ghost" type="button" onClick={() => copyNudge(d)}>
++                    {nudgedId === d.id ? "Nudge copied" : "Nudge"}
++                  </button>
++                )}
++                <Link className="btn btn-ghost" to={`/app/projects/${d.projectId}?tab=decisions`}>Open in project</Link>
++              </div>
++            </div>
++          ))}
++        </div>
++      </main>
++    </div>
++  );
++}
+diff --git a/src/pages/PortfolioRisks.tsx b/src/pages/PortfolioRisks.tsx
+new file mode 100644
+index 0000000..afbc0d3
+--- /dev/null
++++ b/src/pages/PortfolioRisks.tsx
+@@ -0,0 +1,115 @@
++import { useEffect, useState } from "react";
++import { Link } from "react-router-dom";
++import { api, type PortfolioData, type PortfolioIssue, type PortfolioRisk } from "../lib/api";
++import { AppSidebar } from "../components/AppSidebar";
++import { useDocumentTitle } from "../lib/documentTitle";
++import { sortRisks, riskScore } from "../lib/riskExposure";
++
++// Risks & Issues across every project (v164, Portfolio Command): the
++// cross-project view behind the top tab. It reads the portfolio payload's
++// openRisks / openIssues (not-resolved items on visible projects, closed
++// projects excluded server-side). Risks are ordered with the shared
++// v157/v158 exposure comparator -- numeric score first, band product for
++// unscored risks -- so this list can never disagree with a project's own
++// register about what the biggest risk is. Rows carry the v160 matrix
++// chip (P · I · Score) and link into the owning project's tab. Read-only.
++const SEVERITY_ORDER: Record<PortfolioIssue["severity"], number> = { critical: 0, high: 1, medium: 2, low: 3 };
++const SEVERITY_PILL: Record<PortfolioIssue["severity"], string> = { low: "pill-green", medium: "pill-gold", high: "pill-red", critical: "pill-red" };
++const SEVERITY_LABEL: Record<PortfolioIssue["severity"], string> = { low: "Low", medium: "Medium", high: "High", critical: "Critical" };
++const ISSUE_STATUS_WORD: Record<PortfolioIssue["status"], string> = { open: "Open", in_progress: "In progress", resolved: "Resolved" };
++const RISK_STATUS_WORD: Record<PortfolioRisk["status"], string> = { open: "Open", monitoring: "Monitoring", resolved: "Resolved" };
++
++function cap(band: string): string {
++  return band.charAt(0).toUpperCase() + band.slice(1);
++}
++
++function riskChip(r: PortfolioRisk): string {
++  const score = riskScore(r);
++  return score !== null ? `P${r.probability_score} · I${r.impact_score} · Score ${score}` : `P ${cap(r.probability)} · I ${cap(r.impact)}`;
++}
++
++export default function PortfolioRisks() {
++  useDocumentTitle("Risks & Issues");
++  const [data, setData] = useState<PortfolioData | null>(null);
++  const [error, setError] = useState("");
++
++  useEffect(() => {
++    let cancelled = false;
++    api.getPortfolio()
++      .then((d) => { if (!cancelled) setData(d); })
++      .catch(() => { if (!cancelled) setError("Couldn't load your risks and issues. Try refreshing the page."); });
++    return () => { cancelled = true; };
++  }, []);
++
++  const risks = sortRisks(data?.openRisks ?? [], "exposure");
++  const issues = [...(data?.openIssues ?? [])].sort(
++    (a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity] || b.createdAt.localeCompare(a.createdAt)
++  );
++  const projectCount = new Set([...risks.map((r) => r.projectId), ...issues.map((i) => i.projectId)]).size;
++
++  return (
++    <div className="project-shell">
++      <AppSidebar />
++      <main className="project-main">
++        <div className="page-head">
++          <div>
++            <h1>Risks &amp; Issues</h1>
++            <p className="tw-sub">
++              {!data && !error
++                ? "Loading…"
++                : risks.length + issues.length === 0
++                  ? "Nothing open across your projects."
++                  : `${risks.length} open risk${risks.length === 1 ? "" : "s"} and ${issues.length} open issue${issues.length === 1 ? "" : "s"} across ${projectCount} project${projectCount === 1 ? "" : "s"}.`}
++            </p>
++          </div>
++        </div>
++
++        {error && <p className="error-text">{error}</p>}
++
++        {data && !error && (
++          <>
++            <h2 style={{ marginTop: 8 }}>Risks</h2>
++            {risks.length === 0 ? (
++              <p className="muted">
++                No open risks right now. Risks you log on a project show up here, biggest exposure first. <Link to="/app/projects">Open a project</Link> to log one.
++              </p>
++            ) : (
++              <div className="dash-list-rows">
++                {risks.map((r) => (
++                  <div className="dash-list-row" key={r.id}>
++                    <span className="pill pill-navy">{riskChip(r)}</span>{" "}
++                    <Link className="dash-list-title" to={`/app/projects/${r.projectId}?tab=risks`}>{r.title}</Link>
++                    <div className="dash-list-meta">
++                      in <Link to={`/app/projects/${r.projectId}`}>{r.projectName}</Link> · {RISK_STATUS_WORD[r.status]}
++                      {r.ownerName ? <> · Owner: {r.ownerName}</> : null}
++                    </div>
++                  </div>
++                ))}
++              </div>
++            )}
++
++            <h2 style={{ marginTop: 28 }}>Issues</h2>
++            {issues.length === 0 ? (
++              <p className="muted">
++                No open issues right now. Issues you log on a project show up here, most severe first. <Link to="/app/projects">Open a project</Link> to log one.
++              </p>
++            ) : (
++              <div className="dash-list-rows">
++                {issues.map((i) => (
++                  <div className="dash-list-row" key={i.id}>
++                    <span className={`pill ${SEVERITY_PILL[i.severity]}`}>{SEVERITY_LABEL[i.severity]}</span>{" "}
++                    <Link className="dash-list-title" to={`/app/projects/${i.projectId}?tab=issues`}>{i.title}</Link>
++                    <div className="dash-list-meta">
++                      in <Link to={`/app/projects/${i.projectId}`}>{i.projectName}</Link> · {ISSUE_STATUS_WORD[i.status]}
++                      {i.ownerName ? <> · Owner: {i.ownerName}</> : null}
++                    </div>
++                  </div>
++                ))}
++              </div>
++            )}
++          </>
++        )}
++      </main>
++    </div>
++  );
++}

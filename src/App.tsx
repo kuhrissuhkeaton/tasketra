@@ -16,6 +16,8 @@ const VerifyEmail = lazy(() => import("./pages/VerifyEmail"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const WeeklySync = lazy(() => import("./pages/WeeklySync"));
 const Workload = lazy(() => import("./pages/Workload"));
+const PortfolioDecisions = lazy(() => import("./pages/PortfolioDecisions"));
+const PortfolioRisks = lazy(() => import("./pages/PortfolioRisks"));
 const Today = lazy(() => import("./pages/Today"));
 const ProjectHome = lazy(() => import("./pages/ProjectHome"));
 const DecisionPublic = lazy(() => import("./pages/DecisionPublic"));
@@ -94,6 +96,8 @@ export default function App() {
             <Route path="/app/today" element={<Navigate to="/app" replace />} />
             <Route path="/app/sync" element={<Protected><WeeklySync /></Protected>} />
             <Route path="/app/workload" element={<Protected><Workload /></Protected>} />
+        <Route path="/app/decisions" element={<Protected><PortfolioDecisions /></Protected>} />
+        <Route path="/app/risks" element={<Protected><PortfolioRisks /></Protected>} />
             <Route path="/app/resources" element={<Protected><Resources /></Protected>} />
             <Route path="/app/whats-new" element={<Protected><WhatsNew /></Protected>} />
             <Route path="/app/billing" element={<Protected><Billing /></Protected>} />

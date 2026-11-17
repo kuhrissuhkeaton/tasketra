@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { api, ApiError, type Project, type ProjectStage, type PortfolioData, type PortfolioProjectSummary, type Task, type Issue, type UserTemplate, type MyTodayData, type CalendarItem } from "../lib/api";
+import { api, ApiError, type Project, type ProjectStage, type PortfolioData, type PortfolioProjectSummary, type PortfolioDecision, type PortfolioRisk, type Task, type Issue, type UserTemplate, type MyTodayData, type CalendarItem } from "../lib/api";
 import { AppSidebar } from "../components/AppSidebar";
 import { StageChip, STAGES, STAGE_LABEL } from "../components/StageRail";
 import { ProjectSetupPicker } from "../components/ProjectSetup";
@@ -28,6 +28,13 @@ import { startDoingTour } from "../lib/doingTour";
 import { track } from "../lib/analytics";
 import { useDocumentTitle } from "../lib/documentTitle";
 import { announce } from "../lib/announce";
+import { Gauge } from "../components/charts/Gauge";
+import { Donut } from "../components/charts/Donut";
+import { VarianceBars } from "../components/charts/VarianceBars";
+import { categoricalColor } from "../components/charts/palette";
+import { fmtMoney } from "../lib/format";
+import { decisionLeadLine } from "../lib/decisionWait";
+import { sortRisks, riskScore } from "../lib/riskExposure";
 
 const TASK_STATUS_ORDER: Task["status"][] = ["not_started", "in_progress", "blocked", "done"];
 
@@ -91,18 +98,19 @@ function TaskStatusChart({ breakdown }: { breakdown: PortfolioData["taskStatusBr
   );
 }
 
-// Donut for open issues by severity. Collapses high + critical into one
-// visual "High / Critical" arc + legend row, same as ProjectHome.tsx's own
-// SEVERITY_PILL already collapses high/critical to the same pill-red --
-// kept consistent with that instead of inventing a 4th on-chart color.
-// The three fill colors (--chart-good/--chart-warn/--chart-crit) are a
-// colorblind-safe status triad validated separately from the app's
-// --tag-*/pill-* pastels, which are tuned for small text badges, not large
-// chart fills -- see the comment above them in index.css.
-const DONUT_SEGMENTS: { key: "low" | "medium" | "highCritical"; label: string; color: string }[] = [
-  { key: "low", label: "Low", color: "var(--chart-good)" },
-  { key: "medium", label: "Medium", color: "var(--chart-warn)" },
-  { key: "highCritical", label: "High / Critical", color: "var(--chart-crit)" },
+// Donut for open issues by severity, rebuilt on the shared kit Donut in
+// v164. Collapses high + critical into one "High / Critical" segment, same
+// as ProjectHome.tsx's own SEVERITY_PILL already collapses high/critical
+// to the same pill -- kept consistent with that instead of inventing a 4th
+// category. v164 changes the fills from the status triad to the kit's
+// categorical palette: severity here is a category breakdown (how many of
+// each), and the kit rule is that status colors only ever carry a health
+// verdict, never a category. The legend now also gives each count its
+// "x of y · %" words, per the kit's every-percent-carries-words rule.
+const ISSUE_DONUT_SEGMENTS: { key: "low" | "medium" | "highCritical"; label: string }[] = [
+  { key: "low", label: "Low" },
+  { key: "medium", label: "Medium" },
+  { key: "highCritical", label: "High / Critical" },
 ];
 
 function IssueSeverityDonut({ breakdown }: { breakdown: PortfolioData["issueSeverityBreakdown"] }) {
@@ -118,35 +126,213 @@ function IssueSeverityDonut({ breakdown }: { breakdown: PortfolioData["issueSeve
     return <p className="muted">No open issues right now.</p>;
   }
 
-  let acc = 0;
-  const stops: string[] = [];
-  for (const seg of DONUT_SEGMENTS) {
-    const count = counts[seg.key];
-    if (count === 0) continue;
-    const pct = (count / total) * 100;
-    stops.push(`${seg.color} ${acc}% ${acc + pct}%`);
-    acc += pct;
-  }
-  const gradient = `conic-gradient(${stops.join(", ")})`;
+  const segments = ISSUE_DONUT_SEGMENTS
+    .map((seg, i) => ({ label: seg.label, value: counts[seg.key], color: categoricalColor(i) }))
+    .filter((s) => s.value > 0);
 
   return (
-    <div className="dashboard-donut-wrap">
-      <div className="dashboard-donut" style={{ background: gradient }}>
-        <div className="dashboard-donut-hole">
-          <strong>{total}</strong>
-          <span>open</span>
-        </div>
+    <Donut
+      segments={segments}
+      colors={segments.map((s) => s.color)}
+      centerValue={String(total)}
+      centerLabel="open"
+      ariaLabel={`Open issues by severity: ${segments.map((s) => `${s.value} ${s.label}`).join(", ")}`}
+    />
+  );
+}
+
+// ---------------------------------------------------------------------
+// v164 (Portfolio Command): the visual home. Everything below reads the
+// portfolio payload only -- the gauges, variance bars, status donut and
+// the two bottom lists re-draw from the same filtered data as the tables
+// under them, so the header's Client/Project + Status filters move every
+// visual at once. Kit rules hold throughout: no chart from no data (an
+// empty visual is one sentence plus the action that creates the data),
+// and every percent carries its "x of y" words.
+// ---------------------------------------------------------------------
+
+/** Elapsed vs planned days across the active projects that carry roadmap
+ *  dates. A project's planned span is its roadmap window (first to last
+ *  date); elapsed clamps at the window's end, so a project past its last
+ *  date reads fully used, never more than 100%. */
+function timeUsedStats(projects: PortfolioProjectSummary[]): { elapsed: number; planned: number; count: number } {
+  const today = localDateKey(new Date());
+  let elapsed = 0;
+  let planned = 0;
+  let count = 0;
+  for (const p of projects) {
+    if (p.closed_at || !p.plannedStart || !p.plannedEnd) continue;
+    const span = daysBetween(p.plannedStart, p.plannedEnd);
+    if (span <= 0) continue;
+    const through = today < p.plannedEnd ? today : p.plannedEnd;
+    elapsed += Math.max(0, Math.min(span, daysBetween(p.plannedStart, through)));
+    planned += span;
+    count += 1;
+  }
+  return { elapsed, planned, count };
+}
+
+function PortfolioGauges({ data }: { data: PortfolioData }) {
+  const active = data.projects.filter((p) => !p.closed_at);
+  const totalTasks = active.reduce((s, p) => s + p.totalTasks, 0);
+  const doneTasks = active.reduce((s, p) => s + p.doneTasks, 0);
+  const time = timeUsedStats(active);
+  // The Budget Used gauge exists only once money is actually moving: the
+  // plan renders it "only when at least one project logs costs".
+  const anyCosts = active.some((p) => (p.ac ?? 0) > 0);
+  const budgeted = active.filter((p) => (p.bac ?? 0) > 0);
+  const totalBac = budgeted.reduce((s, p) => s + (p.bac ?? 0), 0);
+  const spentOnBudgeted = budgeted.reduce((s, p) => s + (p.ac ?? 0), 0);
+  const budgetPct = totalBac > 0 ? Math.round((spentOnBudgeted / totalBac) * 100) : 0;
+  const firstActive = active[0];
+  const firstWithCosts = active.find((p) => (p.ac ?? 0) > 0);
+
+  return (
+    <div className={anyCosts ? "dash-gauges" : "dash-gauges dash-gauges-two"}>
+      <div className="dash-viz-card">
+        {totalTasks > 0 ? (
+          <Gauge
+            label="Portfolio completion"
+            percent={(doneTasks / totalTasks) * 100}
+            tone="brand"
+            value={`${Math.round((doneTasks / totalTasks) * 100)}%`}
+            words={`${doneTasks} of ${totalTasks} tasks done across ${active.length} active project${active.length === 1 ? "" : "s"}`}
+          />
+        ) : (
+          <p className="dash-viz-empty">
+            No tasks yet across your active projects.{" "}
+            {firstActive && <Link to={`/app/projects/${firstActive.id}?tab=tasks`}>Open {firstActive.name} and add its first task</Link>}
+          </p>
+        )}
       </div>
-      <div className="dashboard-donut-legend">
-        {DONUT_SEGMENTS.map((seg) => (
-          <div className="row-item" key={seg.key}>
-            <span className="sw" style={{ background: seg.color }} />
-            {seg.label}
-            <strong>{counts[seg.key]}</strong>
+      <div className="dash-viz-card">
+        {time.count > 0 ? (
+          <Gauge
+            label="Time used"
+            percent={(time.elapsed / time.planned) * 100}
+            tone="brand"
+            value={`${Math.round((time.elapsed / time.planned) * 100)}%`}
+            words={`${time.elapsed} of ${time.planned} planned days used across ${time.count} project${time.count === 1 ? "" : "s"} with dates`}
+          />
+        ) : (
+          <p className="dash-viz-empty">
+            No project has roadmap dates yet, so there is no planned span to measure time against.{" "}
+            {firstActive && <Link to={`/app/projects/${firstActive.id}?tab=roadmap`}>Add dates on a project's Roadmap</Link>}
+          </p>
+        )}
+      </div>
+      {anyCosts && (
+        <div className="dash-viz-card">
+          {totalBac > 0 ? (
+            <Gauge
+              label="Budget used"
+              percent={budgetPct}
+              tone={budgetPct > 100 ? "crit" : budgetPct >= 85 ? "warn" : "good"}
+              value={`${budgetPct}%`}
+              words={`${fmtMoney(spentOnBudgeted)} of ${fmtMoney(totalBac)} spent across ${budgeted.length} project${budgeted.length === 1 ? "" : "s"} with budgets`}
+            />
+          ) : (
+            <p className="dash-viz-empty">
+              Costs are being logged, but no project has a budget yet, so there is nothing to measure them against.{" "}
+              {firstWithCosts && <Link to={`/app/projects/${firstWithCosts.id}?tab=budget`}>Set a budget on {firstWithCosts.name}</Link>}
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BudgetVarianceCard({ projects }: { projects: PortfolioProjectSummary[] }) {
+  const rows = projects
+    .filter((p) => !p.closed_at && ((p.bac ?? 0) > 0 || (p.ac ?? 0) > 0))
+    .map((p) => ({ id: p.id, label: p.name, planned: p.bac ?? 0, actual: p.ac ?? 0, href: `/app/projects/${p.id}?tab=budget` }));
+  if (rows.length === 0) {
+    return <p className="dash-viz-empty">No budgets or costs yet. Set a budget on a project and log its costs, and planned vs actual shows up here.</p>;
+  }
+  return <VarianceBars rows={rows} formatValue={fmtMoney} actualWord="Spent" />;
+}
+
+function ProjectsByStatusCard({ data }: { data: PortfolioData }) {
+  // Stated status leads (v156): the donut counts projects by the health
+  // their owner stated, exactly what headlineHealth resolves everywhere
+  // else -- the evidence view stays in the Project health table below.
+  const categories: { key: string; label: string }[] = [
+    { key: "on_track", label: "On track" },
+    { key: "at_risk", label: "At risk" },
+    { key: "off_track", label: "Off track" },
+    { key: "closed", label: "Closed" },
+  ];
+  const counts: Record<string, number> = { on_track: 0, at_risk: 0, off_track: 0, closed: 0 };
+  for (const p of data.projects) {
+    if (p.closed_at) counts.closed += 1;
+    else counts[headlineHealth(p)] += 1;
+  }
+  const segments = categories
+    .map((c, i) => ({ label: c.label, value: counts[c.key], color: categoricalColor(i) }))
+    .filter((s) => s.value > 0);
+  const total = data.projects.length;
+  return (
+    <Donut
+      segments={segments}
+      colors={segments.map((s) => s.color)}
+      centerValue={String(total)}
+      centerLabel={total === 1 ? "project" : "projects"}
+      ariaLabel={`Projects by status: ${segments.map((s) => `${s.value} ${s.label}`).join(", ")}`}
+    />
+  );
+}
+
+function WaitingLongestList({ decisions }: { decisions: PortfolioDecision[] }) {
+  const top = decisions.slice(0, 5);
+  if (top.length === 0) {
+    return <p className="dash-viz-empty">Nobody is waiting on a decision right now. When you ask someone to decide, the longest waits show up here.</p>;
+  }
+  return (
+    <>
+      <div className="dash-list-rows">
+        {top.map((d) => (
+          <div className="dash-list-row" key={d.id}>
+            <Link className="dash-list-title" to={`/app/projects/${d.projectId}?tab=decisions`}>{d.title}</Link>
+            <div className="dash-list-meta">{decisionLeadLine(d)}</div>
+            <div className="dash-list-meta">in <Link to={`/app/projects/${d.projectId}`}>{d.projectName}</Link></div>
           </div>
         ))}
       </div>
-    </div>
+      <p className="dash-viz-more"><Link to="/app/decisions">See all decisions</Link></p>
+    </>
+  );
+}
+
+const RISK_STATUS_WORD: Record<PortfolioRisk["status"], string> = { open: "Open", monitoring: "Monitoring", resolved: "Resolved" };
+
+function riskPillLabel(r: PortfolioRisk): string {
+  const score = riskScore(r);
+  if (score !== null) return `P${r.probability_score} · I${r.impact_score} · Score ${score}`;
+  const cap = (b: string) => b.charAt(0).toUpperCase() + b.slice(1);
+  return `P ${cap(r.probability)} · I ${cap(r.impact)}`;
+}
+
+function TopRisksList({ risks }: { risks: PortfolioRisk[] }) {
+  // v157/v158 ordering: the shared exposure comparator, highest first --
+  // the same order the per-project register and matrix use.
+  const top = sortRisks(risks, "exposure").slice(0, 5);
+  if (top.length === 0) {
+    return <p className="dash-viz-empty">No open risks across your projects. Risks you log on a project show up here, biggest exposure first.</p>;
+  }
+  return (
+    <>
+      <div className="dash-list-rows">
+        {top.map((r) => (
+          <div className="dash-list-row" key={r.id}>
+            <span className="pill pill-navy">{riskPillLabel(r)}</span>{" "}
+            <Link className="dash-list-title" to={`/app/projects/${r.projectId}?tab=risks`}>{r.title}</Link>
+            <div className="dash-list-meta">in <Link to={`/app/projects/${r.projectId}`}>{r.projectName}</Link> · {RISK_STATUS_WORD[r.status]}</div>
+          </div>
+        ))}
+      </div>
+      <p className="dash-viz-more"><Link to="/app/risks">See all risks &amp; issues</Link></p>
+    </>
   );
 }
 
@@ -157,6 +343,39 @@ function PortfolioOverview({ data, wide, glance }: { data: PortfolioData; wide: 
   const milestones = showAllMs ? data.upcomingMilestones : data.upcomingMilestones.slice(0, MS_CAP);
   return (
     <div className="dash-reporting">
+      {/* v164: the visual home sits above the glance calendar and the
+          collapsible sections, which keep their order, titles and open
+          defaults -- the sections below remain the detail behind these
+          summaries (the Project health table is the status donut's table
+          of real projects). With no projects at all there is nothing to
+          chart, so the whole block steps aside for the sections' own
+          empty states. */}
+      {data.projects.length > 0 && (
+        <>
+          <PortfolioGauges data={data} />
+          <div className="dash-viz-grid">
+            <section className="dash-viz-card">
+              <h3>Budget variance by project</h3>
+              <BudgetVarianceCard projects={data.projects} />
+            </section>
+            <section className="dash-viz-card">
+              <h3>Projects by status</h3>
+              <ProjectsByStatusCard data={data} />
+            </section>
+          </div>
+          <div className="dash-viz-grid">
+            <section className="dash-viz-card">
+              <h3>Waiting longest</h3>
+              <WaitingLongestList decisions={data.openDecisions ?? []} />
+            </section>
+            <section className="dash-viz-card">
+              <h3>Top risks</h3>
+              <TopRisksList risks={data.openRisks ?? []} />
+            </section>
+          </div>
+        </>
+      )}
+
       {glance}
 
       <CollapsibleSection
@@ -172,7 +391,7 @@ function PortfolioOverview({ data, wide, glance }: { data: PortfolioData; wide: 
         ) : (
           <ResizableTable id="dashboard-health">
             <thead>
-              <tr><th>Project</th><th>Stage</th><th>Health</th><th>Tasks</th><th>Overdue</th><th>Risks</th><th>Issues</th><th>OKR progress</th></tr>
+              <tr><th>Project</th><th>Stage</th><th>Status</th><th>Tasks</th><th>Overdue</th><th>OKR progress</th><th>Next step</th></tr>
             </thead>
             <tbody>
               {data.projects.map((p) => (
@@ -207,9 +426,27 @@ function PortfolioOverview({ data, wide, glance }: { data: PortfolioData; wide: 
                     </span>
                   </td>
                   <td className="muted" style={p.overdueTasks > 0 ? { color: "var(--red)" } : undefined}>{p.overdueTasks}</td>
-                  <td className="muted nowrap-cell">{p.openRisks}{p.highRisks > 0 ? ` (${p.highRisks} high)` : ""}</td>
-                  <td className="muted nowrap-cell">{p.openIssues}{p.highIssues > 0 ? ` (${p.highIssues} high)` : ""}</td>
                   <td className="muted">{p.objectivesCount > 0 ? fmtPct100(p.avgObjectiveProgress) : "--"}</td>
+                  {/* v164: the Next Step deep-link (the v158 pattern) makes
+                      this table the status donut's table of real items:
+                      project, stated status, next step. The per-project
+                      Risks/Issues count columns stepped aside for it --
+                      every open risk and issue now lives one click away
+                      in the cross-project Risks & Issues view and the Top
+                      risks list above. */}
+                  <td>
+                    {p.closed_at ? (
+                      <span className="muted">—</span>
+                    ) : p.nextUp ? (
+                      p.nextUpTab ? (
+                        <Link className="btn-link" to={`/app/projects/${p.id}?tab=${p.nextUpTab}`} aria-label={`Next step for ${p.name}: ${p.nextUp}`}>{p.nextUp}</Link>
+                      ) : (
+                        <span>{p.nextUp}</span>
+                      )
+                    ) : (
+                      <span className="muted">Nothing queued</span>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -640,6 +877,23 @@ export default function Dashboard() {
 
   const taskCounts = Object.fromEntries((portfolio?.projects ?? []).map((p) => [p.id, p.totalTasks]));
   const firstRun = !loading && isFirstRun(projects, taskCounts);
+
+  // v164: the top tabs' "+ New project" lands here as ?new=1 (the tabs sit
+  // outside this page, so the link has to carry the intent). Open the same
+  // modal the page's own button opens, then drop the param so a refresh
+  // does not reopen it. On the first-run screen there is no modal -- the
+  // screen itself is the project creator -- so the param is just cleared.
+  const wantsNew = searchParams.get("new") === "1";
+  useEffect(() => {
+    if (!wantsNew || loading) return;
+    const next = new URLSearchParams(searchParams);
+    next.delete("new");
+    setSearchParams(next, { replace: true });
+    if (!firstRun) openNewProject();
+    // openNewProject reads current state only; the param + load state are
+    // the real triggers.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wantsNew, loading, firstRun]);
 
   const totalOpenDecisions = projects.reduce((sum, p) => sum + (p.open_decisions || 0), 0);
 

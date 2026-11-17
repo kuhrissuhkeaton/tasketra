@@ -913,6 +913,17 @@ export type PortfolioProjectSummary = {
   highIssues: number;
   cpi: number | null;
   spi: number | null;
+  /** v164: the raw budget figures behind the EVM ratios (budget at
+   *  completion, and actual cost logged), for the Dashboard's variance
+   *  bars and Budget Used gauge. Optional: older payloads and fixtures
+   *  built before v164 do not carry them. */
+  bac?: number | null;
+  ac?: number;
+  /** v164: the project's planned window from its roadmap (earliest and
+   *  latest roadmap dates, YYYY-MM-DD), for the Time Used gauge. Null
+   *  when the roadmap carries no dates. */
+  plannedStart?: string | null;
+  plannedEnd?: string | null;
   objectivesCount: number;
   avgObjectiveProgress: number | null;
   health: "on_track" | "at_risk" | "off_track";
@@ -945,6 +956,60 @@ export type PortfolioData = {
   upcomingMilestones: { id: string; title: string; date: string; status: RoadmapItem["status"]; projectId: string; projectName: string }[];
   /** Open milestones with no date set: they exist but can never be "upcoming". */
   undatedMilestones: number;
+  /** v164: every still-open decision request across the visible projects
+   *  (closed projects excluded), oldest first. Optional in the type for
+   *  the same reason as the summary fields above; the API always sends it. */
+  openDecisions?: PortfolioDecision[];
+  /** v164: not-resolved risks across the visible projects (closed
+   *  projects excluded), in log order; surfaces sort by exposure. */
+  openRisks?: PortfolioRisk[];
+  /** v164: not-resolved issues across the visible projects (closed
+   *  projects excluded), newest first. */
+  openIssues?: PortfolioIssue[];
+};
+
+/** v164: one open decision request in the cross-project portfolio payload
+ *  -- the weekly-sync ask shape, plus the public token so the Decisions
+ *  view can offer Copy link / Nudge like the per-project card. */
+export type PortfolioDecision = {
+  id: string;
+  projectId: string;
+  projectName: string;
+  title: string;
+  context: string | null;
+  deadline: string | null;
+  createdAt: string;
+  recipients: string[];
+  publicToken: string;
+};
+
+/** v164: one not-resolved risk in the cross-project portfolio payload.
+ *  Field names mirror src/lib/riskExposure.ts's SortableRisk (snake_case
+ *  scores) so the shared comparator reads it directly. */
+export type PortfolioRisk = {
+  id: string;
+  projectId: string;
+  projectName: string;
+  title: string;
+  probability: Risk["probability"];
+  impact: Risk["impact"];
+  probability_score: number | null;
+  impact_score: number | null;
+  status: Risk["status"];
+  ownerName: string | null;
+  created_at: string;
+};
+
+/** v164: one not-resolved issue in the cross-project portfolio payload. */
+export type PortfolioIssue = {
+  id: string;
+  projectId: string;
+  projectName: string;
+  title: string;
+  severity: Issue["severity"];
+  status: Issue["status"];
+  ownerName: string | null;
+  createdAt: string;
 };
 
 export type MyTodayData = {

@@ -39,6 +39,26 @@ import { loadStageInputs } from "../lib/stageData.ts";
 // Optional `?stage=` filter works the same way, narrowing every aggregate to
 // projects in one stage (initiate, plan, execute, close). Both filters can
 // combine.
+//
+// v164 (Portfolio Command) additions, all additive -- every field below is
+// new in the payload; nothing existing changed shape:
+//   - each project summary gains `bac` / `ac` (the budget figures the EVM
+//     math already reads) and `plannedStart` / `plannedEnd` (the project's
+//     roadmap window: earliest and latest roadmap dates), which the
+//     Dashboard's gauges and budget-variance bars draw from;
+//   - `openDecisions`: every still-open decision request across the visible
+//     projects (closed projects excluded -- a closed project's asks are no
+//     longer actionable, the same rule /api/weekly-sync uses), oldest first
+//     so "waiting longest" is the head of the list. Feeds the Dashboard's
+//     Waiting Longest list and the cross-project Decisions view;
+//   - `openRisks` / `openIssues`: the not-resolved risks and issues across
+//     the same projects, for the Dashboard's Top Risks list and the
+//     cross-project Risks & Issues view. Ordering is applied client-side
+//     with the shared exposure comparator, so it cannot drift from the
+//     per-project register's order.
+// All three lists honor the same projectId/stage filters and are capped at
+// 200 rows -- far past any real portfolio's open-item count, and the cap
+// keeps a pathological account from turning this rollup into a full dump.
 
 export default withSentry(async (req: Request) => {
   const userId = getUserIdFromRequest(req);
@@ -74,6 +94,10 @@ export default withSentry(async (req: Request) => {
     milestoneRows,
     undatedMilestoneRows,
     statedRows,
+    roadmapWindowRows,
+    openDecisionRows,
+    openRiskRows,
+    openIssueRows,
   ] = await Promise.all([
     database.sql`
       SELECT p.id, p.name, p.created_at, p.stage, p.tolerances, p.closed_at
@@ -233,9 +257,92 @@ export default withSentry(async (req: Request) => {
         )
       ORDER BY su.project_id, su.created_at DESC
     `,
+    // v164: each project's planned window, from its roadmap -- the earliest
+    // and latest dates anyone has put on the plan. Projects carry no start
+    // or finish columns of their own, so the roadmap is the only honest
+    // source for the Time Used gauge's "planned" span. to_char for the same
+    // DATE-driver reason as the milestone query above.
+    database.sql`
+      SELECT r.project_id,
+        to_char(min(COALESCE(r.start_date, r.end_date)), 'YYYY-MM-DD') AS planned_start,
+        to_char(max(COALESCE(r.end_date, r.start_date)), 'YYYY-MM-DD') AS planned_end
+      FROM roadmap_items r
+      WHERE r.deleted_at IS NULL
+        AND (r.start_date IS NOT NULL OR r.end_date IS NOT NULL)
+        AND r.project_id IN (
+          SELECT p.id FROM projects p
+          WHERE p.archived = false
+            AND (p.owner_id = ${userId} OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = ${userId} AND pm.status = 'active'))
+            AND (${filterProjectId}::uuid IS NULL OR p.id = ${filterProjectId}::uuid) AND (${filterStage}::text IS NULL OR p.stage = ${filterStage}::text)
+        )
+      GROUP BY r.project_id
+    `,
+    // v164: the cross-project asks queue -- the same query /api/weekly-sync
+    // runs (same closed-project exclusion, same recipients shape), plus the
+    // public token so the Decisions view can offer Copy link / Nudge exactly
+    // like the per-project card does. Ordered oldest first: waiting longest
+    // is the head of the list.
+    database.sql`
+      SELECT dr.id, dr.project_id, p.name AS project_name, dr.title, dr.context,
+             to_char(dr.deadline, 'YYYY-MM-DD') AS deadline, dr.created_at, dr.public_token,
+             COALESCE(
+               (SELECT json_agg(s.name ORDER BY s.name)
+                  FROM decision_request_recipients rr
+                  JOIN stakeholders s ON s.id = rr.stakeholder_id
+                  WHERE rr.decision_request_id = dr.id),
+               '[]'
+             ) AS recipients
+      FROM decision_requests dr
+      JOIN projects p ON p.id = dr.project_id
+      WHERE dr.deleted_at IS NULL
+        AND dr.status = 'open'
+        AND p.archived = false
+        AND p.closed_at IS NULL
+        AND (p.owner_id = ${userId}
+          OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = ${userId} AND pm.status = 'active'))
+        AND (${filterProjectId}::uuid IS NULL OR p.id = ${filterProjectId}::uuid) AND (${filterStage}::text IS NULL OR p.stage = ${filterStage}::text)
+      ORDER BY dr.created_at ASC
+      LIMIT 200
+    `,
+    // v164: not-resolved risks across the same projects (closed projects
+    // excluded, as with the asks). The client orders them with the shared
+    // exposure comparator (src/lib/riskExposure.ts), so this list only
+    // needs a stable base order.
+    database.sql`
+      SELECT r.id, r.project_id, p.name AS project_name, r.title, r.probability, r.impact,
+             r.probability_score, r.impact_score, r.status, r.owner_name, r.created_at
+      FROM risks r
+      JOIN projects p ON p.id = r.project_id
+      WHERE r.deleted_at IS NULL
+        AND r.status != 'resolved'
+        AND p.archived = false
+        AND p.closed_at IS NULL
+        AND (p.owner_id = ${userId}
+          OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = ${userId} AND pm.status = 'active'))
+        AND (${filterProjectId}::uuid IS NULL OR p.id = ${filterProjectId}::uuid) AND (${filterStage}::text IS NULL OR p.stage = ${filterStage}::text)
+      ORDER BY r.created_at ASC
+      LIMIT 200
+    `,
+    // v164: not-resolved issues across the same projects, newest first
+    // (the client re-sorts by severity for display).
+    database.sql`
+      SELECT i.id, i.project_id, p.name AS project_name, i.title, i.severity, i.status, i.owner_name, i.created_at
+      FROM issues i
+      JOIN projects p ON p.id = i.project_id
+      WHERE i.deleted_at IS NULL
+        AND i.status != 'resolved'
+        AND p.archived = false
+        AND p.closed_at IS NULL
+        AND (p.owner_id = ${userId}
+          OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = ${userId} AND pm.status = 'active'))
+        AND (${filterProjectId}::uuid IS NULL OR p.id = ${filterProjectId}::uuid) AND (${filterStage}::text IS NULL OR p.stage = ${filterStage}::text)
+      ORDER BY i.created_at DESC
+      LIMIT 200
+    `,
   ]);
 
   const statedById = new Map((statedRows as any[]).map((r) => [r.project_id, r]));
+  const windowById = new Map((roadmapWindowRows as any[]).map((r) => [r.project_id, r]));
   const taskById = new Map(perProjectTaskRows.map((r: any) => [r.project_id, r]));
   const budgetById = new Map(perProjectBudgetRows.map((r: any) => [r.project_id, r]));
   const riskById = new Map(perProjectRiskRows.map((r: any) => [r.project_id, r]));
@@ -317,6 +424,14 @@ export default withSentry(async (req: Request) => {
       highIssues: issueRow.high_count,
       cpi: evm.cpi,
       spi: evm.spi,
+      // v164: the raw budget figures behind the EVM ratios, and the
+      // roadmap window, for the Dashboard's variance bars and Time Used
+      // gauge. bac is null when no budget was set; plannedStart/End are
+      // null when the roadmap carries no dates.
+      bac,
+      ac,
+      plannedStart: windowById.get(p.id)?.planned_start ?? null,
+      plannedEnd: windowById.get(p.id)?.planned_end ?? null,
       objectivesCount: objectives.length,
       avgObjectiveProgress,
       health,
@@ -353,7 +468,48 @@ export default withSentry(async (req: Request) => {
     projectId: r.project_id, projectName: r.project_name,
   }));
 
-  return json({ kpis, taskStatusBreakdown, issueSeverityBreakdown, projects: projectSummaries, upcomingMilestones, undatedMilestones: undatedMilestoneRows[0]?.count ?? 0 });
+  // v164: the cross-project lists, mapped to the same camelCase shape the
+  // weekly-sync asks already use so the client reads both the same way.
+  const openDecisions = (openDecisionRows as any[]).map((d) => ({
+    id: d.id,
+    projectId: d.project_id,
+    projectName: d.project_name,
+    title: d.title,
+    context: d.context ?? null,
+    deadline: d.deadline as string | null,
+    createdAt: d.created_at,
+    recipients: (d.recipients as string[] | null) ?? [],
+    publicToken: d.public_token,
+  }));
+  // The score and created_at fields keep their snake_case names here on
+  // purpose: src/lib/riskExposure.ts's comparator reads exactly those
+  // fields, so the client can sort this list with the shared ordering
+  // without an adapter (the same reason the per-project Risk type does).
+  const openRisks = (openRiskRows as any[]).map((r) => ({
+    id: r.id,
+    projectId: r.project_id,
+    projectName: r.project_name,
+    title: r.title,
+    probability: r.probability,
+    impact: r.impact,
+    probability_score: r.probability_score ?? null,
+    impact_score: r.impact_score ?? null,
+    status: r.status,
+    ownerName: r.owner_name ?? null,
+    created_at: r.created_at,
+  }));
+  const openIssues = (openIssueRows as any[]).map((i) => ({
+    id: i.id,
+    projectId: i.project_id,
+    projectName: i.project_name,
+    title: i.title,
+    severity: i.severity,
+    status: i.status,
+    ownerName: i.owner_name ?? null,
+    createdAt: i.created_at,
+  }));
+
+  return json({ kpis, taskStatusBreakdown, issueSeverityBreakdown, projects: projectSummaries, upcomingMilestones, undatedMilestones: undatedMilestoneRows[0]?.count ?? 0, openDecisions, openRisks, openIssues });
 });
 
 export const config: Config = { path: "/api/portfolio" };

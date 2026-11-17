@@ -8,6 +8,7 @@ import { FeedbackModal } from "./FeedbackModal";
 import { NavIcon } from "./NavIcon";
 import { NotificationBell } from "./NotificationBell";
 import { GlobalSearch } from "./GlobalSearch";
+import { AppTabs } from "./AppTabs";
 import { readSidebarCollapsed, writeSidebarCollapsed, readNavGroupCollapsed, writeNavGroupCollapsed } from "../lib/sidebarState";
 
 /** Collapsible nav section used by both the sidebar's own global group and
@@ -157,6 +158,7 @@ export function AppSidebar({ children, menuLabel = "Menu" }: { children?: ReactN
     .join(" ");
 
   return (
+    <>
     <aside ref={asideRef} className={sidebarClass}>
       {/* Keyboard shortcut past the navigation: visible only when focused. */}
       <a
@@ -385,5 +387,11 @@ export function AppSidebar({ children, menuLabel = "Menu" }: { children?: ReactN
 
       {feedbackOpen && <FeedbackModal onClose={() => setFeedbackOpen(false)} />}
     </aside>
+    {/* v164: the portfolio top tabs render alongside the sidebar (fixed
+        across the top on desktop, a static strip under the top bar on
+        phones) -- see AppTabs.tsx for why the rail maps onto this
+        sidebar instead of replacing it. */}
+    <AppTabs />
+    </>
   );
 }

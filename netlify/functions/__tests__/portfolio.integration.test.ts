@@ -231,6 +231,87 @@ describe("portfolio", () => {
     expect(forbidden.status).toBe(404);
   });
 
+  it("v164: carries budget figures and the roadmap window per project, plus the cross-project decisions/risks/issues lists", async () => {
+    const database = db();
+    const owner = await createTestUser("pf-v164@example.com");
+    const outsider = await createTestUser("pf-v164-outsider@example.com");
+
+    const a = await createTestProject(owner.id, "V164 Project A");
+    // Budget at completion + one logged cost.
+    await database.sql`UPDATE projects SET budget_at_completion = 8000 WHERE id = ${a.id}`;
+    await database.sql`INSERT INTO cost_entries (project_id, description, amount) VALUES (${a.id}, 'Deposit', 2000)`;
+    // The planned window comes from the roadmap: earliest start to latest end.
+    await database.sql`
+      INSERT INTO roadmap_items (project_id, type, title, start_date, end_date, status)
+      VALUES (${a.id}, 'phase', 'Phase 1', '2026-11-02', '2026-12-14', 'in_progress')
+    `;
+    await database.sql`
+      INSERT INTO roadmap_items (project_id, type, title, start_date, status)
+      VALUES (${a.id}, 'milestone', 'Undated milestone', NULL, 'not_started')
+    `;
+    // One open ask with a recipient, one resolved ask (must not appear).
+    const [stakeholder] = await database.sql`
+      INSERT INTO stakeholders (project_id, name) VALUES (${a.id}, 'Sam Rivera') RETURNING id
+    `;
+    const [open] = await database.sql`
+      INSERT INTO decision_requests (project_id, title, options, deadline, public_token, status)
+      VALUES (${a.id}, 'Pick the venue', '[]'::jsonb, '2026-11-20', 'tok-open', 'open') RETURNING id
+    `;
+    await database.sql`
+      INSERT INTO decision_request_recipients (decision_request_id, stakeholder_id) VALUES (${open.id}, ${stakeholder.id})
+    `;
+    await database.sql`
+      INSERT INTO decision_requests (project_id, title, options, public_token, status)
+      VALUES (${a.id}, 'Already answered', '[]'::jsonb, 'tok-resolved', 'resolved')
+    `;
+    // One scored open risk, one resolved risk (excluded), one open issue.
+    await database.sql`
+      INSERT INTO risks (project_id, title, probability, impact, probability_score, impact_score, status)
+      VALUES (${a.id}, 'Launch date at risk', 'high', 'high', 3, 5, 'open')
+    `;
+    await insertRisk(a.id, { status: "resolved" });
+    await insertIssue(a.id, { severity: "high", status: "open" });
+
+    // A closed project: its open ask must stay out of the cross-project
+    // lists (the weekly-sync rule), while its summary still reports.
+    const closed = await createTestProject(owner.id, "V164 Closed Project");
+    await database.sql`UPDATE projects SET closed_at = now() WHERE id = ${closed.id}`;
+    await database.sql`
+      INSERT INTO decision_requests (project_id, title, options, public_token, status)
+      VALUES (${closed.id}, 'Closed project ask', '[]'::jsonb, 'tok-closed', 'open')
+    `;
+
+    // An outsider's project never leaks into any list.
+    const notMine = await createTestProject(outsider.id, "Not Mine");
+    await database.sql`
+      INSERT INTO decision_requests (project_id, title, options, public_token, status)
+      VALUES (${notMine.id}, 'Outsider ask', '[]'::jsonb, 'tok-outsider', 'open')
+    `;
+
+    const res = await portfolioHandler(asUser(owner, { method: "GET", url: "https://tasketra.com/api/portfolio" }));
+    expect(res.status).toBe(200);
+    const data = await jsonBody<any>(res);
+
+    const summaryA = data.projects.find((p: any) => p.id === a.id);
+    expect(summaryA.bac).toBe(8000);
+    expect(summaryA.ac).toBe(2000);
+    expect(summaryA.plannedStart).toBe("2026-11-02");
+    expect(summaryA.plannedEnd).toBe("2026-12-14");
+
+    expect(data.openDecisions.map((d: any) => d.title)).toEqual(["Pick the venue"]);
+    expect(data.openDecisions[0].projectName).toBe("V164 Project A");
+    expect(data.openDecisions[0].recipients).toEqual(["Sam Rivera"]);
+    expect(data.openDecisions[0].deadline).toBe("2026-11-20");
+    expect(data.openDecisions[0].publicToken).toBe("tok-open");
+
+    expect(data.openRisks.map((r: any) => r.title)).toEqual(["Launch date at risk"]);
+    expect(data.openRisks[0].probability_score).toBe(3);
+    expect(data.openRisks[0].impact_score).toBe(5);
+
+    expect(data.openIssues.map((i: any) => i.severity)).toEqual(["high"]);
+    expect(data.openIssues[0].projectName).toBe("V164 Project A");
+  });
+
   it("rejects an unauthenticated request", async () => {
     const res = await portfolioHandler(new Request("https://tasketra.com/api/portfolio", { method: "GET" }));
     expect(res.status).toBe(401);

@@ -858,6 +858,94 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
    tabs keep 960px. */
 .project-main.project-main-tables { max-width: 1240px; padding-left: 28px; padding-right: 28px; }
 
+/* v164 (Portfolio Command): the portfolio top tabs. On desktop the bar is
+   fixed across the top of the content column (offset by the sidebar's
+   width, which the collapse toggle changes), and .project-main takes a
+   matching top margin so nothing slides under it. On phones the shell is
+   a column, so the bar simply sits in the flow under the sidebar's top
+   bar and scrolls sideways. Print drops it entirely. */
+.app-tabs {
+  display: flex; align-items: center; gap: 2px; height: 49px; padding: 0 12px;
+  background: var(--panel); border-bottom: 1px solid var(--border);
+  overflow-x: auto; scrollbar-width: none;
+}
+.app-tabs::-webkit-scrollbar { display: none; }
+.app-tab {
+  padding: 7px 12px; border-radius: var(--radius-pill); font-size: 14px; font-weight: 600;
+  color: var(--navy); text-decoration: none; white-space: nowrap;
+}
+.app-tab:hover { background: rgba(127, 127, 127, 0.14); }
+.app-tab-active { background: var(--ink); color: var(--ivory); }
+.app-tab-active:hover { background: var(--ink); }
+.app-tabs-new {
+  margin-left: auto; padding: 7px 14px; border-radius: var(--radius-pill); white-space: nowrap;
+  background: var(--lime); color: var(--ink); font-size: 14px; font-weight: 700; text-decoration: none;
+}
+.app-tabs-new:hover { filter: brightness(0.96); }
+@media (min-width: 861px) {
+  .app-tabs { position: fixed; top: 0; left: 264px; right: 0; z-index: 45; }
+  .sidebar-collapsed + .app-tabs { left: 68px; }
+  .project-main { margin-top: 49px; }
+}
+@media print { .app-tabs { display: none; } .project-main { margin-top: 0; } }
+
+/* v164 shared visual kit (src/components/charts/): gauges, donut, variance
+   bars. Categorical colors come from palette.ts; status colors only ever
+   mean status. */
+.kit-gauge { text-align: center; padding: 4px 8px 0; }
+.kit-gauge-label { font-size: 13px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--slate); margin-bottom: 2px; }
+.kit-gauge-svg { width: 168px; max-width: 100%; height: auto; display: block; margin: 0 auto; }
+.kit-gauge-value { font-size: 30px; font-weight: 800; color: var(--navy); margin-top: -34px; }
+.kit-gauge-words { font-size: 13.5px; color: var(--slate); margin-top: 2px; }
+.kit-donut-wrap { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.kit-donut { width: 150px; height: 150px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.kit-donut-hole { width: 96px; height: 96px; border-radius: 50%; background: var(--panel); display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.kit-donut-value { font-size: 26px; font-weight: 800; color: var(--navy); line-height: 1; }
+.kit-donut-label { font-size: 12px; color: var(--slate); margin-top: 3px; }
+.kit-donut-legend { list-style: none; margin: 0; padding: 0; width: 100%; display: flex; flex-direction: column; gap: 6px; }
+.kit-donut-legend li { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.kit-donut-swatch { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; }
+.kit-donut-legend-label { color: var(--navy); }
+.kit-donut-legend-count { margin-left: auto; color: var(--slate); white-space: nowrap; }
+.kit-variance { display: flex; flex-direction: column; gap: 14px; }
+.kit-variance-legend { display: flex; gap: 16px; font-size: 12.5px; color: var(--slate); }
+.kit-variance-legend > span { display: inline-flex; align-items: center; gap: 6px; }
+.kit-variance-key { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+.kit-variance-key-planned { background: var(--slate-2); }
+.kit-variance-key-actual { background: var(--ink); }
+.kit-variance-row { display: block; text-decoration: none; padding: 6px 8px; margin: 0 -8px; border-radius: var(--radius-sm); }
+a.kit-variance-row:hover { background: rgba(127, 127, 127, 0.08); }
+.kit-variance-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 5px; }
+.kit-variance-label { font-size: 14.5px; font-weight: 700; color: var(--navy); }
+.kit-variance-words { font-size: 13px; color: var(--slate); text-align: right; }
+.kit-variance-track { height: 9px; border-radius: var(--radius-pill); background: rgba(127, 127, 127, 0.12); margin-bottom: 4px; }
+.kit-variance-track:last-child { margin-bottom: 0; }
+.kit-variance-bar { height: 100%; border-radius: var(--radius-pill); min-width: 3px; }
+.kit-variance-bar-planned { background: var(--slate-2); }
+.kit-variance-bar-actual { background: var(--ink); }
+.kit-variance-bar-actual.kit-variance-over { background: var(--chart-warn); }
+.kit-variance-bar-actual.kit-variance-over-hard { background: var(--chart-crit); }
+
+/* v164 Dashboard visual rows: gauges across, then two-up panels. */
+.dash-gauges { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-bottom: 20px; }
+.dash-gauges-two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.dash-viz-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-bottom: 20px; }
+.dash-viz-card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; }
+.dash-viz-card h3 { margin: 0 0 12px; font-size: 16px; color: var(--navy); }
+.dash-viz-empty { font-size: 14.5px; color: var(--slate); margin: 0; }
+.dash-viz-more { margin: 10px 0 0; font-size: 14px; }
+.dash-list-rows { display: flex; flex-direction: column; }
+.dash-list-row { padding: 9px 0; border-bottom: 1px solid var(--border); }
+.dash-list-row:last-child { border-bottom: none; padding-bottom: 2px; }
+.dash-list-row:first-child { padding-top: 2px; }
+.dash-list-title { font-size: 15px; font-weight: 600; color: var(--navy); text-decoration: none; }
+a.dash-list-title:hover { text-decoration: underline; }
+.dash-list-meta { font-size: 13.5px; color: var(--slate); margin-top: 2px; }
+.dash-list-meta a { color: var(--slate); }
+@media (max-width: 860px) {
+  .dash-gauges, .dash-gauges-two, .dash-viz-grid { grid-template-columns: 1fr; }
+}
+
 @media (max-width: 860px) {
   .project-shell { flex-direction: column; }
   /* On a phone the sidebar is a slim top bar (wordmark + Menu button). Tapping
