@@ -67,7 +67,7 @@ export default function DecisionPublic() {
       <p className="muted">Regarding project: {decision.project_name}</p>
       <h1>{decision.title}</h1>
       {decision.context && <p className="decision-context">{decision.context}</p>}
-      {decision.deadline && <p className="muted">Requested by: {decision.deadline}</p>}
+      {decision.deadline && <p className="muted">Needed by: {decision.deadline}</p>}
 
       {record ? (
         justSubmitted ? (

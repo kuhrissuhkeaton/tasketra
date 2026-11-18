@@ -5955,14 +5955,14 @@ function StakeholderDecisionsTab({ projectId }: { projectId: string }) {
           </select>
           {/* v161 (F-09): the decider's-eye preview. It mirrors the public
               decision page (DecisionPublic) field for field -- same title,
-              context, "Requested by" line, and option rows -- and updates
+              context, "Needed by" line, and option rows -- and updates
               live as the form is filled, so the sender sees exactly what
               the decider will see before the link exists. */}
           <div className="decision-preview" aria-label="Preview of what the decider sees">
             <p className="decision-preview-label">What they'll see</p>
             <p className="decision-preview-title">{title.trim() || "Your decision title"}</p>
             {context.trim() && <p className="decision-preview-context">{context.trim()}</p>}
-            {deadline && <p className="muted">Requested by: {deadline}</p>}
+            {deadline && <p className="muted">Needed by: {deadline}</p>}
             <div className="option-list">
               {options
                 .split(",")
