@@ -435,7 +435,7 @@ export type SnapshotData = {
   phasesByStatus: boolean;
   milestones: { title: string; date: string; done: boolean }[];
   risks: { title: string; mitigation: string | null }[];
-  decisions: { title: string; deadline: string | null; owner: string }[];
+  decisions: { title: string; deadline: string | null; owner: string | null }[];
 };
 
 export type SharedRisk = {

@@ -78,10 +78,20 @@ describe("SnapshotDocument", () => {
     expect(text).toContain("What we are watching");
     expect(text).toContain("Permit review could slip");
     expect(text).toContain("What we are doing about it: Weekly check-ins with the reviewer");
-    expect(text).toContain("Decisions waiting on you");
+    expect(text).toContain("Open decisions");
     expect(text).toContain("Approve the catering budget");
     expect(text).toContain("Dana Sponsor");
     expect(text).toContain("needed by");
+  });
+
+  it("shows open decisions that have no named owner, with just the needed-by date", () => {
+    const text = render({
+      ...FULL,
+      decisions: [{ title: "Approve the project charter", deadline: "2026-12-04", owner: null }],
+    });
+    expect(text).toContain("Open decisions");
+    expect(text).toContain("Approve the project charter");
+    expect(text).toContain("Needed by");
   });
 
   it("never prints probability, impact or internal scores for risks", () => {
@@ -93,7 +103,7 @@ describe("SnapshotDocument", () => {
   it("hides empty sections and says so plainly for the gauges", () => {
     const text = render(SPARSE);
     expect(text).not.toContain("What we are watching");
-    expect(text).not.toContain("Decisions waiting on you");
+    expect(text).not.toContain("Open decisions");
     expect(text).not.toContain("Milestones");
     expect(text).toContain("No tasks yet");
     expect(text).toContain("No budget set yet");

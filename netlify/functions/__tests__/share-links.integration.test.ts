@@ -121,7 +121,7 @@ describe("share links", () => {
     expect((await sharePublic(new Request(P))).status).toBe(400);
   });
 
-  it("snapshot payload carries the stated status, gauges, milestones, plain risks and sponsor decisions only", async () => {
+  it("snapshot payload carries the stated status, gauges, milestones, plain risks and open decisions", async () => {
     const owner = await createTestUser("sl-snap@example.com");
     const project = await createTestProject(owner.id, "Summit");
     const database = db();
@@ -169,7 +169,10 @@ describe("share links", () => {
     expect(snap.milestones).toEqual([{ title: "Venue booked", date: "2026-12-01", done: false }]);
     expect(snap.risks.map((r: any) => r.title)).toEqual(["Big visible risk"]);
     expect(Object.keys(snap.risks[0]).sort()).toEqual(["mitigation", "title"]);
-    expect(snap.decisions).toEqual([{ title: "Approve the catering budget", deadline: "2026-11-25", owner: "Dana Sponsor" }]);
+    expect(snap.decisions).toEqual([
+      { title: "Approve the catering budget", deadline: "2026-11-25", owner: "Dana Sponsor" },
+      { title: "Internal call", deadline: null, owner: null },
+    ]);
     const raw = JSON.stringify(body);
     expect(raw).not.toContain("secret detail");
     expect(raw).not.toContain("dana@example.com");

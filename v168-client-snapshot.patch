@@ -1,0 +1,1089 @@
+--- a/netlify/functions/__tests__/share-links.integration.test.ts
++++ b/netlify/functions/__tests__/share-links.integration.test.ts
+@@ -120,4 +120,72 @@
+     expect((await view("nope")).status).toBe(404);
+     expect((await sharePublic(new Request(P))).status).toBe(400);
+   });
++
++  it("snapshot payload carries the stated status, gauges, milestones, plain risks and sponsor decisions only", async () => {
++    const owner = await createTestUser("sl-snap@example.com");
++    const project = await createTestProject(owner.id, "Summit");
++    const database = db();
++    await database.sql`UPDATE projects SET budget_at_completion = 1000 WHERE id = ${project.id}`;
++    await database.sql`INSERT INTO cost_entries (project_id, description, amount) VALUES (${project.id}, 'Deposit', 250)`;
++    await database.sql`
++      INSERT INTO tasks (project_id, title, status) VALUES
++        (${project.id}, '1.1 Kickoff', 'done'),
++        (${project.id}, '1.2 Venue', 'in_progress'),
++        (${project.id}, '2.1 Catering', 'not_started')
++    `;
++    await database.sql`
++      INSERT INTO roadmap_items (project_id, type, title, start_date, end_date, status, created_by) VALUES
++        (${project.id}, 'phase', 'Planning', '2026-10-01', '2027-02-27', 'in_progress', ${owner.id}),
++        (${project.id}, 'milestone', 'Venue booked', NULL, '2026-12-01', 'not_started', ${owner.id})
++    `;
++    await database.sql`INSERT INTO status_updates (project_id, body, health) VALUES (${project.id}, 'Venue shortlist is down to two.', 'at_risk')`;
++    await addRisk(project.id, "Big visible risk", "open");
++    await addRisk(project.id, "Quiet resolved risk", "resolved");
++    const [sponsor] = await database.sql`
++      INSERT INTO stakeholders (project_id, name, email) VALUES (${project.id}, 'Dana Sponsor', 'dana@example.com') RETURNING id
++    `;
++    await database.sql`
++      INSERT INTO decision_requests (project_id, title, status, options, public_token, deadline, owner_stakeholder_id) VALUES
++        (${project.id}, 'Approve the catering budget', 'open', '["Yes", "No"]'::jsonb, 'tok-snap-1', '2026-11-25', ${sponsor.id}),
++        (${project.id}, 'Internal call', 'open', '["A"]'::jsonb, 'tok-snap-2', NULL, NULL),
++        (${project.id}, 'Old settled call', 'resolved', '["A"]'::jsonb, 'tok-snap-3', NULL, ${sponsor.id})
++    `;
++    const created = await shareLinks(asUser(owner, { method: "POST", url: U, body: { projectId: project.id, kind: "snapshot" } }));
++    expect(created.status).toBe(201);
++    const token = (await jsonBody<any>(created)).link.token;
++    const res = await view(token);
++    expect(res.status).toBe(200);
++    const body = await jsonBody<any>(res);
++    expect(body.kind).toBe("snapshot");
++    expect(body.project.name).toBe("Summit");
++    const snap = body.snapshot;
++    expect(snap.status.health).toBe("at_risk");
++    expect(snap.status.note).toBe("Venue shortlist is down to two.");
++    expect(snap.completion).toEqual({ done: 1, total: 3, percent: 33 });
++    expect(snap.budget).toEqual({ spent: 250, total: 1000, percent: 25 });
++    expect(snap.time.start).toBe("2026-10-01");
++    expect(snap.time.end).toBe("2027-02-27");
++    expect(snap.phases.map((g: any) => g.label)).toEqual(["Phase 1", "Phase 2"]);
++    expect(snap.milestones).toEqual([{ title: "Venue booked", date: "2026-12-01", done: false }]);
++    expect(snap.risks.map((r: any) => r.title)).toEqual(["Big visible risk"]);
++    expect(Object.keys(snap.risks[0]).sort()).toEqual(["mitigation", "title"]);
++    expect(snap.decisions).toEqual([{ title: "Approve the catering budget", deadline: "2026-11-25", owner: "Dana Sponsor" }]);
++    const raw = JSON.stringify(body);
++    expect(raw).not.toContain("secret detail");
++    expect(raw).not.toContain("dana@example.com");
++    expect(raw).not.toContain(owner.email);
++    expect(raw).not.toContain("tok-snap");
++    expect(raw).not.toContain(project.id);
++  });
++
++  it("snapshot link stops working when sharing stops", async () => {
++    const owner = await createTestUser("sl-snapstop@example.com");
++    const project = await createTestProject(owner.id);
++    const created = await shareLinks(asUser(owner, { method: "POST", url: U, body: { projectId: project.id, kind: "snapshot" } }));
++    const token = (await jsonBody<any>(created)).link.token;
++    expect((await view(token)).status).toBe(200);
++    const del = await shareLinks(asUser(owner, { method: "DELETE", url: `${U}?projectId=${project.id}&kind=snapshot` }));
++    expect(del.status).toBe(200);
++    expect((await view(token)).status).toBe(404);
++  });
+ });
+--- a/netlify/functions/share-public.mts
++++ b/netlify/functions/share-public.mts
+@@ -3,6 +3,7 @@
+ import { json } from "../lib/http.ts";
+ import { withSentry } from "../lib/sentry.ts";
+ import { loadRaci } from "../lib/raciData.ts";
++import { buildSnapshot } from "../lib/snapshotData.ts";
+ import { checkRateLimit, getClientIp } from "../lib/rate-limit.ts";
+ 
+ // Public, unauthenticated, read-only. Resolves an unguessable token to ONE
+@@ -44,6 +45,14 @@
+     `;
+     return json({ kind: link.kind, project: { name: link.name }, risks }, { headers: HEADERS });
+   }
++  if (link.kind === "snapshot") {
++    // Client Snapshot (v168): the sponsor view. Only the fields the
++    // snapshot page prints — stated status, the three gauges, work by
++    // phase, milestones, top risks in plain words, and the open
++    // decisions a stakeholder owns. Nothing else leaves the app.
++    const snapshot = await buildSnapshot(database, link.project_id);
++    return json({ kind: link.kind, project: { name: link.name }, snapshot }, { headers: HEADERS });
++  }
+   if (link.kind === "raci") {
+     // Phases, milestones and any tasks added as rows, people (display name or the part of the email
+     // before the @, plus job role) and the letters. Ids are replaced with
+--- a/netlify/lib/shareLinks.ts
++++ b/netlify/lib/shareLinks.ts
+@@ -1,6 +1,6 @@
+ // Kinds of document that can be shared by link. Add new kinds here (and to
+ // the public endpoint's payload builder) -- no migration needed.
+-export const SHARE_KINDS = ["risk-matrix", "raci"] as const;
++export const SHARE_KINDS = ["risk-matrix", "raci", "snapshot"] as const;
+ export type ShareKind = (typeof SHARE_KINDS)[number];
+ 
+ export function isShareKind(value: unknown): value is ShareKind {
+--- a/src/App.tsx
++++ b/src/App.tsx
+@@ -26,6 +26,7 @@
+ const RaciPrint = lazy(() => import("./pages/RaciPrint"));
+ const StakeholderPrint = lazy(() => import("./pages/StakeholderPrint"));
+ const RiskPrint = lazy(() => import("./pages/RiskPrint"));
++const SnapshotPrint = lazy(() => import("./pages/SnapshotPrint"));
+ const Resources = lazy(() => import("./pages/Resources"));
+ const WhatsNew = lazy(() => import("./pages/WhatsNew"));
+ const Billing = lazy(() => import("./pages/Billing"));
+@@ -114,6 +115,7 @@
+             <Route path="/admin/support/project/:projectId" element={<AdminProtected><AdminProjectView /></AdminProtected>} />
+             <Route path="/app/projects/:id" element={<Protected><ProjectHome /></Protected>} />
+             <Route path="/app/projects/:id/print/risks" element={<Protected><RiskPrint /></Protected>} />
++            <Route path="/app/projects/:id/print/snapshot" element={<Protected><SnapshotPrint /></Protected>} />
+             <Route path="/app/projects/:id/print/raci" element={<Protected><RaciPrint /></Protected>} />
+             <Route path="/app/projects/:id/print/stakeholders" element={<Protected><StakeholderPrint /></Protected>} />
+             <Route path="/s/:token" element={<SharePublic />} />
+--- a/src/components/ProjectCockpit.tsx
++++ b/src/components/ProjectCockpit.tsx
+@@ -6,6 +6,11 @@
+ import { categoricalColor } from "./charts/palette";
+ import { fmtLocalDate, fmtMoney } from "../lib/format";
+ import { daysBetween, monthKeyOf } from "../lib/calendarItems";
++import { workGroups, plannedWindow, type WorkGroup } from "../lib/workGroups";
++
++// Re-exported for the cockpit tests; the implementations live in
++// lib/workGroups (v168) so the Client Snapshot reads the same math.
++export { workGroups, plannedWindow };
+ 
+ // Project Cockpit (v165, dashboard plan Phase 8). The single-project
+ // Overview leads with the shared visual kit (built in v164): completion,
+@@ -45,113 +50,6 @@
+   return `${now.getFullYear()}-${mm}-${dd}`;
+ }
+ 
+-type Group = { label: string; total: number; done: number };
+-
+-const TITLE_LEAF = /^(\d{1,2})\.(\d{1,3})\s+(.+)$/;
+-const TITLE_BARE = /^(\d{1,2})\s+(.+)$/;
+-
+-/** Tasks grouped into phases, from the strongest structure the data
+- *  actually carries, in this order:
+- *    1. WBS parents — the top-level ancestor task is the phase (the
+- *       phase task counts toward its own group, matching taskStats).
+- *    2. WBS numbers in the task titles ("1.1 Initiation", "2.3 Permits",
+- *       a bare "8 Commissioning") — how plans built outside the app, or
+- *       pasted from a plan document, carry their phases. Guarded: at
+- *       least 3 numbered tasks, at least 60% of the list numbered, at
+- *       least 2 distinct phase numbers, and the number is at most two
+- *       digits so a year ("2026 …") can never become a phase. A group
+- *       is labelled "Phase N", or with the bare task's own name when
+- *       one provides it. Unnumbered tasks land in a final "Unnumbered"
+- *       group so the segments always sum to the whole list.
+- *    3. Status — the honest fallback for a flat, unnumbered list.
+- */
+-export function workGroups(tasks: Task[]): { groups: Group[]; byStatus: boolean } {
+-  const byId = new Map(tasks.map((t) => [t.id, t]));
+-  const hasParents = tasks.some((t) => t.parent_task_id && byId.has(t.parent_task_id));
+-  if (!hasParents) {
+-    type Hit = { major: number; bareName?: string; task: Task };
+-    const hits: Hit[] = [];
+-    for (const t of tasks) {
+-      const leaf = t.title.match(TITLE_LEAF);
+-      if (leaf) { hits.push({ major: Number(leaf[1]), task: t }); continue; }
+-      const bare = t.title.match(TITLE_BARE);
+-      if (bare) hits.push({ major: Number(bare[1]), bareName: bare[2].trim(), task: t });
+-    }
+-    const majors = new Set(hits.map((h) => h.major));
+-    if (hits.length >= 3 && hits.length / tasks.length >= 0.6 && majors.size >= 2) {
+-      const hitIds = new Set(hits.map((h) => h.task.id));
+-      const map = new Map<number, Group & { bareName?: string }>();
+-      for (const h of hits) {
+-        const g = map.get(h.major) ?? { label: `Phase ${h.major}`, total: 0, done: 0 };
+-        g.total += 1;
+-        if (h.task.status === "done") g.done += 1;
+-        if (h.bareName) g.bareName = h.bareName;
+-        map.set(h.major, g);
+-      }
+-      const groups: Group[] = [...map.entries()]
+-        .sort((a, b) => a[0] - b[0])
+-        .map(([, g]) => ({ label: g.bareName ?? g.label, total: g.total, done: g.done }));
+-      const rest = tasks.filter((t) => !hitIds.has(t.id));
+-      if (rest.length > 0) {
+-        groups.push({ label: "Unnumbered", total: rest.length, done: rest.filter((t) => t.status === "done").length });
+-      }
+-      return { groups, byStatus: false };
+-    }
+-  }
+-  if (!hasParents) {
+-    const order: { status: Task["status"]; label: string }[] = [
+-      { status: "in_progress", label: "In progress" },
+-      { status: "not_started", label: "Not started" },
+-      { status: "blocked", label: "Blocked" },
+-      { status: "done", label: "Done" },
+-    ];
+-    const groups = order
+-      .map(({ status, label }) => {
+-        const count = tasks.filter((t) => t.status === status).length;
+-        // In status mode the done count only means anything on the Done
+-        // row itself (where it equals the row's total).
+-        return { label, total: count, done: status === "done" ? count : 0 };
+-      })
+-      .filter((g) => g.total > 0);
+-    return { groups, byStatus: true };
+-  }
+-  const rootOf = (t: Task): Task => {
+-    let cur = t;
+-    const seen = new Set<string>();
+-    while (cur.parent_task_id && byId.has(cur.parent_task_id) && !seen.has(cur.id)) {
+-      seen.add(cur.id);
+-      cur = byId.get(cur.parent_task_id)!;
+-    }
+-    return cur;
+-  };
+-  const map = new Map<string, Group>();
+-  for (const t of tasks) {
+-    const root = rootOf(t);
+-    const g = map.get(root.id) ?? { label: root.title, total: 0, done: 0 };
+-    g.total += 1;
+-    if (t.status === "done") g.done += 1;
+-    map.set(root.id, g);
+-  }
+-  const groups = [...map.values()].sort((a, b) => b.total - a.total || a.label.localeCompare(b.label));
+-  return { groups, byStatus: false };
+-}
+-
+-/** The planned window, mirroring portfolio.mts: earliest roadmap
+- *  start (falling back to its end) to latest end (falling back to its
+- *  start). Null when no roadmap item carries a date. */
+-export function plannedWindow(items: RoadmapItem[]): { start: string; end: string } | null {
+-  let start: string | null = null;
+-  let end: string | null = null;
+-  for (const i of items) {
+-    const s = (i.start_date ?? i.end_date)?.slice(0, 10);
+-    const e = (i.end_date ?? i.start_date)?.slice(0, 10);
+-    if (s && (!start || s < start)) start = s;
+-    if (e && (!end || e > end)) end = e;
+-  }
+-  if (!start || !end || daysBetween(start, end) <= 0) return null;
+-  return { start, end };
+-}
+-
+ /** Spend grouped by month from the cost entries' incurred dates,
+  *  oldest first, with the running total through each month. */
+ export function spendByMonth(entries: BudgetData["costEntries"]): { key: string; label: string; amount: number; running: number }[] {
+@@ -199,7 +97,7 @@
+   const ac = budget?.metrics.ac ?? 0;
+   const metrics = budget?.metrics;
+   const window = items ? plannedWindow(items) : null;
+-  const { groups, byStatus } = tasks && total > 0 ? workGroups(tasks) : { groups: [] as Group[], byStatus: false };
++  const { groups, byStatus } = tasks && total > 0 ? workGroups(tasks) : { groups: [] as WorkGroup[], byStatus: false };
+   const months = budget ? spendByMonth(budget.costEntries) : [];
+   const hasBudgetStory = bac !== null || ac > 0 || months.length > 0;
+ 
+--- a/src/index.css
++++ b/src/index.css
+@@ -2036,6 +2036,22 @@
+ .risk-doc-table td { padding: 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+ .risk-doc-table tr { break-inside: avoid; }
+ .risk-doc-title { font-weight: 600; }
++/* Client Snapshot (v168): the sponsor document. Sections follow the
++   risk-doc rhythm; the milestone timeline is the one new shape. */
++.snapshot-doc h1 { margin: 2px 0 4px; }
++.snapshot-doc h2 { font-size: 16px; margin: 24px 0 10px; }
++.snapshot-status { border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); padding: 16px 18px; margin-bottom: 20px; }
++.snapshot-status-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
++.snapshot-status-head h2 { margin: 0; }
++.snapshot-note { margin: 10px 0 8px; white-space: pre-wrap; }
++.snapshot-milestones { list-style: none; margin: 0; padding: 0; }
++.snapshot-milestones li { position: relative; display: flex; align-items: baseline; gap: 10px; padding: 7px 0 7px 4px; }
++.snapshot-milestones li:not(:last-child)::before { content: ""; position: absolute; left: 9px; top: 24px; bottom: -6px; width: 2px; background: var(--border); }
++.snapshot-milestone-dot { flex: none; width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--slate); background: var(--panel); transform: translateY(1px); z-index: 1; }
++.snapshot-milestones li.is-done .snapshot-milestone-dot { background: var(--lime); border-color: var(--navy); }
++.snapshot-milestone-title { font-weight: 600; }
++.snapshot-risks, .snapshot-decisions { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
++.snapshot-risks li, .snapshot-decisions li { border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--panel); padding: 12px 14px; }
+ @media (max-width: 700px) {
+   .risk-doc .risk-matrix-chip { display: block; font-size: 11px; }
+   .risk-doc-table { display: block; overflow-x: auto; }
+--- a/src/lib/api.ts
++++ b/src/lib/api.ts
+@@ -410,7 +410,7 @@
+   totalToAdd: number;
+ };
+ 
+-export type ShareKind = "risk-matrix" | "raci";
++export type ShareKind = "risk-matrix" | "raci" | "snapshot";
+ 
+ export type RaciRow = { id: string; type: string; title: string; start_date: string | null; end_date: string | null; phaseId?: string | null };
+ export type RaciPerson = { key: string; kind?: "team" | "stakeholder"; name: string; role: string | null };
+@@ -418,7 +418,25 @@
+ 
+ export type SharedDocument =
+   | { kind: "risk-matrix"; project: { name: string }; risks: SharedRisk[] }
+-  | { kind: "raci"; project: { name: string }; rows: RaciRow[]; people: RaciPerson[]; assignments: RaciAssignment[] };
++  | { kind: "raci"; project: { name: string }; rows: RaciRow[]; people: RaciPerson[]; assignments: RaciAssignment[] }
++  | { kind: "snapshot"; project: { name: string }; snapshot: SnapshotData };
++
++/** The Client Snapshot payload (v168): the sponsor view of one project.
++ *  Built server-side for the public page (netlify/lib/snapshotData.ts)
++ *  and assembled from the regular APIs by the signed-in preview page.
++ *  Only what the snapshot prints — stated status, never a computed
++ *  verdict; no ids, emails or internal registers. */
++export type SnapshotData = {
++  status: { health: "on_track" | "at_risk" | "off_track" | null; note: string | null; at: string } | null;
++  completion: { done: number; total: number; percent: number } | null;
++  time: { percent: number; start: string; end: string } | null;
++  budget: { spent: number; total: number; percent: number } | null;
++  phases: { label: string; total: number; done: number }[];
++  phasesByStatus: boolean;
++  milestones: { title: string; date: string; done: boolean }[];
++  risks: { title: string; mitigation: string | null }[];
++  decisions: { title: string; deadline: string | null; owner: string }[];
++};
+ 
+ export type SharedRisk = {
+   title: string;
+--- a/src/lib/whatsNewData.ts
++++ b/src/lib/whatsNewData.ts
+@@ -10,6 +10,12 @@
+ // they can do.
+ export const CHANGES: ChangeEntry[] = [
+   {
++    version: "v168",
++    date: "November 2026",
++    title: "Send your sponsor a live snapshot link instead of building a status deck.",
++    body: "Every project now has a client snapshot: a clean, read-only page with the status from your latest check-in, gauges for how much of the work, time and budget is used, the work broken down by phase, the milestones, the top three things you are watching in plain words, and any open decisions your sponsor owns with the date you need them by. Open it from the top of any project's Overview, turn on the link, and send it. Anyone with the link sees the snapshot, always current, no account needed. You can stop sharing or make a fresh link at any time, and nothing else about the project is ever included.",
++  },
++  {
+     version: "v167",
+     date: "November 2026",
+     title: "Weekly sync is a ritual now: stats up top, asks as cards, and wins you can edit line by line.",
+--- a/src/pages/ProjectHome.tsx
++++ b/src/pages/ProjectHome.tsx
+@@ -486,6 +486,11 @@
+           gauges, work breakdown and budget picture above the day-to-day
+           Today/Feed content, which is unchanged below. */}
+       <ProjectCockpit projectId={projectId} onOpenTab={onOpenTab} />
++      <p className="muted" style={{ margin: "0 0 16px" }}>
++        Sharing this project with a sponsor?{" "}
++        <Link to={`/app/projects/${projectId}/print/snapshot`}>Open the client snapshot</Link>
++        {" "}— a read-only page with the status you have stated, the gauges and what needs them. Share it by link from there.
++      </p>
+       <div className="view-toggle">
+         <button
+           className={view === "today" ? "btn btn-primary" : "btn btn-ghost"}
+--- a/src/pages/SharePublic.tsx
++++ b/src/pages/SharePublic.tsx
+@@ -3,6 +3,7 @@
+ import { api, type SharedDocument } from "../lib/api";
+ import { Wordmark } from "../components/Wordmark";
+ import { RiskDocument } from "../components/RiskDocument";
++import { SnapshotDocument } from "../components/SnapshotDocument";
+ import { RaciDocument } from "../components/RaciDocument";
+ import { useDocumentTitle } from "../lib/documentTitle";
+ import { fmtLongDate } from "../lib/format";
+@@ -14,7 +15,7 @@
+   const [data, setData] = useState<SharedDocument | null>(null);
+   const [error, setError] = useState<string | null>(null);
+ 
+-  useDocumentTitle(data ? `${data.kind === "raci" ? "RACI matrix" : "Risk register"} | ${data.project.name}` : "Shared document");
++  useDocumentTitle(data ? `${data.kind === "raci" ? "RACI matrix" : data.kind === "snapshot" ? "Project snapshot" : "Risk register"} | ${data.project.name}` : "Shared document");
+   useEffect(() => {
+     const meta = document.createElement("meta");
+     meta.name = "robots";
+@@ -46,7 +47,9 @@
+           <h1 className="sr-only">Shared document</h1><div className="skel skel-text" style={{ width: "45%" }} /><div className="skel skel-text" style={{ width: "80%" }} /></div>
+       ) : (
+         <>
+-          {data.kind === "raci" ? (
++          {data.kind === "snapshot" ? (
++            <SnapshotDocument projectName={data.project.name} snapshot={data.snapshot} dateLabel={dateLabel} />
++          ) : data.kind === "raci" ? (
+             <RaciDocument projectName={data.project.name} rows={data.rows} people={data.people} assignments={data.assignments} dateLabel={dateLabel} />
+           ) : (
+             <RiskDocument projectName={data.project.name} risks={data.risks} dateLabel={dateLabel} />
+--- a/netlify/lib/snapshotData.ts
++++ b/netlify/lib/snapshotData.ts
+@@ -0,0 +1,136 @@
++// Builds the Client Snapshot payload for one project (v168). Used by
++// the public share endpoint; the signed-in preview page assembles the
++// same shape from the regular APIs. Privacy contract, same as the other
++// share kinds: only what the snapshot page prints leaves the app — no
++// ids, no emails, no internal registers, no other projects.
++//
++// The numbers mirror the Project Cockpit (v165) exactly, by reading the
++// same sources the same way:
++//   - Completion counts leaf tasks only (the budget endpoint's
++//     taskStats rule), while the work breakdown runs the shared
++//     workGroups() over every live task, like the cockpit's donut.
++//   - Time used is elapsed share of the planned window (roadmap dates).
++//   - Budget used is logged costs against the budget at completion.
++//   - Status is the PM's own latest check-in (stated health + note),
++//     never a computed verdict: the snapshot shows what the PM stated.
++//   - Decisions are only the open ones a stakeholder owns (v162), the
++//     asks a sponsor can actually act on, with their needed-by dates.
++
++import { workGroups, plannedWindow, daysBetween } from "../../src/lib/workGroups.ts";
++
++export type SnapshotPayload = {
++  status: { health: string | null; note: string | null; at: string } | null;
++  completion: { done: number; total: number; percent: number } | null;
++  time: { percent: number; start: string; end: string } | null;
++  budget: { spent: number; total: number; percent: number } | null;
++  phases: { label: string; total: number; done: number }[];
++  phasesByStatus: boolean;
++  milestones: { title: string; date: string; done: boolean }[];
++  risks: { title: string; mitigation: string | null }[];
++  decisions: { title: string; deadline: string | null; owner: string }[];
++};
++
++const pct = (part: number, whole: number) => (whole > 0 ? Math.round((part / whole) * 100) : 0);
++
++/** Date columns arrive as Date objects from the driver (the client API
++ *  serializes them to strings). Normalize to a YYYY-MM-DD key. */
++function dateKey(v: unknown): string | null {
++  if (v === null || v === undefined) return null;
++  if (v instanceof Date) return v.toISOString().slice(0, 10);
++  return String(v).slice(0, 10);
++}
++
++export async function buildSnapshot(database: any, projectId: string): Promise<SnapshotPayload> {
++  const [[project], [taskStats], tasks, items, costRows, [latestStatus], risks, decisions] = await Promise.all([
++    database.sql`SELECT budget_at_completion FROM projects WHERE id = ${projectId}`,
++    database.sql`
++      SELECT
++        count(*)::int AS total_tasks,
++        count(*) FILTER (WHERE status = 'done')::int AS done_tasks
++      FROM tasks
++      WHERE project_id = ${projectId} AND deleted_at IS NULL
++        AND id NOT IN (SELECT DISTINCT parent_task_id FROM tasks WHERE parent_task_id IS NOT NULL AND deleted_at IS NULL)
++    `,
++    database.sql`
++      SELECT id, title, status, parent_task_id FROM tasks
++      WHERE project_id = ${projectId} AND deleted_at IS NULL
++    `,
++    database.sql`
++      SELECT type, title, start_date, end_date, status FROM roadmap_items
++      WHERE project_id = ${projectId} AND deleted_at IS NULL
++    `,
++    database.sql`SELECT amount FROM cost_entries WHERE project_id = ${projectId}`,
++    database.sql`
++      SELECT body, health, created_at FROM status_updates
++      WHERE project_id = ${projectId}
++      ORDER BY created_at DESC LIMIT 1
++    `,
++    database.sql`
++      SELECT title, mitigation FROM risks
++      WHERE project_id = ${projectId} AND deleted_at IS NULL AND status IN ('open', 'monitoring')
++      ORDER BY
++        CASE WHEN probability = 'high' AND impact = 'high' THEN 0
++             WHEN probability = 'high' OR impact = 'high' THEN 1
++             WHEN probability = 'medium' AND impact = 'medium' THEN 2
++             ELSE 3 END,
++        created_at DESC
++      LIMIT 3
++    `,
++    database.sql`
++      SELECT dr.title, dr.deadline, s.name AS owner_name
++      FROM decision_requests dr
++      JOIN stakeholders s ON s.id = dr.owner_stakeholder_id AND s.deleted_at IS NULL
++      WHERE dr.project_id = ${projectId} AND dr.deleted_at IS NULL
++        AND dr.status = 'open' AND dr.owner_stakeholder_id IS NOT NULL
++      ORDER BY dr.deadline ASC NULLS LAST, dr.created_at ASC
++    `,
++  ]);
++
++  const total = taskStats?.total_tasks ?? 0;
++  const done = taskStats?.done_tasks ?? 0;
++
++  const { groups, byStatus } = tasks.length > 0 ? workGroups(tasks as any) : { groups: [], byStatus: false };
++
++  const windowItems = (items as any[]).map((i) => ({ start_date: dateKey(i.start_date), end_date: dateKey(i.end_date) }));
++  const window = plannedWindow(windowItems);
++  let time: SnapshotPayload["time"] = null;
++  if (window) {
++    const [todayRow] = await database.sql`SELECT CURRENT_DATE::text AS today`;
++    const today = String(todayRow.today).slice(0, 10);
++    const span = daysBetween(window.start, window.end);
++    const elapsed = Math.max(0, Math.min(span, daysBetween(window.start, today)));
++    time = { percent: pct(elapsed, span), start: window.start, end: window.end };
++  }
++
++  const bac = project?.budget_at_completion != null ? Number(project.budget_at_completion) : null;
++  const spent = (costRows as any[]).reduce((sum, c) => sum + Number(c.amount), 0);
++  const budget = bac !== null ? { spent, total: bac, percent: pct(spent, bac) } : null;
++
++  const milestones = (items as any[])
++    .filter((i) => i.type === "milestone")
++    .map((i) => ({
++      title: i.title as string,
++      date: dateKey(i.end_date ?? i.start_date) ?? "",
++      done: i.status === "done",
++    }))
++    .filter((m) => m.date)
++    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
++
++  return {
++    status: latestStatus
++      ? { health: latestStatus.health ?? null, note: latestStatus.body ?? null, at: new Date(latestStatus.created_at).toISOString() }
++      : null,
++    completion: total > 0 ? { done, total, percent: pct(done, total) } : null,
++    time,
++    budget,
++    phases: groups,
++    phasesByStatus: byStatus,
++    milestones,
++    risks: (risks as any[]).map((r) => ({ title: r.title, mitigation: r.mitigation ?? null })),
++    decisions: (decisions as any[]).map((d) => ({
++      title: d.title,
++      deadline: dateKey(d.deadline),
++      owner: d.owner_name,
++    })),
++  };
++}
+--- a/src/__tests__/snapshotDocument.test.tsx
++++ b/src/__tests__/snapshotDocument.test.tsx
+@@ -0,0 +1,101 @@
++// @vitest-environment jsdom
++//
++// Client Snapshot document (v168): the sponsor view renders the stated
++// status, the three gauges, phases, milestones, plain-word risks and
++// the sponsor's own decisions — and hides every section with no data.
++import { describe, it, expect, beforeEach, afterEach } from "vitest";
++import { createRoot, type Root } from "react-dom/client";
++import { act } from "react";
++import { SnapshotDocument } from "../components/SnapshotDocument";
++import type { SnapshotData } from "../lib/api";
++
++const FULL: SnapshotData = {
++  status: { health: "at_risk", note: "Permits are with the city; everything else is moving.", at: "2026-11-16T14:00:00Z" },
++  completion: { done: 2, total: 4, percent: 50 },
++  time: { percent: 40, start: "2026-10-01", end: "2027-02-27" },
++  budget: { spent: 41250, total: 605000, percent: 7 },
++  phases: [
++    { label: "Phase 1", total: 3, done: 2 },
++    { label: "Phase 2", total: 1, done: 0 },
++  ],
++  phasesByStatus: false,
++  milestones: [
++    { title: "Permits approved", date: "2026-12-01", done: false },
++    { title: "Kickoff held", date: "2026-10-05", done: true },
++  ],
++  risks: [
++    { title: "Permit review could slip", mitigation: "Weekly check-ins with the reviewer" },
++    { title: "Venue holds only until January", mitigation: null },
++  ],
++  decisions: [
++    { title: "Approve the catering budget", deadline: "2026-11-25", owner: "Dana Sponsor" },
++  ],
++};
++
++const SPARSE: SnapshotData = {
++  status: null,
++  completion: null,
++  time: null,
++  budget: null,
++  phases: [],
++  phasesByStatus: false,
++  milestones: [],
++  risks: [],
++  decisions: [],
++};
++
++let container: HTMLDivElement;
++let root: Root;
++
++beforeEach(() => {
++  container = document.createElement("div");
++  document.body.appendChild(container);
++  root = createRoot(container);
++});
++afterEach(() => {
++  act(() => root.unmount());
++  container.remove();
++});
++
++function render(data: SnapshotData) {
++  act(() => {
++    root.render(<SnapshotDocument projectName="Leadership Summit 2027" snapshot={data} dateLabel="As of November 18, 2026" />);
++  });
++  return container.textContent ?? "";
++}
++
++describe("SnapshotDocument", () => {
++  it("renders the stated status, gauges, phases, milestones, risks and sponsor decisions", () => {
++    const text = render(FULL);
++    expect(text).toContain("Leadership Summit 2027");
++    expect(text).toContain("At risk");
++    expect(text).toContain("Permits are with the city; everything else is moving.");
++    expect(text).toContain("2 of 4 tasks done");
++    expect(text).toContain("$41,250 of $605,000 spent");
++    expect(text).toContain("Phase 1");
++    expect(text).toContain("Permits approved");
++    expect(text).toContain("Kickoff held");
++    expect(text).toContain("What we are watching");
++    expect(text).toContain("Permit review could slip");
++    expect(text).toContain("What we are doing about it: Weekly check-ins with the reviewer");
++    expect(text).toContain("Decisions waiting on you");
++    expect(text).toContain("Approve the catering budget");
++    expect(text).toContain("Dana Sponsor");
++    expect(text).toContain("needed by");
++  });
++
++  it("never prints probability, impact or internal scores for risks", () => {
++    const text = render(FULL);
++    expect(text).not.toContain("Probability");
++    expect(text).not.toContain("Impact");
++  });
++
++  it("hides empty sections and says so plainly for the gauges", () => {
++    const text = render(SPARSE);
++    expect(text).not.toContain("What we are watching");
++    expect(text).not.toContain("Decisions waiting on you");
++    expect(text).not.toContain("Milestones");
++    expect(text).toContain("No tasks yet");
++    expect(text).toContain("No budget set yet");
++  });
++});
+--- a/src/components/SnapshotDocument.tsx
++++ b/src/components/SnapshotDocument.tsx
+@@ -0,0 +1,175 @@
++import type { SnapshotData } from "../lib/api";
++import { Gauge } from "./charts/Gauge";
++import { Donut } from "./charts/Donut";
++import { categoricalColor } from "./charts/palette";
++import { HEALTH_LABEL, type HealthValue } from "../lib/healthLabels";
++import { fmtLocalDate, fmtLongDate, fmtMoney } from "../lib/format";
++
++// The Client Snapshot (v168): a read-only sponsor view of one project,
++// rendered by the public share page and by the signed-in preview page.
++// Stripped on purpose — the stated status and the last check-in note,
++// the three gauges, work by phase, milestones, the top risks in plain
++// words, and the decisions the sponsor owns. No edit controls, no
++// acronyms, no internal registers, nothing about any other project.
++
++const HEALTH_PILL: Record<HealthValue, string> = {
++  on_track: "pill-green",
++  at_risk: "pill-gold",
++  off_track: "pill-red",
++};
++
++export function SnapshotDocument({ projectName, snapshot, dateLabel }: {
++  projectName: string;
++  snapshot: SnapshotData;
++  dateLabel: string;
++}) {
++  const { status, completion, time, budget, phases, phasesByStatus, milestones, risks, decisions } = snapshot;
++  const phaseTotal = phases.reduce((sum, g) => sum + g.total, 0);
++
++  return (
++    <article className="snapshot-doc">
++      <header className="risk-doc-head">
++        <p className="muted risk-doc-kicker">Project snapshot</p>
++        <h1>{projectName}</h1>
++        <p className="muted">{dateLabel}</p>
++      </header>
++
++      {status && (status.health || status.note) && (
++        <section className="snapshot-status">
++          <div className="snapshot-status-head">
++            <h2>Status</h2>
++            {status.health && (
++              <span className={`pill ${HEALTH_PILL[status.health]}`}>{HEALTH_LABEL[status.health]}</span>
++            )}
++          </div>
++          {status.note && <p className="snapshot-note">{status.note}</p>}
++          <p className="muted" style={{ margin: 0, fontSize: 13 }}>
++            From the latest check-in, {fmtLongDate(status.at)}
++          </p>
++        </section>
++      )}
++
++      <div className="dash-gauges">
++        {completion ? (
++          <div className="dash-viz-card">
++            <Gauge
++              label="Completion"
++              percent={completion.percent}
++              tone="brand"
++              value={`${completion.percent}%`}
++              words={`${completion.done} of ${completion.total} tasks done`}
++            />
++          </div>
++        ) : (
++          <div className="dash-viz-card">
++            <p className="muted" style={{ margin: 0 }}>No tasks yet, so there is nothing to measure.</p>
++          </div>
++        )}
++        {time ? (
++          <div className="dash-viz-card">
++            <Gauge
++              label="Time used"
++              percent={time.percent}
++              tone="brand"
++              value={`${time.percent}%`}
++              words={`Planned ${fmtLocalDate(time.start)} to ${fmtLocalDate(time.end)}`}
++            />
++          </div>
++        ) : (
++          <div className="dash-viz-card">
++            <p className="muted" style={{ margin: 0 }}>No planned dates yet, so there is no span to measure time against.</p>
++          </div>
++        )}
++        {budget ? (
++          <div className="dash-viz-card">
++            <Gauge
++              label="Budget used"
++              percent={budget.percent}
++              tone={budget.spent > budget.total ? "crit" : "brand"}
++              value={`${budget.percent}%`}
++              words={`${fmtMoney(budget.spent)} of ${fmtMoney(budget.total)} spent`}
++            />
++          </div>
++        ) : (
++          <div className="dash-viz-card">
++            <p className="muted" style={{ margin: 0 }}>No budget set yet.</p>
++          </div>
++        )}
++      </div>
++
++      {phases.length > 0 && phaseTotal > 0 && (
++        <section>
++          <h2>{phasesByStatus ? "Work by status" : "Work by phase"}</h2>
++          <div className="dash-viz-card">
++            <Donut
++              segments={phases.map((g) => ({ label: g.label, value: g.total }))}
++              colors={phases.map((_, i) => categoricalColor(i))}
++              centerValue={String(phaseTotal)}
++              centerLabel={phaseTotal === 1 ? "task" : "tasks"}
++              ariaLabel={`Work breakdown: ${phases.map((g) => `${g.label}, ${g.total} of ${phaseTotal} tasks`).join("; ")}`}
++            />
++            <table className="cockpit-table">
++              <thead>
++                <tr><th>{phasesByStatus ? "Status" : "Phase"}</th><th>Done</th><th>Share</th></tr>
++              </thead>
++              <tbody>
++                {phases.map((g) => (
++                  <tr key={g.label}>
++                    <td>{g.label}</td>
++                    <td>{phasesByStatus ? `${g.total} of ${phaseTotal}` : `${g.done} of ${g.total}`}</td>
++                    <td>{g.total} of {phaseTotal} · {Math.round((g.total / phaseTotal) * 100)}%</td>
++                  </tr>
++                ))}
++              </tbody>
++            </table>
++          </div>
++        </section>
++      )}
++
++      {milestones.length > 0 && (
++        <section>
++          <h2>Milestones</h2>
++          <ol className="snapshot-milestones">
++            {milestones.map((m) => (
++              <li key={`${m.title}-${m.date}`} className={m.done ? "is-done" : undefined}>
++                <span className="snapshot-milestone-dot" aria-hidden="true" />
++                <span className="snapshot-milestone-title">{m.title}</span>
++                <span className="muted">{m.done ? "Done · " : ""}{fmtLocalDate(m.date)}</span>
++              </li>
++            ))}
++          </ol>
++        </section>
++      )}
++
++      {risks.length > 0 && (
++        <section>
++          <h2>What we are watching</h2>
++          <ul className="snapshot-risks">
++            {risks.map((r) => (
++              <li key={r.title}>
++                <strong>{r.title}</strong>
++                {r.mitigation && <p style={{ margin: "4px 0 0" }}>What we are doing about it: {r.mitigation}</p>}
++              </li>
++            ))}
++          </ul>
++        </section>
++      )}
++
++      {decisions.length > 0 && (
++        <section>
++          <h2>Decisions waiting on you</h2>
++          <ul className="snapshot-decisions">
++            {decisions.map((d) => (
++              <li key={`${d.title}-${d.deadline ?? ""}`}>
++                <strong>{d.title}</strong>
++                <p className="muted" style={{ margin: "4px 0 0" }}>
++                  {d.owner}{d.deadline ? ` · needed by ${fmtLocalDate(d.deadline)}` : ""}
++                </p>
++              </li>
++            ))}
++          </ul>
++        </section>
++      )}
++    </article>
++  );
++}
+--- a/src/lib/workGroups.ts
++++ b/src/lib/workGroups.ts
+@@ -0,0 +1,133 @@
++// Structural shapes, not the api.ts types: this module is imported by
++// the Netlify functions too (the snapshot payload builder), and the
++// functions project must stay free of the client api module. The real
++// Task and RoadmapItem types are structurally compatible.
++export type GroupableTask = {
++  id: string;
++  title: string;
++  status: "not_started" | "in_progress" | "blocked" | "done";
++  parent_task_id: string | null;
++};
++export type WindowItem = { start_date: string | null; end_date: string | null };
++
++/** Whole days from one YYYY-MM-DD key to another (UTC, DST-proof).
++ *  Mirrors calendarItems.daysBetween; kept local so this module has no
++ *  imports at all. */
++export function daysBetween(aKey: string, bKey: string): number {
++  const [ay, am, ad] = aKey.split("-").map(Number);
++  const [by, bm, bd] = bKey.split("-").map(Number);
++  return Math.round((Date.UTC(by, bm - 1, bd) - Date.UTC(ay, am - 1, ad)) / 86400000);
++}
++
++// Work grouping and planned-window math, shared by the Project Cockpit
++// (v165) and the Client Snapshot payload builder (v168) so the two
++// surfaces can never disagree about how a project's work breaks down
++// or how much of its planned span has elapsed. Extracted from
++// ProjectCockpit.tsx in v168; the component re-exports both functions.
++
++export type WorkGroup = { label: string; total: number; done: number };
++
++const TITLE_LEAF = /^(\d{1,2})\.(\d{1,3})\s+(.+)$/;
++const TITLE_BARE = /^(\d{1,2})\s+(.+)$/;
++
++/** Tasks grouped into phases, from the strongest structure the data
++ *  actually carries, in this order:
++ *    1. WBS parents — the top-level ancestor task is the phase (the
++ *       phase task counts toward its own group, matching taskStats).
++ *    2. WBS numbers in the task titles ("1.1 Initiation", "2.3 Permits",
++ *       a bare "8 Commissioning") — how plans built outside the app, or
++ *       pasted from a plan document, carry their phases. Guarded: at
++ *       least 3 numbered tasks, at least 60% of the list numbered, at
++ *       least 2 distinct phase numbers, and the number is at most two
++ *       digits so a year ("2026 …") can never become a phase. A group
++ *       is labelled "Phase N", or with the bare task's own name when
++ *       one provides it. Unnumbered tasks land in a final "Unnumbered"
++ *       group so the segments always sum to the whole list.
++ *    3. Status — the honest fallback for a flat, unnumbered list.
++ */
++export function workGroups(tasks: GroupableTask[]): { groups: WorkGroup[]; byStatus: boolean } {
++  const byId = new Map(tasks.map((t) => [t.id, t]));
++  const hasParents = tasks.some((t) => t.parent_task_id && byId.has(t.parent_task_id));
++  if (!hasParents) {
++    type Hit = { major: number; bareName?: string; task: GroupableTask };
++    const hits: Hit[] = [];
++    for (const t of tasks) {
++      const leaf = t.title.match(TITLE_LEAF);
++      if (leaf) { hits.push({ major: Number(leaf[1]), task: t }); continue; }
++      const bare = t.title.match(TITLE_BARE);
++      if (bare) hits.push({ major: Number(bare[1]), bareName: bare[2].trim(), task: t });
++    }
++    const majors = new Set(hits.map((h) => h.major));
++    if (hits.length >= 3 && hits.length / tasks.length >= 0.6 && majors.size >= 2) {
++      const hitIds = new Set(hits.map((h) => h.task.id));
++      const map = new Map<number, WorkGroup & { bareName?: string }>();
++      for (const h of hits) {
++        const g = map.get(h.major) ?? { label: `Phase ${h.major}`, total: 0, done: 0 };
++        g.total += 1;
++        if (h.task.status === "done") g.done += 1;
++        if (h.bareName) g.bareName = h.bareName;
++        map.set(h.major, g);
++      }
++      const groups: WorkGroup[] = [...map.entries()]
++        .sort((a, b) => a[0] - b[0])
++        .map(([, g]) => ({ label: g.bareName ?? g.label, total: g.total, done: g.done }));
++      const rest = tasks.filter((t) => !hitIds.has(t.id));
++      if (rest.length > 0) {
++        groups.push({ label: "Unnumbered", total: rest.length, done: rest.filter((t) => t.status === "done").length });
++      }
++      return { groups, byStatus: false };
++    }
++  }
++  if (!hasParents) {
++    const order: { status: GroupableTask["status"]; label: string }[] = [
++      { status: "in_progress", label: "In progress" },
++      { status: "not_started", label: "Not started" },
++      { status: "blocked", label: "Blocked" },
++      { status: "done", label: "Done" },
++    ];
++    const groups = order
++      .map(({ status, label }) => {
++        const count = tasks.filter((t) => t.status === status).length;
++        // In status mode the done count only means anything on the Done
++        // row itself (where it equals the row's total).
++        return { label, total: count, done: status === "done" ? count : 0 };
++      })
++      .filter((g) => g.total > 0);
++    return { groups, byStatus: true };
++  }
++  const rootOf = (t: GroupableTask): GroupableTask => {
++    let cur = t;
++    const seen = new Set<string>();
++    while (cur.parent_task_id && byId.has(cur.parent_task_id) && !seen.has(cur.id)) {
++      seen.add(cur.id);
++      cur = byId.get(cur.parent_task_id)!;
++    }
++    return cur;
++  };
++  const map = new Map<string, WorkGroup>();
++  for (const t of tasks) {
++    const root = rootOf(t);
++    const g = map.get(root.id) ?? { label: root.title, total: 0, done: 0 };
++    g.total += 1;
++    if (t.status === "done") g.done += 1;
++    map.set(root.id, g);
++  }
++  const groups = [...map.values()].sort((a, b) => b.total - a.total || a.label.localeCompare(b.label));
++  return { groups, byStatus: false };
++}
++
++/** The planned window, mirroring portfolio.mts: earliest roadmap
++ *  start (falling back to its end) to latest end (falling back to its
++ *  start). Null when no roadmap item carries a date. */
++export function plannedWindow(items: WindowItem[]): { start: string; end: string } | null {
++  let start: string | null = null;
++  let end: string | null = null;
++  for (const i of items) {
++    const s = (i.start_date ?? i.end_date)?.slice(0, 10);
++    const e = (i.end_date ?? i.start_date)?.slice(0, 10);
++    if (s && (!start || s < start)) start = s;
++    if (e && (!end || e > end)) end = e;
++  }
++  if (!start || !end || daysBetween(start, end) <= 0) return null;
++  return { start, end };
++}
+--- a/src/pages/SnapshotPrint.tsx
++++ b/src/pages/SnapshotPrint.tsx
+@@ -0,0 +1,142 @@
++import { useEffect, useState } from "react";
++import { Link, useParams } from "react-router-dom";
++import { api, type Project, type SnapshotData } from "../lib/api";
++import { Wordmark } from "../components/Wordmark";
++import { ShareBox } from "../components/ShareBox";
++import { SnapshotDocument } from "../components/SnapshotDocument";
++import { useDocumentTitle } from "../lib/documentTitle";
++import { fmtLongDate } from "../lib/format";
++import { workGroups, plannedWindow } from "../lib/workGroups";
++import { daysBetween } from "../lib/calendarItems";
++
++// Signed-in Client Snapshot page (v168): a live preview of exactly what
++// the sponsor sees through the share link, plus the owner's link
++// controls. The preview assembles the same payload shape the public
++// endpoint builds server-side (netlify/lib/snapshotData.ts), from the
++// regular APIs and the shared cockpit math, so the two cannot drift.
++
++function todayKey(): string {
++  const now = new Date();
++  const mm = String(now.getMonth() + 1).padStart(2, "0");
++  const dd = String(now.getDate()).padStart(2, "0");
++  return `${now.getFullYear()}-${mm}-${dd}`;
++}
++
++// The public endpoint's risk ordering, mirrored exactly: highest
++// probability/impact combinations first, newest first within a band.
++function riskRank(r: { probability: string; impact: string }): number {
++  if (r.probability === "high" && r.impact === "high") return 0;
++  if (r.probability === "high" || r.impact === "high") return 1;
++  if (r.probability === "medium" && r.impact === "medium") return 2;
++  return 3;
++}
++
++export default function SnapshotPrint() {
++  const { id } = useParams<{ id: string }>();
++  const [project, setProject] = useState<Project | null>(null);
++  const [snapshot, setSnapshot] = useState<SnapshotData | null>(null);
++  const [error, setError] = useState<string | null>(null);
++
++  useDocumentTitle(project ? `Client snapshot | ${project.name}` : "Client snapshot");
++  useEffect(() => {
++    if (!id) return;
++    Promise.all([
++      api.getProject(id),
++      api.getBudget(id),
++      api.listTasks(id),
++      api.listRoadmapItems(id),
++      api.listRisks(id),
++      api.listDecisions(id),
++      api.getFeed(id),
++    ])
++      .then(([p, budget, tasksRes, itemsRes, risksRes, decisionsRes, feedRes]) => {
++        setProject(p.project);
++
++        const total = budget.taskStats.totalTasks;
++        const done = budget.taskStats.doneTasks;
++        const { groups, byStatus } = tasksRes.tasks.length > 0
++          ? workGroups(tasksRes.tasks)
++          : { groups: [], byStatus: false };
++
++        const window = plannedWindow(itemsRes.items);
++        let time: SnapshotData["time"] = null;
++        if (window) {
++          const span = daysBetween(window.start, window.end);
++          const elapsed = Math.max(0, Math.min(span, daysBetween(window.start, todayKey())));
++          time = { percent: span > 0 ? Math.round((elapsed / span) * 100) : 0, start: window.start, end: window.end };
++        }
++
++        const bac = budget.budgetAtCompletion;
++        const ac = budget.metrics.ac;
++
++        const milestones = itemsRes.items
++          .filter((i) => i.type === "milestone")
++          .map((i) => ({
++            title: i.title,
++            date: (i.end_date ?? i.start_date ?? "").slice(0, 10),
++            done: i.status === "done",
++          }))
++          .filter((m) => m.date)
++          .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
++
++        const risks = risksRes.risks
++          .filter((r) => r.status === "open" || r.status === "monitoring")
++          .sort((a, b) =>
++            riskRank(a) - riskRank(b)
++            || (a.created_at < b.created_at ? 1 : -1))
++          .slice(0, 3)
++          .map((r) => ({ title: r.title, mitigation: r.mitigation ?? null }));
++
++        const decisions = decisionsRes.decisions
++          .filter((d) => d.status === "open" && d.owner_stakeholder_id && d.owner)
++          .sort((a, b) => {
++            if (a.deadline && b.deadline) return a.deadline < b.deadline ? -1 : 1;
++            if (a.deadline) return -1;
++            if (b.deadline) return 1;
++            return a.created_at < b.created_at ? -1 : 1;
++          })
++          .map((d) => ({ title: d.title, deadline: d.deadline ? d.deadline.slice(0, 10) : null, owner: d.owner!.name }));
++
++        const latest = feedRes.feed.find((f) => f.type === "status_update");
++
++        setSnapshot({
++          status: latest ? { health: latest.health, note: latest.body, at: latest.ts } : null,
++          completion: total > 0 ? { done, total, percent: Math.round((done / total) * 100) } : null,
++          time,
++          budget: bac !== null ? { spent: ac, total: bac, percent: bac > 0 ? Math.round((ac / bac) * 100) : 0 } : null,
++          phases: groups,
++          phasesByStatus: byStatus,
++          milestones,
++          risks,
++          decisions,
++        });
++      })
++      .catch((e) => setError(e.message));
++  }, [id]);
++
++  if (error) return <main className="public-roadmap"><Wordmark size="sm" /><p className="form-error">{error}</p></main>;
++  if (!project || !snapshot) return <main className="public-roadmap"><div className="skel-loading-block"><div className="skel skel-text" style={{ width: "45%" }} /></div></main>;
++
++  return (
++    <main className="public-roadmap share-public">
++      <div className="no-print share-public-bar">
++        <Link to={`/app/projects/${id}`} className="muted">← Back to {project.name}</Link>
++        <button className="btn btn-primary" type="button" onClick={() => window.print()}>Print / Save as PDF</button>
++      </div>
++
++      {project.is_owner === true && (
++        <ShareBox
++          projectId={project.id}
++          kind="snapshot"
++          recipientsSee="They see the status you stated at your last check-in, how much of the work, time and budget is used, the milestones, the top three things being watched, and any open decisions a stakeholder owns. Task lists, registers and other projects are never included."
++        />
++      )}
++
++      <SnapshotDocument
++        projectName={project.name}
++        snapshot={snapshot}
++        dateLabel={`As of ${fmtLongDate(new Date().toISOString())}`}
++      />
++    </main>
++  );
++}

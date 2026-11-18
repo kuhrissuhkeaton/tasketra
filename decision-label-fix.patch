@@ -1,0 +1,30 @@
+--- a/src/pages/DecisionPublic.tsx
++++ b/src/pages/DecisionPublic.tsx
+@@ -67,7 +67,7 @@
+       <p className="muted">Regarding project: {decision.project_name}</p>
+       <h1>{decision.title}</h1>
+       {decision.context && <p className="decision-context">{decision.context}</p>}
+-      {decision.deadline && <p className="muted">Requested by: {decision.deadline}</p>}
++      {decision.deadline && <p className="muted">Needed by: {decision.deadline}</p>}
+ 
+       {record ? (
+         justSubmitted ? (
+--- a/src/pages/ProjectHome.tsx
++++ b/src/pages/ProjectHome.tsx
+@@ -5955,14 +5955,14 @@
+           </select>
+           {/* v161 (F-09): the decider's-eye preview. It mirrors the public
+               decision page (DecisionPublic) field for field -- same title,
+-              context, "Requested by" line, and option rows -- and updates
++              context, "Needed by" line, and option rows -- and updates
+               live as the form is filled, so the sender sees exactly what
+               the decider will see before the link exists. */}
+           <div className="decision-preview" aria-label="Preview of what the decider sees">
+             <p className="decision-preview-label">What they'll see</p>
+             <p className="decision-preview-title">{title.trim() || "Your decision title"}</p>
+             {context.trim() && <p className="decision-preview-context">{context.trim()}</p>}
+-            {deadline && <p className="muted">Requested by: {deadline}</p>}
++            {deadline && <p className="muted">Needed by: {deadline}</p>}
+             <div className="option-list">
+               {options
+                 .split(",")

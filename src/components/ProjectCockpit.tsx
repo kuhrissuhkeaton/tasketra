@@ -211,7 +211,7 @@ export function ProjectCockpit({ projectId, onOpenTab }: {
                     <tr key={g.label}>
                       <td>{g.label}</td>
                       <td>{byStatus ? `${g.total} of ${total}` : `${g.done} of ${g.total}`}</td>
-                      <td>{g.total} of {total} · {Math.round((g.total / total) * 100)}%</td>
+                      <td>{Math.round((g.total / total) * 100)}%</td>
                     </tr>
                   ))}
                 </tbody>

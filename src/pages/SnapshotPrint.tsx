@@ -88,14 +88,14 @@ export default function SnapshotPrint() {
           .map((r) => ({ title: r.title, mitigation: r.mitigation ?? null }));
 
         const decisions = decisionsRes.decisions
-          .filter((d) => d.status === "open" && d.owner_stakeholder_id && d.owner)
+          .filter((d) => d.status === "open")
           .sort((a, b) => {
             if (a.deadline && b.deadline) return a.deadline < b.deadline ? -1 : 1;
             if (a.deadline) return -1;
             if (b.deadline) return 1;
             return a.created_at < b.created_at ? -1 : 1;
           })
-          .map((d) => ({ title: d.title, deadline: d.deadline ? d.deadline.slice(0, 10) : null, owner: d.owner!.name }));
+          .map((d) => ({ title: d.title, deadline: d.deadline ? d.deadline.slice(0, 10) : null, owner: d.owner?.name ?? null }));
 
         const latest = feedRes.feed.find((f) => f.type === "status_update");
 

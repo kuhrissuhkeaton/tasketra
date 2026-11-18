@@ -27,7 +27,7 @@ export type SnapshotPayload = {
   phasesByStatus: boolean;
   milestones: { title: string; date: string; done: boolean }[];
   risks: { title: string; mitigation: string | null }[];
-  decisions: { title: string; deadline: string | null; owner: string }[];
+  decisions: { title: string; deadline: string | null; owner: string | null }[];
 };
 
 const pct = (part: number, whole: number) => (whole > 0 ? Math.round((part / whole) * 100) : 0);
@@ -79,9 +79,9 @@ export async function buildSnapshot(database: any, projectId: string): Promise<S
     database.sql`
       SELECT dr.title, dr.deadline, s.name AS owner_name
       FROM decision_requests dr
-      JOIN stakeholders s ON s.id = dr.owner_stakeholder_id AND s.deleted_at IS NULL
+      LEFT JOIN stakeholders s ON s.id = dr.owner_stakeholder_id AND s.deleted_at IS NULL
       WHERE dr.project_id = ${projectId} AND dr.deleted_at IS NULL
-        AND dr.status = 'open' AND dr.owner_stakeholder_id IS NOT NULL
+        AND dr.status = 'open'
       ORDER BY dr.deadline ASC NULLS LAST, dr.created_at ASC
     `,
   ]);

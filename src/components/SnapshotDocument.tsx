@@ -117,7 +117,7 @@ export function SnapshotDocument({ projectName, snapshot, dateLabel }: {
                   <tr key={g.label}>
                     <td>{g.label}</td>
                     <td>{phasesByStatus ? `${g.total} of ${phaseTotal}` : `${g.done} of ${g.total}`}</td>
-                    <td>{g.total} of {phaseTotal} · {Math.round((g.total / phaseTotal) * 100)}%</td>
+                    <td>{Math.round((g.total / phaseTotal) * 100)}%</td>
                   </tr>
                 ))}
               </tbody>
@@ -157,16 +157,23 @@ export function SnapshotDocument({ projectName, snapshot, dateLabel }: {
 
       {decisions.length > 0 && (
         <section>
-          <h2>Decisions waiting on you</h2>
+          <h2>Open decisions</h2>
           <ul className="snapshot-decisions">
-            {decisions.map((d) => (
-              <li key={`${d.title}-${d.deadline ?? ""}`}>
-                <strong>{d.title}</strong>
-                <p className="muted" style={{ margin: "4px 0 0" }}>
-                  {d.owner}{d.deadline ? ` · needed by ${fmtLocalDate(d.deadline)}` : ""}
-                </p>
-              </li>
-            ))}
+            {decisions.map((d) => {
+              const meta = [d.owner, d.deadline ? `needed by ${fmtLocalDate(d.deadline)}` : null]
+                .filter(Boolean)
+                .join(" · ");
+              return (
+                <li key={`${d.title}-${d.deadline ?? ""}`}>
+                  <strong>{d.title}</strong>
+                  {meta && (
+                    <p className="muted" style={{ margin: "4px 0 0" }}>
+                      {d.owner ? meta : meta.charAt(0).toUpperCase() + meta.slice(1)}
+                    </p>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </section>
       )}
