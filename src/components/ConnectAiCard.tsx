@@ -98,6 +98,11 @@ export function ConnectAiCard() {
         waiting on me?" This first version is read-only: your AI can look, never change anything.
       </p>
 
+      {/* v169.1: the server address and setup steps only make sense once a
+          token can actually be created below, so they render for founding
+          members only. Everyone else sees the intro and the founding note. */}
+      {!loading && !loadError && founding && (
+        <>
       <label htmlFor="f-connectai-endpoint">Server address</label>
       <div className="inline-form">
         <input
@@ -135,6 +140,8 @@ export function ConnectAiCard() {
           <li>Create a new app, choose MCP, paste the server address above, and when it asks how the app signs in, use the header option with <code>Authorization: Bearer YOUR_TOKEN</code>.</li>
           <li>Ask ChatGPT about your projects, for example "What is overdue in Tasketra?"</li>
         </ol>
+      )}
+        </>
       )}
 
       {loading ? (
