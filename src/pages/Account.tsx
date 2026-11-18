@@ -5,6 +5,7 @@ import { api, type ReferralInfo } from "../lib/api";
 import { avatarColor, initials } from "../lib/avatar";
 import { PageHeader, SoftCard } from "../components/ui";
 import { DeleteAccountCard } from "../components/DeleteAccountCard";
+import { ConnectAiCard } from "../components/ConnectAiCard";
 import { readStoredTheme, setTheme, type Theme } from "../lib/theme";
 import { useDelight } from "../lib/delight";
 import { useDocumentTitle } from "../lib/documentTitle";
@@ -139,7 +140,7 @@ export default function Account() {
     <div className="project-shell">
       <AppSidebar />
       <main id="main-content" className="project-main">
-        <PageHeader title="Account" subtitle="Your profile, appearance, password and referral link." />
+        <PageHeader title="Account" subtitle="Your profile, appearance, password, referral link and AI connection." />
 
         <SoftCard title="Profile picture" className="ui-narrow billing-card">
           <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
@@ -250,6 +251,8 @@ export default function Account() {
             </>
           )}
         </SoftCard>
+
+        <ConnectAiCard />
 
         <DeleteAccountCard email={user.email} />
       </main>

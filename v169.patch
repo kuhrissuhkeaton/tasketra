@@ -1,0 +1,1237 @@
+--- a/src/lib/api.ts
++++ b/src/lib/api.ts
+@@ -136,6 +136,16 @@
+   tour_completed_at?: string | null;
+ };
+ 
++export type ApiToken = {
++  id: string;
++  name: string;
++  token_prefix: string;
++  scope: "read" | "write";
++  created_at: string;
++  last_used_at: string | null;
++  revoked_at: string | null;
++};
++
+ export type ReferralInfo = {
+   link: string;
+   totalReferred: number;
+@@ -1759,6 +1769,10 @@
+   avatarUrl: (userId: string) => `${BASE}/avatar?userId=${userId}`,
+ 
+   getReferrals: () => request<ReferralInfo>("/referrals"),
++  getApiTokens: () => request<{ tokens: ApiToken[]; founding: boolean }>("/api-tokens"),
++  createApiToken: (name: string, scope: "read" | "write") =>
++    request<{ token: ApiToken; raw: string }>("/api-tokens", { method: "POST", body: JSON.stringify({ name, scope }) }),
++  revokeApiToken: (id: string) => request<{ ok: true }>(`/api-tokens?id=${id}`, { method: "DELETE" }),
+   getMyActivity: () => request<{ items: ActivityItem[] }>("/my-activity"),
+   deleteMyAccount: (password: string, confirmEmail: string) =>
+     request<{ ok: true }>("/account-delete", { method: "POST", body: JSON.stringify({ password, confirmEmail }) }),
+--- a/src/lib/whatsNewData.ts
++++ b/src/lib/whatsNewData.ts
+@@ -10,6 +10,12 @@
+ // they can do.
+ export const CHANGES: ChangeEntry[] = [
+   {
++    version: "v169",
++    date: "November 2026",
++    title: "Your AI can read your projects now: connect Claude or ChatGPT in Account.",
++    body: "Founding members can now connect their own AI assistant to Tasketra. Create a personal token in the new Connect your AI section of Account, paste it into Claude or ChatGPT once, and your AI can answer questions about your projects: what is overdue, which decisions are waiting and who owns them, the top risks, and the full picture for any project. This first version is read-only, your AI can look but never change anything, and you can revoke a token at any time. Write access arrives in a later update, and only for tokens you create as read + write.",
++  },
++  {
+     version: "v168",
+     date: "November 2026",
+     title: "Send your sponsor a live snapshot link instead of building a status deck.",
+--- a/src/pages/Account.tsx
++++ b/src/pages/Account.tsx
+@@ -5,6 +5,7 @@
+ import { avatarColor, initials } from "../lib/avatar";
+ import { PageHeader, SoftCard } from "../components/ui";
+ import { DeleteAccountCard } from "../components/DeleteAccountCard";
++import { ConnectAiCard } from "../components/ConnectAiCard";
+ import { readStoredTheme, setTheme, type Theme } from "../lib/theme";
+ import { useDelight } from "../lib/delight";
+ import { useDocumentTitle } from "../lib/documentTitle";
+@@ -139,7 +140,7 @@
+     <div className="project-shell">
+       <AppSidebar />
+       <main id="main-content" className="project-main">
+-        <PageHeader title="Account" subtitle="Your profile, appearance, password and referral link." />
++        <PageHeader title="Account" subtitle="Your profile, appearance, password, referral link and AI connection." />
+ 
+         <SoftCard title="Profile picture" className="ui-narrow billing-card">
+           <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+@@ -251,6 +252,8 @@
+           )}
+         </SoftCard>
+ 
++        <ConnectAiCard />
++
+         <DeleteAccountCard email={user.email} />
+       </main>
+     </div>
+--- a/netlify/database/migrations/20261118120000_add_api_tokens/migration.sql
++++ b/netlify/database/migrations/20261118120000_add_api_tokens/migration.sql
+@@ -0,0 +1,22 @@
++-- Personal API tokens for the MCP server (v169): a user creates a token in
++-- Account settings and pastes it into their own AI client, which then reads
++-- their Tasketra projects over /api/mcp. Only the SHA-256 hash of a token is
++-- stored (the password-reset token pattern in lib/auth.ts), so a leaked row
++-- can never be replayed as a working token. Revoking sets revoked_at; the
++-- row stays so the settings list can show what was revoked and when.
++--
++-- scope is 'read' or 'write' (write implies read), validated in the API the
++-- same way share-link kinds are, so a future scope needs no migration.
++-- Additive only: one new table, nothing existing is touched.
++CREATE TABLE api_tokens (
++  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
++  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
++  name TEXT NOT NULL,
++  token_hash TEXT NOT NULL UNIQUE,
++  token_prefix TEXT NOT NULL,
++  scope TEXT NOT NULL DEFAULT 'read',
++  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
++  last_used_at TIMESTAMPTZ,
++  revoked_at TIMESTAMPTZ
++);
++CREATE INDEX idx_api_tokens_user ON api_tokens (user_id, created_at DESC);
+--- a/netlify/lib/apiTokens.ts
++++ b/netlify/lib/apiTokens.ts
+@@ -0,0 +1,97 @@
++import crypto from "node:crypto";
++
++// Personal API tokens for the MCP server (v169). A token is the credential
++// a user's own AI client presents to /api/mcp. Generation and storage mirror
++// the password-reset tokens in lib/auth.ts: the raw value is shown to the
++// user exactly once, and only its SHA-256 hash ever reaches the database.
++
++export type ApiTokenScope = "read" | "write";
++
++export const API_TOKEN_SCOPES: ApiTokenScope[] = ["read", "write"];
++
++export function isApiTokenScope(v: unknown): v is ApiTokenScope {
++  return v === "read" || v === "write";
++}
++
++export function generateApiToken() {
++  const raw = `tk_${crypto.randomBytes(32).toString("base64url")}`;
++  const hash = crypto.createHash("sha256").update(raw).digest("hex");
++  // Enough of the token to recognize it in a list ("tk_Ab3dEf…"), never
++  // enough to use it.
++  const prefix = raw.slice(0, 11);
++  return { raw, hash, prefix };
++}
++
++export function hashApiToken(raw: string) {
++  return crypto.createHash("sha256").update(raw).digest("hex");
++}
++
++export type ApiTokenRow = {
++  id: string;
++  name: string;
++  token_prefix: string;
++  scope: ApiTokenScope;
++  created_at: string;
++  last_used_at: string | null;
++  revoked_at: string | null;
++};
++
++export async function createApiToken(
++  database: any,
++  userId: string,
++  name: string,
++  scope: ApiTokenScope
++): Promise<{ raw: string; token: ApiTokenRow }> {
++  const { raw, hash, prefix } = generateApiToken();
++  const [token] = await database.sql`
++    INSERT INTO api_tokens (user_id, name, token_hash, token_prefix, scope)
++    VALUES (${userId}, ${name}, ${hash}, ${prefix}, ${scope})
++    RETURNING id, name, token_prefix, scope, created_at, last_used_at, revoked_at
++  `;
++  return { raw, token };
++}
++
++export async function listApiTokens(database: any, userId: string): Promise<ApiTokenRow[]> {
++  return database.sql`
++    SELECT id, name, token_prefix, scope, created_at, last_used_at, revoked_at
++    FROM api_tokens
++    WHERE user_id = ${userId} AND revoked_at IS NULL
++    ORDER BY created_at DESC
++  `;
++}
++
++export async function revokeApiToken(database: any, userId: string, tokenId: string): Promise<boolean> {
++  const rows = await database.sql`
++    UPDATE api_tokens SET revoked_at = now()
++    WHERE id = ${tokenId} AND user_id = ${userId} AND revoked_at IS NULL
++    RETURNING id
++  `;
++  return rows.length > 0;
++}
++
++export type AuthenticatedToken = { userId: string; tokenId: string; scope: ApiTokenScope };
++
++/** Resolves the Authorization: Bearer credential on an MCP request to its
++ *  token row. Returns null for anything missing, malformed, unknown, or
++ *  revoked. Stamps last_used_at on success (awaited: one cheap UPDATE, and
++ *  it keeps the settings list honest about which tokens are alive). */
++export async function authenticateApiToken(database: any, req: Request): Promise<AuthenticatedToken | null> {
++  const header = req.headers.get("authorization") || "";
++  const match = /^Bearer\s+(tk_[A-Za-z0-9_-]+)$/.exec(header.trim());
++  if (!match) return null;
++  const hash = hashApiToken(match[1]);
++  const [row] = await database.sql`
++    SELECT id, user_id, scope FROM api_tokens
++    WHERE token_hash = ${hash} AND revoked_at IS NULL
++  `;
++  if (!row) return null;
++  await database.sql`UPDATE api_tokens SET last_used_at = now() WHERE id = ${row.id}`;
++  return { userId: row.user_id, tokenId: row.id, scope: row.scope as ApiTokenScope };
++}
++
++/** The v169 gate: MCP tokens are a founding-member beta feature. Checked
++ *  the same way /api/founding-status counts members. */
++export async function isFoundingMember(database: any, userId: string): Promise<boolean> {
++  const [row] = await database.sql`SELECT founding_member FROM users WHERE id = ${userId}`;
++  return row?.founding_member === true;
++}
+--- a/netlify/lib/mcpData.ts
++++ b/netlify/lib/mcpData.ts
+@@ -0,0 +1,257 @@
++// Data behind the MCP server's read tools (v169). Every function takes the
++// token owner's user id and applies the app's standard access rule — owner,
++// or an active project member — exactly as /api/projects, /api/my-today and
++// /api/weekly-sync do, so an AI connected over MCP can never see a project
++// its owner couldn't see in the app. Queries are modeled on those endpoints
++// and the numbers are read from the same tables the same way, so MCP
++// answers match what the app shows.
++
++import { buildSnapshot } from "./snapshotData.ts";
++import { hasProjectAccess } from "./ownership.ts";
++
++/** Date columns arrive as Date objects from the driver. Normalize to a
++ *  YYYY-MM-DD key (same helper as snapshotData). */
++function dateKey(v: unknown): string | null {
++  if (v === null || v === undefined) return null;
++  if (v instanceof Date) return v.toISOString().slice(0, 10);
++  return String(v).slice(0, 10);
++}
++
++function daysSince(v: unknown): number | null {
++  if (v === null || v === undefined) return null;
++  const t = v instanceof Date ? v.getTime() : new Date(String(v)).getTime();
++  if (Number.isNaN(t)) return null;
++  return Math.max(0, Math.floor((Date.now() - t) / 86_400_000));
++}
++
++export class McpToolError extends Error {}
++
++async function projectOrThrow(database: any, userId: string, projectId: unknown) {
++  if (typeof projectId !== "string" || !projectId) {
++    throw new McpToolError("project_id is required. Use list_projects to find the id.");
++  }
++  if (!(await hasProjectAccess(userId, projectId))) {
++    throw new McpToolError("That project was not found among the projects this account can access.");
++  }
++  const [project] = await database.sql`SELECT id, name, stage FROM projects WHERE id = ${projectId}`;
++  if (!project) throw new McpToolError("That project was not found among the projects this account can access.");
++  return project;
++}
++
++export async function mcpListProjects(database: any, userId: string) {
++  const projects = await database.sql`
++    SELECT p.id, p.name, p.stage, p.created_at,
++      (SELECT count(*)::int FROM decision_requests dr WHERE dr.project_id = p.id AND dr.status = 'open' AND dr.deleted_at IS NULL) AS open_decisions,
++      (SELECT count(*)::int FROM tasks t WHERE t.project_id = p.id AND t.status != 'done' AND t.due_date IS NOT NULL AND t.due_date < now()::date AND t.deleted_at IS NULL) AS overdue_tasks
++    FROM projects p
++    WHERE p.archived = false
++      AND (p.owner_id = ${userId}
++        OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = ${userId} AND pm.status = 'active'))
++    ORDER BY p.created_at DESC
++  `;
++  return {
++    projects: (projects as any[]).map((p) => ({
++      id: p.id,
++      name: p.name,
++      stage: p.stage,
++      open_decisions: p.open_decisions,
++      overdue_tasks: p.overdue_tasks,
++    })),
++  };
++}
++
++export async function mcpGetProjectOverview(database: any, userId: string, args: any) {
++  const project = await projectOrThrow(database, userId, args?.project_id);
++  const snapshot = await buildSnapshot(database, project.id);
++  return { project: { id: project.id, name: project.name, stage: project.stage }, ...snapshot };
++}
++
++export async function mcpListTasks(database: any, userId: string, args: any) {
++  const project = await projectOrThrow(database, userId, args?.project_id);
++  const status = args?.status ?? "open";
++  if (status !== "open" && status !== "done" && status !== "all") {
++    throw new McpToolError("status must be one of open, done, or all.");
++  }
++  const overdueOnly = args?.overdue_only === true;
++  const today = new Date().toISOString().slice(0, 10);
++  const rows = await database.sql`
++    SELECT id, title, status, due_date, owner_name, parent_task_id
++    FROM tasks
++    WHERE project_id = ${project.id} AND deleted_at IS NULL
++    ORDER BY due_date NULLS LAST, created_at
++  `;
++  const tasks = (rows as any[])
++    .map((t) => ({
++      id: t.id,
++      title: t.title,
++      status: t.status,
++      due_date: dateKey(t.due_date),
++      owner_name: t.owner_name,
++      is_subtask: t.parent_task_id !== null && t.parent_task_id !== undefined,
++      overdue: t.status !== "done" && dateKey(t.due_date) !== null && (dateKey(t.due_date) as string) < today,
++    }))
++    .filter((t) => (status === "all" ? true : status === "done" ? t.status === "done" : t.status !== "done"))
++    .filter((t) => (overdueOnly ? t.overdue : true))
++    .slice(0, 200);
++  return { project: { id: project.id, name: project.name }, count: tasks.length, tasks };
++}
++
++export async function mcpGetDecisionsWaiting(database: any, userId: string) {
++  const rows = await database.sql`
++    SELECT dr.id, dr.title, dr.context, dr.deadline, dr.created_at,
++           p.id AS project_id, p.name AS project_name, s.name AS owner_name
++    FROM decision_requests dr
++    JOIN projects p ON p.id = dr.project_id
++    LEFT JOIN stakeholders s ON s.id = dr.owner_stakeholder_id
++    WHERE dr.status = 'open' AND dr.deleted_at IS NULL AND p.archived = false
++      AND (p.owner_id = ${userId}
++        OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = ${userId} AND pm.status = 'active'))
++    ORDER BY dr.deadline NULLS LAST, dr.created_at
++    LIMIT 100
++  `;
++  return {
++    decisions: (rows as any[]).map((d) => ({
++      id: d.id,
++      title: d.title,
++      context: d.context,
++      project: d.project_name,
++      project_id: d.project_id,
++      owner: d.owner_name,
++      needed_by: dateKey(d.deadline),
++      waiting_days: daysSince(d.created_at),
++    })),
++  };
++}
++
++export async function mcpListRisks(database: any, userId: string, args: any) {
++  const project = await projectOrThrow(database, userId, args?.project_id);
++  const rows = await database.sql`
++    SELECT id, title, description, probability, impact, probability_score, impact_score, mitigation, owner_name, status
++    FROM risks
++    WHERE project_id = ${project.id} AND deleted_at IS NULL AND status IN ('open', 'monitoring')
++    ORDER BY
++      (probability_score * impact_score) DESC NULLS LAST,
++      CASE WHEN probability = 'high' AND impact = 'high' THEN 0
++           WHEN probability = 'high' OR impact = 'high' THEN 1
++           WHEN probability = 'medium' AND impact = 'medium' THEN 2
++           ELSE 3 END,
++      created_at DESC
++    LIMIT 25
++  `;
++  return {
++    project: { id: project.id, name: project.name },
++    risks: (rows as any[]).map((r) => ({
++      id: r.id,
++      title: r.title,
++      description: r.description,
++      probability: r.probability,
++      impact: r.impact,
++      exposure_score:
++        r.probability_score !== null && r.impact_score !== null ? r.probability_score * r.impact_score : null,
++      mitigation: r.mitigation,
++      owner_name: r.owner_name,
++      status: r.status,
++    })),
++  };
++}
++
++export async function mcpGetToday(database: any, userId: string) {
++  const today = new Date().toISOString().slice(0, 10);
++  const [openTasks, recentlyDone] = await Promise.all([
++    database.sql`
++      SELECT t.id, t.title, t.status, t.owner_name, t.due_date, t.project_id,
++             p.name AS project_name
++      FROM tasks t
++      JOIN projects p ON p.id = t.project_id
++      WHERE t.deleted_at IS NULL
++        AND t.status != 'done'
++        AND p.archived = false
++        AND (p.owner_id = ${userId}
++          OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = ${userId} AND pm.status = 'active'))
++        AND t.id NOT IN (SELECT DISTINCT parent_task_id FROM tasks WHERE parent_task_id IS NOT NULL AND deleted_at IS NULL)
++      ORDER BY t.due_date NULLS LAST, t.created_at
++      LIMIT 400
++    `,
++    database.sql`
++      SELECT t.id FROM tasks t
++      JOIN projects p ON p.id = t.project_id
++      WHERE t.deleted_at IS NULL
++        AND t.status = 'done'
++        AND t.updated_at >= now() - interval '2 days'
++        AND p.archived = false
++        AND (p.owner_id = ${userId}
++          OR EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id AND pm.user_id = ${userId} AND pm.status = 'active'))
++      LIMIT 100
++    `,
++  ]);
++  const shape = (t: any) => ({
++    id: t.id,
++    title: t.title,
++    status: t.status,
++    owner_name: t.owner_name,
++    due_date: dateKey(t.due_date),
++    project: t.project_name,
++    project_id: t.project_id,
++  });
++  const all = (openTasks as any[]).map(shape);
++  return {
++    today,
++    overdue: all.filter((t) => t.due_date !== null && t.due_date < today),
++    due_today: all.filter((t) => t.due_date === today),
++    open_total: all.length,
++    done_last_two_days: (recentlyDone as any[]).length,
++  };
++}
++
++export async function mcpGetWeeklySync(database: any, userId: string, args: any) {
++  const project = await projectOrThrow(database, userId, args?.project_id);
++  const [[latestStatus], asks, overdueRows, [doneRow]] = await Promise.all([
++    database.sql`
++      SELECT body, health, created_at FROM status_updates
++      WHERE project_id = ${project.id}
++      ORDER BY created_at DESC LIMIT 1
++    `,
++    database.sql`
++      SELECT dr.id, dr.title, dr.context, dr.deadline, dr.created_at, s.name AS owner_name
++      FROM decision_requests dr
++      LEFT JOIN stakeholders s ON s.id = dr.owner_stakeholder_id
++      WHERE dr.project_id = ${project.id} AND dr.status = 'open' AND dr.deleted_at IS NULL
++      ORDER BY dr.deadline NULLS LAST, dr.created_at
++      LIMIT 50
++    `,
++    database.sql`
++      SELECT id, title, due_date, owner_name FROM tasks
++      WHERE project_id = ${project.id} AND deleted_at IS NULL AND status != 'done'
++        AND due_date IS NOT NULL AND due_date < now()::date
++        AND id NOT IN (SELECT DISTINCT parent_task_id FROM tasks WHERE parent_task_id IS NOT NULL AND deleted_at IS NULL)
++      ORDER BY due_date
++      LIMIT 25
++    `,
++    database.sql`
++      SELECT count(*)::int AS done_count FROM tasks
++      WHERE project_id = ${project.id} AND deleted_at IS NULL AND status = 'done'
++        AND updated_at >= now() - interval '7 days'
++    `,
++  ]);
++  return {
++    project: { id: project.id, name: project.name, stage: project.stage },
++    latest_check_in: latestStatus
++      ? { health: latestStatus.health, note: latestStatus.body, at: dateKey(latestStatus.created_at) }
++      : null,
++    open_asks: (asks as any[]).map((a) => ({
++      id: a.id,
++      title: a.title,
++      context: a.context,
++      owner: a.owner_name,
++      needed_by: dateKey(a.deadline),
++      waiting_days: daysSince(a.created_at),
++    })),
++    overdue_tasks: (overdueRows as any[]).map((t) => ({
++      id: t.id,
++      title: t.title,
++      due_date: dateKey(t.due_date),
++      owner_name: t.owner_name,
++    })),
++    done_last_7_days: doneRow?.done_count ?? 0,
++  };
++}
+--- a/netlify/functions/api-tokens.mts
++++ b/netlify/functions/api-tokens.mts
+@@ -0,0 +1,63 @@
++import type { Config } from "@netlify/functions";
++import { db } from "../lib/db.ts";
++import { getUserIdFromRequest } from "../lib/auth.ts";
++import { json } from "../lib/http.ts";
++import { withSentry } from "../lib/sentry.ts";
++import {
++  createApiToken,
++  listApiTokens,
++  revokeApiToken,
++  isApiTokenScope,
++  isFoundingMember,
++} from "../lib/apiTokens.ts";
++
++// Manages the signed-in user's personal API tokens for the MCP server
++// (v169). Session-cookie auth, like every other account endpoint — the
++// tokens themselves are only ever presented to /api/mcp, never here.
++// Creating a token is founding-members-only while MCP is in beta.
++
++export default withSentry(async (req: Request) => {
++  const userId = getUserIdFromRequest(req);
++  if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
++  const database = db();
++
++  if (req.method === "GET") {
++    const tokens = await listApiTokens(database, userId);
++    return json({ tokens, founding: await isFoundingMember(database, userId) });
++  }
++
++  if (req.method === "POST") {
++    if (!(await isFoundingMember(database, userId))) {
++      return json(
++        { error: "Connecting your own AI is a founding-member beta feature for now." },
++        { status: 403 }
++      );
++    }
++    const body = (await req.json().catch(() => null)) as any;
++    const name = typeof body?.name === "string" ? body.name.trim() : "";
++    if (!name) return json({ error: "Give the token a name so you can recognize it later." }, { status: 400 });
++    if (name.length > 60) return json({ error: "Token names are capped at 60 characters." }, { status: 400 });
++    const scope = body?.scope ?? "read";
++    if (!isApiTokenScope(scope)) return json({ error: "scope must be read or write." }, { status: 400 });
++    const active = await listApiTokens(database, userId);
++    if (active.length >= 10) {
++      return json({ error: "You already have 10 active tokens. Revoke one before creating another." }, { status: 400 });
++    }
++    const { raw, token } = await createApiToken(database, userId, name, scope);
++    // The raw token rides along exactly once, in this response. Only its
++    // hash is stored, so it can never be shown again.
++    return json({ token, raw }, { status: 201 });
++  }
++
++  if (req.method === "DELETE") {
++    const id = new URL(req.url).searchParams.get("id");
++    if (!id) return json({ error: "id is required." }, { status: 400 });
++    const revoked = await revokeApiToken(database, userId, id);
++    if (!revoked) return json({ error: "Token not found." }, { status: 404 });
++    return json({ ok: true });
++  }
++
++  return json({ error: "Method not allowed" }, { status: 405 });
++});
++
++export const config: Config = { path: "/api/api-tokens" };
+--- a/netlify/functions/mcp.mts
++++ b/netlify/functions/mcp.mts
+@@ -0,0 +1,198 @@
++import type { Config } from "@netlify/functions";
++import { db } from "../lib/db.ts";
++import { json } from "../lib/http.ts";
++import { withSentry } from "../lib/sentry.ts";
++import { checkRateLimit } from "../lib/rate-limit.ts";
++import { authenticateApiToken } from "../lib/apiTokens.ts";
++import {
++  McpToolError,
++  mcpListProjects,
++  mcpGetProjectOverview,
++  mcpListTasks,
++  mcpGetDecisionsWaiting,
++  mcpListRisks,
++  mcpGetToday,
++  mcpGetWeeklySync,
++} from "../lib/mcpData.ts";
++
++// Tasketra's MCP server (v169): a stateless JSON-RPC endpoint that a user's
++// own AI client (Claude, ChatGPT, or any MCP client) calls with the
++// personal API token the user created in Account settings. This version is
++// read-only — the seven tools below. Write tools arrive in v170 behind the
++// token's scope.
++//
++// Stateless by design: no session is kept between calls, every request
++// carries its Bearer token, and responses are plain JSON (no streaming),
++// which is the simplest shape the MCP Streamable HTTP transport allows and
++// the one every major client accepts.
++
++const KNOWN_PROTOCOL_VERSIONS = ["2024-11-05", "2025-03-26", "2025-06-18"];
++const DEFAULT_PROTOCOL_VERSION = "2025-03-26";
++
++const TOOLS = [
++  {
++    name: "list_projects",
++    description:
++      "List the projects in this Tasketra account, with each project's stage and counts of open decisions and overdue tasks. Start here to find project ids.",
++    inputSchema: { type: "object", properties: {}, additionalProperties: false },
++  },
++  {
++    name: "get_project_overview",
++    description:
++      "The full picture for one project: the project manager's latest stated status and check-in note, completion / time used / budget used, work broken down by phase, milestones, the top risks in plain words, and open decisions with who owns them and when they are needed by.",
++    inputSchema: {
++      type: "object",
++      properties: { project_id: { type: "string", description: "A project id from list_projects." } },
++      required: ["project_id"],
++      additionalProperties: false,
++    },
++  },
++  {
++    name: "list_tasks",
++    description: "List a project's tasks with their status, due date, and owner. Defaults to open tasks only.",
++    inputSchema: {
++      type: "object",
++      properties: {
++        project_id: { type: "string", description: "A project id from list_projects." },
++        status: { type: "string", enum: ["open", "done", "all"], description: "Which tasks to return. Default open." },
++        overdue_only: { type: "boolean", description: "Return only overdue open tasks. Default false." },
++      },
++      required: ["project_id"],
++      additionalProperties: false,
++    },
++  },
++  {
++    name: "get_decisions_waiting",
++    description:
++      "Every open decision across the account's projects, soonest needed-by first, with the project, the owner if one is named, and how many days it has been waiting.",
++    inputSchema: { type: "object", properties: {}, additionalProperties: false },
++  },
++  {
++    name: "list_risks",
++    description: "A project's open risks, highest exposure first, with probability, impact, mitigation, and owner.",
++    inputSchema: {
++      type: "object",
++      properties: { project_id: { type: "string", description: "A project id from list_projects." } },
++      required: ["project_id"],
++      additionalProperties: false,
++    },
++  },
++  {
++    name: "get_today",
++    description:
++      "What's on the account owner's plate today across all their projects: overdue tasks, tasks due today, the total open count, and how many tasks were finished in the last two days.",
++    inputSchema: { type: "object", properties: {}, additionalProperties: false },
++  },
++  {
++    name: "get_weekly_sync",
++    description:
++      "The inputs for one project's weekly sync: its latest check-in (stated health and note), open asks (decisions waiting, with owners and needed-by dates), overdue tasks, and how many tasks finished in the last 7 days.",
++    inputSchema: {
++      type: "object",
++      properties: { project_id: { type: "string", description: "A project id from list_projects." } },
++      required: ["project_id"],
++      additionalProperties: false,
++    },
++  },
++] as const;
++
++type ToolName = (typeof TOOLS)[number]["name"];
++
++async function callTool(database: any, userId: string, name: string, args: any) {
++  switch (name as ToolName) {
++    case "list_projects":
++      return mcpListProjects(database, userId);
++    case "get_project_overview":
++      return mcpGetProjectOverview(database, userId, args);
++    case "list_tasks":
++      return mcpListTasks(database, userId, args);
++    case "get_decisions_waiting":
++      return mcpGetDecisionsWaiting(database, userId);
++    case "list_risks":
++      return mcpListRisks(database, userId, args);
++    case "get_today":
++      return mcpGetToday(database, userId);
++    case "get_weekly_sync":
++      return mcpGetWeeklySync(database, userId, args);
++    default:
++      throw new McpToolError(`Unknown tool: ${name}`);
++  }
++}
++
++function rpcResult(id: unknown, result: unknown) {
++  return json({ jsonrpc: "2.0", id, result });
++}
++
++function rpcError(id: unknown, code: number, message: string, status = 200) {
++  return json({ jsonrpc: "2.0", id, error: { code, message } }, { status });
++}
++
++export default withSentry(async (req: Request) => {
++  if (req.method !== "POST") {
++    return rpcError(null, -32600, "This MCP server accepts POST requests only.", 405);
++  }
++  const rawBody = await req.text();
++  let msg: any;
++  try {
++    msg = JSON.parse(rawBody);
++  } catch {
++    return rpcError(null, -32700, "Request body was not valid JSON.", 400);
++  }
++  if (!msg || typeof msg !== "object" || Array.isArray(msg) || typeof msg.method !== "string") {
++    return rpcError(null, -32600, "Expected a single JSON-RPC request object.");
++  }
++  // Notifications carry no id and expect no response.
++  if (msg.id === undefined || msg.id === null || msg.method.startsWith("notifications/")) {
++    return new Response(null, { status: 202 });
++  }
++
++  const database = db();
++  const auth = await authenticateApiToken(database, req);
++  if (!auth) {
++    return rpcError(
++      msg.id,
++      -32001,
++      "Missing or invalid API token. Create one in Tasketra under Account, Connect your AI, and send it as an Authorization: Bearer header.",
++      401
++    );
++  }
++  const withinLimit = await checkRateLimit(database, `mcp:token:${auth.tokenId}`, 300, 15);
++  if (!withinLimit) {
++    return rpcError(msg.id, -32002, "Too many requests from this token. Wait a few minutes and try again.", 429);
++  }
++
++  switch (msg.method) {
++    case "initialize": {
++      const requested = msg.params?.protocolVersion;
++      const protocolVersion = KNOWN_PROTOCOL_VERSIONS.includes(requested) ? requested : DEFAULT_PROTOCOL_VERSION;
++      return rpcResult(msg.id, {
++        protocolVersion,
++        capabilities: { tools: { listChanged: false } },
++        serverInfo: { name: "tasketra", version: "1.0.0" },
++        instructions:
++          "Tasketra project data for the connected account. This connection is read-only: use the tools to answer questions about the user's projects, tasks, decisions, and risks. Never invent a status, date, or number that a tool did not return.",
++      });
++    }
++    case "ping":
++      return rpcResult(msg.id, {});
++    case "tools/list":
++      return rpcResult(msg.id, { tools: TOOLS });
++    case "tools/call": {
++      const name = msg.params?.name;
++      if (typeof name !== "string") return rpcError(msg.id, -32602, "tools/call needs a tool name.");
++      try {
++        const data = await callTool(database, auth.userId, name, msg.params?.arguments ?? {});
++        return rpcResult(msg.id, { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] });
++      } catch (err) {
++        if (err instanceof McpToolError) {
++          return rpcResult(msg.id, { content: [{ type: "text", text: err.message }], isError: true });
++        }
++        throw err;
++      }
++    }
++    default:
++      return rpcError(msg.id, -32601, `Method not found: ${msg.method}`);
++  }
++});
++
++export const config: Config = { path: "/api/mcp" };
+--- a/netlify/functions/__tests__/api-tokens.integration.test.ts
++++ b/netlify/functions/__tests__/api-tokens.integration.test.ts
+@@ -0,0 +1,69 @@
++import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
++import { setupTestDb, teardownTestDb, resetTestDb } from "../../lib/__tests__/testDb.ts";
++import { createTestUser, asUser, jsonBody } from "./fixtures.ts";
++import apiTokens from "../api-tokens.mts";
++
++const U = "https://tasketra.com/api/api-tokens";
++
++describe("api tokens", () => {
++  beforeAll(async () => { await setupTestDb(); }, 30000);
++  afterAll(async () => { await teardownTestDb(); });
++  beforeEach(async () => { await resetTestDb(); });
++
++  it("rejects unauthenticated requests", async () => {
++    const res = await apiTokens(new Request(U, { method: "GET" }));
++    expect(res.status).toBe(401);
++  });
++
++  it("non-founding members can list (empty) but cannot create", async () => {
++    const user = await createTestUser("tok-plain@example.com");
++    const g = await apiTokens(asUser(user, { method: "GET", url: U }));
++    expect(g.status).toBe(200);
++    const body = await jsonBody<any>(g);
++    expect(body.founding).toBe(false);
++    expect(body.tokens).toEqual([]);
++    const p = await apiTokens(asUser(user, { method: "POST", url: U, body: { name: "My Claude", scope: "read" } }));
++    expect(p.status).toBe(403);
++  });
++
++  it("founding member creates a token; the raw value appears once and never in the list", async () => {
++    const user = await createTestUser("tok-founder@example.com", { foundingMember: true });
++    const p = await apiTokens(asUser(user, { method: "POST", url: U, body: { name: "My Claude", scope: "read" } }));
++    expect(p.status).toBe(201);
++    const created = await jsonBody<any>(p);
++    expect(created.raw.startsWith("tk_")).toBe(true);
++    expect(created.token.name).toBe("My Claude");
++    expect(created.token.scope).toBe("read");
++
++    const g = await apiTokens(asUser(user, { method: "GET", url: U }));
++    const body = await jsonBody<any>(g);
++    expect(body.founding).toBe(true);
++    expect(body.tokens).toHaveLength(1);
++    expect(body.tokens[0].token_prefix).toBe(created.raw.slice(0, 11));
++    expect(JSON.stringify(body)).not.toContain(created.raw);
++  });
++
++  it("validates name and scope", async () => {
++    const user = await createTestUser("tok-valid@example.com", { foundingMember: true });
++    expect((await apiTokens(asUser(user, { method: "POST", url: U, body: { name: "", scope: "read" } }))).status).toBe(400);
++    expect((await apiTokens(asUser(user, { method: "POST", url: U, body: { name: "X", scope: "admin" } }))).status).toBe(400);
++    expect((await apiTokens(asUser(user, { method: "POST", url: U, body: { name: "X", scope: "write" } }))).status).toBe(201);
++  });
++
++  it("revoke removes the token from the list and cannot be repeated or done by someone else", async () => {
++    const user = await createTestUser("tok-revoke@example.com", { foundingMember: true });
++    const other = await createTestUser("tok-other@example.com", { foundingMember: true });
++    const p = await apiTokens(asUser(user, { method: "POST", url: U, body: { name: "Temp", scope: "read" } }));
++    const { token } = await jsonBody<any>(p);
++
++    const byOther = await apiTokens(asUser(other, { method: "DELETE", url: `${U}?id=${token.id}` }));
++    expect(byOther.status).toBe(404);
++
++    const del = await apiTokens(asUser(user, { method: "DELETE", url: `${U}?id=${token.id}` }));
++    expect(del.status).toBe(200);
++    const g = await apiTokens(asUser(user, { method: "GET", url: U }));
++    expect((await jsonBody<any>(g)).tokens).toEqual([]);
++    const again = await apiTokens(asUser(user, { method: "DELETE", url: `${U}?id=${token.id}` }));
++    expect(again.status).toBe(404);
++  });
++});
+--- a/netlify/functions/__tests__/mcp.integration.test.ts
++++ b/netlify/functions/__tests__/mcp.integration.test.ts
+@@ -0,0 +1,164 @@
++import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
++import { setupTestDb, teardownTestDb, resetTestDb } from "../../lib/__tests__/testDb.ts";
++import { createTestUser, createTestProject, jsonBody } from "./fixtures.ts";
++import { createApiToken, revokeApiToken } from "../../lib/apiTokens.ts";
++import { db } from "../../lib/db.ts";
++import mcp from "../mcp.mts";
++
++const U = "https://tasketra.com/api/mcp";
++
++function rpc(raw: string | null, body: unknown, id: unknown = 1) {
++  const headers: Record<string, string> = { "content-type": "application/json" };
++  if (raw) headers.authorization = `Bearer ${raw}`;
++  return mcp(
++    new Request(U, {
++      method: "POST",
++      headers,
++      body: JSON.stringify(typeof body === "object" && body !== null && "method" in (body as any) ? { jsonrpc: "2.0", id, ...(body as any) } : body),
++    })
++  );
++}
++
++async function callTool(raw: string, name: string, args: Record<string, unknown> = {}) {
++  const res = await rpc(raw, { method: "tools/call", params: { name, arguments: args } });
++  expect(res.status).toBe(200);
++  const body = await jsonBody<any>(res);
++  return body.result;
++}
++
++function toolJson(result: any) {
++  return JSON.parse(result.content[0].text);
++}
++
++async function seedWorld() {
++  const owner = await createTestUser("mcp-owner@example.com", { foundingMember: true });
++  const project = await createTestProject(owner.id, "Portal Launch");
++  const database = db();
++  await database.sql`
++    INSERT INTO tasks (project_id, title, status, due_date, owner_name)
++    VALUES (${project.id}, 'Overdue thing', 'not_started', '2020-01-01', 'Sam'),
++           (${project.id}, 'Done thing', 'done', NULL, 'Sam'),
++           (${project.id}, 'Future thing', 'not_started', '2999-01-01', NULL)
++  `;
++  await database.sql`
++    INSERT INTO decision_requests (project_id, title, context, deadline, status, options, public_token)
++    VALUES (${project.id}, 'Approve the charter?', 'We need a call', '2026-12-04', 'open', '[]'::jsonb, 'tok-mcp-1'),
++           (${project.id}, 'Old call', NULL, NULL, 'resolved', '[]'::jsonb, 'tok-mcp-2')
++  `;
++  await database.sql`
++    INSERT INTO risks (project_id, title, description, probability, impact, probability_score, impact_score, mitigation, owner_name, status)
++    VALUES (${project.id}, 'Vendor slips', 'They are late', 'high', 'high', 4, 5, 'Plan B', 'Sam', 'open')
++  `;
++  const { raw } = await createApiToken(database, owner.id, "Test token", "read");
++  return { owner, project, raw };
++}
++
++describe("mcp server", () => {
++  beforeAll(async () => { await setupTestDb(); }, 30000);
++  afterAll(async () => { await teardownTestDb(); });
++  beforeEach(async () => { await resetTestDb(); });
++
++  it("rejects missing and unknown tokens", async () => {
++    expect((await rpc(null, { method: "tools/list" })).status).toBe(401);
++    expect((await rpc("tk_notarealtoken1234567890abcdef", { method: "tools/list" })).status).toBe(401);
++  });
++
++  it("initialize negotiates the protocol version and names the server", async () => {
++    const { raw } = await seedWorld();
++    const res = await rpc(raw, { method: "initialize", params: { protocolVersion: "2025-03-26" } });
++    expect(res.status).toBe(200);
++    const body = await jsonBody<any>(res);
++    expect(body.result.protocolVersion).toBe("2025-03-26");
++    expect(body.result.serverInfo.name).toBe("tasketra");
++  });
++
++  it("tools/list returns the seven read tools", async () => {
++    const { raw } = await seedWorld();
++    const res = await rpc(raw, { method: "tools/list" });
++    const body = await jsonBody<any>(res);
++    const names = body.result.tools.map((t: any) => t.name).sort();
++    expect(names).toEqual(
++      ["get_decisions_waiting", "get_project_overview", "get_today", "get_weekly_sync", "list_projects", "list_risks", "list_tasks"].sort()
++    );
++  });
++
++  it("list_projects and list_tasks read the seeded world", async () => {
++    const { project, raw } = await seedWorld();
++    const projects = toolJson(await callTool(raw, "list_projects"));
++    expect(projects.projects).toHaveLength(1);
++    expect(projects.projects[0].name).toBe("Portal Launch");
++    expect(projects.projects[0].open_decisions).toBe(1);
++    expect(projects.projects[0].overdue_tasks).toBe(1);
++
++    const open = toolJson(await callTool(raw, "list_tasks", { project_id: project.id }));
++    expect(open.tasks.map((t: any) => t.title).sort()).toEqual(["Future thing", "Overdue thing"]);
++    expect(open.tasks.find((t: any) => t.title === "Overdue thing").overdue).toBe(true);
++
++    const overdueOnly = toolJson(await callTool(raw, "list_tasks", { project_id: project.id, overdue_only: true }));
++    expect(overdueOnly.tasks).toHaveLength(1);
++  });
++
++  it("get_decisions_waiting returns open decisions only, across projects", async () => {
++    const { raw } = await seedWorld();
++    const out = toolJson(await callTool(raw, "get_decisions_waiting"));
++    expect(out.decisions).toHaveLength(1);
++    expect(out.decisions[0].title).toBe("Approve the charter?");
++    expect(out.decisions[0].needed_by).toBe("2026-12-04");
++    expect(out.decisions[0].project).toBe("Portal Launch");
++  });
++
++  it("get_project_overview, list_risks, get_weekly_sync and get_today answer from the same data", async () => {
++    const { project, raw } = await seedWorld();
++    const overview = toolJson(await callTool(raw, "get_project_overview", { project_id: project.id }));
++    expect(overview.project.name).toBe("Portal Launch");
++    expect(overview.completion.total).toBe(3);
++    expect(overview.completion.done).toBe(1);
++    expect(overview.decisions).toHaveLength(1);
++    expect(overview.risks[0].title).toBe("Vendor slips");
++
++    const risks = toolJson(await callTool(raw, "list_risks", { project_id: project.id }));
++    expect(risks.risks).toHaveLength(1);
++    expect(risks.risks[0].exposure_score).toBe(20);
++
++    const sync = toolJson(await callTool(raw, "get_weekly_sync", { project_id: project.id }));
++    expect(sync.open_asks).toHaveLength(1);
++    expect(sync.overdue_tasks).toHaveLength(1);
++
++    const today = toolJson(await callTool(raw, "get_today"));
++    expect(today.overdue.map((t: any) => t.title)).toEqual(["Overdue thing"]);
++    expect(today.open_total).toBe(2);
++  });
++
++  it("a token cannot see another user's project", async () => {
++    const { project } = await seedWorld();
++    const stranger = await createTestUser("mcp-stranger@example.com", { foundingMember: true });
++    const { raw: strangerRaw } = await createApiToken(db(), stranger.id, "Stranger", "read");
++    const result = await callTool(strangerRaw, "get_project_overview", { project_id: project.id });
++    expect(result.isError).toBe(true);
++    const projects = toolJson(await callTool(strangerRaw, "list_projects"));
++    expect(projects.projects).toEqual([]);
++  });
++
++  it("a revoked token stops working", async () => {
++    const { owner, raw } = await seedWorld();
++    const database = db();
++    const [row] = await database.sql`SELECT id FROM api_tokens WHERE user_id = ${owner.id}`;
++    await revokeApiToken(database, owner.id, row.id);
++    expect((await rpc(raw, { method: "tools/list" })).status).toBe(401);
++  });
++
++  it("notifications get a 202 with no body, unknown methods a JSON-RPC error", async () => {
++    const { raw } = await seedWorld();
++    const note = await mcp(
++      new Request(U, {
++        method: "POST",
++        headers: { "content-type": "application/json", authorization: `Bearer ${raw}` },
++        body: JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }),
++      })
++    );
++    expect(note.status).toBe(202);
++    const res = await rpc(raw, { method: "resources/list" });
++    const body = await jsonBody<any>(res);
++    expect(body.error.code).toBe(-32601);
++  });
++});
+--- a/src/components/ConnectAiCard.tsx
++++ b/src/components/ConnectAiCard.tsx
+@@ -0,0 +1,270 @@
++import { useEffect, useState } from "react";
++import { api, type ApiToken } from "../lib/api";
++import { SoftCard } from "./ui";
++
++// v169: "Connect your AI" — personal API tokens for the MCP server. A
++// founding member creates a token here, pastes it into their own AI client
++// once, and that AI can read their projects over /api/mcp. The raw token is
++// shown exactly once (only its hash is stored server-side), so the reveal
++// panel below is the one and only chance to copy it.
++
++const MCP_URL = "https://app.tasketra.com/api/mcp";
++
++function formatWhen(v: string | null): string {
++  if (!v) return "Never";
++  const d = new Date(v);
++  return Number.isNaN(d.getTime()) ? "Never" : d.toLocaleString();
++}
++
++export function ConnectAiCard() {
++  const [loading, setLoading] = useState(true);
++  const [founding, setFounding] = useState(false);
++  const [tokens, setTokens] = useState<ApiToken[]>([]);
++  const [loadError, setLoadError] = useState("");
++
++  const [tab, setTab] = useState<"claude" | "chatgpt">("claude");
++  const [endpointCopied, setEndpointCopied] = useState(false);
++
++  const [name, setName] = useState("");
++  const [scope, setScope] = useState<"read" | "write">("read");
++  const [creating, setCreating] = useState(false);
++  const [createError, setCreateError] = useState("");
++  const [revealed, setRevealed] = useState<string | null>(null);
++  const [revealCopied, setRevealCopied] = useState(false);
++
++  const [confirmRevokeId, setConfirmRevokeId] = useState<string | null>(null);
++  const [revokingId, setRevokingId] = useState<string | null>(null);
++
++  async function load() {
++    try {
++      const res = await api.getApiTokens();
++      setTokens(res.tokens);
++      setFounding(res.founding);
++      setLoadError("");
++    } catch {
++      setLoadError("Couldn't load your tokens. Refresh the page to try again.");
++    } finally {
++      setLoading(false);
++    }
++  }
++
++  useEffect(() => {
++    load();
++  }, []);
++
++  function copyText(text: string, done: (v: boolean) => void) {
++    navigator.clipboard.writeText(text).then(() => {
++      done(true);
++      setTimeout(() => done(false), 2000);
++    });
++  }
++
++  async function createToken(e: React.FormEvent) {
++    e.preventDefault();
++    setCreateError("");
++    setCreating(true);
++    try {
++      const res = await api.createApiToken(name.trim(), scope);
++      setRevealed(res.raw);
++      setRevealCopied(false);
++      setName("");
++      setScope("read");
++      await load();
++    } catch (err) {
++      setCreateError(err instanceof Error ? err.message : "Couldn't create that token.");
++    } finally {
++      setCreating(false);
++    }
++  }
++
++  async function revoke(id: string) {
++    setRevokingId(id);
++    try {
++      await api.revokeApiToken(id);
++      setConfirmRevokeId(null);
++      await load();
++    } catch {
++      setCreateError("Couldn't revoke that token. Try again.");
++    } finally {
++      setRevokingId(null);
++    }
++  }
++
++  return (
++    <SoftCard title="Connect your AI" className="ui-narrow billing-card">
++      <p className="muted" style={{ marginTop: 0 }}>
++        Connect Claude, ChatGPT, or another AI assistant to your projects. It can read your project
++        status, tasks, decisions that are waiting, and risks, and answer questions like "what is
++        waiting on me?" This first version is read-only: your AI can look, never change anything.
++      </p>
++
++      <label htmlFor="f-connectai-endpoint">Server address</label>
++      <div className="inline-form">
++        <input
++          id="f-connectai-endpoint"
++          type="text"
++          readOnly
++          value={MCP_URL}
++          onFocus={(e) => e.target.select()}
++          style={{ flex: 1, minWidth: 260 }}
++        />
++        <button type="button" className="btn btn-primary" onClick={() => copyText(MCP_URL, setEndpointCopied)}>
++          {endpointCopied ? "Copied!" : "Copy"}
++        </button>
++      </div>
++
++      <div className="view-toggle" role="group" aria-label="Setup instructions" style={{ marginTop: 14 }}>
++        <button type="button" className={tab === "claude" ? "btn btn-primary" : "btn btn-ghost"} onClick={() => setTab("claude")}>
++          Claude
++        </button>
++        <button type="button" className={tab === "chatgpt" ? "btn btn-primary" : "btn btn-ghost"} onClick={() => setTab("chatgpt")}>
++          ChatGPT
++        </button>
++      </div>
++      {tab === "claude" ? (
++        <ol className="muted" style={{ marginTop: 10, paddingLeft: 20, lineHeight: 1.7 }}>
++          <li>Create a token below and copy it (you will only see it once).</li>
++          <li>In Claude Code, run: <code>claude mcp add --transport http tasketra {MCP_URL} --header "Authorization: Bearer YOUR_TOKEN"</code></li>
++          <li>In Claude Desktop, add the same server address and Authorization header in Settings, under Developer / MCP servers.</li>
++          <li>Ask Claude about your projects, for example "What decisions are waiting on me in Tasketra?"</li>
++        </ol>
++      ) : (
++        <ol className="muted" style={{ marginTop: 10, paddingLeft: 20, lineHeight: 1.7 }}>
++          <li>Create a token below and copy it (you will only see it once).</li>
++          <li>In ChatGPT, open Settings, then Apps and connectors, and turn on Developer mode under Advanced settings.</li>
++          <li>Create a new app, choose MCP, paste the server address above, and when it asks how the app signs in, use the header option with <code>Authorization: Bearer YOUR_TOKEN</code>.</li>
++          <li>Ask ChatGPT about your projects, for example "What is overdue in Tasketra?"</li>
++        </ol>
++      )}
++
++      {loading ? (
++        <p className="muted">Loading your tokens...</p>
++      ) : loadError ? (
++        <div className="form-error">{loadError}</div>
++      ) : !founding ? (
++        <p className="muted" style={{ marginTop: 14 }}>
++          Connecting your AI is rolling out to founding members first. When it opens to everyone,
++          this is where your tokens will live.
++        </p>
++      ) : (
++        <>
++          {tokens.length > 0 && (
++            <div style={{ marginTop: 14, display: "grid", gap: 10 }}>
++              {tokens.map((t) => (
++                <div
++                  key={t.id}
++                  style={{
++                    display: "flex",
++                    alignItems: "center",
++                    gap: 12,
++                    border: "1px solid var(--border)",
++                    borderRadius: 10,
++                    padding: "10px 12px",
++                  }}
++                >
++                  <div style={{ flex: 1, minWidth: 0 }}>
++                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
++                      <strong>{t.name}</strong>
++                      <span className={t.scope === "write" ? "pill pill-green" : "pill pill-neutral"}>{t.scope === "write" ? "Read + write" : "Read only"}</span>
++                      <code className="muted">{t.token_prefix}…</code>
++                    </div>
++                    <div className="muted" style={{ fontSize: 13, marginTop: 2 }}>
++                      Created {formatWhen(t.created_at)} · Last used {formatWhen(t.last_used_at)}
++                    </div>
++                  </div>
++                  {confirmRevokeId === t.id ? (
++                    <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
++                      <button
++                        type="button"
++                        className="btn-link btn-link-danger"
++                        disabled={revokingId === t.id}
++                        onClick={() => revoke(t.id)}
++                      >
++                        {revokingId === t.id ? "Revoking..." : "Confirm revoke"}
++                      </button>
++                      <button type="button" className="btn-link" onClick={() => setConfirmRevokeId(null)}>
++                        Keep it
++                      </button>
++                    </span>
++                  ) : (
++                    <button type="button" className="btn-link btn-link-danger" onClick={() => setConfirmRevokeId(t.id)}>
++                      Revoke
++                    </button>
++                  )}
++                </div>
++              ))}
++            </div>
++          )}
++
++          {revealed && (
++            <div
++              style={{
++                marginTop: 14,
++                background: "var(--tint)",
++                border: "1px solid var(--border)",
++                borderRadius: 10,
++                padding: "12px 14px",
++              }}
++            >
++              <strong>Copy your token now.</strong>
++              <p className="muted" style={{ margin: "6px 0 10px" }}>
++                This is the only time it is shown. If you lose it, revoke it and create a new one.
++              </p>
++              <div className="inline-form">
++                <input
++                  aria-label="Your new API token"
++                  type="text"
++                  readOnly
++                  value={revealed}
++                  onFocus={(e) => e.target.select()}
++                  style={{ flex: 1, minWidth: 260, fontFamily: "monospace" }}
++                />
++                <button type="button" className="btn btn-primary" onClick={() => copyText(revealed, setRevealCopied)}>
++                  {revealCopied ? "Copied!" : "Copy token"}
++                </button>
++                <button type="button" className="btn btn-ghost" onClick={() => setRevealed(null)}>
++                  Done
++                </button>
++              </div>
++            </div>
++          )}
++
++          <form onSubmit={createToken} style={{ marginTop: 16 }}>
++            <label htmlFor="f-connectai-name">New token name</label>
++            <input
++              id="f-connectai-name"
++              type="text"
++              value={name}
++              onChange={(e) => setName(e.target.value)}
++              placeholder="e.g. My Claude"
++              maxLength={60}
++              required
++            />
++            <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
++              <label style={{ display: "flex", gap: 10, alignItems: "flex-start", cursor: "pointer" }}>
++                <input type="radio" name="token-scope" checked={scope === "read"} onChange={() => setScope("read")} style={{ marginTop: 3 }} />
++                <span>
++                  <strong>Read only</strong>
++                  <span className="muted" style={{ display: "block" }}>Your AI can read your projects. It cannot change anything.</span>
++                </span>
++              </label>
++              <label style={{ display: "flex", gap: 10, alignItems: "flex-start", cursor: "pointer" }}>
++                <input type="radio" name="token-scope" checked={scope === "write"} onChange={() => setScope("write")} style={{ marginTop: 3 }} />
++                <span>
++                  <strong>Read + write</strong>
++                  <span className="muted" style={{ display: "block" }}>
++                    Takes effect when write tools arrive in the next update. Until then this token is read-only too.
++                  </span>
++                </span>
++              </label>
++            </div>
++            {createError && <div className="form-error">{createError}</div>}
++            <button type="submit" className="btn btn-primary" disabled={creating} style={{ marginTop: 10 }}>
++              {creating ? "Creating..." : "Create token"}
++            </button>
++          </form>
++        </>
++      )}
++    </SoftCard>
++  );
++}

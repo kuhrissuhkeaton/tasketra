@@ -136,6 +136,16 @@ export type User = {
   tour_completed_at?: string | null;
 };
 
+export type ApiToken = {
+  id: string;
+  name: string;
+  token_prefix: string;
+  scope: "read" | "write";
+  created_at: string;
+  last_used_at: string | null;
+  revoked_at: string | null;
+};
+
 export type ReferralInfo = {
   link: string;
   totalReferred: number;
@@ -1759,6 +1769,10 @@ export const api = {
   avatarUrl: (userId: string) => `${BASE}/avatar?userId=${userId}`,
 
   getReferrals: () => request<ReferralInfo>("/referrals"),
+  getApiTokens: () => request<{ tokens: ApiToken[]; founding: boolean }>("/api-tokens"),
+  createApiToken: (name: string, scope: "read" | "write") =>
+    request<{ token: ApiToken; raw: string }>("/api-tokens", { method: "POST", body: JSON.stringify({ name, scope }) }),
+  revokeApiToken: (id: string) => request<{ ok: true }>(`/api-tokens?id=${id}`, { method: "DELETE" }),
   getMyActivity: () => request<{ items: ActivityItem[] }>("/my-activity"),
   deleteMyAccount: (password: string, confirmEmail: string) =>
     request<{ ok: true }>("/account-delete", { method: "POST", body: JSON.stringify({ password, confirmEmail }) }),

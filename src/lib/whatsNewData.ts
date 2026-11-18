@@ -10,6 +10,12 @@ export type ChangeEntry = { version: string; date: string; title: string; body: 
 // they can do.
 export const CHANGES: ChangeEntry[] = [
   {
+    version: "v169",
+    date: "November 2026",
+    title: "Your AI can read your projects now: connect Claude or ChatGPT in Account.",
+    body: "Founding members can now connect their own AI assistant to Tasketra. Create a personal token in the new Connect your AI section of Account, paste it into Claude or ChatGPT once, and your AI can answer questions about your projects: what is overdue, which decisions are waiting and who owns them, the top risks, and the full picture for any project. This first version is read-only, your AI can look but never change anything, and you can revoke a token at any time. Write access arrives in a later update, and only for tokens you create as read + write.",
+  },
+  {
     version: "v168",
     date: "November 2026",
     title: "Send your sponsor a live snapshot link instead of building a status deck.",
