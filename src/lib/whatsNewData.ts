@@ -10,6 +10,12 @@ export type ChangeEntry = { version: string; date: string; title: string; body: 
 // they can do.
 export const CHANGES: ChangeEntry[] = [
   {
+    version: "v168",
+    date: "November 2026",
+    title: "Send your sponsor a live snapshot link instead of building a status deck.",
+    body: "Every project now has a client snapshot: a clean, read-only page with the status from your latest check-in, gauges for how much of the work, time and budget is used, the work broken down by phase, the milestones, the top three things you are watching in plain words, and any open decisions your sponsor owns with the date you need them by. Open it from the top of any project's Overview, turn on the link, and send it. Anyone with the link sees the snapshot, always current, no account needed. You can stop sharing or make a fresh link at any time, and nothing else about the project is ever included.",
+  },
+  {
     version: "v167",
     date: "November 2026",
     title: "Weekly sync is a ritual now: stats up top, asks as cards, and wins you can edit line by line.",

@@ -120,4 +120,72 @@ describe("share links", () => {
     expect((await view("nope")).status).toBe(404);
     expect((await sharePublic(new Request(P))).status).toBe(400);
   });
+
+  it("snapshot payload carries the stated status, gauges, milestones, plain risks and sponsor decisions only", async () => {
+    const owner = await createTestUser("sl-snap@example.com");
+    const project = await createTestProject(owner.id, "Summit");
+    const database = db();
+    await database.sql`UPDATE projects SET budget_at_completion = 1000 WHERE id = ${project.id}`;
+    await database.sql`INSERT INTO cost_entries (project_id, description, amount) VALUES (${project.id}, 'Deposit', 250)`;
+    await database.sql`
+      INSERT INTO tasks (project_id, title, status) VALUES
+        (${project.id}, '1.1 Kickoff', 'done'),
+        (${project.id}, '1.2 Venue', 'in_progress'),
+        (${project.id}, '2.1 Catering', 'not_started')
+    `;
+    await database.sql`
+      INSERT INTO roadmap_items (project_id, type, title, start_date, end_date, status, created_by) VALUES
+        (${project.id}, 'phase', 'Planning', '2026-10-01', '2027-02-27', 'in_progress', ${owner.id}),
+        (${project.id}, 'milestone', 'Venue booked', NULL, '2026-12-01', 'not_started', ${owner.id})
+    `;
+    await database.sql`INSERT INTO status_updates (project_id, body, health) VALUES (${project.id}, 'Venue shortlist is down to two.', 'at_risk')`;
+    await addRisk(project.id, "Big visible risk", "open");
+    await addRisk(project.id, "Quiet resolved risk", "resolved");
+    const [sponsor] = await database.sql`
+      INSERT INTO stakeholders (project_id, name, email) VALUES (${project.id}, 'Dana Sponsor', 'dana@example.com') RETURNING id
+    `;
+    await database.sql`
+      INSERT INTO decision_requests (project_id, title, status, options, public_token, deadline, owner_stakeholder_id) VALUES
+        (${project.id}, 'Approve the catering budget', 'open', '["Yes", "No"]'::jsonb, 'tok-snap-1', '2026-11-25', ${sponsor.id}),
+        (${project.id}, 'Internal call', 'open', '["A"]'::jsonb, 'tok-snap-2', NULL, NULL),
+        (${project.id}, 'Old settled call', 'resolved', '["A"]'::jsonb, 'tok-snap-3', NULL, ${sponsor.id})
+    `;
+    const created = await shareLinks(asUser(owner, { method: "POST", url: U, body: { projectId: project.id, kind: "snapshot" } }));
+    expect(created.status).toBe(201);
+    const token = (await jsonBody<any>(created)).link.token;
+    const res = await view(token);
+    expect(res.status).toBe(200);
+    const body = await jsonBody<any>(res);
+    expect(body.kind).toBe("snapshot");
+    expect(body.project.name).toBe("Summit");
+    const snap = body.snapshot;
+    expect(snap.status.health).toBe("at_risk");
+    expect(snap.status.note).toBe("Venue shortlist is down to two.");
+    expect(snap.completion).toEqual({ done: 1, total: 3, percent: 33 });
+    expect(snap.budget).toEqual({ spent: 250, total: 1000, percent: 25 });
+    expect(snap.time.start).toBe("2026-10-01");
+    expect(snap.time.end).toBe("2027-02-27");
+    expect(snap.phases.map((g: any) => g.label)).toEqual(["Phase 1", "Phase 2"]);
+    expect(snap.milestones).toEqual([{ title: "Venue booked", date: "2026-12-01", done: false }]);
+    expect(snap.risks.map((r: any) => r.title)).toEqual(["Big visible risk"]);
+    expect(Object.keys(snap.risks[0]).sort()).toEqual(["mitigation", "title"]);
+    expect(snap.decisions).toEqual([{ title: "Approve the catering budget", deadline: "2026-11-25", owner: "Dana Sponsor" }]);
+    const raw = JSON.stringify(body);
+    expect(raw).not.toContain("secret detail");
+    expect(raw).not.toContain("dana@example.com");
+    expect(raw).not.toContain(owner.email);
+    expect(raw).not.toContain("tok-snap");
+    expect(raw).not.toContain(project.id);
+  });
+
+  it("snapshot link stops working when sharing stops", async () => {
+    const owner = await createTestUser("sl-snapstop@example.com");
+    const project = await createTestProject(owner.id);
+    const created = await shareLinks(asUser(owner, { method: "POST", url: U, body: { projectId: project.id, kind: "snapshot" } }));
+    const token = (await jsonBody<any>(created)).link.token;
+    expect((await view(token)).status).toBe(200);
+    const del = await shareLinks(asUser(owner, { method: "DELETE", url: `${U}?projectId=${project.id}&kind=snapshot` }));
+    expect(del.status).toBe(200);
+    expect((await view(token)).status).toBe(404);
+  });
 });

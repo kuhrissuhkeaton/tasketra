@@ -486,6 +486,11 @@ function HomeTab({ projectId, isOwner, purpose, stage, size, showAll, onShowAllT
           gauges, work breakdown and budget picture above the day-to-day
           Today/Feed content, which is unchanged below. */}
       <ProjectCockpit projectId={projectId} onOpenTab={onOpenTab} />
+      <p className="muted" style={{ margin: "0 0 16px" }}>
+        Sharing this project with a sponsor?{" "}
+        <Link to={`/app/projects/${projectId}/print/snapshot`}>Open the client snapshot</Link>
+        {" "}— a read-only page with the status you have stated, the gauges and what needs them. Share it by link from there.
+      </p>
       <div className="view-toggle">
         <button
           className={view === "today" ? "btn btn-primary" : "btn btn-ghost"}

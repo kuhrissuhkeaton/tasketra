@@ -410,7 +410,7 @@ export type TemplatePlanSummary = {
   totalToAdd: number;
 };
 
-export type ShareKind = "risk-matrix" | "raci";
+export type ShareKind = "risk-matrix" | "raci" | "snapshot";
 
 export type RaciRow = { id: string; type: string; title: string; start_date: string | null; end_date: string | null; phaseId?: string | null };
 export type RaciPerson = { key: string; kind?: "team" | "stakeholder"; name: string; role: string | null };
@@ -418,7 +418,25 @@ export type RaciData = { rows: RaciRow[]; people: RaciPerson[]; assignments: Rac
 
 export type SharedDocument =
   | { kind: "risk-matrix"; project: { name: string }; risks: SharedRisk[] }
-  | { kind: "raci"; project: { name: string }; rows: RaciRow[]; people: RaciPerson[]; assignments: RaciAssignment[] };
+  | { kind: "raci"; project: { name: string }; rows: RaciRow[]; people: RaciPerson[]; assignments: RaciAssignment[] }
+  | { kind: "snapshot"; project: { name: string }; snapshot: SnapshotData };
+
+/** The Client Snapshot payload (v168): the sponsor view of one project.
+ *  Built server-side for the public page (netlify/lib/snapshotData.ts)
+ *  and assembled from the regular APIs by the signed-in preview page.
+ *  Only what the snapshot prints — stated status, never a computed
+ *  verdict; no ids, emails or internal registers. */
+export type SnapshotData = {
+  status: { health: "on_track" | "at_risk" | "off_track" | null; note: string | null; at: string } | null;
+  completion: { done: number; total: number; percent: number } | null;
+  time: { percent: number; start: string; end: string } | null;
+  budget: { spent: number; total: number; percent: number } | null;
+  phases: { label: string; total: number; done: number }[];
+  phasesByStatus: boolean;
+  milestones: { title: string; date: string; done: boolean }[];
+  risks: { title: string; mitigation: string | null }[];
+  decisions: { title: string; deadline: string | null; owner: string }[];
+};
 
 export type SharedRisk = {
   title: string;

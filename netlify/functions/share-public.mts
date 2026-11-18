@@ -3,6 +3,7 @@ import { db } from "../lib/db.ts";
 import { json } from "../lib/http.ts";
 import { withSentry } from "../lib/sentry.ts";
 import { loadRaci } from "../lib/raciData.ts";
+import { buildSnapshot } from "../lib/snapshotData.ts";
 import { checkRateLimit, getClientIp } from "../lib/rate-limit.ts";
 
 // Public, unauthenticated, read-only. Resolves an unguessable token to ONE
@@ -43,6 +44,14 @@ export default withSentry(async (req: Request) => {
         created_at DESC
     `;
     return json({ kind: link.kind, project: { name: link.name }, risks }, { headers: HEADERS });
+  }
+  if (link.kind === "snapshot") {
+    // Client Snapshot (v168): the sponsor view. Only the fields the
+    // snapshot page prints — stated status, the three gauges, work by
+    // phase, milestones, top risks in plain words, and the open
+    // decisions a stakeholder owns. Nothing else leaves the app.
+    const snapshot = await buildSnapshot(database, link.project_id);
+    return json({ kind: link.kind, project: { name: link.name }, snapshot }, { headers: HEADERS });
   }
   if (link.kind === "raci") {
     // Phases, milestones and any tasks added as rows, people (display name or the part of the email

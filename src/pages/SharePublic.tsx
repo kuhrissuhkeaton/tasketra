@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import { api, type SharedDocument } from "../lib/api";
 import { Wordmark } from "../components/Wordmark";
 import { RiskDocument } from "../components/RiskDocument";
+import { SnapshotDocument } from "../components/SnapshotDocument";
 import { RaciDocument } from "../components/RaciDocument";
 import { useDocumentTitle } from "../lib/documentTitle";
 import { fmtLongDate } from "../lib/format";
@@ -14,7 +15,7 @@ export default function SharePublic() {
   const [data, setData] = useState<SharedDocument | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useDocumentTitle(data ? `${data.kind === "raci" ? "RACI matrix" : "Risk register"} | ${data.project.name}` : "Shared document");
+  useDocumentTitle(data ? `${data.kind === "raci" ? "RACI matrix" : data.kind === "snapshot" ? "Project snapshot" : "Risk register"} | ${data.project.name}` : "Shared document");
   useEffect(() => {
     const meta = document.createElement("meta");
     meta.name = "robots";
@@ -46,7 +47,9 @@ export default function SharePublic() {
           <h1 className="sr-only">Shared document</h1><div className="skel skel-text" style={{ width: "45%" }} /><div className="skel skel-text" style={{ width: "80%" }} /></div>
       ) : (
         <>
-          {data.kind === "raci" ? (
+          {data.kind === "snapshot" ? (
+            <SnapshotDocument projectName={data.project.name} snapshot={data.snapshot} dateLabel={dateLabel} />
+          ) : data.kind === "raci" ? (
             <RaciDocument projectName={data.project.name} rows={data.rows} people={data.people} assignments={data.assignments} dateLabel={dateLabel} />
           ) : (
             <RiskDocument projectName={data.project.name} risks={data.risks} dateLabel={dateLabel} />

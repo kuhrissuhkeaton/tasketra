@@ -2036,6 +2036,22 @@ a.dash-list-title:hover { text-decoration: underline; }
 .risk-doc-table td { padding: 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
 .risk-doc-table tr { break-inside: avoid; }
 .risk-doc-title { font-weight: 600; }
+/* Client Snapshot (v168): the sponsor document. Sections follow the
+   risk-doc rhythm; the milestone timeline is the one new shape. */
+.snapshot-doc h1 { margin: 2px 0 4px; }
+.snapshot-doc h2 { font-size: 16px; margin: 24px 0 10px; }
+.snapshot-status { border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); padding: 16px 18px; margin-bottom: 20px; }
+.snapshot-status-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.snapshot-status-head h2 { margin: 0; }
+.snapshot-note { margin: 10px 0 8px; white-space: pre-wrap; }
+.snapshot-milestones { list-style: none; margin: 0; padding: 0; }
+.snapshot-milestones li { position: relative; display: flex; align-items: baseline; gap: 10px; padding: 7px 0 7px 4px; }
+.snapshot-milestones li:not(:last-child)::before { content: ""; position: absolute; left: 9px; top: 24px; bottom: -6px; width: 2px; background: var(--border); }
+.snapshot-milestone-dot { flex: none; width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--slate); background: var(--panel); transform: translateY(1px); z-index: 1; }
+.snapshot-milestones li.is-done .snapshot-milestone-dot { background: var(--lime); border-color: var(--navy); }
+.snapshot-milestone-title { font-weight: 600; }
+.snapshot-risks, .snapshot-decisions { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.snapshot-risks li, .snapshot-decisions li { border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--panel); padding: 12px 14px; }
 @media (max-width: 700px) {
   .risk-doc .risk-matrix-chip { display: block; font-size: 11px; }
   .risk-doc-table { display: block; overflow-x: auto; }

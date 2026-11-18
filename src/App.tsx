@@ -26,6 +26,7 @@ const SharePublic = lazy(() => import("./pages/SharePublic"));
 const RaciPrint = lazy(() => import("./pages/RaciPrint"));
 const StakeholderPrint = lazy(() => import("./pages/StakeholderPrint"));
 const RiskPrint = lazy(() => import("./pages/RiskPrint"));
+const SnapshotPrint = lazy(() => import("./pages/SnapshotPrint"));
 const Resources = lazy(() => import("./pages/Resources"));
 const WhatsNew = lazy(() => import("./pages/WhatsNew"));
 const Billing = lazy(() => import("./pages/Billing"));
@@ -114,6 +115,7 @@ export default function App() {
             <Route path="/admin/support/project/:projectId" element={<AdminProtected><AdminProjectView /></AdminProtected>} />
             <Route path="/app/projects/:id" element={<Protected><ProjectHome /></Protected>} />
             <Route path="/app/projects/:id/print/risks" element={<Protected><RiskPrint /></Protected>} />
+            <Route path="/app/projects/:id/print/snapshot" element={<Protected><SnapshotPrint /></Protected>} />
             <Route path="/app/projects/:id/print/raci" element={<Protected><RaciPrint /></Protected>} />
             <Route path="/app/projects/:id/print/stakeholders" element={<Protected><StakeholderPrint /></Protected>} />
             <Route path="/s/:token" element={<SharePublic />} />
