@@ -1040,7 +1040,7 @@ a.dash-list-title:hover { text-decoration: underline; }
    zeroing the font size (the icons are fixed-size boxes), so every nav group,
    including the ones ProjectHome passes in, collapses without markup changes. */
 .sidebar { transition: width var(--ease); }
-.sidebar-bar-actions { display: flex; align-items: center; gap: 8px; }
+.sidebar-bar-actions { display: flex; align-items: center; gap: 6px; }
 /* Notification bell: same round outline as the collapse button, always visible (phone and desktop). */
 .sidebar-bell-btn {
   position: relative; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; flex-shrink: 0;
@@ -1071,7 +1071,7 @@ a.dash-list-title:hover { text-decoration: underline; }
 .notif-when { font-size: 12px; white-space: nowrap; }
 .sidebar-collapse-btn { display: none; }
 @media (min-width: 861px) {
-  .sidebar-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 24px; }
+  .sidebar-bar { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 24px; }
   .sidebar-bar .sidebar-wordmark { margin-bottom: 0; }
   .sidebar-collapse-btn {
     display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; flex-shrink: 0;

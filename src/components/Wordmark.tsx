@@ -42,14 +42,16 @@ type WordmarkProps = { size?: "sm" | "md"; className?: string; beta?: boolean; m
  * marketing landing page's own "Join the beta" framing.
  */
 export function Wordmark({ size = "md", className = "", beta = false, mark = false }: WordmarkProps) {
+  const betaPill = beta ? <span className="brand-lockup-beta">Beta</span> : null;
   return (
     <span className={`brand-lockup brand-lockup-${size}${className ? ` ${className}` : ""}`}>
-      {mark && <Logomark size={44} />}
+      {mark && <Logomark size={40} />}
       <span className="brand-lockup-text">
         <span className="brand-lockup-name-row">
           <span className="brand-lockup-name">tasketra</span>
-          {beta && <span className="brand-lockup-beta">Beta</span>}
+          {!mark && betaPill}
         </span>
+        {mark && betaPill}
       </span>
     </span>
   );
