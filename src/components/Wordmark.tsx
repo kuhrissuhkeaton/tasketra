@@ -1,8 +1,10 @@
 /**
- * Tasketra's icon glyph -- a simplified ascending mountain-and-flags motif
- * carried over from the ProjectPMP-era brand. Used only where a compact
- * square mark is needed (favicon, OG image) since the nav itself has no
- * icon at all, just text.
+ * Tasketra's icon glyph -- "the Level": a spirit level's vial with its lime
+ * bubble sitting dead center between the two marks, a project on level and
+ * on track (brand mark decided 2026-11-19; same geometry as the favicon,
+ * scaled from its 1024 viewBox). Drawn glyph-only, no tile: callers place
+ * it on the brand's dark surfaces. Used only where a compact square mark
+ * is needed since the nav itself has no icon at all, just text.
  */
 export function Logomark({ size = 28 }: { size?: number }) {
   return (
@@ -14,9 +16,10 @@ export function Logomark({ size = 28 }: { size?: number }) {
       xmlns="http://www.w3.org/2000/svg"
       aria-hidden="true"
     >
-      <path d="M20 165 L70 100 L110 135 L180 40" stroke="#F2EBD9" strokeWidth="14" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M20 165 L60 165 L110 135 L150 165 L180 165 L180 40" fill="#CFEA46" opacity="0.9" />
-      <circle cx="180" cy="40" r="14" fill="#F2EBD9" />
+      <rect x="32.8" y="77.7" width="134.4" height="44.5" rx="22.3" stroke="#F2EBD9" strokeWidth="6.25" />
+      <rect x="74" y="89.8" width="5.1" height="20.3" rx="2.5" fill="#F2EBD9" />
+      <rect x="120.9" y="89.8" width="5.1" height="20.3" rx="2.5" fill="#F2EBD9" />
+      <rect x="83.6" y="88.7" width="32.8" height="22.7" rx="11.3" fill="#CFEA46" />
     </svg>
   );
 }
