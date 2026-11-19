@@ -177,7 +177,7 @@ export function AppSidebar({ children, menuLabel = "Menu" }: { children?: ReactN
       </a>
       <div className="sidebar-bar">
         <Link to="/app" className="sidebar-wordmark">
-          <Wordmark size="sm" beta />
+          <Wordmark size="sm" beta mark />
         </Link>
         <div className="sidebar-bar-actions">
           <NotificationBell />

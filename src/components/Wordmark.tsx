@@ -3,15 +3,15 @@
  * bubble sitting dead center between the two marks, a project on level and
  * on track (brand mark decided 2026-11-19; same geometry as the favicon,
  * scaled from its 1024 viewBox). Drawn glyph-only, no tile: callers place
- * it on the brand's dark surfaces. Used only where a compact square mark
- * is needed since the nav itself has no icon at all, just text.
+ * it on the brand's dark surfaces. Used where a compact mark is needed;
+ * the sidebar wordmark lockup carries it too (Kk's call, 2026-11-19).
  */
 export function Logomark({ size = 28 }: { size?: number }) {
   return (
     <svg
       width={size}
-      height={size}
-      viewBox="0 0 200 200"
+      height={Math.round((size * 58) / 148)}
+      viewBox="26 71 148 58"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       aria-hidden="true"
@@ -24,7 +24,7 @@ export function Logomark({ size = 28 }: { size?: number }) {
   );
 }
 
-type WordmarkProps = { size?: "sm" | "md"; className?: string; beta?: boolean };
+type WordmarkProps = { size?: "sm" | "md"; className?: string; beta?: boolean; mark?: boolean };
 
 /**
  * The Tasketra wordmark -- the bold serif "tasketra" name, no caption pill
@@ -32,17 +32,19 @@ type WordmarkProps = { size?: "sm" | "md"; className?: string; beta?: boolean };
  * "ProjectPMP", later "The Working PM") above the name, but now that
  * Tasketra is the umbrella brand itself, there's no separate parent name
  * to display -- a caption reading "Tasketra" above a name reading
- * "tasketra" would just be redundant. No icon glyph here either, keeping
- * the nav text-only.
+ * "tasketra" would just be redundant. The `mark` prop adds the Level glyph
+ * beside the name; only the sidebar opts in (Kk's call, 2026-11-19), every
+ * other surface stays text-only.
  *
  * The optional `beta` prop adds a small outlined "Beta" tag next to the
  * name -- used on in-app screens (sidebar, auth) so people already using
  * the product are reminded this is beta software, distinct from the
  * marketing landing page's own "Join the beta" framing.
  */
-export function Wordmark({ size = "md", className = "", beta = false }: WordmarkProps) {
+export function Wordmark({ size = "md", className = "", beta = false, mark = false }: WordmarkProps) {
   return (
     <span className={`brand-lockup brand-lockup-${size}${className ? ` ${className}` : ""}`}>
+      {mark && <Logomark size={44} />}
       <span className="brand-lockup-text">
         <span className="brand-lockup-name-row">
           <span className="brand-lockup-name">tasketra</span>
