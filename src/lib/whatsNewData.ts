@@ -10,6 +10,12 @@ export type ChangeEntry = { version: string; date: string; title: string; body: 
 // they can do.
 export const CHANGES: ChangeEntry[] = [
   {
+    version: "v170",
+    date: "November 2026",
+    title: "Your AI can update your projects now, with a read + write token.",
+    body: "Connect your AI gave your assistant read-only access in the last update. Now, if you create a token with the read + write scope in Account, Connect your AI, your assistant can also do the updates you ask for: add a task, mark one done or move its due date, open a decision with the date you need it by, add a risk to the register, and post a project check-in. Nothing changes silently: every update your AI makes is recorded in the project's activity log under your name, marked via MCP, so you can always see what it did. Read-only tokens still cannot change anything, and you can revoke any token at any time.",
+  },
+  {
     version: "v169",
     date: "November 2026",
     title: "Your AI can read your projects now: connect Claude or ChatGPT in Account.",

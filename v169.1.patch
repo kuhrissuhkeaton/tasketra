@@ -1,0 +1,23 @@
+--- a/src/components/ConnectAiCard.tsx
++++ b/src/components/ConnectAiCard.tsx
+@@ -98,6 +98,11 @@
+         waiting on me?" This first version is read-only: your AI can look, never change anything.
+       </p>
+ 
++      {/* v169.1: the server address and setup steps only make sense once a
++          token can actually be created below, so they render for founding
++          members only. Everyone else sees the intro and the founding note. */}
++      {!loading && !loadError && founding && (
++        <>
+       <label htmlFor="f-connectai-endpoint">Server address</label>
+       <div className="inline-form">
+         <input
+@@ -136,6 +141,8 @@
+           <li>Ask ChatGPT about your projects, for example "What is overdue in Tasketra?"</li>
+         </ol>
+       )}
++        </>
++      )}
+ 
+       {loading ? (
+         <p className="muted">Loading your tokens...</p>

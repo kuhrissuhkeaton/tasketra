@@ -162,3 +162,178 @@ describe("mcp server", () => {
     expect(body.error.code).toBe(-32601);
   });
 });
+
+describe("mcp write tools (v170)", () => {
+  beforeAll(async () => { await setupTestDb(); }, 30000);
+  afterAll(async () => { await teardownTestDb(); });
+  beforeEach(async () => { await resetTestDb(); });
+
+  async function seedWriteWorld() {
+    const world = await seedWorld();
+    const { raw: writeRaw } = await createApiToken(db(), world.owner.id, "Write token", "write");
+    return { ...world, writeRaw };
+  }
+
+  it("tools/list shows the five write tools only to a write token", async () => {
+    const { raw, writeRaw } = await seedWriteWorld();
+    const readList = await jsonBody<any>(await rpc(raw, { method: "tools/list" }));
+    expect(readList.result.tools).toHaveLength(7);
+    const writeList = await jsonBody<any>(await rpc(writeRaw, { method: "tools/list" }));
+    const names = writeList.result.tools.map((t: any) => t.name).sort();
+    expect(names).toEqual(
+      [
+        "add_decision_request", "add_risk", "add_status_update", "create_task", "get_decisions_waiting",
+        "get_project_overview", "get_today", "get_weekly_sync", "list_projects", "list_risks",
+        "list_tasks", "update_task",
+      ].sort()
+    );
+  });
+
+  it("a read-only token is refused on every write, and nothing changes", async () => {
+    const { project, raw } = await seedWorld();
+    const database = db();
+    const before = await database.sql`SELECT count(*)::int AS n FROM tasks WHERE project_id = ${project.id}`;
+    const result = await callTool(raw, "create_task", { project_id: project.id, title: "Sneaky task" });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("read-only");
+    const after = await database.sql`SELECT count(*)::int AS n FROM tasks WHERE project_id = ${project.id}`;
+    expect(after[0].n).toBe(before[0].n);
+  });
+
+  it("create_task adds the task and logs it as the owner, via MCP", async () => {
+    const { owner, project, writeRaw } = await seedWriteWorld();
+    const out = toolJson(
+      await callTool(writeRaw, "create_task", {
+        project_id: project.id,
+        title: "Book the venue",
+        due_date: "2026-12-01",
+        description: "Ask about Friday rates",
+      })
+    );
+    expect(out.task.title).toBe("Book the venue");
+    expect(out.task.status).toBe("not_started");
+    expect(out.task.due_date).toBe("2026-12-01");
+
+    const database = db();
+    const [activity] = await database.sql`
+      SELECT summary, actor_id FROM activity_log
+      WHERE project_id = ${project.id} AND entity_type = 'task' AND entity_id = ${out.task.id}
+    `;
+    expect(activity.summary).toBe("Created via MCP");
+    expect(activity.actor_id).toBe(owner.id);
+
+    const list = toolJson(await callTool(writeRaw, "list_tasks", { project_id: project.id }));
+    expect(list.tasks.map((t: any) => t.title)).toContain("Book the venue");
+  });
+
+  it("create_task rejects a missing title and a bad date", async () => {
+    const { project, writeRaw } = await seedWriteWorld();
+    expect((await callTool(writeRaw, "create_task", { project_id: project.id })).isError).toBe(true);
+    expect(
+      (await callTool(writeRaw, "create_task", { project_id: project.id, title: "X", due_date: "2026-13-40" })).isError
+    ).toBe(true);
+  });
+
+  it("update_task marks a task done, moves its date, and logs the diff via MCP", async () => {
+    const { project, writeRaw } = await seedWriteWorld();
+    const database = db();
+    const [seeded] = await database.sql`SELECT id FROM tasks WHERE project_id = ${project.id} AND title = 'Overdue thing'`;
+    const out = toolJson(
+      await callTool(writeRaw, "update_task", { project_id: project.id, task_id: seeded.id, status: "done" })
+    );
+    expect(out.task.status).toBe("done");
+    const [activity] = await database.sql`
+      SELECT summary FROM activity_log
+      WHERE project_id = ${project.id} AND entity_type = 'task' AND entity_id = ${seeded.id} AND action = 'updated'
+    `;
+    expect(activity.summary).toContain("via MCP");
+    expect(activity.summary).toContain("Done");
+
+    const cleared = toolJson(
+      await callTool(writeRaw, "update_task", { project_id: project.id, task_id: seeded.id, due_date: null })
+    );
+    expect(cleared.task.due_date).toBeNull();
+
+    expect((await callTool(writeRaw, "update_task", { project_id: project.id, task_id: seeded.id })).isError).toBe(true);
+    expect(
+      (await callTool(writeRaw, "update_task", { project_id: project.id, task_id: seeded.id, status: "nope" })).isError
+    ).toBe(true);
+  });
+
+  it("add_decision_request opens a decision that shows up as waiting", async () => {
+    const { project, writeRaw } = await seedWriteWorld();
+    const out = toolJson(
+      await callTool(writeRaw, "add_decision_request", {
+        project_id: project.id,
+        title: "Pick the caterer?",
+        needed_by: "2026-11-30",
+        options: ["Caterer A", "Caterer B"],
+      })
+    );
+    expect(out.decision.status).toBe("open");
+    expect(out.decision.needed_by).toBe("2026-11-30");
+
+    const waiting = toolJson(await callTool(writeRaw, "get_decisions_waiting"));
+    expect(waiting.decisions.map((d: any) => d.title)).toContain("Pick the caterer?");
+
+    expect(
+      (await callTool(writeRaw, "add_decision_request", { project_id: project.id, title: "No date" })).isError
+    ).toBe(true);
+    expect(
+      (await callTool(writeRaw, "add_decision_request", {
+        project_id: project.id,
+        title: "One option",
+        needed_by: "2026-11-30",
+        options: ["Only this"],
+      })).isError
+    ).toBe(true);
+  });
+
+  it("add_risk requires real probability and impact, then lists the risk", async () => {
+    const { project, writeRaw } = await seedWriteWorld();
+    expect(
+      (await callTool(writeRaw, "add_risk", { project_id: project.id, title: "Rain", impact: "high" })).isError
+    ).toBe(true);
+    const out = toolJson(
+      await callTool(writeRaw, "add_risk", {
+        project_id: project.id,
+        title: "Rain on the day",
+        probability: "medium",
+        impact: "high",
+        mitigation: "Tent on standby",
+      })
+    );
+    expect(out.risk.status).toBe("open");
+    const risks = toolJson(await callTool(writeRaw, "list_risks", { project_id: project.id }));
+    expect(risks.risks.map((r: any) => r.title)).toContain("Rain on the day");
+  });
+
+  it("add_status_update posts a check-in the weekly sync then reads back", async () => {
+    const { project, writeRaw } = await seedWriteWorld();
+    expect(
+      (await callTool(writeRaw, "add_status_update", { project_id: project.id, health: "great" })).isError
+    ).toBe(true);
+    const out = toolJson(
+      await callTool(writeRaw, "add_status_update", {
+        project_id: project.id,
+        health: "at_risk",
+        note: "Vendor is two weeks behind",
+      })
+    );
+    expect(out.status_update.health).toBe("at_risk");
+    const sync = toolJson(await callTool(writeRaw, "get_weekly_sync", { project_id: project.id }));
+    expect(sync.latest_check_in.health).toBe("at_risk");
+    expect(sync.latest_check_in.note).toBe("Vendor is two weeks behind");
+  });
+
+  it("a write token cannot write into another user's project", async () => {
+    const { project } = await seedWorld();
+    const stranger = await createTestUser("mcp-writer@example.com", { foundingMember: true });
+    const { raw: strangerWrite } = await createApiToken(db(), stranger.id, "Stranger write", "write");
+    const result = await callTool(strangerWrite, "create_task", { project_id: project.id, title: "Intrusion" });
+    expect(result.isError).toBe(true);
+    const database = db();
+    const rows = await database.sql`SELECT id FROM tasks WHERE project_id = ${project.id} AND title = 'Intrusion'`;
+    expect(rows).toHaveLength(0);
+  });
+});

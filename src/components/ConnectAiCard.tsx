@@ -95,7 +95,8 @@ export function ConnectAiCard() {
       <p className="muted" style={{ marginTop: 0 }}>
         Connect Claude, ChatGPT, or another AI assistant to your projects. It can read your project
         status, tasks, decisions that are waiting, and risks, and answer questions like "what is
-        waiting on me?" This first version is read-only: your AI can look, never change anything.
+        waiting on me?" With a read + write token it can also make the updates you ask for, and
+        every change it makes is marked "via MCP" in the project's activity log.
       </p>
 
       {/* v169.1: the server address and setup steps only make sense once a
@@ -260,7 +261,7 @@ export function ConnectAiCard() {
                 <span>
                   <strong>Read + write</strong>
                   <span className="muted" style={{ display: "block" }}>
-                    Takes effect when write tools arrive in the next update. Until then this token is read-only too.
+                    Your AI can read your projects and make the updates you ask for: add and update tasks, open decisions, add risks, and post check-ins. Every change is marked "via MCP" in the project's activity log.
                   </span>
                 </span>
               </label>

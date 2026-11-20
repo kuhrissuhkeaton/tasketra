@@ -26,7 +26,7 @@ function daysSince(v: unknown): number | null {
 
 export class McpToolError extends Error {}
 
-async function projectOrThrow(database: any, userId: string, projectId: unknown) {
+export async function projectOrThrow(database: any, userId: string, projectId: unknown) {
   if (typeof projectId !== "string" || !projectId) {
     throw new McpToolError("project_id is required. Use list_projects to find the id.");
   }
