@@ -1,7 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
-  <rect width="1024" height="1024" rx="218" fill="#1C2415"/>
-  <rect x="168" y="398" width="688" height="228" rx="114" fill="none" stroke="#F2EBD9" stroke-width="32"/>
-  <rect x="379" y="460" width="26" height="104" rx="13" fill="#F2EBD9"/>
-  <rect x="619" y="460" width="26" height="104" rx="13" fill="#F2EBD9"/>
-  <rect x="428" y="454" width="168" height="116" rx="58" fill="#CFEA46"/>
+  <style>
+    .o { stroke: #1C2415; }
+    .t { fill: #1C2415; }
+    @media (prefers-color-scheme: dark) {
+      .o { stroke: #F2EBD9; }
+      .t { fill: #F2EBD9; }
+    }
+  </style>
+  <rect class="o" x="85" y="371" width="853" height="283" rx="141" fill="none" stroke-width="56"/>
+  <rect class="t" x="341" y="439" width="45" height="146" rx="22"/>
+  <rect class="t" x="639" y="439" width="45" height="146" rx="22"/>
+  <rect x="391" y="433" width="243" height="159" rx="79" fill="#CFEA46"/>
 </svg>
