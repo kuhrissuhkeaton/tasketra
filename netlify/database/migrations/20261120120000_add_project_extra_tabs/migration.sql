@@ -1,0 +1,13 @@
+-- Grow-in-place for light projects (v171, "Two Doors"): a light project
+-- hides most sections by size (v153). When the owner adds one back from
+-- the calm home ("Need more for this project?"), the tab id is recorded
+-- here so the section stays visible for that project only, in place --
+-- nothing is migrated, recreated, or deleted; hiding never touched data.
+--
+-- One additive, nullable column holding a JSON array of tab ids as text
+-- (e.g. '["budget","meetings"]'). NULL means no pieces added, which is
+-- every existing project's state, and behavior is exactly as before.
+-- The API validates the value (a JSON array of known tab id strings,
+-- length-capped) before storing; readers parse it defensively and treat
+-- anything unreadable as an empty list.
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS extra_tabs TEXT;

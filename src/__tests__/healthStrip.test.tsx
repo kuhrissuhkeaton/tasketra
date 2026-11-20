@@ -114,11 +114,13 @@ describe("projectReasonParts", () => {
 });
 
 describe("HealthStrip placement", () => {
-  it("sits under the project title on every tab, Home included (one verdict, not two)", async () => {
+  it("sits under the project title on every tab, Home included (one verdict, not two); the v171 calm home is the one exception", async () => {
     // @ts-ignore node builtin: the app tsconfig has no node types, vitest runs in node
     const { readFileSync } = await import("node:fs");
     const src: string = readFileSync("src/pages/ProjectHome.tsx", "utf8");
-    expect(src).toMatch(/\{id && <HealthStrip projectId=\{id\}/);
+    // v171: a light project's calm home carries no strip (its three quiet
+    // cards are the whole surface); everywhere else the strip renders.
+    expect(src).toMatch(/\{id && !onCalmHome && <HealthStrip projectId=\{id\}/);
     expect(src.indexOf("<HealthStrip")).toBeLessThan(src.indexOf('className="project-tabs primary-tabs"'));
     expect(src.indexOf("<HealthStrip")).toBeGreaterThan(src.indexOf("project-page-head"));
   });

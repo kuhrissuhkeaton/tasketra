@@ -181,7 +181,7 @@ describe("Dashboard first run", () => {
     await renderDashboard([], []);
     await act(async () => { button("Start from a blank project").click(); });
     await flush();
-    expect(calls.createProject).toHaveBeenCalledWith("My first project", undefined, false, { size: "standard", approach: "hybrid" });
+    expect(calls.createProject).toHaveBeenCalledWith("My first project", undefined, false, { size: "light", approach: "hybrid" });
     expect(container.querySelector('[data-testid="where"]')?.textContent).toBe("/app/projects/new1");
     expect(track).toHaveBeenCalledWith("template_chosen", { template: "blank" });
   });
@@ -251,8 +251,26 @@ describe("New project dialog", () => {
     });
     await act(async () => { button("Create project").click(); });
     await flush();
-    expect(calls.createProject).toHaveBeenCalledWith("Launch plan", undefined, false, { size: "standard", approach: "hybrid" });
+    expect(calls.createProject).toHaveBeenCalledWith("Launch plan", undefined, false, { size: "light", approach: "hybrid" });
     expect(container.querySelector('[data-testid="where"]')?.textContent).toBe("/app/projects/new1");
+  });
+
+  it("the full door creates a full-track project, and the choice is remembered", async () => {
+    await open();
+    const radios = dialog()!.querySelectorAll<HTMLInputElement>('input[name="project-route"]');
+    expect(radios).toHaveLength(2);
+    expect(radios[0].checked).toBe(true); // Keep it simple is the default door
+    await act(async () => { radios[1].click(); });
+    expect(radios[1].checked).toBe(true);
+    await act(async () => {
+      const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+      set.call(nameInput(), "Big program");
+      nameInput().dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => { button("Create project").click(); });
+    await flush();
+    expect(calls.createProject).toHaveBeenCalledWith("Big program", undefined, false, { size: "full", approach: "hybrid" });
+    expect(localStorage.getItem("tasketra:lastRoute")).toBe("full");
   });
 
   it("shows a creation error inside the dialog", async () => {

@@ -25,7 +25,7 @@ export default withSentry(async (req: Request) => {
     const [project] = await database.sql`
       SELECT p.id, p.name, p.description, p.created_at, p.owner_id, p.webhook_enabled,
         p.ccb_enabled, p.archived, p.deleted_at, p.roadmap_share_enabled, p.roadmap_share_token,
-        p.closure_checklist, p.closure_notes, p.closed_at, p.stage, p.size, p.approach, p.show_all_tabs, p.charter, p.tolerances, p.stage_gates,
+        p.closure_checklist, p.closure_notes, p.closed_at, p.stage, p.size, p.approach, p.show_all_tabs, p.extra_tabs, p.charter, p.tolerances, p.stage_gates,
         (p.owner_id = ${userId}) AS is_owner,
         (SELECT max(al.created_at) FROM activity_log al WHERE al.project_id = p.id) AS last_activity_at,
         ((SELECT count(*)::int FROM tasks t WHERE t.project_id = p.id AND t.deleted_at IS NULL)
@@ -101,6 +101,18 @@ export default withSentry(async (req: Request) => {
     const hasSize = body?.size !== undefined;
     const hasApproach = body?.approach !== undefined;
     const hasShowAllTabs = typeof body?.show_all_tabs === "boolean";
+    // v171 grow-in-place: extra_tabs is a JSON array of tab ids stored as
+    // text. Validate it here the way size/approach are validated: a string
+    // that parses to an array of known tab ids, nothing else.
+    const KNOWN_TAB_IDS = new Set(["home", "roadmap", "tasks", "charter", "okrs", "issues", "risks", "assumptions", "dependencies", "quality", "compliance", "budget", "meetings", "documents", "stakeholders", "decisions", "team", "raci", "procurement", "comms", "closure", "report", "templates", "export", "connections", "trash"]);
+    const hasExtraTabs = typeof body?.extra_tabs === "string";
+    if (hasExtraTabs) {
+      let parsed: unknown = null;
+      try { parsed = JSON.parse(body.extra_tabs); } catch { parsed = null; }
+      if (!Array.isArray(parsed) || parsed.length > 26 || !parsed.every((x) => typeof x === "string" && KNOWN_TAB_IDS.has(x))) {
+        return json({ error: "extra_tabs must be a JSON array of tab ids." }, { status: 400 });
+      }
+    }
     const hasStageGates = typeof body?.stage_gates === "boolean";
     if (hasSize && !isProjectSize(body.size)) {
       return json({ error: "size must be one of light, standard, full." }, { status: 400 });
@@ -126,7 +138,7 @@ export default withSentry(async (req: Request) => {
     if (hasName && !body.name.trim()) {
       return json({ error: "Project name can't be empty." }, { status: 400 });
     }
-    if (!hasName && !hasDescription && !hasWebhook && !hasCcb && !hasRoadmapShare && !hasClosureChecklist && !hasClosureNotes && !hasStage && !hasSize && !hasApproach && !hasShowAllTabs && !hasCharter && !hasTolerances && !hasStageGates) {
+    if (!hasName && !hasDescription && !hasWebhook && !hasCcb && !hasRoadmapShare && !hasClosureChecklist && !hasClosureNotes && !hasStage && !hasSize && !hasApproach && !hasShowAllTabs && !hasExtraTabs && !hasCharter && !hasTolerances && !hasStageGates) {
       return json({ error: "Nothing to update." }, { status: 400 });
     }
 
@@ -161,13 +173,14 @@ export default withSentry(async (req: Request) => {
         size = COALESCE(${hasSize ? body.size : null}, size),
         approach = COALESCE(${hasApproach ? body.approach : null}, approach),
         show_all_tabs = COALESCE(${hasShowAllTabs ? body.show_all_tabs : null}, show_all_tabs),
+        extra_tabs = COALESCE(${hasExtraTabs ? body.extra_tabs : null}, extra_tabs),
         stage_gates = COALESCE(${hasStageGates ? body.stage_gates : null}, stage_gates),
         charter = CASE WHEN ${hasCharter} THEN ${hasCharter ? JSON.stringify(charter) : null}::jsonb ELSE charter END,
         tolerances = CASE WHEN ${hasTolerances} THEN ${hasTolerances ? JSON.stringify(tolerances) : null}::jsonb ELSE tolerances END
       WHERE id = ${id}
       RETURNING id, name, description, created_at, owner_id, webhook_enabled, ccb_enabled, archived, deleted_at,
         roadmap_share_enabled, roadmap_share_token, closure_checklist, closure_notes, closed_at, stage,
-        size, approach, show_all_tabs, charter, tolerances, stage_gates
+        size, approach, show_all_tabs, extra_tabs, charter, tolerances, stage_gates
     `;
 
     if (hasStage) {

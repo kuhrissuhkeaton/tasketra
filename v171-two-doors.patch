@@ -1,0 +1,1056 @@
+--- a/netlify/functions/project.mts
++++ b/netlify/functions/project.mts
+@@ -25,7 +25,7 @@
+     const [project] = await database.sql`
+       SELECT p.id, p.name, p.description, p.created_at, p.owner_id, p.webhook_enabled,
+         p.ccb_enabled, p.archived, p.deleted_at, p.roadmap_share_enabled, p.roadmap_share_token,
+-        p.closure_checklist, p.closure_notes, p.closed_at, p.stage, p.size, p.approach, p.show_all_tabs, p.charter, p.tolerances, p.stage_gates,
++        p.closure_checklist, p.closure_notes, p.closed_at, p.stage, p.size, p.approach, p.show_all_tabs, p.extra_tabs, p.charter, p.tolerances, p.stage_gates,
+         (p.owner_id = ${userId}) AS is_owner,
+         (SELECT max(al.created_at) FROM activity_log al WHERE al.project_id = p.id) AS last_activity_at,
+         ((SELECT count(*)::int FROM tasks t WHERE t.project_id = p.id AND t.deleted_at IS NULL)
+@@ -101,6 +101,18 @@
+     const hasSize = body?.size !== undefined;
+     const hasApproach = body?.approach !== undefined;
+     const hasShowAllTabs = typeof body?.show_all_tabs === "boolean";
++    // v171 grow-in-place: extra_tabs is a JSON array of tab ids stored as
++    // text. Validate it here the way size/approach are validated: a string
++    // that parses to an array of known tab ids, nothing else.
++    const KNOWN_TAB_IDS = new Set(["home", "roadmap", "tasks", "charter", "okrs", "issues", "risks", "assumptions", "dependencies", "quality", "compliance", "budget", "meetings", "documents", "stakeholders", "decisions", "team", "raci", "procurement", "comms", "closure", "report", "templates", "export", "connections", "trash"]);
++    const hasExtraTabs = typeof body?.extra_tabs === "string";
++    if (hasExtraTabs) {
++      let parsed: unknown = null;
++      try { parsed = JSON.parse(body.extra_tabs); } catch { parsed = null; }
++      if (!Array.isArray(parsed) || parsed.length > 26 || !parsed.every((x) => typeof x === "string" && KNOWN_TAB_IDS.has(x))) {
++        return json({ error: "extra_tabs must be a JSON array of tab ids." }, { status: 400 });
++      }
++    }
+     const hasStageGates = typeof body?.stage_gates === "boolean";
+     if (hasSize && !isProjectSize(body.size)) {
+       return json({ error: "size must be one of light, standard, full." }, { status: 400 });
+@@ -126,7 +138,7 @@
+     if (hasName && !body.name.trim()) {
+       return json({ error: "Project name can't be empty." }, { status: 400 });
+     }
+-    if (!hasName && !hasDescription && !hasWebhook && !hasCcb && !hasRoadmapShare && !hasClosureChecklist && !hasClosureNotes && !hasStage && !hasSize && !hasApproach && !hasShowAllTabs && !hasCharter && !hasTolerances && !hasStageGates) {
++    if (!hasName && !hasDescription && !hasWebhook && !hasCcb && !hasRoadmapShare && !hasClosureChecklist && !hasClosureNotes && !hasStage && !hasSize && !hasApproach && !hasShowAllTabs && !hasExtraTabs && !hasCharter && !hasTolerances && !hasStageGates) {
+       return json({ error: "Nothing to update." }, { status: 400 });
+     }
+ 
+@@ -161,13 +173,14 @@
+         size = COALESCE(${hasSize ? body.size : null}, size),
+         approach = COALESCE(${hasApproach ? body.approach : null}, approach),
+         show_all_tabs = COALESCE(${hasShowAllTabs ? body.show_all_tabs : null}, show_all_tabs),
++        extra_tabs = COALESCE(${hasExtraTabs ? body.extra_tabs : null}, extra_tabs),
+         stage_gates = COALESCE(${hasStageGates ? body.stage_gates : null}, stage_gates),
+         charter = CASE WHEN ${hasCharter} THEN ${hasCharter ? JSON.stringify(charter) : null}::jsonb ELSE charter END,
+         tolerances = CASE WHEN ${hasTolerances} THEN ${hasTolerances ? JSON.stringify(tolerances) : null}::jsonb ELSE tolerances END
+       WHERE id = ${id}
+       RETURNING id, name, description, created_at, owner_id, webhook_enabled, ccb_enabled, archived, deleted_at,
+         roadmap_share_enabled, roadmap_share_token, closure_checklist, closure_notes, closed_at, stage,
+-        size, approach, show_all_tabs, charter, tolerances, stage_gates
++        size, approach, show_all_tabs, extra_tabs, charter, tolerances, stage_gates
+     `;
+ 
+     if (hasStage) {
+--- a/netlify/functions/__tests__/project-setup.integration.test.ts
++++ b/netlify/functions/__tests__/project-setup.integration.test.ts
+@@ -66,6 +66,25 @@
+     expect((await getProject(owner, project.id)).show_all_tabs).toBe(false);
+   });
+ 
++  it("stores grown-back tabs (v171 extra_tabs) and returns them on GET", async () => {
++    const owner = await createTestUser("setup-extras@example.com");
++    const project = await createTestProject(owner.id);
++    expect((await getProject(owner, project.id)).extra_tabs ?? null).toBeNull();
++    const res = await patch(owner, { id: project.id, extra_tabs: JSON.stringify(["budget", "meetings"]) });
++    expect(res.status).toBe(200);
++    expect((await jsonBody<{ project: any }>(res)).project.extra_tabs).toBe('["budget","meetings"]');
++    expect((await getProject(owner, project.id)).extra_tabs).toBe('["budget","meetings"]');
++  });
++
++  it("rejects a malformed extra_tabs and leaves the project unchanged", async () => {
++    const owner = await createTestUser("setup-extras-bad@example.com");
++    const project = await createTestProject(owner.id);
++    expect((await patch(owner, { id: project.id, extra_tabs: "budget" })).status).toBe(400);
++    expect((await patch(owner, { id: project.id, extra_tabs: '["nope"]' })).status).toBe(400);
++    expect((await patch(owner, { id: project.id, extra_tabs: 42 })).status).toBe(400);
++    expect((await getProject(owner, project.id)).extra_tabs ?? null).toBeNull();
++  });
++
+   it("rejects bad values on PATCH and leaves the project unchanged", async () => {
+     const owner = await createTestUser("setup-bad-patch@example.com");
+     const project = await createTestProject(owner.id);
+--- a/src/lib/projectView.ts
++++ b/src/lib/projectView.ts
+@@ -49,14 +49,29 @@
+   return HIDDEN[size];
+ }
+ 
+-export function hiddenTabLabels(size: ProjectSize): string[] {
+-  return HIDDEN[size].map((id) => TAB_LABEL[id] ?? id);
++export function hiddenTabLabels(size: ProjectSize, extraTabs: string[] = []): string[] {
++  return HIDDEN[size].filter((id) => !extraTabs.includes(id)).map((id) => TAB_LABEL[id] ?? id);
++}
++
++/** v171: the tab ids a light project has grown back in place, stored on the
++ *  project as a JSON array in a text column. Parse defensively: anything
++ *  unreadable, or not an array of strings, is an empty list. */
++export function parseExtraTabs(raw: string | null | undefined): string[] {
++  if (!raw) return [];
++  try {
++    const parsed: unknown = JSON.parse(raw);
++    if (!Array.isArray(parsed)) return [];
++    return [...new Set(parsed.filter((x): x is string => typeof x === "string"))];
++  } catch {
++    return [];
++  }
+ }
+ 
+ /** A tab is hidden only by its project's size, and never once "show all tabs"
+- *  is on. The tab a person is currently on is always kept visible by callers. */
+-export function isTabHidden(tab: string, size: ProjectSize, showAll: boolean): boolean {
+-  return !showAll && HIDDEN[size].includes(tab);
++ *  is on or the tab has been grown back in place (v171 extra_tabs). The tab a
++ *  person is currently on is always kept visible by callers. */
++export function isTabHidden(tab: string, size: ProjectSize, showAll: boolean, extraTabs: string[] = []): boolean {
++  return !showAll && !extraTabs.includes(tab) && HIDDEN[size].includes(tab);
+ }
+ 
+ const PRIMARY_ORDER: Record<ProjectApproach, string[]> = {
+@@ -65,8 +80,8 @@
+   agile: ["home", "tasks", "roadmap", "meetings", "budget"],
+ };
+ 
+-export function primaryTabOrder(approach: ProjectApproach, size: ProjectSize, showAll: boolean): string[] {
+-  return PRIMARY_ORDER[approach].filter((id) => !isTabHidden(id, size, showAll));
++export function primaryTabOrder(approach: ProjectApproach, size: ProjectSize, showAll: boolean, extraTabs: string[] = []): string[] {
++  return PRIMARY_ORDER[approach].filter((id) => !isTabHidden(id, size, showAll, extraTabs));
+ }
+ 
+ export function defaultTasksView(approach: ProjectApproach): "list" | "board" {
+--- a/src/lib/projectNav.ts
++++ b/src/lib/projectNav.ts
+@@ -70,14 +70,14 @@
+   return tab === "trash" ? "Trash" : null;
+ }
+ 
+-export function visibleSections(group: NavGroup, current: string, size: ProjectSize, showAll: boolean): NavSection[] {
+-  return group.sections.filter((s) => s.id === current || !isTabHidden(s.id, size, showAll));
++export function visibleSections(group: NavGroup, current: string, size: ProjectSize, showAll: boolean, extraTabs: string[] = []): NavSection[] {
++  return group.sections.filter((s) => s.id === current || !isTabHidden(s.id, size, showAll, extraTabs));
+ }
+ 
+ /** The six groups, minus any whose sections are all hidden, each with the tab a click should open. */
+-export function visibleGroups(current: string, size: ProjectSize, showAll: boolean) {
++export function visibleGroups(current: string, size: ProjectSize, showAll: boolean, extraTabs: string[] = []) {
+   return NAV_GROUPS
+-    .map((g) => ({ group: g, sections: visibleSections(g, current, size, showAll) }))
++    .map((g) => ({ group: g, sections: visibleSections(g, current, size, showAll, extraTabs) }))
+     .filter((x) => x.sections.length > 0)
+     .map((x) => ({ ...x, opens: x.sections[0].id }));
+ }
+@@ -88,11 +88,11 @@
+  *  on. The Overview entry itself is left out (the directory sits on it), and
+  *  a group with nothing visible left is dropped entirely. This is the one
+  *  function that decides what the directory lists; HomeTab renders it as-is. */
+-export function sectionDirectory(size: ProjectSize, showAll: boolean): { group: NavGroup; sections: NavSection[] }[] {
++export function sectionDirectory(size: ProjectSize, showAll: boolean, extraTabs: string[] = []): { group: NavGroup; sections: NavSection[] }[] {
+   return NAV_GROUPS
+     .map((group) => ({
+       group,
+-      sections: visibleSections(group, "home", size, showAll).filter((s) => s.id !== "home"),
++      sections: visibleSections(group, "home", size, showAll, extraTabs).filter((s) => s.id !== "home"),
+     }))
+     .filter((x) => x.sections.length > 0);
+ }
+--- a/src/lib/api.ts
++++ b/src/lib/api.ts
+@@ -197,6 +197,8 @@
+   size?: ProjectSize;
+   approach?: ProjectApproach;
+   show_all_tabs?: boolean;
++  // v171: JSON array of tab ids grown back in place on a light project.
++  extra_tabs?: string | null;
+   charter?: Charter;
+   tolerances?: Tolerances;
+   stage_gates?: boolean;
+@@ -1227,7 +1229,7 @@
+   updateProject: (id: string, patch: {
+     name?: string; description?: string; ccb_enabled?: boolean;
+     closureChecklist?: Record<string, boolean>; closureNotes?: string; stage?: ProjectStage;
+-    size?: ProjectSize; approach?: ProjectApproach; show_all_tabs?: boolean; charter?: Charter; tolerances?: Tolerances; stage_gates?: boolean;
++    size?: ProjectSize; approach?: ProjectApproach; show_all_tabs?: boolean; extra_tabs?: string; charter?: Charter; tolerances?: Tolerances; stage_gates?: boolean;
+   }) =>
+     request<{ project: Project }>("/project", { method: "PATCH", body: JSON.stringify({ id, ...patch }) }),
+   getStageGate: (projectId: string) =>
+--- a/src/lib/whatsNewData.ts
++++ b/src/lib/whatsNewData.ts
+@@ -10,6 +10,12 @@
+ // they can do.
+ export const CHANGES: ChangeEntry[] = [
+   {
++    version: "v171",
++    date: "November 2026",
++    title: "Start simple: new projects ask one question, and light projects open on a calm home.",
++    body: "Creating a project used to mean picking a size and an approach before you had written a single task. Now it asks one question: keep it simple, or run the full project track? Simple projects open on a calm home with one job, adding your first task, your progress in plain words, and three quiet cards for tasks, what is coming up, and decisions you are waiting on. Nothing is walled off: when a project grows, add Budget, Meetings, Stakeholders, Risks, the Charter and more from the Need more row, and they join the same project right where you are. Full-track projects work exactly as before, and you can switch any project any time in its settings.",
++  },
++  {
+     version: "v170",
+     date: "November 2026",
+     title: "Your AI can update your projects now, with a read + write token.",
+--- a/src/pages/ProjectHome.tsx
++++ b/src/pages/ProjectHome.tsx
+@@ -39,12 +39,13 @@
+ import { useIsScrollable } from "../lib/scrollRegion";
+ import { announce } from "../lib/announce";
+ import { AddForm } from "../components/AddForm";
++import CalmHome from "../components/CalmHome";
+ import { CharterTab } from "../components/CharterTab";
+ import { BaselineCard } from "../components/BaselineCard";
+ import { EscalationSettings } from "../components/EscalationSettings";
+ import { HealthStrip } from "../components/HealthStrip";
+ import { ProjectCockpit } from "../components/ProjectCockpit";
+-import { isTabHidden, defaultTasksView, hiddenTabLabels, SIZE_LABEL, type ProjectSize, type ProjectApproach } from "../lib/projectView";
++import { isTabHidden, defaultTasksView, hiddenTabLabels, parseExtraTabs, SIZE_LABEL, type ProjectSize, type ProjectApproach } from "../lib/projectView";
+ import { useDocumentTitle } from "../lib/documentTitle";
+ import { entityLabel } from "../lib/entityLabels";
+ import { QualityTab } from "./project/QualityTab";
+@@ -239,13 +240,39 @@
+   useDocumentTitle(project?.name ? (titleTabLabel && tab !== "home" ? `${titleTabLabel} | ${project.name}` : project.name) : null);
+ 
+   if (!id) return null;
++  const projectId: string = id;
+ 
+   // Size hides tabs (never data). The product tour and "show all tabs" both
+   // reveal everything, and the tab someone is on is never hidden from them.
+   const size: ProjectSize = project?.size ?? "full";
+   const approach: ProjectApproach = project?.approach ?? "hybrid";
+   const showAll = (project?.show_all_tabs ?? false) || tour.active;
+-  const navGroups = visibleGroups(tab, size, showAll);
++  // v171: the pieces a light project has grown back in place (extra_tabs),
++  // and the calm home it opens on while it stays light with "show all" off.
++  const extraTabs = parseExtraTabs(project?.extra_tabs);
++  const onCalmHome = size === "light" && !showAll && tab === "home";
++  const navGroups = visibleGroups(tab, size, showAll, extraTabs);
++
++  async function showAllTabs() {
++    await api.updateProject(projectId, { show_all_tabs: true });
++    setProject((p) => (p ? { ...p, show_all_tabs: true } : p));
++  }
++
++  // v171 grow-in-place: record the piece on the project, then open it. If
++  // the save fails the tab still opens for this visit (the current tab is
++  // never hidden); it just won't stick in the nav.
++  async function growTab(tabId: string) {
++    if (!extraTabs.includes(tabId)) {
++      const next = JSON.stringify([...extraTabs, tabId]);
++      try {
++        await api.updateProject(projectId, { extra_tabs: next });
++        setProject((p) => (p ? { ...p, extra_tabs: next } : p));
++      } catch {
++        /* open anyway */
++      }
++    }
++    setParams({ tab: tabId as Tab });
++  }
+   const activeGroup = groupOf(tab);
+   const activeSections = navGroups.find((g) => g.group.id === activeGroup)?.sections ?? [];
+   // Strip views (the old top row) keep the project name as the heading; every other
+@@ -309,7 +336,7 @@
+             ))}
+         </div>
+ 
+-        {project && project.content_count === 0 && !project.last_activity_at && (
++        {project && project.content_count === 0 && !project.last_activity_at && !onCalmHome && (
+           <div className="callout" role="note">
+             <strong>Nothing here yet.</strong> This project was created {fmtDate(project.created_at)} and
+             nothing has been added to it — it hasn&apos;t been deleted or emptied. When you add tasks,
+@@ -319,8 +346,9 @@
+           </div>
+         )}
+ 
+-        {id && <HealthStrip projectId={id} refreshKey={`${tab}:${healthNonce}`} onOpenTab={(t) => setParams({ tab: t })} />}
++        {id && !onCalmHome && <HealthStrip projectId={id} refreshKey={`${tab}:${healthNonce}`} onOpenTab={(t) => setParams({ tab: t })} />}
+ 
++        {!onCalmHome && (<>
+         <nav className="project-tabs primary-tabs" aria-label="Project views">
+           {navGroups.map(({ group, sections, opens }) => (
+             <button
+@@ -351,8 +379,19 @@
+             ))}
+           </nav>
+         )}
++        </>)}
+ 
+-        {tab === "home" && (
++        {tab === "home" && onCalmHome ? (
++          <CalmHome
++            projectId={id}
++            isOwner={project?.is_owner ?? false}
++            size={size}
++            extraTabs={extraTabs}
++            onOpenTab={(t) => setParams({ tab: t as Tab })}
++            onShowAllTabs={showAllTabs}
++            onGrowTab={growTab}
++          />
++        ) : tab === "home" ? (
+           <HomeTab
+             projectId={id}
+             isOwner={project?.is_owner ?? false}
+@@ -360,15 +399,13 @@
+             stage={project?.stage ?? "initiate"}
+             size={size}
+             showAll={project?.show_all_tabs ?? false}
+-            onShowAllTabs={async () => {
+-              await api.updateProject(id, { show_all_tabs: true });
+-              setProject((p) => (p ? { ...p, show_all_tabs: true } : p));
+-            }}
++            extraTabs={extraTabs}
++            onShowAllTabs={showAllTabs}
+             onStageChange={(stage: ProjectStage) => setProject((p) => (p ? { ...p, stage } : p))}
+             onOpenTab={(t) => setParams({ tab: t })}
+           />
+-        )}
+-        {tab === "roadmap" && <RoadmapTab projectId={id} isOwner={project?.is_owner ?? false} showBudget={!isTabHidden("budget", size, showAll)} />}
++        ) : null}
++        {tab === "roadmap" && <RoadmapTab projectId={id} isOwner={project?.is_owner ?? false} showBudget={!isTabHidden("budget", size, showAll, extraTabs)} />}
+         {tab === "tasks" && <TasksTab projectId={id} defaultView={defaultTasksView(approach)} projectName={project?.name || "Project"} highlightId={tab === "tasks" ? highlightId : null} />}
+         {tab === "charter" && (
+           <CharterTab
+@@ -378,7 +415,7 @@
+             isOwner={project?.is_owner ?? false}
+             size={size}
+             showAll={showAll}
+-            okrsVisible={!isTabHidden("okrs", size, showAll)}
++            okrsVisible={!isTabHidden("okrs", size, showAll, extraTabs)}
+             onSaved={(charter) => setProject((p) => (p ? { ...p, charter } : p))}
+             onOpenTab={(t) => setParams({ tab: t })}
+           />
+@@ -420,13 +457,14 @@
+   );
+ }
+ 
+-function HomeTab({ projectId, isOwner, purpose, stage, size, showAll, onShowAllTabs, onStageChange, onOpenTab }: {
++function HomeTab({ projectId, isOwner, purpose, stage, size, showAll, extraTabs, onShowAllTabs, onStageChange, onOpenTab }: {
+   projectId: string;
+   isOwner: boolean;
+   purpose?: string;
+   stage: ProjectStage;
+   size: ProjectSize;
+   showAll: boolean;
++  extraTabs: string[];
+   onShowAllTabs: () => void;
+   onStageChange: (stage: ProjectStage) => void;
+   onOpenTab: (tab: string) => void;
+@@ -448,7 +486,7 @@
+     <div>
+       {size !== "full" && !showAll && (
+         <p className="view-banner">
+-          Showing the {SIZE_LABEL[size]} view, which hides {hiddenTabLabels(size).length} tabs.{" "}
++          Showing the {SIZE_LABEL[size]} view, which hides {hiddenTabLabels(size, extraTabs).length} tabs.{" "}
+           {isOwner && (
+             <button type="button" className="view-banner-link" onClick={onShowAllTabs}>Show all sections</button>
+           )}
+@@ -522,7 +560,7 @@
+       <div className="today-section" style={{ marginTop: 28 }}>
+         <h4>All sections</h4>
+         <div className="section-dir">
+-          {sectionDirectory(size, showAll).map(({ group, sections }) => (
++          {sectionDirectory(size, showAll, extraTabs).map(({ group, sections }) => (
+             <div key={group.id} className="section-dir-group">
+               <h5 className="section-dir-label">{group.label}</h5>
+               <div className="section-dir-grid">
+@@ -540,7 +578,7 @@
+         </div>
+         {size !== "full" && !showAll && (
+           <p className="muted" style={{ marginTop: 12 }}>
+-            {hiddenTabLabels(size).length} sections are hidden by the {SIZE_LABEL[size]} view.
++            {hiddenTabLabels(size, extraTabs).length} sections are hidden by the {SIZE_LABEL[size]} view.
+             {isOwner && <> <button type="button" className="view-banner-link" onClick={onShowAllTabs}>Show all sections</button></>}
+           </p>
+         )}
+--- a/src/pages/Dashboard.tsx
++++ b/src/pages/Dashboard.tsx
+@@ -3,7 +3,7 @@
+ import { api, ApiError, type Project, type ProjectStage, type PortfolioData, type PortfolioProjectSummary, type PortfolioDecision, type PortfolioRisk, type Task, type Issue, type UserTemplate, type MyTodayData, type CalendarItem } from "../lib/api";
+ import { AppSidebar } from "../components/AppSidebar";
+ import { StageChip, STAGES, STAGE_LABEL } from "../components/StageRail";
+-import { ProjectSetupPicker } from "../components/ProjectSetup";
++import TwoDoorsPicker, { lastRoute, rememberRoute, type ProjectRoute } from "../components/TwoDoors";
+ import type { ProjectSize, ProjectApproach } from "../lib/projectView";
+ import { PROJECT_TEMPLATES, getTemplate, isTemplateId, templateSummary } from "../lib/projectTemplates";
+ import { useConfirm } from "../components/ConfirmDialog";
+@@ -616,8 +616,13 @@
+   }, []);
+   const [showSetup, setShowSetup] = useState(false);
+   const [showNew, setShowNew] = useState(false);
+-  const [setupSize, setSetupSize] = useState<ProjectSize>("standard");
+-  const [setupApproach, setSetupApproach] = useState<ProjectApproach>("hybrid");
++  // v171: creation asks one question (the Two Doors) instead of the size x
++  // approach picker. The door maps onto the size system, the approach
++  // stays the hybrid default, and both remain changeable afterwards in
++  // project settings, where the full picker (incl. Standard) still lives.
++  const [route, setRoute] = useState<ProjectRoute>(() => lastRoute());
++  const setupSize: ProjectSize = route === "full" ? "full" : "light";
++  const setupApproach: ProjectApproach = "hybrid";
+   const [creating, setCreating] = useState(false);
+   const [nameError, setNameError] = useState("");
+   const [restoringId, setRestoringId] = useState<string | null>(null);
+@@ -822,6 +827,7 @@
+         approach: setupApproach,
+         ...(templateId ? { template: templateId } : {}),
+       });
++      rememberRoute(route);
+       if (templateId && created.templateApplied === false) {
+         // The project exists, but its skeleton did not fully load. Say so
+         // rather than dropping the user into a half-empty project unannounced.
+@@ -837,8 +843,8 @@
+       setTemplateId("");
+       setSeedExample(false);
+       setShowSetup(false);
+-      setSetupSize("standard");
+-      setSetupApproach("hybrid");
++      // The door choice stays where the creator left it: it is the
++      // pre-selected door next time (v171 decision: remember the last one).
+       // v161 (F-09): same as the first-run screen -- a first project gets
+       // the doing tour, and the narration tour no longer auto-starts.
+       if (user && isFirstProjectEver) startDoingTour(user.id, project.id);
+@@ -874,7 +880,11 @@
+     setFirstRunError(null);
+     try {
+       const created = await api.createProject(name, undefined, choice === "example", {
+-        size: "standard",
++        // v171: a blank first project starts on the simple route and opens
++        // on the calm home. Example and template starts keep Standard:
++        // they seed sections (assumptions, dependencies) the simple view
++        // hides, and seeded content should never land out of sight.
++        size: choice === "blank" ? "light" : "standard",
+         // No Set up step on this screen, so take the approach the template is built for.
+         approach: template ? template.suggestedApproach : "hybrid",
+         ...(template ? { template: template.id } : {}),
+@@ -1098,7 +1108,7 @@
+               {templateId && getTemplate(templateId) && (
+                 <p className="muted">
+                   {getTemplate(templateId)!.blurb} We'll add {templateSummary(getTemplate(templateId)!)}, with dates counted
+-                  from today. It works best with the {getTemplate(templateId)!.suggestedApproach} approach (change it under More options).
++                  from today. It works best with the {getTemplate(templateId)!.suggestedApproach} approach (change it any time in project settings).
+                   Stakeholders are placeholder roles; replace them with real people. Delete anything you don't need.
+                 </p>
+               )}
+@@ -1109,6 +1119,7 @@
+                   people are copied. Delete anything you don't need.
+                 </p>
+               )}
++              <TwoDoorsPicker value={route} onChange={setRoute} />
+               <div>
+                 <button
+                   type="button"
+@@ -1137,13 +1148,6 @@
+                     anything you don't want.
+                   </p>
+                 )}
+-                <div className="setup-panel">
+-                  <ProjectSetupPicker
+-                    size={setupSize}
+-                    approach={setupApproach}
+-                    onChange={(n) => { setSetupSize(n.size); setSetupApproach(n.approach); }}
+-                  />
+-                </div>
+               </div>
+               {upgradeNotice && (
+                 <p className="form-error" role="alert">
+--- a/src/index.css
++++ b/src/index.css
+@@ -1837,6 +1837,64 @@
+   .setup-size-grid { grid-template-columns: 1fr; }
+ }
+ 
++/* --- v171: Two Doors (creation) + calm home (light projects) --- */
++.doors { margin: 2px 0 4px; }
++.doors-q { margin: 0 0 10px; font-size: 16px; font-weight: 700; color: var(--navy); }
++.doors-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
++.door-card {
++  position: relative; display: flex; flex-direction: column; gap: 4px; margin: 0;
++  background: var(--panel); border: 2px solid var(--border); border-radius: var(--radius);
++  padding: 14px 16px; cursor: pointer; transition: border-color var(--ease), background var(--ease);
++}
++.door-card:hover { border-color: var(--tint-strong); }
++.door-card-on { border-color: var(--lime); background: var(--tint); }
++.door-card:focus-within { outline: 2px solid var(--lime); outline-offset: 2px; }
++.door-name { font-size: 16px; font-weight: 700; }
++.door-blurb { font-size: 13px; color: var(--slate); line-height: 1.45; }
++.door-tag {
++  align-self: flex-start; margin-top: 8px; font-size: 12px; font-weight: 700; color: var(--ink);
++  background: var(--lime); border-radius: var(--radius-pill); padding: 2px 9px;
++}
++.doors-note { margin: 8px 0 0; font-size: 13px; color: var(--slate); }
++@media (max-width: 640px) {
++  .doors-grid { grid-template-columns: 1fr; }
++}
++
++.calm { max-width: 880px; display: flex; flex-direction: column; gap: 22px; }
++.calm-add {
++  background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
++  padding: 26px 28px;
++}
++.calm-add-title { margin: 0 0 6px; font-size: 26px; line-height: 1.2; }
++.calm-add-sub { margin: 0 0 18px; font-size: 15px; color: var(--slate); line-height: 1.5; }
++.calm-add-form { display: flex; gap: 10px; }
++.calm-add-form input { flex: 1; min-width: 0; }
++.calm-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
++.calm-tile {
++  display: flex; flex-direction: column; gap: 6px; text-align: left; font: inherit;
++  background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
++  padding: 18px; cursor: pointer; transition: border-color var(--ease);
++}
++.calm-tile:hover { border-color: var(--tint-strong); }
++.calm-tile:focus-visible { outline: 2px solid var(--lime); outline-offset: 2px; }
++.calm-tile-name { font-size: 15px; font-weight: 700; }
++.calm-tile-line { font-size: 13px; color: var(--slate); line-height: 1.45; overflow-wrap: anywhere; }
++.calm-tile-strong { color: var(--navy); font-weight: 600; }
++.calm-grow-label { margin: 0 0 10px; font-size: 14px; font-weight: 700; }
++.calm-grow-row { display: flex; flex-wrap: wrap; gap: 8px; }
++.calm-chip {
++  font: inherit; font-size: 13px; font-weight: 600; color: var(--navy);
++  background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-pill);
++  padding: 6px 12px; cursor: pointer; transition: border-color var(--ease);
++}
++.calm-chip:hover { border-color: var(--lime); }
++.calm-all { margin-top: 14px; }
++@media (max-width: 760px) {
++  .calm-grid { grid-template-columns: 1fr; }
++  .calm-add { padding: 20px; }
++  .calm-add-form { flex-direction: column; }
++}
++
+ /* --- Charter tab --- */
+ .charter { max-width: 780px; }
+ .charter-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+--- a/src/__tests__/firstRun.test.tsx
++++ b/src/__tests__/firstRun.test.tsx
+@@ -181,7 +181,7 @@
+     await renderDashboard([], []);
+     await act(async () => { button("Start from a blank project").click(); });
+     await flush();
+-    expect(calls.createProject).toHaveBeenCalledWith("My first project", undefined, false, { size: "standard", approach: "hybrid" });
++    expect(calls.createProject).toHaveBeenCalledWith("My first project", undefined, false, { size: "light", approach: "hybrid" });
+     expect(container.querySelector('[data-testid="where"]')?.textContent).toBe("/app/projects/new1");
+     expect(track).toHaveBeenCalledWith("template_chosen", { template: "blank" });
+   });
+@@ -251,10 +251,28 @@
+     });
+     await act(async () => { button("Create project").click(); });
+     await flush();
+-    expect(calls.createProject).toHaveBeenCalledWith("Launch plan", undefined, false, { size: "standard", approach: "hybrid" });
++    expect(calls.createProject).toHaveBeenCalledWith("Launch plan", undefined, false, { size: "light", approach: "hybrid" });
+     expect(container.querySelector('[data-testid="where"]')?.textContent).toBe("/app/projects/new1");
+   });
+ 
++  it("the full door creates a full-track project, and the choice is remembered", async () => {
++    await open();
++    const radios = dialog()!.querySelectorAll<HTMLInputElement>('input[name="project-route"]');
++    expect(radios).toHaveLength(2);
++    expect(radios[0].checked).toBe(true); // Keep it simple is the default door
++    await act(async () => { radios[1].click(); });
++    expect(radios[1].checked).toBe(true);
++    await act(async () => {
++      const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
++      set.call(nameInput(), "Big program");
++      nameInput().dispatchEvent(new Event("input", { bubbles: true }));
++    });
++    await act(async () => { button("Create project").click(); });
++    await flush();
++    expect(calls.createProject).toHaveBeenCalledWith("Big program", undefined, false, { size: "full", approach: "hybrid" });
++    expect(localStorage.getItem("tasketra:lastRoute")).toBe("full");
++  });
++
+   it("shows a creation error inside the dialog", async () => {
+     calls.createProject.mockRejectedValue(new Error("Nope."));
+     await open();
+--- a/src/__tests__/healthStrip.test.tsx
++++ b/src/__tests__/healthStrip.test.tsx
+@@ -114,11 +114,13 @@
+ });
+ 
+ describe("HealthStrip placement", () => {
+-  it("sits under the project title on every tab, Home included (one verdict, not two)", async () => {
++  it("sits under the project title on every tab, Home included (one verdict, not two); the v171 calm home is the one exception", async () => {
+     // @ts-ignore node builtin: the app tsconfig has no node types, vitest runs in node
+     const { readFileSync } = await import("node:fs");
+     const src: string = readFileSync("src/pages/ProjectHome.tsx", "utf8");
+-    expect(src).toMatch(/\{id && <HealthStrip projectId=\{id\}/);
++    // v171: a light project's calm home carries no strip (its three quiet
++    // cards are the whole surface); everywhere else the strip renders.
++    expect(src).toMatch(/\{id && !onCalmHome && <HealthStrip projectId=\{id\}/);
+     expect(src.indexOf("<HealthStrip")).toBeLessThan(src.indexOf('className="project-tabs primary-tabs"'));
+     expect(src.indexOf("<HealthStrip")).toBeGreaterThan(src.indexOf("project-page-head"));
+   });
+--- a/netlify/database/migrations/20261120120000_add_project_extra_tabs/migration.sql
++++ b/netlify/database/migrations/20261120120000_add_project_extra_tabs/migration.sql
+@@ -0,0 +1,13 @@
++-- Grow-in-place for light projects (v171, "Two Doors"): a light project
++-- hides most sections by size (v153). When the owner adds one back from
++-- the calm home ("Need more for this project?"), the tab id is recorded
++-- here so the section stays visible for that project only, in place --
++-- nothing is migrated, recreated, or deleted; hiding never touched data.
++--
++-- One additive, nullable column holding a JSON array of tab ids as text
++-- (e.g. '["budget","meetings"]'). NULL means no pieces added, which is
++-- every existing project's state, and behavior is exactly as before.
++-- The API validates the value (a JSON array of known tab id strings,
++-- length-capped) before storing; readers parse it defensively and treat
++-- anything unreadable as an empty list.
++ALTER TABLE projects ADD COLUMN IF NOT EXISTS extra_tabs TEXT;
+--- a/src/components/TwoDoors.tsx
++++ b/src/components/TwoDoors.tsx
+@@ -0,0 +1,68 @@
++// v171 "Two Doors": the choice shown when a project is created, replacing
++// the size x approach jargon picker at the user's most fragile moment.
++// One question, two doors, plain words. The full picker (Light / Standard /
++// Full x Predictive / Hybrid / Agile) still lives in project settings,
++// where Standard remains reachable; nothing about the size system changes.
++//
++// The last door a person picked is remembered (localStorage) and
++// pre-selected next time, so a returning creator is one tap from done.
++
++export type ProjectRoute = "simple" | "full";
++
++const ROUTE_KEY = "tasketra:lastRoute";
++
++export function lastRoute(): ProjectRoute {
++  try {
++    return localStorage.getItem(ROUTE_KEY) === "full" ? "full" : "simple";
++  } catch {
++    return "simple";
++  }
++}
++
++export function rememberRoute(route: ProjectRoute): void {
++  try {
++    localStorage.setItem(ROUTE_KEY, route);
++  } catch {
++    /* storage unavailable (private mode); the default stands */
++  }
++}
++
++export default function TwoDoorsPicker({
++  value,
++  onChange,
++}: {
++  value: ProjectRoute;
++  onChange: (route: ProjectRoute) => void;
++}) {
++  return (
++    <div className="doors">
++      <p className="doors-q" id="doors-q">How do you want to run this project?</p>
++      <div className="doors-grid" role="radiogroup" aria-labelledby="doors-q">
++        <label className={value === "simple" ? "door-card door-card-on" : "door-card"}>
++          <input
++            type="radio"
++            name="project-route"
++            className="sr-only"
++            checked={value === "simple"}
++            onChange={() => onChange("simple")}
++          />
++          <span className="door-name">Keep it simple</span>
++          <span className="door-blurb">Tasks, timeline, and decisions. Nothing else in your way.</span>
++          <span className="door-tag">Most people start here</span>
++        </label>
++        <label className={value === "full" ? "door-card door-card-on" : "door-card"}>
++          <input
++            type="radio"
++            name="project-route"
++            className="sr-only"
++            checked={value === "full"}
++            onChange={() => onChange("full")}
++          />
++          <span className="door-name">Full project track</span>
++          <span className="door-blurb">Charter, stakeholders, change control, and the complete structure.</span>
++        </label>
++      </div>
++      <p className="doors-note">You can switch anytime.</p>
++    </div>
++  );
++}
+--- a/src/components/CalmHome.tsx
++++ b/src/components/CalmHome.tsx
+@@ -0,0 +1,197 @@
++// v171: the calm home a light project opens on, instead of the full tabbed
++// ProjectHome wall. One primary action (add a task), progress in plain
++// words, three quiet cards, and a grow-in-place row: the heavier pieces
++// are one tap away and are added to this same project, in place -- the
++// size system only ever hid them; nothing was deleted (see projectView.ts).
++//
++// Data comes from the same list endpoints the tabs use; this component
++// owns no state beyond what it renders.
++
++import { useEffect, useState } from "react";
++import { api, type Decision, type Task } from "../lib/api";
++import { fmtDate } from "../lib/format";
++import { hiddenTabIds, type ProjectSize } from "../lib/projectView";
++
++// The pieces offered on the grow row, in the order a growing project
++// usually reaches for them. Timeline (roadmap) is not hidden by size, but
++// it belongs here: on the calm home it is the one core surface with no
++// card of its own.
++const GROW_PIECES: { id: string; label: string }[] = [
++  { id: "roadmap", label: "Timeline" },
++  { id: "budget", label: "Budget" },
++  { id: "meetings", label: "Meetings" },
++  { id: "stakeholders", label: "Stakeholders" },
++  { id: "risks", label: "Risks" },
++  { id: "charter", label: "Charter" },
++  { id: "assumptions", label: "Assumptions" },
++  { id: "dependencies", label: "Dependencies" },
++  { id: "procurement", label: "Vendors" },
++];
++
++export default function CalmHome({
++  projectId,
++  isOwner,
++  size,
++  extraTabs,
++  onOpenTab,
++  onShowAllTabs,
++  onGrowTab,
++}: {
++  projectId: string;
++  isOwner: boolean;
++  size: ProjectSize;
++  extraTabs: string[];
++  onOpenTab: (tab: string) => void;
++  onShowAllTabs: () => void;
++  onGrowTab: (tab: string) => void;
++}) {
++  const [tasks, setTasks] = useState<Task[] | null>(null);
++  const [decisions, setDecisions] = useState<Decision[] | null>(null);
++  const [title, setTitle] = useState("");
++  const [adding, setAdding] = useState(false);
++  const [error, setError] = useState<string | null>(null);
++
++  async function load() {
++    const [t, d] = await Promise.all([api.listTasks(projectId), api.listDecisions(projectId)]);
++    setTasks(t.tasks);
++    setDecisions(d.decisions);
++  }
++
++  useEffect(() => {
++    let live = true;
++    Promise.all([api.listTasks(projectId), api.listDecisions(projectId)])
++      .then(([t, d]) => {
++        if (!live) return;
++        setTasks(t.tasks);
++        setDecisions(d.decisions);
++      })
++      .catch(() => {
++        if (!live) return;
++        setTasks([]);
++        setDecisions([]);
++      });
++    return () => {
++      live = false;
++    };
++  }, [projectId]);
++
++  async function addTask(e: React.FormEvent) {
++    e.preventDefault();
++    const trimmed = title.trim();
++    if (!trimmed || adding) return;
++    setAdding(true);
++    setError(null);
++    try {
++      await api.createTask(projectId, trimmed);
++      setTitle("");
++      await load();
++    } catch {
++      setError("That task didn't save. Give it another try.");
++    } finally {
++      setAdding(false);
++    }
++  }
++
++  const total = tasks?.length ?? 0;
++  const done = tasks?.filter((t) => t.status === "done").length ?? 0;
++  const open = total - done;
++  const nextDue = (tasks ?? [])
++    .filter((t) => t.status !== "done" && t.due_date)
++    .sort((a, b) => (a.due_date! < b.due_date! ? -1 : 1))[0];
++  const waiting = (decisions ?? []).filter((d) => d.status === "open");
++  const nextDecision = [...waiting].sort((a, b) =>
++    (a.deadline ?? "9999") < (b.deadline ?? "9999") ? -1 : 1,
++  )[0];
++
++  const hidden = hiddenTabIds(size);
++  function grow(id: string) {
++    // A piece the size view hides is grown back in place (and then opened);
++    // a piece that was never hidden just opens.
++    if (hidden.includes(id) && !extraTabs.includes(id)) onGrowTab(id);
++    else onOpenTab(id);
++  }
++
++  return (
++    <div className="calm">
++      <section className="calm-add">
++        <h2 className="calm-add-title">{total === 0 ? "Add your first task" : "Add a task"}</h2>
++        <p className="calm-add-sub">
++          {tasks === null
++            ? "One moment…"
++            : total === 0
++              ? "Get started by creating your first task for this project."
++              : `${done} of ${total} done${open > 0 ? `, ${open} still open` : ""}. What's next?`}
++        </p>
++        <form className="calm-add-form" onSubmit={addTask}>
++          <input
++            type="text"
++            value={title}
++            onChange={(e) => setTitle(e.target.value)}
++            placeholder="e.g., Design homepage layout"
++            aria-label="Task title"
++          />
++          <button type="submit" className="btn btn-primary" disabled={adding || !title.trim()}>
++            {adding ? "Adding…" : "Add"}
++          </button>
++        </form>
++        {error && (
++          <p className="form-error" role="alert">
++            {error}
++          </p>
++        )}
++      </section>
++
++      <div className="calm-grid">
++        <button type="button" className="calm-tile" onClick={() => onOpenTab("tasks")}>
++          <span className="calm-tile-name">Tasks</span>
++          <span className="calm-tile-line">
++            {tasks === null ? "…" : total === 0 ? "Nothing yet" : `${done} of ${total} done`}
++          </span>
++          <span className="calm-tile-line">
++            {total === 0 ? "Add your first one above" : open > 0 ? `${open} still open` : "All caught up"}
++          </span>
++        </button>
++        <button type="button" className="calm-tile" onClick={() => onOpenTab("tasks")}>
++          <span className="calm-tile-name">Coming up</span>
++          {nextDue ? (
++            <>
++              <span className="calm-tile-line calm-tile-strong">{nextDue.title}</span>
++              <span className="calm-tile-line">Due {fmtDate(nextDue.due_date)}</span>
++            </>
++          ) : (
++            <span className="calm-tile-line">Nothing scheduled yet</span>
++          )}
++        </button>
++        <button type="button" className="calm-tile" onClick={() => onOpenTab("decisions")}>
++          <span className="calm-tile-name">Waiting on a decision</span>
++          {waiting.length > 0 ? (
++            <>
++              <span className="calm-tile-line">
++                {waiting.length} waiting
++              </span>
++              <span className="calm-tile-line calm-tile-strong">{nextDecision?.title}</span>
++            </>
++          ) : (
++            <span className="calm-tile-line">Nothing waiting</span>
++          )}
++        </button>
++      </div>
++
++      <div className="calm-grow">
++        <p className="calm-grow-label">Need more for this project?</p>
++        <div className="calm-grow-row">
++          {GROW_PIECES.map((piece) => (
++            <button key={piece.id} type="button" className="calm-chip" onClick={() => grow(piece.id)}>
++              + {piece.label}
++            </button>
++          ))}
++        </div>
++        {isOwner && (
++          <button type="button" className="btn-link calm-all" onClick={onShowAllTabs}>
++            All project tools
++          </button>
++        )}
++      </div>
++    </div>
++  );
++}
+--- a/src/__tests__/projectView.test.ts
++++ b/src/__tests__/projectView.test.ts
+@@ -0,0 +1,54 @@
++// v171: extra_tabs parsing and the grow-in-place visibility rule.
++import { describe, it, expect } from "vitest";
++import { parseExtraTabs, isTabHidden, hiddenTabLabels, hiddenTabIds } from "../lib/projectView";
++import { visibleGroups, sectionDirectory } from "../lib/projectNav";
++
++describe("parseExtraTabs", () => {
++  it("parses a stored JSON array of tab ids", () => {
++    expect(parseExtraTabs('["budget","meetings"]')).toEqual(["budget", "meetings"]);
++  });
++
++  it("treats null, empty, and unreadable values as no extras", () => {
++    expect(parseExtraTabs(null)).toEqual([]);
++    expect(parseExtraTabs(undefined)).toEqual([]);
++    expect(parseExtraTabs("")).toEqual([]);
++    expect(parseExtraTabs("not json")).toEqual([]);
++    expect(parseExtraTabs('{"budget":true}')).toEqual([]);
++    expect(parseExtraTabs('[1,2]')).toEqual([]);
++  });
++
++  it("drops non-strings and duplicates", () => {
++    expect(parseExtraTabs('["budget",7,"budget","risks"]')).toEqual(["budget", "risks"]);
++  });
++});
++
++describe("grow-in-place visibility", () => {
++  it("a grown-back tab is no longer hidden, others stay hidden", () => {
++    expect(isTabHidden("budget", "light", false)).toBe(true);
++    expect(isTabHidden("budget", "light", false, ["budget"])).toBe(false);
++    expect(isTabHidden("meetings", "light", false, ["budget"])).toBe(true);
++  });
++
++  it("show-all still reveals everything, extras or not", () => {
++    expect(isTabHidden("budget", "light", true)).toBe(false);
++    expect(isTabHidden("budget", "light", true, [])).toBe(false);
++  });
++
++  it("hidden labels shrink as pieces are grown back", () => {
++    const all = hiddenTabLabels("light");
++    expect(all).toHaveLength(hiddenTabIds("light").length);
++    expect(hiddenTabLabels("light", ["budget"])).toEqual(all.filter((l) => l !== "Budget"));
++  });
++
++  it("the nav and the section directory include a grown-back section", () => {
++    const groups = visibleGroups("home", "light", false, ["budget"]);
++    const plan = groups.find((g) => g.group.id === "plan");
++    expect(plan?.sections.map((s) => s.id)).toContain("budget");
++    const dir = sectionDirectory("light", false, ["budget"]);
++    const dirPlan = dir.find((g) => g.group.id === "plan");
++    expect(dirPlan?.sections.map((s) => s.id)).toContain("budget");
++    // And without the extra, budget stays out of both.
++    const plain = visibleGroups("home", "light", false);
++    expect(plain.find((g) => g.group.id === "plan")?.sections.map((s) => s.id)).not.toContain("budget");
++  });
++});
+--- a/src/__tests__/calmHome.test.tsx
++++ b/src/__tests__/calmHome.test.tsx
+@@ -0,0 +1,121 @@
++// @vitest-environment jsdom
++//
++// v171 calm home: the light project's front page. One primary action,
++// plain-words progress, three quiet cards, grow-in-place.
++import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
++import { createRoot, type Root } from "react-dom/client";
++import { act } from "react";
++
++const calls = { listTasks: vi.fn(), listDecisions: vi.fn(), createTask: vi.fn() };
++vi.mock("../lib/api", async (importOriginal) => {
++  const actual = await importOriginal<typeof import("../lib/api")>();
++  return {
++    ...actual,
++    api: {
++      ...actual.api,
++      listTasks: (...a: unknown[]) => calls.listTasks(...a),
++      listDecisions: (...a: unknown[]) => calls.listDecisions(...a),
++      createTask: (...a: unknown[]) => calls.createTask(...a),
++    },
++  };
++});
++
++import CalmHome from "../components/CalmHome";
++
++let container: HTMLDivElement;
++let root: Root;
++beforeAll(() => {
++  (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
++});
++beforeEach(() => {
++  Object.values(calls).forEach((c) => c.mockReset());
++  calls.listTasks.mockResolvedValue({ tasks: [] });
++  calls.listDecisions.mockResolvedValue({ decisions: [] });
++  calls.createTask.mockResolvedValue({ task: { id: "t9" } });
++  container = document.createElement("div");
++  document.body.appendChild(container);
++  root = createRoot(container);
++});
++afterEach(() => { act(() => root.unmount()); container.remove(); });
++
++const flush = () => act(async () => { await new Promise((r) => setTimeout(r, 0)); });
++const button = (text: string) => [...container.querySelectorAll("button")].find((b) => b.textContent?.trim() === text) as HTMLButtonElement;
++
++async function render(extra: Partial<React.ComponentProps<typeof CalmHome>> = {}) {
++  const props: React.ComponentProps<typeof CalmHome> = {
++    projectId: "p1",
++    isOwner: true,
++    size: "light",
++    extraTabs: [],
++    onOpenTab: vi.fn(),
++    onShowAllTabs: vi.fn(),
++    onGrowTab: vi.fn(),
++    ...extra,
++  };
++  await act(async () => { root.render(<CalmHome {...props} />); });
++  await flush();
++  return props;
++}
++
++describe("CalmHome", () => {
++  it("an empty project leads with adding the first task, and adding works", async () => {
++    const props = await render();
++    expect(container.querySelector("h2")?.textContent).toBe("Add your first task");
++    expect(container.textContent).toContain("Nothing yet");
++    expect(container.textContent).toContain("Nothing scheduled yet");
++    expect(container.textContent).toContain("Nothing waiting");
++    const input = container.querySelector('input[aria-label="Task title"]') as HTMLInputElement;
++    await act(async () => {
++      const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
++      set.call(input, "Design homepage layout");
++      input.dispatchEvent(new Event("input", { bubbles: true }));
++    });
++    await act(async () => { button("Add").click(); });
++    await flush();
++    expect(calls.createTask).toHaveBeenCalledWith("p1", "Design homepage layout");
++    expect(props.onOpenTab).not.toHaveBeenCalled();
++  });
++
++  it("progress is plain words, and the cards open their tabs", async () => {
++    calls.listTasks.mockResolvedValue({
++      tasks: [
++        { id: "t1", title: "Done one", description: null, status: "done", owner_name: null, start_date: null, due_date: null, stakeholder_id: null, parent_task_id: null, roadmap_item_id: null },
++        { id: "t2", title: "Next up", description: null, status: "not_started", owner_name: null, start_date: null, due_date: "2026-12-01", stakeholder_id: null, parent_task_id: null, roadmap_item_id: null },
++      ],
++    });
++    calls.listDecisions.mockResolvedValue({
++      decisions: [
++        { id: "d1", title: "Pick a vendor", context: null, options: [], deadline: null, public_token: "x", status: "open", created_at: "", chosen_option: null, responder_name: null, responded_at: null, outcome_confirmed_at: null },
++      ],
++    });
++    const props = await render();
++    expect(container.textContent).toContain("1 of 2 done");
++    expect(container.textContent).toContain("Next up");
++    expect(container.textContent).toContain("1 waiting");
++    expect(container.textContent).toContain("Pick a vendor");
++    const tiles = [...container.querySelectorAll(".calm-tile")] as HTMLButtonElement[];
++    await act(async () => { tiles[2].click(); });
++    expect(props.onOpenTab).toHaveBeenCalledWith("decisions");
++  });
++
++  it("grow chips: a hidden piece grows in place, a visible one just opens", async () => {
++    const props = await render();
++    await act(async () => { button("+ Budget").click(); });
++    expect(props.onGrowTab).toHaveBeenCalledWith("budget");
++    await act(async () => { button("+ Timeline").click(); });
++    expect(props.onOpenTab).toHaveBeenCalledWith("roadmap");
++    // A piece already grown back just opens.
++    const props2 = await render({ extraTabs: ["budget"] });
++    await act(async () => { button("+ Budget").click(); });
++    expect(props2.onGrowTab).not.toHaveBeenCalled();
++    expect(props2.onOpenTab).toHaveBeenCalledWith("budget");
++  });
++
++  it("All project tools shows for the owner only", async () => {
++    const props = await render();
++    await act(async () => { button("All project tools").click(); });
++    expect(props.onShowAllTabs).toHaveBeenCalled();
++    await render({ isOwner: false });
++    expect(button("All project tools")).toBeUndefined();
++  });
++});

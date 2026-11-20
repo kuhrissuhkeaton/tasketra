@@ -10,6 +10,12 @@ export type ChangeEntry = { version: string; date: string; title: string; body: 
 // they can do.
 export const CHANGES: ChangeEntry[] = [
   {
+    version: "v171",
+    date: "November 2026",
+    title: "Start simple: new projects ask one question, and light projects open on a calm home.",
+    body: "Creating a project used to mean picking a size and an approach before you had written a single task. Now it asks one question: keep it simple, or run the full project track? Simple projects open on a calm home with one job, adding your first task, your progress in plain words, and three quiet cards for tasks, what is coming up, and decisions you are waiting on. Nothing is walled off: when a project grows, add Budget, Meetings, Stakeholders, Risks, the Charter and more from the Need more row, and they join the same project right where you are. Full-track projects work exactly as before, and you can switch any project any time in its settings.",
+  },
+  {
     version: "v170",
     date: "November 2026",
     title: "Your AI can update your projects now, with a read + write token.",

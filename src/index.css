@@ -1837,6 +1837,64 @@ a.dash-list-title:hover { text-decoration: underline; }
   .setup-size-grid { grid-template-columns: 1fr; }
 }
 
+/* --- v171: Two Doors (creation) + calm home (light projects) --- */
+.doors { margin: 2px 0 4px; }
+.doors-q { margin: 0 0 10px; font-size: 16px; font-weight: 700; color: var(--navy); }
+.doors-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.door-card {
+  position: relative; display: flex; flex-direction: column; gap: 4px; margin: 0;
+  background: var(--panel); border: 2px solid var(--border); border-radius: var(--radius);
+  padding: 14px 16px; cursor: pointer; transition: border-color var(--ease), background var(--ease);
+}
+.door-card:hover { border-color: var(--tint-strong); }
+.door-card-on { border-color: var(--lime); background: var(--tint); }
+.door-card:focus-within { outline: 2px solid var(--lime); outline-offset: 2px; }
+.door-name { font-size: 16px; font-weight: 700; }
+.door-blurb { font-size: 13px; color: var(--slate); line-height: 1.45; }
+.door-tag {
+  align-self: flex-start; margin-top: 8px; font-size: 12px; font-weight: 700; color: var(--ink);
+  background: var(--lime); border-radius: var(--radius-pill); padding: 2px 9px;
+}
+.doors-note { margin: 8px 0 0; font-size: 13px; color: var(--slate); }
+@media (max-width: 640px) {
+  .doors-grid { grid-template-columns: 1fr; }
+}
+
+.calm { max-width: 880px; display: flex; flex-direction: column; gap: 22px; }
+.calm-add {
+  background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 26px 28px;
+}
+.calm-add-title { margin: 0 0 6px; font-size: 26px; line-height: 1.2; }
+.calm-add-sub { margin: 0 0 18px; font-size: 15px; color: var(--slate); line-height: 1.5; }
+.calm-add-form { display: flex; gap: 10px; }
+.calm-add-form input { flex: 1; min-width: 0; }
+.calm-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.calm-tile {
+  display: flex; flex-direction: column; gap: 6px; text-align: left; font: inherit;
+  background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 18px; cursor: pointer; transition: border-color var(--ease);
+}
+.calm-tile:hover { border-color: var(--tint-strong); }
+.calm-tile:focus-visible { outline: 2px solid var(--lime); outline-offset: 2px; }
+.calm-tile-name { font-size: 15px; font-weight: 700; }
+.calm-tile-line { font-size: 13px; color: var(--slate); line-height: 1.45; overflow-wrap: anywhere; }
+.calm-tile-strong { color: var(--navy); font-weight: 600; }
+.calm-grow-label { margin: 0 0 10px; font-size: 14px; font-weight: 700; }
+.calm-grow-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.calm-chip {
+  font: inherit; font-size: 13px; font-weight: 600; color: var(--navy);
+  background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-pill);
+  padding: 6px 12px; cursor: pointer; transition: border-color var(--ease);
+}
+.calm-chip:hover { border-color: var(--lime); }
+.calm-all { margin-top: 14px; }
+@media (max-width: 760px) {
+  .calm-grid { grid-template-columns: 1fr; }
+  .calm-add { padding: 20px; }
+  .calm-add-form { flex-direction: column; }
+}
+
 /* --- Charter tab --- */
 .charter { max-width: 780px; }
 .charter-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }

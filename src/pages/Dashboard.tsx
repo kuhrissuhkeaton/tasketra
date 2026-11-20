@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api, ApiError, type Project, type ProjectStage, type PortfolioData, type PortfolioProjectSummary, type PortfolioDecision, type PortfolioRisk, type Task, type Issue, type UserTemplate, type MyTodayData, type CalendarItem } from "../lib/api";
 import { AppSidebar } from "../components/AppSidebar";
 import { StageChip, STAGES, STAGE_LABEL } from "../components/StageRail";
-import { ProjectSetupPicker } from "../components/ProjectSetup";
+import TwoDoorsPicker, { lastRoute, rememberRoute, type ProjectRoute } from "../components/TwoDoors";
 import type { ProjectSize, ProjectApproach } from "../lib/projectView";
 import { PROJECT_TEMPLATES, getTemplate, isTemplateId, templateSummary } from "../lib/projectTemplates";
 import { useConfirm } from "../components/ConfirmDialog";
@@ -616,8 +616,13 @@ export default function Dashboard() {
   }, []);
   const [showSetup, setShowSetup] = useState(false);
   const [showNew, setShowNew] = useState(false);
-  const [setupSize, setSetupSize] = useState<ProjectSize>("standard");
-  const [setupApproach, setSetupApproach] = useState<ProjectApproach>("hybrid");
+  // v171: creation asks one question (the Two Doors) instead of the size x
+  // approach picker. The door maps onto the size system, the approach
+  // stays the hybrid default, and both remain changeable afterwards in
+  // project settings, where the full picker (incl. Standard) still lives.
+  const [route, setRoute] = useState<ProjectRoute>(() => lastRoute());
+  const setupSize: ProjectSize = route === "full" ? "full" : "light";
+  const setupApproach: ProjectApproach = "hybrid";
   const [creating, setCreating] = useState(false);
   const [nameError, setNameError] = useState("");
   const [restoringId, setRestoringId] = useState<string | null>(null);
@@ -822,6 +827,7 @@ export default function Dashboard() {
         approach: setupApproach,
         ...(templateId ? { template: templateId } : {}),
       });
+      rememberRoute(route);
       if (templateId && created.templateApplied === false) {
         // The project exists, but its skeleton did not fully load. Say so
         // rather than dropping the user into a half-empty project unannounced.
@@ -837,8 +843,8 @@ export default function Dashboard() {
       setTemplateId("");
       setSeedExample(false);
       setShowSetup(false);
-      setSetupSize("standard");
-      setSetupApproach("hybrid");
+      // The door choice stays where the creator left it: it is the
+      // pre-selected door next time (v171 decision: remember the last one).
       // v161 (F-09): same as the first-run screen -- a first project gets
       // the doing tour, and the narration tour no longer auto-starts.
       if (user && isFirstProjectEver) startDoingTour(user.id, project.id);
@@ -874,7 +880,11 @@ export default function Dashboard() {
     setFirstRunError(null);
     try {
       const created = await api.createProject(name, undefined, choice === "example", {
-        size: "standard",
+        // v171: a blank first project starts on the simple route and opens
+        // on the calm home. Example and template starts keep Standard:
+        // they seed sections (assumptions, dependencies) the simple view
+        // hides, and seeded content should never land out of sight.
+        size: choice === "blank" ? "light" : "standard",
         // No Set up step on this screen, so take the approach the template is built for.
         approach: template ? template.suggestedApproach : "hybrid",
         ...(template ? { template: template.id } : {}),
@@ -1098,7 +1108,7 @@ export default function Dashboard() {
               {templateId && getTemplate(templateId) && (
                 <p className="muted">
                   {getTemplate(templateId)!.blurb} We'll add {templateSummary(getTemplate(templateId)!)}, with dates counted
-                  from today. It works best with the {getTemplate(templateId)!.suggestedApproach} approach (change it under More options).
+                  from today. It works best with the {getTemplate(templateId)!.suggestedApproach} approach (change it any time in project settings).
                   Stakeholders are placeholder roles; replace them with real people. Delete anything you don't need.
                 </p>
               )}
@@ -1109,6 +1119,7 @@ export default function Dashboard() {
                   people are copied. Delete anything you don't need.
                 </p>
               )}
+              <TwoDoorsPicker value={route} onChange={setRoute} />
               <div>
                 <button
                   type="button"
@@ -1137,13 +1148,6 @@ export default function Dashboard() {
                     anything you don't want.
                   </p>
                 )}
-                <div className="setup-panel">
-                  <ProjectSetupPicker
-                    size={setupSize}
-                    approach={setupApproach}
-                    onChange={(n) => { setSetupSize(n.size); setSetupApproach(n.approach); }}
-                  />
-                </div>
               </div>
               {upgradeNotice && (
                 <p className="form-error" role="alert">

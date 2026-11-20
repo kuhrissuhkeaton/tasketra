@@ -66,6 +66,25 @@ describe("project size and approach", () => {
     expect((await getProject(owner, project.id)).show_all_tabs).toBe(false);
   });
 
+  it("stores grown-back tabs (v171 extra_tabs) and returns them on GET", async () => {
+    const owner = await createTestUser("setup-extras@example.com");
+    const project = await createTestProject(owner.id);
+    expect((await getProject(owner, project.id)).extra_tabs ?? null).toBeNull();
+    const res = await patch(owner, { id: project.id, extra_tabs: JSON.stringify(["budget", "meetings"]) });
+    expect(res.status).toBe(200);
+    expect((await jsonBody<{ project: any }>(res)).project.extra_tabs).toBe('["budget","meetings"]');
+    expect((await getProject(owner, project.id)).extra_tabs).toBe('["budget","meetings"]');
+  });
+
+  it("rejects a malformed extra_tabs and leaves the project unchanged", async () => {
+    const owner = await createTestUser("setup-extras-bad@example.com");
+    const project = await createTestProject(owner.id);
+    expect((await patch(owner, { id: project.id, extra_tabs: "budget" })).status).toBe(400);
+    expect((await patch(owner, { id: project.id, extra_tabs: '["nope"]' })).status).toBe(400);
+    expect((await patch(owner, { id: project.id, extra_tabs: 42 })).status).toBe(400);
+    expect((await getProject(owner, project.id)).extra_tabs ?? null).toBeNull();
+  });
+
   it("rejects bad values on PATCH and leaves the project unchanged", async () => {
     const owner = await createTestUser("setup-bad-patch@example.com");
     const project = await createTestProject(owner.id);

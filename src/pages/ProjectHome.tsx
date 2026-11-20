@@ -39,12 +39,13 @@ import { ProjectSetupPicker } from "../components/ProjectSetup";
 import { useIsScrollable } from "../lib/scrollRegion";
 import { announce } from "../lib/announce";
 import { AddForm } from "../components/AddForm";
+import CalmHome from "../components/CalmHome";
 import { CharterTab } from "../components/CharterTab";
 import { BaselineCard } from "../components/BaselineCard";
 import { EscalationSettings } from "../components/EscalationSettings";
 import { HealthStrip } from "../components/HealthStrip";
 import { ProjectCockpit } from "../components/ProjectCockpit";
-import { isTabHidden, defaultTasksView, hiddenTabLabels, SIZE_LABEL, type ProjectSize, type ProjectApproach } from "../lib/projectView";
+import { isTabHidden, defaultTasksView, hiddenTabLabels, parseExtraTabs, SIZE_LABEL, type ProjectSize, type ProjectApproach } from "../lib/projectView";
 import { useDocumentTitle } from "../lib/documentTitle";
 import { entityLabel } from "../lib/entityLabels";
 import { QualityTab } from "./project/QualityTab";
@@ -239,13 +240,39 @@ export default function ProjectHome() {
   useDocumentTitle(project?.name ? (titleTabLabel && tab !== "home" ? `${titleTabLabel} | ${project.name}` : project.name) : null);
 
   if (!id) return null;
+  const projectId: string = id;
 
   // Size hides tabs (never data). The product tour and "show all tabs" both
   // reveal everything, and the tab someone is on is never hidden from them.
   const size: ProjectSize = project?.size ?? "full";
   const approach: ProjectApproach = project?.approach ?? "hybrid";
   const showAll = (project?.show_all_tabs ?? false) || tour.active;
-  const navGroups = visibleGroups(tab, size, showAll);
+  // v171: the pieces a light project has grown back in place (extra_tabs),
+  // and the calm home it opens on while it stays light with "show all" off.
+  const extraTabs = parseExtraTabs(project?.extra_tabs);
+  const onCalmHome = size === "light" && !showAll && tab === "home";
+  const navGroups = visibleGroups(tab, size, showAll, extraTabs);
+
+  async function showAllTabs() {
+    await api.updateProject(projectId, { show_all_tabs: true });
+    setProject((p) => (p ? { ...p, show_all_tabs: true } : p));
+  }
+
+  // v171 grow-in-place: record the piece on the project, then open it. If
+  // the save fails the tab still opens for this visit (the current tab is
+  // never hidden); it just won't stick in the nav.
+  async function growTab(tabId: string) {
+    if (!extraTabs.includes(tabId)) {
+      const next = JSON.stringify([...extraTabs, tabId]);
+      try {
+        await api.updateProject(projectId, { extra_tabs: next });
+        setProject((p) => (p ? { ...p, extra_tabs: next } : p));
+      } catch {
+        /* open anyway */
+      }
+    }
+    setParams({ tab: tabId as Tab });
+  }
   const activeGroup = groupOf(tab);
   const activeSections = navGroups.find((g) => g.group.id === activeGroup)?.sections ?? [];
   // Strip views (the old top row) keep the project name as the heading; every other
@@ -309,7 +336,7 @@ export default function ProjectHome() {
             ))}
         </div>
 
-        {project && project.content_count === 0 && !project.last_activity_at && (
+        {project && project.content_count === 0 && !project.last_activity_at && !onCalmHome && (
           <div className="callout" role="note">
             <strong>Nothing here yet.</strong> This project was created {fmtDate(project.created_at)} and
             nothing has been added to it — it hasn&apos;t been deleted or emptied. When you add tasks,
@@ -319,8 +346,9 @@ export default function ProjectHome() {
           </div>
         )}
 
-        {id && <HealthStrip projectId={id} refreshKey={`${tab}:${healthNonce}`} onOpenTab={(t) => setParams({ tab: t })} />}
+        {id && !onCalmHome && <HealthStrip projectId={id} refreshKey={`${tab}:${healthNonce}`} onOpenTab={(t) => setParams({ tab: t })} />}
 
+        {!onCalmHome && (<>
         <nav className="project-tabs primary-tabs" aria-label="Project views">
           {navGroups.map(({ group, sections, opens }) => (
             <button
@@ -351,8 +379,19 @@ export default function ProjectHome() {
             ))}
           </nav>
         )}
+        </>)}
 
-        {tab === "home" && (
+        {tab === "home" && onCalmHome ? (
+          <CalmHome
+            projectId={id}
+            isOwner={project?.is_owner ?? false}
+            size={size}
+            extraTabs={extraTabs}
+            onOpenTab={(t) => setParams({ tab: t as Tab })}
+            onShowAllTabs={showAllTabs}
+            onGrowTab={growTab}
+          />
+        ) : tab === "home" ? (
           <HomeTab
             projectId={id}
             isOwner={project?.is_owner ?? false}
@@ -360,15 +399,13 @@ export default function ProjectHome() {
             stage={project?.stage ?? "initiate"}
             size={size}
             showAll={project?.show_all_tabs ?? false}
-            onShowAllTabs={async () => {
-              await api.updateProject(id, { show_all_tabs: true });
-              setProject((p) => (p ? { ...p, show_all_tabs: true } : p));
-            }}
+            extraTabs={extraTabs}
+            onShowAllTabs={showAllTabs}
             onStageChange={(stage: ProjectStage) => setProject((p) => (p ? { ...p, stage } : p))}
             onOpenTab={(t) => setParams({ tab: t })}
           />
-        )}
-        {tab === "roadmap" && <RoadmapTab projectId={id} isOwner={project?.is_owner ?? false} showBudget={!isTabHidden("budget", size, showAll)} />}
+        ) : null}
+        {tab === "roadmap" && <RoadmapTab projectId={id} isOwner={project?.is_owner ?? false} showBudget={!isTabHidden("budget", size, showAll, extraTabs)} />}
         {tab === "tasks" && <TasksTab projectId={id} defaultView={defaultTasksView(approach)} projectName={project?.name || "Project"} highlightId={tab === "tasks" ? highlightId : null} />}
         {tab === "charter" && (
           <CharterTab
@@ -378,7 +415,7 @@ export default function ProjectHome() {
             isOwner={project?.is_owner ?? false}
             size={size}
             showAll={showAll}
-            okrsVisible={!isTabHidden("okrs", size, showAll)}
+            okrsVisible={!isTabHidden("okrs", size, showAll, extraTabs)}
             onSaved={(charter) => setProject((p) => (p ? { ...p, charter } : p))}
             onOpenTab={(t) => setParams({ tab: t })}
           />
@@ -420,13 +457,14 @@ export default function ProjectHome() {
   );
 }
 
-function HomeTab({ projectId, isOwner, purpose, stage, size, showAll, onShowAllTabs, onStageChange, onOpenTab }: {
+function HomeTab({ projectId, isOwner, purpose, stage, size, showAll, extraTabs, onShowAllTabs, onStageChange, onOpenTab }: {
   projectId: string;
   isOwner: boolean;
   purpose?: string;
   stage: ProjectStage;
   size: ProjectSize;
   showAll: boolean;
+  extraTabs: string[];
   onShowAllTabs: () => void;
   onStageChange: (stage: ProjectStage) => void;
   onOpenTab: (tab: string) => void;
@@ -448,7 +486,7 @@ function HomeTab({ projectId, isOwner, purpose, stage, size, showAll, onShowAllT
     <div>
       {size !== "full" && !showAll && (
         <p className="view-banner">
-          Showing the {SIZE_LABEL[size]} view, which hides {hiddenTabLabels(size).length} tabs.{" "}
+          Showing the {SIZE_LABEL[size]} view, which hides {hiddenTabLabels(size, extraTabs).length} tabs.{" "}
           {isOwner && (
             <button type="button" className="view-banner-link" onClick={onShowAllTabs}>Show all sections</button>
           )}
@@ -522,7 +560,7 @@ function HomeTab({ projectId, isOwner, purpose, stage, size, showAll, onShowAllT
       <div className="today-section" style={{ marginTop: 28 }}>
         <h4>All sections</h4>
         <div className="section-dir">
-          {sectionDirectory(size, showAll).map(({ group, sections }) => (
+          {sectionDirectory(size, showAll, extraTabs).map(({ group, sections }) => (
             <div key={group.id} className="section-dir-group">
               <h5 className="section-dir-label">{group.label}</h5>
               <div className="section-dir-grid">
@@ -540,7 +578,7 @@ function HomeTab({ projectId, isOwner, purpose, stage, size, showAll, onShowAllT
         </div>
         {size !== "full" && !showAll && (
           <p className="muted" style={{ marginTop: 12 }}>
-            {hiddenTabLabels(size).length} sections are hidden by the {SIZE_LABEL[size]} view.
+            {hiddenTabLabels(size, extraTabs).length} sections are hidden by the {SIZE_LABEL[size]} view.
             {isOwner && <> <button type="button" className="view-banner-link" onClick={onShowAllTabs}>Show all sections</button></>}
           </p>
         )}

@@ -197,6 +197,8 @@ export type Project = {
   size?: ProjectSize;
   approach?: ProjectApproach;
   show_all_tabs?: boolean;
+  // v171: JSON array of tab ids grown back in place on a light project.
+  extra_tabs?: string | null;
   charter?: Charter;
   tolerances?: Tolerances;
   stage_gates?: boolean;
@@ -1227,7 +1229,7 @@ export const api = {
   updateProject: (id: string, patch: {
     name?: string; description?: string; ccb_enabled?: boolean;
     closureChecklist?: Record<string, boolean>; closureNotes?: string; stage?: ProjectStage;
-    size?: ProjectSize; approach?: ProjectApproach; show_all_tabs?: boolean; charter?: Charter; tolerances?: Tolerances; stage_gates?: boolean;
+    size?: ProjectSize; approach?: ProjectApproach; show_all_tabs?: boolean; extra_tabs?: string; charter?: Charter; tolerances?: Tolerances; stage_gates?: boolean;
   }) =>
     request<{ project: Project }>("/project", { method: "PATCH", body: JSON.stringify({ id, ...patch }) }),
   getStageGate: (projectId: string) =>

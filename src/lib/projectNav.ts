@@ -70,14 +70,14 @@ export function sectionLabel(tab: string): string | null {
   return tab === "trash" ? "Trash" : null;
 }
 
-export function visibleSections(group: NavGroup, current: string, size: ProjectSize, showAll: boolean): NavSection[] {
-  return group.sections.filter((s) => s.id === current || !isTabHidden(s.id, size, showAll));
+export function visibleSections(group: NavGroup, current: string, size: ProjectSize, showAll: boolean, extraTabs: string[] = []): NavSection[] {
+  return group.sections.filter((s) => s.id === current || !isTabHidden(s.id, size, showAll, extraTabs));
 }
 
 /** The six groups, minus any whose sections are all hidden, each with the tab a click should open. */
-export function visibleGroups(current: string, size: ProjectSize, showAll: boolean) {
+export function visibleGroups(current: string, size: ProjectSize, showAll: boolean, extraTabs: string[] = []) {
   return NAV_GROUPS
-    .map((g) => ({ group: g, sections: visibleSections(g, current, size, showAll) }))
+    .map((g) => ({ group: g, sections: visibleSections(g, current, size, showAll, extraTabs) }))
     .filter((x) => x.sections.length > 0)
     .map((x) => ({ ...x, opens: x.sections[0].id }));
 }
@@ -88,11 +88,11 @@ export function visibleGroups(current: string, size: ProjectSize, showAll: boole
  *  on. The Overview entry itself is left out (the directory sits on it), and
  *  a group with nothing visible left is dropped entirely. This is the one
  *  function that decides what the directory lists; HomeTab renders it as-is. */
-export function sectionDirectory(size: ProjectSize, showAll: boolean): { group: NavGroup; sections: NavSection[] }[] {
+export function sectionDirectory(size: ProjectSize, showAll: boolean, extraTabs: string[] = []): { group: NavGroup; sections: NavSection[] }[] {
   return NAV_GROUPS
     .map((group) => ({
       group,
-      sections: visibleSections(group, "home", size, showAll).filter((s) => s.id !== "home"),
+      sections: visibleSections(group, "home", size, showAll, extraTabs).filter((s) => s.id !== "home"),
     }))
     .filter((x) => x.sections.length > 0);
 }

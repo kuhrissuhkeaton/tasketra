@@ -49,14 +49,29 @@ export function hiddenTabIds(size: ProjectSize): string[] {
   return HIDDEN[size];
 }
 
-export function hiddenTabLabels(size: ProjectSize): string[] {
-  return HIDDEN[size].map((id) => TAB_LABEL[id] ?? id);
+export function hiddenTabLabels(size: ProjectSize, extraTabs: string[] = []): string[] {
+  return HIDDEN[size].filter((id) => !extraTabs.includes(id)).map((id) => TAB_LABEL[id] ?? id);
+}
+
+/** v171: the tab ids a light project has grown back in place, stored on the
+ *  project as a JSON array in a text column. Parse defensively: anything
+ *  unreadable, or not an array of strings, is an empty list. */
+export function parseExtraTabs(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return [...new Set(parsed.filter((x): x is string => typeof x === "string"))];
+  } catch {
+    return [];
+  }
 }
 
 /** A tab is hidden only by its project's size, and never once "show all tabs"
- *  is on. The tab a person is currently on is always kept visible by callers. */
-export function isTabHidden(tab: string, size: ProjectSize, showAll: boolean): boolean {
-  return !showAll && HIDDEN[size].includes(tab);
+ *  is on or the tab has been grown back in place (v171 extra_tabs). The tab a
+ *  person is currently on is always kept visible by callers. */
+export function isTabHidden(tab: string, size: ProjectSize, showAll: boolean, extraTabs: string[] = []): boolean {
+  return !showAll && !extraTabs.includes(tab) && HIDDEN[size].includes(tab);
 }
 
 const PRIMARY_ORDER: Record<ProjectApproach, string[]> = {
@@ -65,8 +80,8 @@ const PRIMARY_ORDER: Record<ProjectApproach, string[]> = {
   agile: ["home", "tasks", "roadmap", "meetings", "budget"],
 };
 
-export function primaryTabOrder(approach: ProjectApproach, size: ProjectSize, showAll: boolean): string[] {
-  return PRIMARY_ORDER[approach].filter((id) => !isTabHidden(id, size, showAll));
+export function primaryTabOrder(approach: ProjectApproach, size: ProjectSize, showAll: boolean, extraTabs: string[] = []): string[] {
+  return PRIMARY_ORDER[approach].filter((id) => !isTabHidden(id, size, showAll, extraTabs));
 }
 
 export function defaultTasksView(approach: ProjectApproach): "list" | "board" {
