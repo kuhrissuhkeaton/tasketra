@@ -111,6 +111,18 @@ describe("CalmHome", () => {
     expect(props2.onOpenTab).toHaveBeenCalledWith("budget");
   });
 
+  it("while loading it never claims the project is empty", async () => {
+    calls.listTasks.mockReturnValue(new Promise(() => {}));
+    calls.listDecisions.mockReturnValue(new Promise(() => {}));
+    await render();
+    expect(container.querySelector("h2")?.textContent).toBe("Add a task");
+    expect(container.textContent).not.toContain("Add your first task");
+    expect(container.textContent).not.toContain("Add your first one above");
+    expect(container.textContent).not.toContain("Nothing yet");
+    expect(container.textContent).not.toContain("Nothing scheduled yet");
+    expect(container.textContent).not.toContain("Nothing waiting");
+  });
+
   it("All project tools shows for the owner only", async () => {
     const props = await render();
     await act(async () => { button("All project tools").click(); });

@@ -114,7 +114,7 @@ export default function CalmHome({
   return (
     <div className="calm">
       <section className="calm-add">
-        <h2 className="calm-add-title">{total === 0 ? "Add your first task" : "Add a task"}</h2>
+        <h2 className="calm-add-title">{tasks !== null && total === 0 ? "Add your first task" : "Add a task"}</h2>
         <p className="calm-add-sub">
           {tasks === null
             ? "One moment…"
@@ -148,12 +148,14 @@ export default function CalmHome({
             {tasks === null ? "…" : total === 0 ? "Nothing yet" : `${done} of ${total} done`}
           </span>
           <span className="calm-tile-line">
-            {total === 0 ? "Add your first one above" : open > 0 ? `${open} still open` : "All caught up"}
+            {tasks === null ? "" : total === 0 ? "Add your first one above" : open > 0 ? `${open} still open` : "All caught up"}
           </span>
         </button>
         <button type="button" className="calm-tile" onClick={() => onOpenTab("tasks")}>
           <span className="calm-tile-name">Coming up</span>
-          {nextDue ? (
+          {tasks === null ? (
+            <span className="calm-tile-line">…</span>
+          ) : nextDue ? (
             <>
               <span className="calm-tile-line calm-tile-strong">{nextDue.title}</span>
               <span className="calm-tile-line">Due {fmtDate(nextDue.due_date)}</span>
@@ -164,7 +166,9 @@ export default function CalmHome({
         </button>
         <button type="button" className="calm-tile" onClick={() => onOpenTab("decisions")}>
           <span className="calm-tile-name">Waiting on a decision</span>
-          {waiting.length > 0 ? (
+          {decisions === null ? (
+            <span className="calm-tile-line">…</span>
+          ) : waiting.length > 0 ? (
             <>
               <span className="calm-tile-line">
                 {waiting.length} waiting
