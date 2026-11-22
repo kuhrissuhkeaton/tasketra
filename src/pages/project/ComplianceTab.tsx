@@ -6,7 +6,8 @@ import { RowActionsMenu } from "../../components/RowActionsMenu";
 import { QuickAddForm } from "../../components/QuickAddForm";
 import { DateField } from "../../components/DateField";
 import { useConfirm } from "../../components/ConfirmDialog";
-import { RegisterRow, RegisterSummary, RegisterEmpty } from "../../components/ui";
+import { RegisterRow } from "../../components/ui";
+import { StatCards, StatCard, HowItWorks, TeachEmpty } from "../../components/Layered";
 import { announce } from "../../lib/announce";
 import { fmtLocalDate } from "../../lib/format";
 import { expiryFlag } from "../../lib/rowFlags";
@@ -117,11 +118,14 @@ export function ComplianceTab({ projectId }: { projectId: string }) {
 
   return (
     <div>
-      <p className="muted" style={{ marginBottom: 16, maxWidth: 640 }}>
-        Regulatory, policy, standard, or contractual obligations this project needs to satisfy --
-        tracked alongside the rest of RAID, since "are we compliant with this" is a different
-        question from "is this good enough" (Quality) or "is something broken" (Issues).
-      </p>
+      <div style={{ marginBottom: 16 }}>
+        <p className="muted" style={{ margin: "0 0 6px", maxWidth: 640 }}>
+          Regulatory, policy, standard, or contractual obligations this project needs to satisfy.
+        </p>
+        <HowItWorks label="How compliance works" article="compliance">
+          Compliance is tracked alongside the rest of RAID because are we compliant with this is a different question from is this good enough (Quality) or is something broken (Issues). Log the obligation, name who owns it, and set the date it has to be satisfied by.
+        </HowItWorks>
+      </div>
       <QuickAddForm
         storageKey="compliance"
         hasRows={items.length > 0}
@@ -210,13 +214,13 @@ export function ComplianceTab({ projectId }: { projectId: string }) {
         </div>
       ) : (
       <>
-      <RegisterSummary>
-        {items.filter((c) => c.status === "not_started" || c.status === "in_progress").length} to do
-        {" \u00b7 "}{items.filter((c) => c.status === "non_compliant").length} non-compliant
-        {" \u00b7 "}{items.filter((c) => c.status === "compliant").length} compliant
-      </RegisterSummary>
+      <StatCards>
+        <StatCard label="To do" value={String(items.filter((c) => c.status === "not_started" || c.status === "in_progress").length)} />
+        <StatCard label="Non-compliant" value={String(items.filter((c) => c.status === "non_compliant").length)} tone={items.some((c) => c.status === "non_compliant") ? "bad" : undefined} />
+        <StatCard label="Compliant" value={String(items.filter((c) => c.status === "compliant").length)} />
+      </StatCards>
       {items.length === 0 ? (
-        <RegisterEmpty>No compliance items logged yet. Add a regulation, policy, or standard this project needs to satisfy.</RegisterEmpty>
+        <TeachEmpty title="No compliance items logged yet" body="Add a regulation, policy, or standard this project needs to satisfy. Each item gets an owner and a due date, so an obligation is never just something someone remembers." article="compliance" />
       ) : (
         <ul className="rg-list" aria-label="Compliance items">
           {items.map((c) => (

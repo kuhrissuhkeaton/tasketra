@@ -46,7 +46,7 @@ export function AdminUserProjects() {
   return (
     <div className="project-shell">
       <AppSidebar />
-      <main id="main-content" className="project-main">
+      <main id="main-content" className="project-main admin-main">
         <PageHeader
           title="Support view"
           subtitle={owner ? `Projects owned by ${owner.display_name ? `${owner.display_name} (${owner.email})` : owner.email} — read-only.` : undefined}
@@ -107,7 +107,7 @@ export function AdminProjectView() {
   return (
     <div className="project-shell">
       <AppSidebar />
-      <main id="main-content" className="project-main">
+      <main id="main-content" className="project-main admin-main">
         <PageHeader title={p ? p.name : "Support view"} subtitle="Admin support view" />
         {p && (
           <p className="pill pill-gold" role="status">

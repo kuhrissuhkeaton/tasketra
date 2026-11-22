@@ -23,6 +23,7 @@ import { AppSidebar } from "../components/AppSidebar";
 import { NAV_GROUPS, STRIP_TABS, groupOf, sectionLabel, sectionDirectory, visibleGroups } from "../lib/projectNav";
 import { useConfirm } from "../components/ConfirmDialog";
 import { RegisterRow, RegisterSummary, RegisterEmpty } from "../components/ui";
+import { StatCards, StatCard, LayerGroup, HowItWorks, TeachEmpty } from "../components/Layered";
 import { daysUntil, lateFlag, expiryFlag } from "../lib/rowFlags";
 import { statusEvidence, STATED_HEALTH_LABEL, STATED_HEALTH_PILL, STATED_HEALTH_VALUES, type StatedHealth, type StatusEvidenceInput } from "../lib/statusEvidence";
 import { groupTasks, groupOfTask, isTaskSort, TASK_SORT_LABEL, TASK_GROUPS_OPEN_BY_DEFAULT, type TaskSort, type TaskGroupId } from "../lib/taskGroups";
@@ -39,7 +40,10 @@ import { ProjectSetupPicker } from "../components/ProjectSetup";
 import { useIsScrollable } from "../lib/scrollRegion";
 import { announce } from "../lib/announce";
 import { AddForm } from "../components/AddForm";
-import CalmHome from "../components/CalmHome";
+import CalmHome, { GROW_PIECES } from "../components/CalmHome";
+import { StatusTier } from "../components/StatusTier";
+import type { ReactNode } from "react";
+import { ProjectSidebarNav } from "../components/ProjectSidebarNav";
 import { CharterTab } from "../components/CharterTab";
 import { BaselineCard } from "../components/BaselineCard";
 import { EscalationSettings } from "../components/EscalationSettings";
@@ -274,19 +278,50 @@ export default function ProjectHome() {
     setParams({ tab: tabId as Tab });
   }
   const activeGroup = groupOf(tab);
-  const activeSections = navGroups.find((g) => g.group.id === activeGroup)?.sections ?? [];
   // Strip views (the old top row) keep the project name as the heading; every other
   // view gets a breadcrumb and uses the view name as the heading.
   const viewLabel: string | null = STRIP_TABS.has(tab) ? null : sectionLabel(tab);
 
+  // v172: the sidebar's Decisions badge. Refetched on the same triggers
+  // as the project itself (tab change, project-changed event).
+  const [decisionsWaiting, setDecisionsWaiting] = useState(0);
+  useEffect(() => {
+    if (!id) return;
+    let live = true;
+    api
+      .listDecisions(id)
+      .then(({ decisions }) => {
+        if (live) setDecisionsWaiting(decisions.filter((d) => d.status === "open").length);
+      })
+      .catch(() => {
+        /* badge just stays as it was */
+      });
+    return () => {
+      live = false;
+    };
+  }, [id, tab, healthNonce]);
+
+  // v172: the sidebar's grow row offers the pieces the size view still
+  // hides (the calm home's grow list, same order and labels).
+  const sidebarGrowPieces =
+    size === "light" && !showAll
+      ? GROW_PIECES.filter((p) => isTabHidden(p.id, size, showAll, extraTabs))
+      : [];
+
   return (
     <div className="project-shell">
       <AppSidebar menuLabel="Project tools">
-        <div className="side-nav-group">
-          {/* v160 (F-24): the label truncates in the narrow sidebar; the
-              full project name is on hover. */}
-          <div className="side-nav-label" title={project?.name || "Project"}>{project?.name || "Project"}</div>
-        </div>
+        <ProjectSidebarNav
+          projectName={project?.name || "Project"}
+          stageLabel={project?.stage ? STAGE_LABEL[project.stage] : null}
+          groups={navGroups}
+          activeTab={tab}
+          activeGroupId={activeGroup}
+          decisionsWaiting={decisionsWaiting}
+          growPieces={sidebarGrowPieces}
+          onOpenTab={(t) => setParams({ tab: t as Tab })}
+          onGrow={(t) => void growTab(t)}
+        />
       </AppSidebar>
 
       <main id="main-content" className={`project-main${TABLE_TABS.has(tab) ? " project-main-tables" : ""}`}>
@@ -330,7 +365,7 @@ export default function ProjectHome() {
                 userId={user.id}
                 projectId={id}
                 tab={tab}
-                hidden={tour.active}
+                hidden={tour.active || (tab === "home" && !onCalmHome)}
                 onOpenTab={(t) => setParams({ tab: t })}
               />
             ))}
@@ -346,40 +381,13 @@ export default function ProjectHome() {
           </div>
         )}
 
-        {id && !onCalmHome && <HealthStrip projectId={id} refreshKey={`${tab}:${healthNonce}`} onOpenTab={(t) => setParams({ tab: t })} />}
+        {/* v172: on the standard/full home the strip renders inside the
+            StatusTier instead (HomeTab); everywhere else it stands alone. */}
+        {id && !onCalmHome && tab !== "home" && <HealthStrip projectId={id} refreshKey={`${tab}:${healthNonce}`} onOpenTab={(t) => setParams({ tab: t })} />}
 
-        {!onCalmHome && (<>
-        <nav className="project-tabs primary-tabs" aria-label="Project views">
-          {navGroups.map(({ group, sections, opens }) => (
-            <button
-              key={group.id}
-              type="button"
-              className={activeGroup === group.id ? "project-tab is-active" : "project-tab"}
-              aria-current={activeGroup === group.id ? "page" : undefined}
-              onClick={() => setParams({ tab: opens })}
-              data-tour={sections.length === 1 ? `tab-${sections[0].id}` : `group-${group.id}`}
-            >
-              {group.label}
-            </button>
-          ))}
-        </nav>
-        {activeSections.length > 1 && (
-          <nav className="section-tabs" aria-label={`${NAV_GROUPS.find((g) => g.id === activeGroup)?.label} sections`}>
-            {activeSections.map((sec) => (
-              <button
-                key={sec.id}
-                type="button"
-                className={tab === sec.id ? "section-tab is-active" : "section-tab"}
-                aria-current={tab === sec.id ? "page" : undefined}
-                onClick={() => setParams({ tab: sec.id })}
-                data-tour={`tab-${sec.id}`}
-              >
-                {sec.label}
-              </button>
-            ))}
-          </nav>
-        )}
-        </>)}
+        {/* v172: project navigation moved into the sidebar
+            (ProjectSidebarNav); the two stacked tab bars that used to
+            sit here are gone. ?tab= routing is unchanged. */}
 
         {tab === "home" && onCalmHome ? (
           <CalmHome
@@ -403,6 +411,18 @@ export default function ProjectHome() {
             onShowAllTabs={showAllTabs}
             onStageChange={(stage: ProjectStage) => setProject((p) => (p ? { ...p, stage } : p))}
             onOpenTab={(t) => setParams({ tab: t })}
+            statusRefreshKey={`${healthNonce}`}
+            statusChecklist={
+              user && !doingTourState ? (
+                <FirstRunChecklist
+                  userId={user.id}
+                  projectId={id}
+                  tab="home"
+                  hidden={tour.active}
+                  onOpenTab={(t) => setParams({ tab: t })}
+                />
+              ) : undefined
+            }
           />
         ) : null}
         {tab === "roadmap" && <RoadmapTab projectId={id} isOwner={project?.is_owner ?? false} showBudget={!isTabHidden("budget", size, showAll, extraTabs)} />}
@@ -457,7 +477,7 @@ export default function ProjectHome() {
   );
 }
 
-function HomeTab({ projectId, isOwner, purpose, stage, size, showAll, extraTabs, onShowAllTabs, onStageChange, onOpenTab }: {
+function HomeTab({ projectId, isOwner, purpose, stage, size, showAll, extraTabs, onShowAllTabs, onStageChange, onOpenTab, statusChecklist, statusRefreshKey }: {
   projectId: string;
   isOwner: boolean;
   purpose?: string;
@@ -468,6 +488,8 @@ function HomeTab({ projectId, isOwner, purpose, stage, size, showAll, extraTabs,
   onShowAllTabs: () => void;
   onStageChange: (stage: ProjectStage) => void;
   onOpenTab: (tab: string) => void;
+  statusChecklist?: ReactNode;
+  statusRefreshKey?: string;
 }) {
   const [view, setView] = useState<"today" | "feed">("today");
   // v150: the Next Step card's "Write a check-in" jumps to the Feed composer.
@@ -484,20 +506,23 @@ function HomeTab({ projectId, isOwner, purpose, stage, size, showAll, extraTabs,
   }, [projectId]);
   return (
     <div>
-      {size !== "full" && !showAll && (
-        <p className="view-banner">
-          Showing the {SIZE_LABEL[size]} view, which hides {hiddenTabLabels(size, extraTabs).length} tabs.{" "}
-          {isOwner && (
-            <button type="button" className="view-banner-link" onClick={onShowAllTabs}>Show all sections</button>
-          )}
-        </p>
-      )}
-      {!purpose && (stage === "plan" || stage === "execute") && (
-        <p className="view-banner">
-          This project is under way without a charter. A short one — why it exists, who it's for, what done looks like — settles the scope questions before they become arguments.{" "}
-          <button type="button" className="view-banner-link" onClick={() => onOpenTab("charter")}>Write the charter</button>
-        </p>
-      )}
+      {/* v172: one status tier leads the home — verdict, progress,
+          decisions waiting, the quiet notice lines, and the setup
+          checklist as its action row. The banners that used to stack
+          above the cockpit now live inside it as plain lines. */}
+      <StatusTier
+        projectId={projectId}
+        stage={stage}
+        purpose={purpose}
+        sizeLabel={size !== "full" && !showAll ? SIZE_LABEL[size] : null}
+        hiddenCount={hiddenTabLabels(size, extraTabs).length}
+        isOwner={isOwner}
+        baselineData={baselineData}
+        checklist={statusChecklist}
+        refreshKey={statusRefreshKey}
+        onOpenTab={onOpenTab}
+        onShowAllTabs={onShowAllTabs}
+      />
       {purpose && (
         <p className="home-purpose">
           <span className="home-purpose-label">Purpose</span>
@@ -505,24 +530,9 @@ function HomeTab({ projectId, isOwner, purpose, stage, size, showAll, extraTabs,
           <button type="button" className="view-banner-link" onClick={() => onOpenTab("charter")}>Charter</button>
         </p>
       )}
-      {baselineData?.baseline && (
-        <p className="view-banner">
-          Baseline locked {fmtDate(baselineData.baseline.lockedAt)} · {baselineData.baseline.taskCount} tasks
-          {baselineData.variance && (baselineData.variance.movedTasks.length > 0 || baselineData.variance.addedTasks > 0 || baselineData.variance.removedTasks > 0)
-            ? ` · since then: ${baselineData.variance.movedTasks.length} moved, ${baselineData.variance.addedTasks} added, ${baselineData.variance.removedTasks} removed`
-            : " · nothing has moved against it yet"}{" "}
-          <button type="button" className="view-banner-link" onClick={() => onOpenTab("roadmap")}>See it on the Roadmap</button>
-        </p>
-      )}
-      {baselineData && !baselineData.baseline && stage === "execute" && (
-        <p className="view-banner">
-          No baseline locked yet. Once the plan settles, locking one gives you a fixed point to measure slippage against.{" "}
-          <button type="button" className="view-banner-link" onClick={() => onOpenTab("roadmap")}>Go to the Roadmap</button>
-        </p>
-      )}
-      {/* v165: the Project Cockpit leads the Overview -- the shared kit's
-          gauges, work breakdown and budget picture above the day-to-day
-          Today/Feed content, which is unchanged below. */}
+      {/* v165: the Project Cockpit follows the status tier as layer 2 --
+          the shared kit's gauges, work breakdown and budget picture above
+          the day-to-day Today/Feed content, which is unchanged below. */}
       <ProjectCockpit projectId={projectId} onOpenTab={onOpenTab} />
       <p className="muted" style={{ margin: "0 0 16px" }}>
         Sharing this project with a sponsor?{" "}
@@ -2258,6 +2268,9 @@ function IssuesTab({ projectId, highlightId }: { projectId: string; highlightId?
         Problems that are already happening and need someone to sort them out. Log them here so they
         get an owner and a status, not just a mention in a meeting.
       </p>
+      <HowItWorks label="How issues work" article="issues">
+        An issue is a problem that is already here, unlike a risk, which might happen. When a risk turns real, promote it from the Risks register and it lands here with its history attached.
+      </HowItWorks>
       <QuickAddForm
         storageKey="issues"
         hasRows={issues.length > 0}
@@ -2345,13 +2358,13 @@ function IssuesTab({ projectId, highlightId }: { projectId: string; highlightId?
         </div>
       ) : (
       <>
-      <RegisterSummary>
-        {issues.filter((i) => i.status !== "resolved").length} open
-        {" \u00b7 "}{issues.filter((i) => i.status !== "resolved" && (i.severity === "high" || i.severity === "critical")).length} high or critical
-        {" \u00b7 "}{issues.filter((i) => i.status === "resolved").length} resolved
-      </RegisterSummary>
+      <StatCards>
+        <StatCard label="Open" value={String(issues.filter((i) => i.status !== "resolved").length)} />
+        <StatCard label="High or critical" value={String(issues.filter((i) => i.status !== "resolved" && (i.severity === "high" || i.severity === "critical")).length)} tone={issues.some((i) => i.status !== "resolved" && (i.severity === "high" || i.severity === "critical")) ? "bad" : undefined} />
+        <StatCard label="Resolved" value={String(issues.filter((i) => i.status === "resolved").length)} />
+      </StatCards>
       {issues.length === 0 ? (
-        <RegisterEmpty action={{ label: "Log an issue", onClick: () => { issueTitleRef.current?.scrollIntoView({ block: "center" }); issueTitleRef.current?.focus(); } }}>No issues logged yet. Log one when something goes wrong or gets in the way.</RegisterEmpty>
+        <TeachEmpty title="No issues logged yet" body="Log one when something goes wrong or gets in the way. An issue is a problem that is already here; a risk that has not happened yet belongs in Risks." actionLabel="Log an issue" onAction={() => { issueTitleRef.current?.scrollIntoView({ block: "center" }); issueTitleRef.current?.focus(); }} article="issues" />
       ) : (
         <ul className="rg-list" aria-label="Issues">
           {issues.map((i) => {
@@ -2687,10 +2700,17 @@ function RisksTab({ projectId, highlightId }: { projectId: string; highlightId?:
 
   return (
     <div>
-      <p className="muted" style={{ marginBottom: 16, maxWidth: 640 }}>
-        Things that might go wrong, rated by how likely they are and how much they would hurt. Write
-        down what you will do about each one before it happens.
-      </p>
+      <div style={{ marginBottom: 16 }}>
+        <p className="muted" style={{ margin: "0 0 6px", maxWidth: 640 }}>
+          Things that might go wrong, rated by how likely they are and how much they would hurt.
+        </p>
+        <HowItWorks label="How risks work" article="risks">
+          Score each risk on probability and impact, 1 to 5. The exposure band (low, medium, high) follows
+          from the two scores. Write down what you will do about each one before it happens, that is the
+          mitigation, and give it an owner. When a risk actually happens, turn it into an issue from its
+          card so the history carries over.
+        </HowItWorks>
+      </div>
       <QuickAddForm
         storageKey="risks"
         hasRows={risks.length > 0}
@@ -2823,27 +2843,65 @@ function RisksTab({ projectId, highlightId }: { projectId: string; highlightId?:
         </div>
       ) : (
       <>
-      <RegisterSummary>
-        {risks.filter((r) => r.status !== "resolved").length} open
-        {" \u00b7 "}{risks.filter((r) => isHighExposureRisk(r)).length} high exposure
-        {" \u00b7 "}{risks.filter((r) => r.status === "resolved").length} resolved
-        {(() => {
-          const open = risks.filter((r) => r.status !== "resolved");
-          // Egg 3 (v158): every open risk scored and owned. Egg 11
-          // (v163): no open risks at all -- the two states are mutually
-          // exclusive, and each line appears and vanishes with its
-          // condition, which is its dismissal.
-          if (!delight) return null;
-          if (open.length > 0 && open.every((r) => riskScore(r) !== null && (r.owner_name ?? "").trim() !== ""))
-            return <>{" \u00b7 "}Fully loaded register</>;
-          if (risks.length > 0 && open.length === 0)
-            return <>{" \u00b7 "}All quiet on the risk front.</>;
-          return null;
-        })()}
-      </RegisterSummary>
-      {risks.length === 0 ? (
-        <RegisterEmpty>No risks logged yet. Add one above if something's worth tracking.</RegisterEmpty>
-      ) : (
+      {(() => {
+        const openRisks = risks.filter((r) => r.status !== "resolved");
+        const needsLook = openRisks.filter(
+          (r) => isHighExposureRisk(r) || riskScore(r) === null || (r.owner_name ?? "").trim() === "",
+        );
+        return (
+          <>
+            <StatCards>
+              <StatCard label="Open" value={String(openRisks.length)} />
+              <StatCard
+                label="High exposure"
+                value={String(risks.filter((r) => isHighExposureRisk(r)).length)}
+                tone={risks.some((r) => isHighExposureRisk(r)) ? "bad" : undefined}
+              />
+              <StatCard label="Resolved" value={String(risks.length - openRisks.length)} />
+              <StatCard
+                label="Needs a look"
+                value={String(needsLook.length)}
+                tone={needsLook.length > 0 ? "warn" : undefined}
+              />
+            </StatCards>
+            {delight && openRisks.length > 0 && openRisks.every((r) => riskScore(r) !== null && (r.owner_name ?? "").trim() !== "") && (
+              <p className="muted layer-note">Fully loaded register, every open risk scored and owned.</p>
+            )}
+            {delight && risks.length > 0 && openRisks.length === 0 && (
+              <p className="muted layer-note">All quiet on the risk front.</p>
+            )}
+            {risks.length === 0 ? (
+              <TeachEmpty
+                title="No risks logged yet"
+                body="Add one above if something is worth tracking. A risk is anything that might go wrong, written down before it does, with a plan for what you will do about it."
+                article="risks"
+              />
+            ) : (
+              <>
+                {needsLook.length > 0 && (
+                  <LayerGroup id="risks-needs" title="Needs a look" count={needsLook.length} defaultOpen>
+                    <ul className="rg-list" aria-label="Risks needing a look">
+                      {needsLook.map((r) => (
+                        <RegisterRow
+                          key={r.id}
+                          title={<button type="button" className="row-title-btn" onClick={() => openDrawer(r)}>{r.title}</button>}
+                          meta={[
+                            isHighExposureRisk(r) ? "High exposure" : null,
+                            riskScore(r) === null ? "Not scored yet" : null,
+                            (r.owner_name ?? "").trim() === "" ? "No owner" : r.owner_name,
+                          ].filter(Boolean).join(" \u00b7 ")}
+                          pill={
+                            <span className={`pill ${EXPOSURE_PILL[riskExposureFor(r)]}`}>
+                              {LEVEL_LABEL[riskExposureFor(r)]}
+                            </span>
+                          }
+                          actions={<button className="btn-link" type="button" onClick={() => openDrawer(r)}>Details</button>}
+                        />
+                      ))}
+                    </ul>
+                  </LayerGroup>
+                )}
+                <LayerGroup id="risks-all" title="Full register" count={risks.length} defaultOpen={needsLook.length === 0}>
         <ul className="rg-list" aria-label="Risks">
           {sortedRisks.map((r) => (
             <RegisterRow
@@ -2893,8 +2951,12 @@ function RisksTab({ projectId, highlightId }: { projectId: string; highlightId?:
               }
             />
           ))}
-        </ul>
+            </ul>
+          </LayerGroup>
+        </>
       )}
+      </>
+      ); })()}
       </>
       )}
 
@@ -3103,6 +3165,9 @@ function AssumptionsTab({ projectId }: { projectId: string }) {
         Things you're treating as true for planning purposes. Write them down so the plan gets
         revisited if one turns out wrong.
       </p>
+      <HowItWorks label="How assumptions work" article="assumptions">
+        Each assumption gets a check date, the day someone confirms it still holds. When one turns out wrong, revisit the plan in the same sitting, because it usually moves dates, money, or scope.
+      </HowItWorks>
       <QuickAddForm
         storageKey="assumptions"
         hasRows={assumptions.length > 0}
@@ -3185,13 +3250,13 @@ function AssumptionsTab({ projectId }: { projectId: string }) {
         </div>
       ) : (
       <>
-      <RegisterSummary>
-        {assumptions.filter((a) => a.status === "unconfirmed").length} to check
-        {" \u00b7 "}{assumptions.filter((a) => a.status === "unconfirmed" && (daysUntil(a.check_by) ?? 1) < 0).length} past their check date
-        {" \u00b7 "}{assumptions.filter((a) => a.status === "confirmed").length} confirmed
-      </RegisterSummary>
+      <StatCards>
+        <StatCard label="To check" value={String(assumptions.filter((a) => a.status === "unconfirmed").length)} />
+        <StatCard label="Past check date" value={String(assumptions.filter((a) => a.status === "unconfirmed" && (daysUntil(a.check_by) ?? 1) < 0).length)} tone={assumptions.some((a) => a.status === "unconfirmed" && (daysUntil(a.check_by) ?? 1) < 0) ? "warn" : undefined} />
+        <StatCard label="Confirmed" value={String(assumptions.filter((a) => a.status === "confirmed").length)} />
+      </StatCards>
       {assumptions.length === 0 ? (
-        <RegisterEmpty>No assumptions logged yet. Add one above to track what you're taking for granted.</RegisterEmpty>
+        <TeachEmpty title="No assumptions logged yet" body="Add one above to track what you are taking for granted. Give each assumption a check date so it gets re-tested before it quietly becomes a problem." article="assumptions" />
       ) : (
         <ul className="rg-list" aria-label="Assumptions">
           {assumptions.map((a) => (
@@ -3354,6 +3419,9 @@ function DependenciesTab({ projectId }: { projectId: string }) {
         Work that can't start or finish until something else does -- internal (another task) or
         external (a vendor, client, or regulatory step).
       </p>
+      <HowItWorks label="How dependencies work" article="dependencies">
+        Log what you are waiting on and the date you need it by. A dependency drifting past that date shows up as late in the counts before it stops the work, while there is still time to chase it.
+      </HowItWorks>
       <QuickAddForm
         storageKey="dependencies"
         hasRows={dependencies.length > 0}
@@ -3444,13 +3512,13 @@ function DependenciesTab({ projectId }: { projectId: string }) {
         </div>
       ) : (
       <>
-      <RegisterSummary>
-        {dependencies.filter((d) => d.status !== "resolved").length} waiting
-        {" \u00b7 "}{dependencies.filter((d) => d.status !== "resolved" && (daysUntil(d.needed_by) ?? 1) < 0).length} late
-        {" \u00b7 "}{dependencies.filter((d) => d.status === "resolved").length} resolved
-      </RegisterSummary>
+      <StatCards>
+        <StatCard label="Waiting" value={String(dependencies.filter((d) => d.status !== "resolved").length)} />
+        <StatCard label="Late" value={String(dependencies.filter((d) => d.status !== "resolved" && (daysUntil(d.needed_by) ?? 1) < 0).length)} tone={dependencies.some((d) => d.status !== "resolved" && (daysUntil(d.needed_by) ?? 1) < 0) ? "bad" : undefined} />
+        <StatCard label="Resolved" value={String(dependencies.filter((d) => d.status === "resolved").length)} />
+      </StatCards>
       {dependencies.length === 0 ? (
-        <RegisterEmpty>No dependencies logged yet. Add one above if this project is waiting on something.</RegisterEmpty>
+        <TeachEmpty title="No dependencies logged yet" body="Add one above if this project is waiting on something. Mark what you are waiting on and when you need it by, so a late arrival is visible before it stops the work." article="dependencies" />
       ) : (
         <ul className="rg-list" aria-label="Dependencies">
           {dependencies.map((d) => (
@@ -3711,11 +3779,14 @@ function OkrsTab({ projectId }: { projectId: string }) {
 
   return (
     <div>
-      <p className="muted" style={{ marginBottom: 16, maxWidth: 640 }}>
-        The handful of outcomes this project is actually driving toward, each broken into the
-        measurable key results that say whether it's happening -- separate from the day-to-day
-        work in Tasks, and rolled up onto the portfolio Dashboard across every project.
+      <p className="muted" style={{ margin: "0 0 6px", maxWidth: 640 }}>
+        The handful of outcomes this project is actually driving toward, each broken into measurable key results.
       </p>
+      <HowItWorks label="How OKRs work" article="okrs">
+        OKRs sit apart from the day-to-day work in Tasks: objectives say where the project is going,
+        key results say whether it is getting there. Charter objectives can become OKRs in one click
+        from the Charter, and progress rolls up onto the portfolio Dashboard across every project.
+      </HowItWorks>
 
       <QuickAddForm
         storageKey="objectives"
@@ -3995,6 +4066,9 @@ function CommsPlanTab({ projectId }: { projectId: string }) {
         a tracked workflow, so entries don't have a status; edit or remove one when the arrangement
         changes.
       </p>
+      <HowItWorks label="How the comms plan works" article="comms">
+        One row per audience. The plan carries no statuses on purpose: when the arrangement changes, edit the row, and when an audience stops mattering, remove it.
+      </HowItWorks>
       <QuickAddForm
         storageKey="comms-plan"
         hasRows={items.length > 0}
@@ -4031,12 +4105,12 @@ function CommsPlanTab({ projectId }: { projectId: string }) {
       />
       {error && <p className="form-error">{error}</p>}
 
-      <RegisterSummary>
-        {`${items.length} ${items.length === 1 ? "audience" : "audiences"}`}
-        {" \u00b7 "}{items.filter((i) => i.frequency === "weekly" || i.frequency === "daily").length} hear from you weekly or more
-      </RegisterSummary>
+      <StatCards>
+        <StatCard label="Audiences" value={String(items.length)} />
+        <StatCard label="Weekly or more" value={String(items.filter((i) => i.frequency === "weekly" || i.frequency === "daily").length)} sub="Hear from you weekly or daily" />
+      </StatCards>
       {items.length === 0 ? (
-        <RegisterEmpty>No communications plan yet. Add a row for who needs to hear what, and how often.</RegisterEmpty>
+        <TeachEmpty title="No communications plan yet" body="Add a row for who needs to hear what, and how often. A comms plan is a reference, not a workflow: one row per audience, with the channel and the rhythm." article="comms" />
       ) : (
         <ul className="rg-list" aria-label="Communications plan">
           {items.map((item) => (
@@ -4230,6 +4304,9 @@ function ProcurementTab({ projectId }: { projectId: string }) {
         the same way as the rest of RAID, since "do we have an agreement with this vendor" is a
         different question from "is this task done."
       </p>
+      <HowItWorks label="How vendors work" article="vendors">
+        Log a vendor when sourcing starts, not when the contract signs. The requested and in-progress states are where the delays live, and a register that only shows signed contracts hides exactly that part.
+      </HowItWorks>
       <QuickAddForm
         storageKey="vendors"
         hasRows={items.length > 0}
@@ -4334,13 +4411,13 @@ function ProcurementTab({ projectId }: { projectId: string }) {
         </div>
       ) : (
       <>
-      <RegisterSummary>
-        {items.filter((p) => p.status === "active" || p.status === "in_progress" || p.status === "requested").length} open
-        {" \u00b7 "}{items.filter((p) => p.status === "active").length} active
-        {" \u00b7 "}{items.filter((p) => p.status === "completed" || p.status === "cancelled").length} finished
-      </RegisterSummary>
+      <StatCards>
+        <StatCard label="Open" value={String(items.filter((p) => p.status === "active" || p.status === "in_progress" || p.status === "requested").length)} />
+        <StatCard label="Active" value={String(items.filter((p) => p.status === "active").length)} />
+        <StatCard label="Finished" value={String(items.filter((p) => p.status === "completed" || p.status === "cancelled").length)} />
+      </StatCards>
       {items.length === 0 ? (
-        <RegisterEmpty>No vendors or contracts logged yet. Add one above when you're sourcing or have an agreement in place.</RegisterEmpty>
+        <TeachEmpty title="No vendors or contracts logged yet" body="Add one above when you are sourcing or have an agreement in place. Vendors are tracked separately from tasks because having an agreement and finishing the work are different questions." article="vendors" />
       ) : (
         <ul className="rg-list" aria-label="Vendors">
           {items.map((p) => (
@@ -4539,6 +4616,57 @@ function BudgetTab({ projectId, onOpenTab }: { projectId: string; onOpenTab: (ta
         </p>
       )}
 
+      {/* v172: the budget summary tier — the four numbers that answer
+          "where do we stand?" lead; the earned value grid is the detail
+          layer below. */}
+      <StatCards>
+        <StatCard label="Work budget" value={budgetAtCompletion !== null ? fmtMoney(budgetAtCompletion) : "Not set"} />
+        <StatCard
+          label="Spent so far"
+          value={fmtMoney(costEntries.reduce((n, c) => n + Number(c.amount), 0))}
+          sub={`${costEntries.length} logged ${costEntries.length === 1 ? "cost" : "costs"}`}
+        />
+        <StatCard
+          label="Forecast final cost"
+          value={metrics.eac !== null && metrics.eac !== undefined ? fmtMoney(metrics.eac) : "—"}
+          sub={metrics.eac !== null && metrics.eac !== undefined ? "At the current pace" : "Once costs and tasks land"}
+        />
+        <StatCard
+          label="Projected variance"
+          value={metrics.vac !== null && metrics.vac !== undefined ? fmtMoney(metrics.vac) : "—"}
+          tone={metrics.vac === null || metrics.vac === undefined ? undefined : metrics.vac >= 0 ? "ok" : "bad"}
+        />
+      </StatCards>
+      {budgetAtCompletion !== null && budgetAtCompletion > 0 && (
+        <div className="status-progress-row" style={{ marginBottom: 16 }}>
+          <div
+            className="progress-track status-progress-track"
+            role="progressbar"
+            aria-valuenow={Math.min(100, Math.round((costEntries.reduce((n, c) => n + Number(c.amount), 0) / budgetAtCompletion) * 100))}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label="Share of work budget spent"
+          >
+            <div
+              className="progress-fill"
+              style={{ width: `${Math.min(100, (costEntries.reduce((n, c) => n + Number(c.amount), 0) / budgetAtCompletion) * 100)}%` }}
+            />
+          </div>
+          <span className="muted" style={{ fontSize: 13.5 }}>
+            {Math.round((costEntries.reduce((n, c) => n + Number(c.amount), 0) / budgetAtCompletion) * 100)}% of the work budget spent
+          </span>
+        </div>
+      )}
+      <div style={{ marginBottom: 8 }}>
+        <HowItWorks label="How the budget works" article="budget">
+          The work budget is what the project itself may spend. A contingency reserve, if you set one, sits
+          beside it for known risks and is not counted in the earned value figures. Earned value compares
+          the work actually done (EV) with what was planned by now (PV) and what it really cost (AC). CPI
+          above 1 means the work is costing less than planned, SPI above 1 means it is ahead of pace. The
+          forecast (EAC) projects the final cost at the current efficiency.
+        </HowItWorks>
+      </div>
+
       {taskStats.totalTasks === 0 && (
         <p className="muted" style={{ marginTop: 12 }}>Add tasks with due dates to compute schedule-based metrics (PV, SPI, SV).</p>
       )}
@@ -4548,7 +4676,7 @@ function BudgetTab({ projectId, onOpenTab }: { projectId: string; onOpenTab: (ta
       )}
 
       {hasEvmData && hasEvmActivity && (
-      <>
+      <LayerGroup id="budget-evm" title="Earned value detail" defaultOpen={false}>
       <div className="evm-grid">
         <div className="evm-card" title="Planned Value: % of tasks due by today x BAC">
           <div className="evm-label">PV</div>
@@ -4606,7 +4734,7 @@ function BudgetTab({ projectId, onOpenTab }: { projectId: string; onOpenTab: (ta
           Early forecast: only {taskStats.doneTasks} of {taskStats.totalTasks} tasks {taskStats.doneTasks === 1 ? "is" : "are"} done, so EAC and the other forecasts will swing a lot as more work completes. Treat them as a rough guide for now.
         </p>
       )}
-      </>
+      </LayerGroup>
       )}
 
       <h2 className="heading-sm" style={{ marginTop: 28 }}>Log actual cost</h2>
@@ -4617,13 +4745,16 @@ function BudgetTab({ projectId, onOpenTab }: { projectId: string; onOpenTab: (ta
         <button className="btn btn-primary">Add cost</button>
       </AddForm>
 
-      <RegisterSummary>
-        {costEntries.length} logged {costEntries.length === 1 ? "cost" : "costs"}
-        {" \u00b7 "}{fmtMoney(costEntries.reduce((n, c) => n + Number(c.amount), 0))} total
-      </RegisterSummary>
       {costEntries.length === 0 ? (
-        <RegisterEmpty action={{ label: "Log a cost", onClick: () => { costDescRef.current?.scrollIntoView({ block: "center" }); costDescRef.current?.focus(); } }}>No costs logged yet. Log one to start tracking spend.</RegisterEmpty>
+        <TeachEmpty
+          title="No costs logged yet"
+          body="Log one to start tracking spend. Each cost you log feeds the spent total and the earned value figures above."
+          actionLabel="Log a cost"
+          onAction={() => { costDescRef.current?.scrollIntoView({ block: "center" }); costDescRef.current?.focus(); }}
+          article="budget"
+        />
       ) : (
+        <LayerGroup id="budget-costs" title="Logged costs" count={costEntries.length}>
         <ul className="rg-list" aria-label="Logged costs">
           {costEntries.map((c) => (
             <RegisterRow
@@ -4635,6 +4766,7 @@ function BudgetTab({ projectId, onOpenTab }: { projectId: string; onOpenTab: (ta
             />
           ))}
         </ul>
+        </LayerGroup>
       )}
     </div>
   );
@@ -5225,6 +5357,9 @@ function MeetingsTab({ projectId }: { projectId: string }) {
         A record of the meetings that actually drive a project -- who was there, what was decided,
         and action items that carry straight into Tasks so nothing gets lost between the call and the work.
       </p>
+      <HowItWorks label="How meetings work" article="meetings">
+        Action items logged here carry into the project's work instead of evaporating when the call ends. Ready-made agendas for the recurring meetings (kickoff, weekly status, steering, retro) live in Learn.
+      </HowItWorks>
 
       <AddForm className="stacked-form" style={{ maxWidth: "none" }} onSubmit={addMeeting}>
         <label htmlFor="f-projecthome-4748">Meeting</label>
@@ -5256,12 +5391,12 @@ function MeetingsTab({ projectId }: { projectId: string }) {
       </AddForm>
       {error && <p className="form-error">{error}</p>}
 
-      <RegisterSummary>
-        {`${meetings.length} ${meetings.length === 1 ? "meeting" : "meetings"}`}
-        {" \u00b7 "}{meetings.reduce((n, m) => n + (m.action_items || []).filter((it) => !it.done).length, 0)} open action items
-      </RegisterSummary>
+      <StatCards>
+        <StatCard label="Meetings" value={String(meetings.length)} />
+        <StatCard label="Open action items" value={String(meetings.reduce((n, m) => n + (m.action_items || []).filter((it) => !it.done).length, 0))} tone={meetings.some((m) => (m.action_items || []).some((it) => !it.done)) ? "warn" : undefined} />
+      </StatCards>
       {meetings.length === 0 ? (
-        <RegisterEmpty>No meetings logged yet. Add one above to start a record.</RegisterEmpty>
+        <TeachEmpty title="No meetings logged yet" body="Add one above to start a record. Note who was there, what was decided, and the action items, so nothing gets lost between the call and the work." article="meetings" />
       ) : (
         <ul className="rg-list" aria-label="Meetings">
           {meetings.map((m) => {
@@ -5431,6 +5566,9 @@ function DocumentsTab({ projectId }: { projectId: string }) {
         Reference material for this project -- specs, contracts, and other documentation you need close at hand.
         PDF, Word, Excel, and image files up to 5MB. To update a document, delete the old copy and upload the new one.
       </p>
+      <HowItWorks label="How documents work" article="documents">
+        Documents are reference, not workflow. Decisions about a document belong in Decisions, and work on it belongs in Tasks. This shelf just keeps the current version one click away.
+      </HowItWorks>
 
       {storage && <StorageMeter storage={storage} />}
 
@@ -5458,11 +5596,11 @@ function DocumentsTab({ projectId }: { projectId: string }) {
         </p>
       )}
 
-      <RegisterSummary>
-        {`${documents.length} ${documents.length === 1 ? "document" : "documents"}`}
-      </RegisterSummary>
+      <StatCards>
+        <StatCard label="Documents" value={String(documents.length)} />
+      </StatCards>
       {documents.length === 0 ? (
-        <RegisterEmpty>No documents uploaded yet. Add one above to start building a reference library.</RegisterEmpty>
+        <TeachEmpty title="No documents uploaded yet" body="Add one above to start building a reference library. Specs, contracts, and other documentation you need close at hand live here." article="documents" />
       ) : (
         <ul className="rg-list" aria-label="Documents">
           {documents.map((doc) => {
@@ -5610,10 +5748,18 @@ function StakeholdersTab({ projectId }: { projectId: string }) {
 
   return (
     <div>
-      <p className="muted" style={{ marginBottom: 16, maxWidth: 640 }}>
-        Everyone with a stake in this project: sponsors, customers, teams, and anyone who can help or
-        block it. Rate their power and interest so you know how closely to keep them in the loop.
-      </p>
+      <div style={{ marginBottom: 16 }}>
+        <p className="muted" style={{ margin: "0 0 6px", maxWidth: 640 }}>
+          Everyone with a stake in this project: sponsors, customers, teams, and anyone who can help or
+          block it.
+        </p>
+        <HowItWorks label="How stakeholders work" article="stakeholders">
+          Rate each person on power (how much they can affect the project) and interest (how much they
+          care). High power and high interest means keep them closely involved. High power, low interest
+          means keep them satisfied with short, high-level updates. The grid view places everyone on
+          those two axes so the pattern is visible at a glance.
+        </HowItWorks>
+      </div>
       <AddForm className="inline-form inline-form-wide" onSubmit={addStakeholder}>
         <input aria-label="Name" aria-required="true" placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} />
         <input aria-label="Email (optional)" placeholder="Email (optional)" value={email} onChange={(e) => setEmail(e.target.value)} />
@@ -5645,13 +5791,26 @@ function StakeholdersTab({ projectId }: { projectId: string }) {
 
       {shView === "list" && (
       <>
-        <RegisterSummary>
-          {`${stakeholders.length} ${stakeholders.length === 1 ? "person" : "people"}`}
-          {" \u00b7 "}{stakeholders.filter((s) => s.power_level === "high").length} stakeholders with high power
-          {" \u00b7 "}{(() => { const n = stakeholders.reduce((t, s) => t + (s.decisions_sent ?? 0) - (s.decisions_resolved ?? 0), 0); return `${n} ${n === 1 ? "decision" : "decisions"} awaiting a response`; })()}
-        </RegisterSummary>
+        <StatCards>
+          <StatCard label="People" value={String(stakeholders.length)} />
+          <StatCard
+            label="High power"
+            value={String(stakeholders.filter((s) => s.power_level === "high").length)}
+            sub="Keep these closest"
+          />
+          <StatCard
+            label="Awaiting response"
+            value={String(stakeholders.reduce((t, s) => t + (s.decisions_sent ?? 0) - (s.decisions_resolved ?? 0), 0))}
+            tone={stakeholders.reduce((t, s) => t + (s.decisions_sent ?? 0) - (s.decisions_resolved ?? 0), 0) > 0 ? "warn" : undefined}
+            sub="Decisions sent, not yet answered"
+          />
+        </StatCards>
         {stakeholders.length === 0 ? (
-          <RegisterEmpty>No stakeholders yet. Add one above to start your register.</RegisterEmpty>
+          <TeachEmpty
+            title="No stakeholders yet"
+            body="Add one above to start your register. Sponsors, customers, teams, anyone who can help or block the project belongs here."
+            article="stakeholders"
+          />
         ) : (
           <ul className="rg-list" aria-label="Stakeholders">
             {stakeholders.map((s) => {
@@ -5934,118 +6093,12 @@ function StakeholderDecisionsTab({ projectId }: { projectId: string }) {
     load();
   }
 
-  if (loading) return <div className="skel-loading-block"><div className="skel skel-text" style={{ width: "45%" }} /><div className="skel skel-text" style={{ width: "80%" }} /><div className="skel skel-text" style={{ width: "60%", marginBottom: 0 }} /></div>;
-
-  return (
-    <div>
-      <button className="btn btn-primary" onClick={() => setShowForm((v) => !v)} type="button">
-        {showForm ? "Cancel" : "New decision request"}
-      </button>
-
-      {lastShareUrl && (
-        <div className="callout">
-          Share this link with the stakeholder. No account needed to respond:
-          <br />
-          <input
-            className="share-url"
-            type="text"
-            readOnly
-            value={`${window.location.origin}${lastShareUrl}`}
-            onFocus={(e) => e.target.select()}
-            aria-label="Decision share link"
-          />
-        </div>
-      )}
-
-      {showForm && (
-        <AddForm className="stacked-form" onSubmit={createDecision}>
-          <label htmlFor="f-projecthome-5349">Title</label>
-          <input id="f-projecthome-5349" value={title} onChange={(e) => setTitle(e.target.value)} aria-required="true" autoFocus />
-          <label htmlFor="f-projecthome-5351">Context</label>
-          <textarea id="f-projecthome-5351" value={context} onChange={(e) => setContext(e.target.value)} rows={3} />
-          <label htmlFor="f-projecthome-5353">Options (comma separated)</label>
-          <input id="f-projecthome-5353" value={options} onChange={(e) => { setOptions(e.target.value); if (error) setError(""); }} aria-required="true" aria-describedby={error ? "decision-error" : undefined} aria-invalid={error ? true : undefined} />
-          <label htmlFor="f-projecthome-5355">Deadline (optional)</label>
-          <DateField id="f-projecthome-5355" value={deadline} onChange={setDeadline} />
-          <label>Send to</label>
-          <div className="checkbox-list">
-            {stakeholders.map((s) => (
-              <label key={s.id} className="checkbox-row">
-                <input
-                  type="checkbox"
-                  checked={selectedStakeholders.includes(s.id)}
-                  onChange={(e) => {
-                    setSelectedStakeholders((prev) =>
-                      e.target.checked ? [...prev, s.id] : prev.filter((id) => id !== s.id)
-                    );
-                  }}
-                />
-                {s.name}
-              </label>
-            ))}
-            {stakeholders.length === 0 && <p className="muted">Add stakeholders first to route this to someone.</p>}
-          </div>
-          {/* v162 (F-11): the accountable owner -- one stakeholder or role --
-              distinct from the Send-to list above: the list is who gets
-              asked, the owner is whose call it is. Optional, as it always
-              was implicitly. */}
-          <label htmlFor="f-decision-owner">Decision owner (optional)</label>
-          <select id="f-decision-owner" value={ownerStakeholder} onChange={(e) => setOwnerStakeholder(e.target.value)}>
-            <option value="">No owner</option>
-            {stakeholders.map((s) => (
-              <option key={s.id} value={s.id}>{stakeholderOptionLabel(s)}</option>
-            ))}
-          </select>
-          {/* v161 (F-09): the decider's-eye preview. It mirrors the public
-              decision page (DecisionPublic) field for field -- same title,
-              context, "Needed by" line, and option rows -- and updates
-              live as the form is filled, so the sender sees exactly what
-              the decider will see before the link exists. */}
-          <div className="decision-preview" aria-label="Preview of what the decider sees">
-            <p className="decision-preview-label">What they'll see</p>
-            <p className="decision-preview-title">{title.trim() || "Your decision title"}</p>
-            {context.trim() && <p className="decision-preview-context">{context.trim()}</p>}
-            {deadline && <p className="muted">Needed by: {deadline}</p>}
-            <div className="option-list">
-              {options
-                .split(",")
-                .map((o) => o.trim())
-                .filter(Boolean)
-                .map((opt) => (
-                  <span key={opt} className="option-row decision-preview-option">
-                    {/* A drawn radio dot, not a real input: the preview is
-                        a picture of the decider's page, not a form. */}
-                    <span className="decision-preview-radio" aria-hidden="true" />
-                    {opt}
-                  </span>
-                ))}
-            </div>
-            <p className="muted decision-preview-note">
-              They pick one, add their name, and submit -- no account needed. You confirm the final call.
-            </p>
-          </div>
-          <button className="btn btn-primary" type="submit">Create decision request</button>
-          {error && <p id="decision-error" className="form-error" role="alert">{error}</p>}
-        </AddForm>
-      )}
-
-      {showForm && stakeholders.length === 0 && (
-        <StakeholderQuickAdd
-          projectId={projectId}
-          onAdded={(s) => {
-            setStakeholders((cur) => [...cur, s]);
-            setSelectedStakeholders((cur) => [...cur, s.id]);
-          }}
-        />
-      )}
-
-      {decisions.length > 0 && (
-        <p className="muted" style={{ marginBottom: 12 }}>
-          {decisions.filter((d) => d.status === "open").length} awaiting a response · {decisions.filter((d) => d.status !== "open").length} decided
-        </p>
-      )}
-      <div className="decision-list">
-        {decisions.map((d) => (
+  // v172 (Plan A): the list leads with what is still waiting; decided
+  // requests drop into a collapsed Decided group below it. decisionCard
+  // is the one card renderer both lists share.
+  const openDecisions = decisions.filter((d) => d.status === "open");
+  const decidedDecisions = decisions.filter((d) => d.status !== "open");
+  const decisionCard = (d: Decision) => (
           <div key={d.id} className={`decision-card ${d.status}`}>
             <div className="decision-card-head">
               <h4>{d.title}</h4>
@@ -6167,9 +6220,141 @@ function StakeholderDecisionsTab({ projectId }: { projectId: string }) {
               <button className="btn-link btn-link-danger" type="button" onClick={() => removeDecision(d.id, d.title)}>Delete</button>
             </div>
           </div>
-        ))}
-        {decisions.length === 0 && <p className="muted">No decisions requested yet. Use New decision request above to ask for one.</p>}
+  );
+
+  if (loading) return <div className="skel-loading-block"><div className="skel skel-text" style={{ width: "45%" }} /><div className="skel skel-text" style={{ width: "80%" }} /><div className="skel skel-text" style={{ width: "60%", marginBottom: 0 }} /></div>;
+
+  return (
+    <div>
+      <button className="btn btn-primary" onClick={() => setShowForm((v) => !v)} type="button">
+        {showForm ? "Cancel" : "New decision request"}
+      </button>
+
+      {lastShareUrl && (
+        <div className="callout">
+          Share this link with the stakeholder. No account needed to respond:
+          <br />
+          <input
+            className="share-url"
+            type="text"
+            readOnly
+            value={`${window.location.origin}${lastShareUrl}`}
+            onFocus={(e) => e.target.select()}
+            aria-label="Decision share link"
+          />
+        </div>
+      )}
+
+      {showForm && (
+        <AddForm className="stacked-form" onSubmit={createDecision}>
+          <label htmlFor="f-projecthome-5349">Title</label>
+          <input id="f-projecthome-5349" value={title} onChange={(e) => setTitle(e.target.value)} aria-required="true" autoFocus />
+          <label htmlFor="f-projecthome-5351">Context</label>
+          <textarea id="f-projecthome-5351" value={context} onChange={(e) => setContext(e.target.value)} rows={3} />
+          <label htmlFor="f-projecthome-5353">Options (comma separated)</label>
+          <input id="f-projecthome-5353" value={options} onChange={(e) => { setOptions(e.target.value); if (error) setError(""); }} aria-required="true" aria-describedby={error ? "decision-error" : undefined} aria-invalid={error ? true : undefined} />
+          <label htmlFor="f-projecthome-5355">Deadline (optional)</label>
+          <DateField id="f-projecthome-5355" value={deadline} onChange={setDeadline} />
+          <label>Send to</label>
+          <div className="checkbox-list">
+            {stakeholders.map((s) => (
+              <label key={s.id} className="checkbox-row">
+                <input
+                  type="checkbox"
+                  checked={selectedStakeholders.includes(s.id)}
+                  onChange={(e) => {
+                    setSelectedStakeholders((prev) =>
+                      e.target.checked ? [...prev, s.id] : prev.filter((id) => id !== s.id)
+                    );
+                  }}
+                />
+                {s.name}
+              </label>
+            ))}
+            {stakeholders.length === 0 && <p className="muted">Add stakeholders first to route this to someone.</p>}
+          </div>
+          {/* v162 (F-11): the accountable owner -- one stakeholder or role --
+              distinct from the Send-to list above: the list is who gets
+              asked, the owner is whose call it is. Optional, as it always
+              was implicitly. */}
+          <label htmlFor="f-decision-owner">Decision owner (optional)</label>
+          <select id="f-decision-owner" value={ownerStakeholder} onChange={(e) => setOwnerStakeholder(e.target.value)}>
+            <option value="">No owner</option>
+            {stakeholders.map((s) => (
+              <option key={s.id} value={s.id}>{stakeholderOptionLabel(s)}</option>
+            ))}
+          </select>
+          {/* v161 (F-09): the decider's-eye preview. It mirrors the public
+              decision page (DecisionPublic) field for field -- same title,
+              context, "Needed by" line, and option rows -- and updates
+              live as the form is filled, so the sender sees exactly what
+              the decider will see before the link exists. */}
+          <div className="decision-preview" aria-label="Preview of what the decider sees">
+            <p className="decision-preview-label">What they'll see</p>
+            <p className="decision-preview-title">{title.trim() || "Your decision title"}</p>
+            {context.trim() && <p className="decision-preview-context">{context.trim()}</p>}
+            {deadline && <p className="muted">Needed by: {deadline}</p>}
+            <div className="option-list">
+              {options
+                .split(",")
+                .map((o) => o.trim())
+                .filter(Boolean)
+                .map((opt) => (
+                  <span key={opt} className="option-row decision-preview-option">
+                    {/* A drawn radio dot, not a real input: the preview is
+                        a picture of the decider's page, not a form. */}
+                    <span className="decision-preview-radio" aria-hidden="true" />
+                    {opt}
+                  </span>
+                ))}
+            </div>
+            <p className="muted decision-preview-note">
+              They pick one, add their name, and submit -- no account needed. You confirm the final call.
+            </p>
+          </div>
+          <button className="btn btn-primary" type="submit">Create decision request</button>
+          {error && <p id="decision-error" className="form-error" role="alert">{error}</p>}
+        </AddForm>
+      )}
+
+      {showForm && stakeholders.length === 0 && (
+        <StakeholderQuickAdd
+          projectId={projectId}
+          onAdded={(s) => {
+            setStakeholders((cur) => [...cur, s]);
+            setSelectedStakeholders((cur) => [...cur, s.id]);
+          }}
+        />
+      )}
+
+      {decisions.length > 0 && (
+        <div style={{ marginBottom: 12 }}>
+          <StatCards>
+            <StatCard
+              label="Waiting"
+              value={String(decisions.filter((d) => d.status === "open").length)}
+              tone={decisions.some((d) => d.status === "open") ? "warn" : undefined}
+              sub="Awaiting a response"
+            />
+            <StatCard label="Decided" value={String(decisions.filter((d) => d.status !== "open").length)} />
+          </StatCards>
+        </div>
+      )}
+      <div className="decision-list">
+        {openDecisions.map(decisionCard)}
+        {decisions.length === 0 && (
+          <TeachEmpty
+            title="No decisions requested yet"
+            body="Use New decision request above to ask for one. A decision request names who decides, what the options are, and when you need the answer, so approvals stop living in chat threads."
+            article="decisions"
+          />
+        )}
       </div>
+      {decidedDecisions.length > 0 && (
+        <LayerGroup id="decisions-decided" title="Decided" count={decidedDecisions.length} defaultOpen={false}>
+          <div className="decision-list">{decidedDecisions.map(decisionCard)}</div>
+        </LayerGroup>
+      )}
     </div>
   );
 }
@@ -6312,6 +6497,9 @@ function ChangeRequestsTab({ projectId }: { projectId: string }) {
         Scope changes worth a paper trail -- what's changing, why, who asked for it, and what it
         does to schedule and budget.
       </p>
+      <HowItWorks label="How change requests work" article="change-requests">
+        The assessment is the point: writing down the schedule and budget effect before approval turns a casual yes into an informed one, and the record stays whether the answer is yes or no.
+      </HowItWorks>
       <QuickAddForm
         storageKey="change-requests"
         hasRows={items.length > 0}
@@ -6423,7 +6611,7 @@ function ChangeRequestsTab({ projectId }: { projectId: string }) {
         ))}
       </ul>
       {items.length === 0 && (
-        <RegisterEmpty>No change requests logged yet. Add one above if scope shifts.</RegisterEmpty>
+        <TeachEmpty title="No change requests logged yet" body="Add one above if scope shifts. A change request records what is changing, why, who asked for it, and what it does to schedule and budget." article="change-requests" />
       )}
     </div>
   );
@@ -7334,8 +7522,11 @@ function LessonsLearnedTab({ projectId }: { projectId: string }) {
     <div>
       <p className="muted" style={{ marginBottom: 16, maxWidth: 640 }}>
         What went well, what didn't, and what to change next time -- mirrors the retro template in
-        the Resource hub. Log entries any time, not just at project close.
+        Learn. Log entries any time, not just at project close.
       </p>
+      <HowItWorks label="How lessons work" article="lessons">
+        A useful lesson names the situation and the change, not just the feeling. The retro template in Learn gives the end-of-project session a shape, and the lessons written there are the ones the next project inherits.
+      </HowItWorks>
       <QuickAddForm
         storageKey="lessons"
         hasRows={lessons.length > 0}
@@ -7405,7 +7596,7 @@ function LessonsLearnedTab({ projectId }: { projectId: string }) {
         ))}
       </ul>
       {lessons.length === 0 && (
-        <RegisterEmpty>No lessons logged yet. Log one any time, not just at project close.</RegisterEmpty>
+        <TeachEmpty title="No lessons logged yet" body="Log one any time, not just at project close. What went well, what did not, and what to change next time, written down while it is still fresh." article="lessons" />
       )}
     </div>
   );

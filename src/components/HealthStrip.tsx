@@ -20,7 +20,7 @@ function statedAge(iso: string | null | undefined): string {
  * same portfolio rollup the Projects list uses (no new health logic). If the data cannot load,
  * it renders nothing and the page is unchanged.
  */
-export function HealthStrip({ projectId, refreshKey, onOpenTab }: { projectId: string; refreshKey?: string; onOpenTab: (tab: string) => void }) {
+export function HealthStrip({ projectId, refreshKey, onOpenTab, bare }: { projectId: string; refreshKey?: string; onOpenTab: (tab: string) => void; bare?: boolean }) {
   const [summary, setSummary] = useState<PortfolioProjectSummary | null>(null);
 
   // Refetch when the tab changes as well as when the project does: work added
@@ -44,7 +44,7 @@ export function HealthStrip({ projectId, refreshKey, onOpenTab }: { projectId: s
   // are history, not a current health signal.
   if (summary.closed_at) {
     return (
-      <div className="hs-strip" role="status" aria-label="Project health">
+      <div className={bare ? "hs-strip hs-bare" : "hs-strip"} role="status" aria-label="Project health">
         <span className="pill pill-neutral">Closed</span>
         <span className="hs-why">This project has been closed. Everything stays readable — reopen it from the Closure tab if work resumes.</span>
       </div>
@@ -67,7 +67,7 @@ export function HealthStrip({ projectId, refreshKey, onOpenTab }: { projectId: s
   const shownParts = parts.length > 0 ? parts : [{ text: "Nothing flagged" }];
 
   return (
-    <div className="hs-strip" role="status" aria-label="Project health">
+    <div className={bare ? "hs-strip hs-bare" : "hs-strip"} role="status" aria-label="Project health">
       <span className={`pill ${isNew ? "hs-new" : PILL[headline]}`}>{isNew ? "New" : LABEL[headline]}</span>
       <span className="hs-why">
         {shownParts.map((p, i) => (

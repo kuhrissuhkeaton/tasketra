@@ -7,6 +7,7 @@ import { PageHeader, SoftCard } from "../components/ui";
 import { DeleteAccountCard } from "../components/DeleteAccountCard";
 import { ConnectAiCard } from "../components/ConnectAiCard";
 import { readStoredTheme, setTheme, type Theme } from "../lib/theme";
+import { readDensity, writeDensity, type Density } from "../lib/density";
 import { useDelight } from "../lib/delight";
 import { useDocumentTitle } from "../lib/documentTitle";
 
@@ -44,6 +45,11 @@ export default function Account() {
   const [copied, setCopied] = useState(false);
 
   const [theme, setThemeState] = useState<Theme>(() => readStoredTheme());
+  const [density, setDensityState] = useState<Density>(() => readDensity());
+  function chooseDensity(d: Density) {
+    writeDensity(d);
+    setDensityState(d);
+  }
   function chooseTheme(t: Theme) {
     setTheme(t);
     setThemeState(t);
@@ -203,6 +209,13 @@ export default function Account() {
             <button type="button" className={theme === "light" ? "btn btn-primary" : "btn btn-ghost"} onClick={() => chooseTheme("light")}>Light</button>
             <button type="button" className={theme === "dark" ? "btn btn-primary" : "btn btn-ghost"} onClick={() => chooseTheme("dark")}>Dark</button>
             <button type="button" className={theme === "system" ? "btn btn-primary" : "btn btn-ghost"} onClick={() => chooseTheme("system")}>Match system</button>
+          </div>
+          <p className="muted" style={{ marginBottom: 8 }}>
+            Density: comfortable is the calm default. Compact tightens register rows and tables when you are working a long list.
+          </p>
+          <div className="view-toggle" role="group" aria-label="Density">
+            <button type="button" className={density === "comfortable" ? "btn btn-primary" : "btn btn-ghost"} onClick={() => chooseDensity("comfortable")}>Comfortable</button>
+            <button type="button" className={density === "compact" ? "btn btn-primary" : "btn btn-ghost"} onClick={() => chooseDensity("compact")}>Compact</button>
           </div>
         </SoftCard>
 

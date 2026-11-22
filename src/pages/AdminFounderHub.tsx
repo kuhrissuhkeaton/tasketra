@@ -47,7 +47,7 @@ export default function AdminFounderHub() {
     <div className="project-shell">
       <AppSidebar />
 
-      <main id="main-content" className="project-main">
+      <main id="main-content" className="project-main admin-main">
         <PageHeader title="Founder hub" subtitle="Milestones, money, activation, usage, and friction, from the app's own data." />
 
         {error && <div className="form-error">{error}</div>}

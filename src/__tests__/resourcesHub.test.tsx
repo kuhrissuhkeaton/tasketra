@@ -70,7 +70,7 @@ describe("Resource hub, three doors (v166)", () => {
   it("shows the three doors and every section, each with its one-line summary", async () => {
     await mount();
     const doors = [...host.querySelectorAll(".hub-door-title")].map((x) => x.textContent);
-    expect(doors).toEqual(["Start a project", "Run the week", "Look it up"]);
+    expect(doors).toEqual(["Start", "Learn", "Reference"]);
     for (const id of ["templates", "how-it-works", "forms", "meetings", "status-reports", "methodologies", "formulas", "raid", "stakeholder-matrix"]) {
       expect(host.querySelector(`#${CSS.escape(id)}`), id).not.toBeNull();
     }
@@ -102,7 +102,7 @@ describe("Resource hub, three doors (v166)", () => {
   it("a door opens all of its sections at once", async () => {
     await mount();
     const door = [...host.querySelectorAll<HTMLButtonElement>(".hub-door")]
-      .find((b) => b.textContent?.includes("Look it up"))!;
+      .find((b) => b.textContent?.includes("Reference"))!;
     await click(door);
     for (const id of ["methodologies", "formulas", "raid", "stakeholder-matrix"]) {
       expect(section(id).body.hidden, id).toBe(false);

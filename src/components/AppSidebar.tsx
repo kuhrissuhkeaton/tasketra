@@ -234,7 +234,7 @@ export function AppSidebar({ children, menuLabel = "Menu" }: { children?: ReactN
             className={pathname === "/app/resources" ? "side-tab active" : "side-tab"}
           >
             <NavIcon name="resources" active={pathname === "/app/resources"} />
-            Resource hub
+            Learn
           </Link>
           <Link
             to="/app/whats-new"

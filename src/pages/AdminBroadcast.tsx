@@ -103,7 +103,7 @@ export default function AdminBroadcast() {
   return (
     <div className="project-shell">
       <AppSidebar />
-      <main id="main-content" className="project-main">
+      <main id="main-content" className="project-main admin-main">
         <PageHeader
           title="Email founding members"
           subtitle={audience !== null ? `${audience} will receive it.` : undefined}

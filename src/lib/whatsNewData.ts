@@ -10,6 +10,12 @@ export type ChangeEntry = { version: string; date: string; title: string; body: 
 // they can do.
 export const CHANGES: ChangeEntry[] = [
   {
+    version: "v172",
+    date: "November 2026",
+    title: "A calmer Tasketra: every page leads with the summary, and the detail waits until you ask for it.",
+    body: "Project pages used to show everything at once. Now each one opens with the few numbers that matter, then groups the rest below, and the groups open and close as you need them. Risks even sort the ones that need a look to the top. The two rows of tabs inside a project are gone: your project's sections live in the sidebar now, grouped the way you think about them, with a small badge on Decisions when someone is waiting on you. The charter reads as a document instead of a form, and you edit one section at a time. The Resource hub is now called Learn, with a Start here path, short guides for every register and weekly habit, and a How this works note on each project section that links to its guide. If you work long lists, Account, Appearance now has a density choice: Comfortable, the calm default, or Compact for tighter rows.",
+  },
+  {
     version: "v171",
     date: "November 2026",
     title: "Start simple: new projects ask one question, and light projects open on a calm home.",

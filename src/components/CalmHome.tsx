@@ -16,7 +16,7 @@ import { hiddenTabIds, type ProjectSize } from "../lib/projectView";
 // usually reaches for them. Timeline (roadmap) is not hidden by size, but
 // it belongs here: on the calm home it is the one core surface with no
 // card of its own.
-const GROW_PIECES: { id: string; label: string }[] = [
+export const GROW_PIECES: { id: string; label: string }[] = [
   { id: "roadmap", label: "Timeline" },
   { id: "budget", label: "Budget" },
   { id: "meetings", label: "Meetings" },

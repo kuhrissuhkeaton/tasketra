@@ -4,7 +4,10 @@ import { BrowserRouter } from "react-router-dom";
 import * as Sentry from "@sentry/react";
 import App from "./App";
 import { ErrorPage } from "./components/ErrorPage";
+import { initDensity } from "./lib/density";
 import "./index.css";
+
+initDensity();
 
 const dsn = import.meta.env.VITE_SENTRY_DSN;
 if (dsn) {

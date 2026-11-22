@@ -162,6 +162,10 @@ describe("Decision card Egg 7", () => {
 
   it("an answer inside the hour earns the line, with the real minutes", async () => {
     await mount("decisions", decisionsHandler);
+    // v172: decided cards live in the collapsed Decided group; open it first.
+    await settle(() => !!host.querySelector("button.layer-group-btn"));
+    const toggle = host.querySelector<HTMLButtonElement>("button.layer-group-btn")!;
+    await act(async () => { toggle.click(); });
     await settle(() => (host.textContent || "").includes("A record worth framing."));
     expect(host.textContent).toContain("Answered in 43 minutes. A record worth framing.");
     expect(errors).toEqual([]);
@@ -170,6 +174,9 @@ describe("Decision card Egg 7", () => {
   it("Delight off: the line is gone, the card is intact", async () => {
     window.localStorage.setItem("tasketra:delight:u1", "off");
     await mount("decisions", decisionsHandler);
+    await settle(() => !!host.querySelector("button.layer-group-btn"));
+    const toggle = host.querySelector<HTMLButtonElement>("button.layer-group-btn")!;
+    await act(async () => { toggle.click(); });
     await settle(() => (host.textContent || "").includes("Pick a vendor"));
     expect(host.textContent).not.toContain("A record worth framing.");
   });

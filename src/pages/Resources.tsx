@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { AppSidebar } from "../components/AppSidebar";
 import { PageHeader, RegisterRow } from "../components/ui";
 import { api } from "../lib/api";
@@ -11,6 +11,7 @@ import { FormsAndDownloads } from "../components/FormsAndDownloads";
 import { ProjectFlowGuide } from "../components/ProjectFlowGuide";
 import { STAKEHOLDER_QUADRANTS } from "../lib/stakeholderGrid";
 import { useDocumentTitle } from "../lib/documentTitle";
+import { LEARN_ARTICLES, articleBySlug } from "../lib/learnArticles";
 
 type Methodology = { name: string; points: string[]; bestWhen: string };
 
@@ -283,11 +284,15 @@ type HubSectionDef = { id: string; title: string; blurb: string };
 /** v166: the hub is organized by intent -- three doors. Every section
  *  that was on the old stacked page is still here, behind one door or
  *  another; sections start collapsed with a one-line summary each and
- *  open in place. */
+ *  open in place.
+ *  v172 (Plan A): the hub is Learn now. The doors became the three
+ *  shelves (Start, Learn, Reference), a Start here path leads the page,
+ *  and the short guides the app's surfaces link to live here as
+ *  articles (?article=<slug>), written from the old inline explainers. */
 const DOORS: { id: string; title: string; blurb: string; sections: HubSectionDef[] }[] = [
   {
     id: "start",
-    title: "Start a project",
+    title: "Start",
     blurb: "Templates to start from, and how a project runs here.",
     sections: [
       { id: "templates", title: "Project templates", blurb: "Start a new project with phases, starter tasks, likely risks and roles already in place." },
@@ -296,9 +301,10 @@ const DOORS: { id: string; title: string; blurb: string; sections: HubSectionDef
   },
   {
     id: "run",
-    title: "Run the week",
+    title: "Learn",
     blurb: "The handouts, meetings and reporting of the weekly rhythm.",
     sections: [
+      { id: "guides", title: "Guides for the weekly work", blurb: "Short reads on stakeholders, decisions, meetings, comms and lessons." },
       { id: "forms", title: "Forms & downloads", blurb: "Documents built from a project's live data: the charter, the registers and the weekly report." },
       { id: "meetings", title: "Meeting cadence templates", blurb: "Ready-made agendas and cadences, from kickoff to closeout." },
       { id: "status-reports", title: "Status reporting -- what good looks like", blurb: "Five rules for a status report people can scan in under a minute." },
@@ -306,9 +312,10 @@ const DOORS: { id: string; title: string; blurb: string; sections: HubSectionDef
   },
   {
     id: "reference",
-    title: "Look it up",
+    title: "Reference",
     blurb: "Plain-English reference for the moments you need a definition or a formula.",
     sections: [
+      { id: "register-guides", title: "Register guides", blurb: "What each register is for and how to work it, one short read each." },
       { id: "methodologies", title: "Methodologies", blurb: "Agile, Waterfall, Hybrid and the rest, in plain English, with when each one fits." },
       { id: "formulas", title: "EVM & scheduling formulas", blurb: "CPI, SPI, float, PERT and friends, each with what it actually means." },
       { id: "raid", title: "RAID log guide", blurb: "Risks, Issues, Assumptions and Dependencies explained, plus Quality and Compliance." },
@@ -342,7 +349,7 @@ function HubSection({ def, open, onToggle, children }: {
 }
 
 export default function Resources() {
-  useDocumentTitle("Resource hub");
+  useDocumentTitle("Learn");
   const [query, setQuery] = useState("");
   const [replaying, setReplaying] = useState(false);
   const [applyTemplateId, setApplyTemplateId] = useState<string | null>(null);
@@ -366,6 +373,85 @@ export default function Resources() {
     }, 0);
     return () => window.clearTimeout(timer);
   }, [hash]);
+
+  // v172: a Learn article (?article=<slug>) replaces the hub with the
+  // article page. The app's surfaces link here from their "How this
+  // works" disclosures and teaching empty states.
+  const [searchParams] = useSearchParams();
+  const article = articleBySlug(searchParams.get("article"));
+  const [firstProject, setFirstProject] = useState<{ id: string; name: string } | null | undefined>(undefined);
+  useEffect(() => {
+    if (!article) return;
+    let live = true;
+    api
+      .listProjects()
+      .then(({ projects }) => {
+        if (live) setFirstProject(projects[0] ? { id: projects[0].id, name: projects[0].name } : null);
+      })
+      .catch(() => {
+        if (live) setFirstProject(null);
+      });
+    return () => {
+      live = false;
+    };
+  }, [article]);
+
+  if (article) {
+    const related = LEARN_ARTICLES.filter((a) => a.shelf === article.shelf && a.slug !== article.slug).slice(0, 3);
+    return (
+      <div className="project-shell">
+        <AppSidebar />
+        <main id="main-content" className="project-main">
+          <p style={{ margin: "0 0 10px" }}>
+            <Link to="/app/resources">← Learn</Link>
+          </p>
+          <PageHeader title={article.title} subtitle={article.blurb} />
+          <div className="learn-article-body">
+            {article.body.map((para, i) => (
+              <p key={i}>{para}</p>
+            ))}
+          </div>
+
+          <div className="resource-card learn-project-card">
+            <h3 className="heading-sm" style={{ marginTop: 0 }}>In your project</h3>
+            {firstProject === undefined && <p className="muted">Loading your projects…</p>}
+            {firstProject && (
+              <>
+                <p>
+                  See it live in <strong>{firstProject.name}</strong>.
+                </p>
+                <Link className="btn btn-primary" to={`/app/projects/${firstProject.id}?tab=${article.tab}`}>
+                  Open {article.tabLabel}
+                </Link>
+              </>
+            )}
+            {firstProject === null && (
+              <>
+                <p className="muted">You have no projects yet. Start one and this guide's subject is one of its sections.</p>
+                <Link className="btn btn-primary" to="/app/projects">
+                  Start a project
+                </Link>
+              </>
+            )}
+          </div>
+
+          {related.length > 0 && (
+            <div className="learn-related">
+              <h3 className="heading-sm">Keep reading</h3>
+              <ul>
+                {related.map((a) => (
+                  <li key={a.slug}>
+                    <Link to={`/app/resources?article=${a.slug}`}>{a.title}</Link>
+                    <span className="muted">, {a.blurb}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </main>
+      </div>
+    );
+  }
 
   async function replayTour() {
     setReplaying(true);
@@ -394,6 +480,8 @@ export default function Resources() {
     matches(st.name, st.goal, st.checklist, "tasketra", "how it works", "stage", "guide", ...st.steps.flatMap((x) => [x.title, x.tab, x.why])));
   const forms = matches("forms", "downloads", "printable", "charter", "risk register", "risk matrix", "raci", "weekly report", "pdf", "share") ? [1] : [];
   const statusTips = STATUS_REPORT_TIPS.filter((t) => matches(t, "status report", "status update"));
+  const learnGuides = LEARN_ARTICLES.filter((a) => a.shelf === "learn" && matches(a.title, a.blurb, "guide"));
+  const registerGuides = LEARN_ARTICLES.filter((a) => a.shelf === "reference" && matches(a.title, a.blurb, "guide", "register"));
 
   const showById: Record<string, boolean> = {
     templates: templates.length > 0,
@@ -405,6 +493,8 @@ export default function Resources() {
     "stakeholder-matrix": quadrants.length > 0,
     meetings: meetings.length > 0,
     "status-reports": statusTips.length > 0,
+    guides: learnGuides.length > 0,
+    "register-guides": registerGuides.length > 0,
   };
 
   // While searching, every section still standing is open -- the results
@@ -432,7 +522,7 @@ export default function Resources() {
 
   const nothingMatches =
     templates.length === 0 && forms.length === 0 && guideStages.length === 0 && methodologies.length === 0 && formulas.length === 0 && raidItems.length === 0 &&
-    quadrants.length === 0 && meetings.length === 0 && statusTips.length === 0;
+    quadrants.length === 0 && meetings.length === 0 && statusTips.length === 0 && learnGuides.length === 0 && registerGuides.length === 0;
 
   const sectionBody = (def: HubSectionDef) => {
     switch (def.id) {
@@ -599,6 +689,21 @@ export default function Resources() {
             </div>
           </>
         );
+      case "guides":
+      case "register-guides": {
+        const list = def.id === "guides" ? learnGuides : registerGuides;
+        return (
+          <ul className="rg-list rg-plain" aria-label={def.title}>
+            {list.map((a) => (
+              <RegisterRow
+                key={a.slug}
+                title={<Link to={`/app/resources?article=${a.slug}`}>{a.title}</Link>}
+                meta={a.blurb}
+              />
+            ))}
+          </ul>
+        );
+      }
       default:
         return null;
     }
@@ -610,8 +715,8 @@ export default function Resources() {
 
       <main id="main-content" className="project-main">
         <PageHeader
-          title="Resource hub"
-          subtitle="Starting points and plain-English reference for running a project. The reference sections are read-only; your project's own sections hold the live data. Templates are the one exception: starting from one creates a new project for you."
+          title="Learn"
+          subtitle="Guides, templates, and plain-English reference for running a project. Follow the Start here path if you are new; the guides are the same ones the app's sections link to from their How this works notes."
         />
 
         <div className="inline-form" style={{ marginBottom: 20, alignItems: "center" }}>
@@ -634,6 +739,26 @@ export default function Resources() {
           onChange={(e) => setQuery(e.target.value)}
           style={{ marginBottom: 28, maxWidth: 360 }}
         />
+
+        {!searching && (
+          <div className="learn-path" aria-label="Start here">
+            <span className="learn-path-label">Start here</span>
+            <ol className="learn-path-steps">
+              <li>
+                <Link to="/app/resources#how-it-works">See how a project runs</Link>
+                <span className="muted">, the four stages and what to do in each</span>
+              </li>
+              <li>
+                <Link to="/app/resources#templates">Start from a template</Link>
+                <span className="muted">, with phases, starter tasks and likely risks in place</span>
+              </li>
+              <li>
+                <Link to="/app/resources?article=risks">Read a guide</Link>
+                <span className="muted">, how risks work, in three short paragraphs</span>
+              </li>
+            </ol>
+          </div>
+        )}
 
         {!searching && (
           <div className="hub-doors">

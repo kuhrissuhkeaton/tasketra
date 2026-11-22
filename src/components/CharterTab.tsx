@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type CharterApproval } from "../lib/api";
+import { HowItWorks } from "./Layered";
 import { fmtDate } from "../lib/format";
 import {
   CHARTER_LIGHT_FIELDS, cleanCharter, isCharterComplete, objectiveLines, sameCharter,
@@ -46,6 +47,9 @@ export function CharterTab({
   const [asking, setAsking] = useState(false);
   const [approvalError, setApprovalError] = useState("");
   const [copied, setCopied] = useState(false);
+  // v172: the charter reads as a document; one section at a time can be
+  // open for editing.
+  const [editingKey, setEditingKey] = useState<CharterField | null>(null);
 
   useEffect(() => {
     api.getCharterApproval(projectId).then(({ approval }) => setApproval(approval)).catch(() => {});
@@ -138,6 +142,97 @@ export function CharterTab({
   );
   const byKey = (k: CharterField) => FIELD_ROWS.find((f) => f.key === k)!;
 
+  // v172 (Plan A): document headings are short; the guiding questions
+  // stay on the form labels shown while editing.
+  const DOC_LABEL: Record<CharterField, string> = {
+    purpose: "Purpose",
+    objectives: "Objectives",
+    scope_in: "In scope",
+    scope_out: "Out of scope",
+    sponsor: "Sponsor",
+    budget: "Summary budget",
+    timeline: "Summary timeline",
+    success: "Success measures",
+  };
+  const FIELD_ID: Record<CharterField, string> = {
+    purpose: "charter-purpose",
+    objectives: "charter-objectives",
+    scope_in: "charter-scope-in",
+    scope_out: "charter-scope-out",
+    sponsor: "charter-sponsor",
+    budget: "charter-budget",
+    timeline: "charter-timeline",
+    success: "charter-success",
+  };
+
+  async function saveSection() {
+    await save();
+    setEditingKey(null);
+  }
+
+  function cancelSection(k: CharterField) {
+    setDraft((d) => ({ ...d, [k]: charter[k] ?? "" }));
+    setEditingKey(null);
+  }
+
+  const sectionEl = (f: (typeof FIELD_ROWS)[number]) => {
+    const value = (charter[f.key] ?? "").trim();
+    if (editingKey === f.key) {
+      return (
+        <div key={f.key} className="charter-field">
+          {fieldEl(f, FIELD_ID[f.key])}
+          {f.key === "objectives" && <p className="charter-hint">One per line.</p>}
+          <div className="charter-section-actions no-print">
+            <button type="button" className="btn btn-primary" disabled={saving} onClick={saveSection}>
+              {saving ? "Saving..." : "Save"}
+            </button>
+            <button type="button" className="btn btn-ghost" onClick={() => cancelSection(f.key)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return (
+      <section key={f.key} className="charter-section">
+        <div className="charter-section-head">
+          <h3>{DOC_LABEL[f.key]}</h3>
+          {isOwner && (
+            <button type="button" className="btn-link no-print" onClick={() => setEditingKey(f.key)}>
+              {value ? "Edit" : "Add"}
+            </button>
+          )}
+        </div>
+        {value ? (
+          f.key === "objectives" ? (
+            <ul className="charter-objectives-list">
+              {objectiveLines(charter[f.key]).map((l, i) => (
+                <li key={i}>{l}</li>
+              ))}
+            </ul>
+          ) : (
+            <p className="charter-prose">{charter[f.key]}</p>
+          )
+        ) : (
+          <p className="muted charter-unwritten">Not written yet.</p>
+        )}
+        {f.key === "objectives" && value && isOwner && okrsVisible && (
+          <div className="charter-goals no-print">
+            <button type="button" className="btn btn-primary" disabled={makingGoals} onClick={turnIntoGoals}>
+              {makingGoals ? "Adding..." : "Turn these into goals"}
+            </button>
+            {goalsMsg && (
+              <span className="muted" role="status">
+                {goalsMsg}{" "}
+                <button type="button" className="view-banner-link" onClick={() => onOpenTab("okrs")}>Open OKRs</button>
+              </span>
+            )}
+          </div>
+        )}
+      </section>
+    );
+  };
+
   return (
     <div className="charter">
       <div className="charter-head">
@@ -151,48 +246,42 @@ export function CharterTab({
 
       {!isOwner && <p className="muted">Only the project owner can edit the charter.</p>}
 
-      <div className="settings-card charter-card">
-        {fieldEl(byKey("purpose"), "charter-purpose")}
-        <div className="charter-field">
-          <label htmlFor="charter-objectives">Objectives</label>
-          <textarea id="charter-objectives" rows={3} value={draft.objectives ?? ""} disabled={!isOwner} onChange={(e) => set("objectives", e.target.value)} />
-          <p className="charter-hint">One per line.</p>
-          {isOwner && okrsVisible && objectiveLines(draft.objectives).length > 0 && (
-            <div className="charter-goals no-print">
-              <button type="button" className="btn btn-primary" disabled={makingGoals} onClick={turnIntoGoals}>
-                {makingGoals ? "Adding..." : "Turn these into goals"}
-              </button>
-              {goalsMsg && (
-                <span className="muted" role="status">
-                  {goalsMsg}{" "}
-                  <button type="button" className="view-banner-link" onClick={() => onOpenTab("okrs")}>Open OKRs</button>
-                </span>
-              )}
-            </div>
-          )}
+      <div className="settings-card charter-card charter-doc">
+        {sectionEl(byKey("purpose"))}
+        {sectionEl(byKey("objectives"))}
+        <div className="charter-row">
+          {sectionEl(byKey("scope_in"))}
+          {sectionEl(byKey("scope_out"))}
         </div>
         <div className="charter-row">
-          {fieldEl(byKey("scope_in"), "charter-scope-in")}
-          {fieldEl(byKey("scope_out"), "charter-scope-out")}
+          {sectionEl(byKey("sponsor"))}
+          {isShown("budget") && sectionEl(byKey("budget"))}
+          {isShown("timeline") && sectionEl(byKey("timeline"))}
         </div>
-        <div className="charter-row">
-          {fieldEl(byKey("sponsor"), "charter-sponsor")}
-          {isShown("budget") && fieldEl(byKey("budget"), "charter-budget")}
-          {isShown("timeline") && fieldEl(byKey("timeline"), "charter-timeline")}
-        </div>
-        {isShown("success") && fieldEl(byKey("success"), "charter-success")}
+        {isShown("success") && sectionEl(byKey("success"))}
 
-        {isOwner && (
+        <p className="muted charter-doc-foot">
+          Assumptions and constraints live in the{" "}
+          <button type="button" className="view-banner-link no-print" onClick={() => onOpenTab("assumptions")}>
+            Assumptions register
+          </button>
+          , so they stay checkable while the project runs.
+        </p>
+
+        {isOwner && !editingKey && dirty && (
           <div className="charter-save no-print">
-            <button type="button" className="btn btn-primary" disabled={!dirty || saving} onClick={save}>
+            <button type="button" className="btn btn-primary" disabled={saving} onClick={save}>
               {saving ? "Saving..." : "Save charter"}
             </button>
-            {savedAt && !dirty && <span className="muted" role="status">Saved</span>}
-            {dirty && !saving && <span className="muted">Unsaved changes</span>}
+            <span className="muted">Unsaved changes</span>
           </div>
+        )}
+        {savedAt && !dirty && (
+          <p className="muted" role="status" style={{ marginBottom: 0 }}>Saved</p>
         )}
         {error && <p className="form-error">{error}</p>}
       </div>
+
 
       <div className="settings-card charter-approval no-print">
         <p className="settings-card-label">Approval</p>
@@ -223,11 +312,12 @@ export function CharterTab({
         {approvalError && <p className="form-error">{approvalError}</p>}
       </div>
 
-      <div className="settings-card charter-where no-print">
-        <p className="settings-card-label">Where this shows up</p>
-        <p>Purpose at the top of Home</p>
-        <p>"Write the charter" in the Next up list while you are in Initiate</p>
-        {okrsVisible && <p>Objectives become OKRs in one click</p>}
+      <div className="no-print" style={{ marginTop: 16 }}>
+        <HowItWorks label="How the charter is used">
+          The purpose shows at the top of Home. While the project is in Initiate, writing the charter
+          sits in the Next up list. Objectives can become OKRs in one click, from the Objectives
+          section above.
+        </HowItWorks>
       </div>
 
       {size === "light" && !showAll && (

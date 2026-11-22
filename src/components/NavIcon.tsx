@@ -17,6 +17,11 @@ import { createElement, type SVGProps } from "react";
  */
 
 export type NavIconName =
+  | "home"
+  | "roadmap"
+  | "tasks"
+  | "budget"
+  | "meetings"
   | "dashboard"
   | "today"
   | "resources"
@@ -56,6 +61,35 @@ export type NavIconName =
 type Shape = { tag: "path" | "rect" | "circle"; attrs: SVGProps<SVGElement> };
 
 const SHAPES: Record<NavIconName, Shape[]> = {
+  home: [
+    { tag: "path", attrs: { d: "M3.5 9.8 10 3.8l6.5 6" } },
+    { tag: "path", attrs: { d: "M5.6 8.6v7.6h8.8V8.6" } },
+  ],
+  roadmap: [
+    { tag: "path", attrs: { d: "M3.2 16.8c4.5-9.5 9.3-4.2 13.6-10.3" } },
+    { tag: "circle", attrs: { cx: 3.2, cy: 16.8, r: 1.4 } },
+    { tag: "circle", attrs: { cx: 10, cy: 10.4, r: 1.4 } },
+    { tag: "circle", attrs: { cx: 16.8, cy: 6.5, r: 1.4 } },
+  ],
+  tasks: [
+    { tag: "path", attrs: { d: "M2.8 5.2 3.9 6.3 6 3.9" } },
+    { tag: "path", attrs: { d: "M8.2 5.2h9" } },
+    { tag: "path", attrs: { d: "M2.8 10.4l1.1 1.1L6 9.1" } },
+    { tag: "path", attrs: { d: "M8.2 10.4h9" } },
+    { tag: "path", attrs: { d: "M2.8 15.6l1.1 1.1L6 14.3" } },
+    { tag: "path", attrs: { d: "M8.2 15.6h9" } },
+  ],
+  budget: [
+    { tag: "circle", attrs: { cx: 10, cy: 10, r: 7 } },
+    { tag: "path", attrs: { d: "M10 5.8v8.4" } },
+    { tag: "path", attrs: { d: "M12.4 7.4c-.6-.6-1.4-.9-2.4-.9-1.3 0-2.3.8-2.3 1.8 0 2.4 4.7 1.3 4.7 3.5 0 1-1 1.8-2.4 1.8-1 0-1.9-.4-2.5-1" } },
+  ],
+  meetings: [
+    { tag: "rect", attrs: { x: 3, y: 4.8, width: 14, height: 12, rx: 1.6 } },
+    { tag: "path", attrs: { d: "M3 8.6h14" } },
+    { tag: "path", attrs: { d: "M6.8 3v3.2" } },
+    { tag: "path", attrs: { d: "M13.2 3v3.2" } },
+  ],
   dashboard: [
     { tag: "rect", attrs: { x: 3, y: 3, width: 6, height: 6, rx: 1.5 } },
     { tag: "rect", attrs: { x: 11, y: 3, width: 6, height: 6, rx: 1.5 } },

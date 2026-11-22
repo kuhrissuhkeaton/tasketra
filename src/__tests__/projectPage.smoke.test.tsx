@@ -30,6 +30,7 @@ vi.mock("../lib/auth-context", () => ({
 
 import ProjectHome from "../pages/ProjectHome";
 import { ConfirmProvider } from "../components/ConfirmDialog";
+import { clearApiCache } from "../lib/api";
 
 // Every tab id, read from the Tab type so a new tab is picked up automatically.
 const TAB_IDS: string[] = (() => {
@@ -271,18 +272,28 @@ describe("project page smoke test", () => {
     expect(errors, errors.join("\n---\n")).toEqual([]);
   });
 
-  it("shows the six main tabs, and every section reachable when all tabs are shown", async () => {
+  it("shows every section in the sidebar, grouped, when all tabs are shown (v172)", async () => {
     await mountProject("full", "issues");
-    const main = [...host.querySelectorAll('nav[aria-label="Project views"] .project-tab')].map((b) => b.textContent);
-    expect(main).toEqual(["Overview", "Tasks", "Plan", "Risks & issues", "People and decisions", "Docs"]);
-    expect(host.querySelector('nav[aria-label="Project views"] .is-active')?.textContent).toBe("Risks & issues");
-    const sections = [...host.querySelectorAll('.section-tabs .section-tab')].map((b) => b.textContent);
-    expect(sections).toEqual(["Issues", "Risks", "Assumptions", "Dependencies", "Quality", "Compliance"]);
+    // v172: project navigation moved from the two in-page tab bars into
+    // the sidebar. Project items carry the tour's data-tour="tab-*" ids.
+    const items = [...host.querySelectorAll(".side-nav .side-tab[data-tour^='tab-']")].map((b) =>
+      (b.textContent ?? "").replace(/\d+$/, ""),
+    );
+    expect(items).toEqual([
+      "Overview", "Tasks",
+      "Roadmap", "Budget", "Meetings", "Charter", "OKRs",
+      "Issues", "Risks", "Assumptions", "Dependencies", "Quality", "Compliance",
+      "Decisions", "Stakeholders", "Settings", "RACI", "Vendors", "Comms Plan",
+      "Documents", "Weekly Report", "Closure", "Templates", "Export", "Connections",
+    ]);
+    expect(host.querySelector(".side-nav .side-tab.active")?.getAttribute("data-tour")).toBe("tab-issues");
+    const labels = [...host.querySelectorAll(".side-nav-label")].map((b) => (b.textContent ?? "").replace(/▾$/, ""));
+    expect(labels).toEqual(expect.arrayContaining(["Plan", "Risks & issues", "People and decisions", "Docs"]));
   });
 
-  it("the sidebar no longer lists project tabs, only the project name", async () => {
+  it("the sidebar lists the project tabs under the project name (v172)", async () => {
     await mountProject("full", "home");
-    expect(host.querySelectorAll(".side-nav .side-tab[data-tour^='tab-']").length).toBe(0);
+    expect(host.querySelectorAll(".side-nav .side-tab[data-tour^='tab-']").length).toBeGreaterThan(0);
   });
 
   it("decision cards lead with the wait, and Nudge copies a ready reminder (v160, F-16)", async () => {
@@ -331,6 +342,45 @@ describe("project page smoke test", () => {
     // The unsent decision says so in its lead line and offers no Nudge.
     expect(cards[1].querySelector(".decision-wait")?.textContent).toContain("Not sent to anyone yet");
     expect(cards[1].querySelector(".decision-actions")?.textContent).not.toContain("Nudge");
+    expect(errors, errors.join("\n---\n")).toEqual([]);
+  });
+
+  it("decided requests drop into a collapsed Decided group below the waiting ones (v172)", async () => {
+    clearApiCache();
+    const now = new Date().toISOString();
+    await mountProject("full", "decisions", (url) => {
+      if (/\/api\/decisions\?projectId=/.test(url)) {
+        return {
+          decisions: [
+            {
+              id: "d1", title: "Approve the charter", context: "", options: ["Approve", "Reject"],
+              status: "open", deadline: null, created_at: now, public_token: "tok123",
+              recipients: [], records: [],
+            },
+            {
+              id: "d2", title: "Pick the venue", context: "", options: ["A", "B"],
+              status: "decided", deadline: null, created_at: now, public_token: "tok456",
+              recipients: [], records: [], chosen_option: "A", responder_name: "Sponsor Sam",
+              responded_at: now, outcome_confirmed_at: null,
+            },
+          ],
+        };
+      }
+      if (/\/api\/stakeholders\?projectId=/.test(url)) return { stakeholders: [] };
+      return undefined;
+    });
+    // Only the waiting card renders; the decided one waits behind the group.
+    const cards = [...host.querySelectorAll(".decision-card")];
+    expect(cards).toHaveLength(1);
+    expect(cards[0].textContent).toContain("Approve the charter");
+    const toggle = host.querySelector<HTMLButtonElement>("button.layer-group-btn")!;
+    expect(toggle).toBeTruthy();
+    expect(toggle.textContent).toContain("Decided");
+    await act(async () => { toggle.click(); });
+    const all = [...host.querySelectorAll(".decision-card")];
+    expect(all).toHaveLength(2);
+    expect(all[1].textContent).toContain("Pick the venue");
+    expect(all[1].textContent).toContain("Decided:");
     expect(errors, errors.join("\n---\n")).toEqual([]);
   });
 });

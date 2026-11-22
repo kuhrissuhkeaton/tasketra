@@ -128,8 +128,14 @@ export function SnapshotDocument({ projectName, snapshot, dateLabel }: {
 
       {milestones.length > 0 && (
         <section>
-          <h2>Milestones</h2>
-          <ol className="snapshot-milestones">
+          <h2>
+            Milestones{" "}
+            <span className="snapshot-count">
+              · {milestones.filter((x) => x.done).length} of {milestones.length} done
+            </span>
+          </h2>
+          <div className="snapshot-panel">
+            <ol className="snapshot-milestones">
             {milestones.map((m) => (
               <li key={`${m.title}-${m.date}`} className={m.done ? "is-done" : undefined}>
                 <span className="snapshot-milestone-dot" aria-hidden="true" />
@@ -137,13 +143,16 @@ export function SnapshotDocument({ projectName, snapshot, dateLabel }: {
                 <span className="muted">{m.done ? "Done · " : ""}{fmtLocalDate(m.date)}</span>
               </li>
             ))}
-          </ol>
+            </ol>
+          </div>
         </section>
       )}
 
       {risks.length > 0 && (
         <section>
-          <h2>What we are watching</h2>
+          <h2>
+            What we are watching <span className="snapshot-count">· {risks.length}</span>
+          </h2>
           <ul className="snapshot-risks">
             {risks.map((r) => (
               <li key={r.title}>
@@ -157,7 +166,9 @@ export function SnapshotDocument({ projectName, snapshot, dateLabel }: {
 
       {decisions.length > 0 && (
         <section>
-          <h2>Open decisions</h2>
+          <h2>
+            Open decisions <span className="snapshot-count">· {decisions.length}</span>
+          </h2>
           <ul className="snapshot-decisions">
             {decisions.map((d) => {
               const meta = [d.owner, d.deadline ? `needed by ${fmtLocalDate(d.deadline)}` : null]

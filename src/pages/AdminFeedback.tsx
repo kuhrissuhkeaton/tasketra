@@ -67,7 +67,7 @@ export default function AdminFeedback() {
     <div className="project-shell">
       <AppSidebar />
 
-      <main id="main-content" className="project-main">
+      <main id="main-content" className="project-main admin-main">
         <PageHeader title="Feedback" subtitle="What people sent from the in-app Feedback link." />
         <RegisterSummary>{counts.new} new · {counts.planned} planned · {counts.shipped} shipped</RegisterSummary>
 

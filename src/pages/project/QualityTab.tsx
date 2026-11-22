@@ -5,7 +5,8 @@ import { api, type QualityItem } from "../../lib/api";
 import { RowActionsMenu } from "../../components/RowActionsMenu";
 import { QuickAddForm } from "../../components/QuickAddForm";
 import { useConfirm } from "../../components/ConfirmDialog";
-import { RegisterRow, RegisterSummary, RegisterEmpty } from "../../components/ui";
+import { RegisterRow } from "../../components/ui";
+import { StatCards, StatCard, HowItWorks, TeachEmpty } from "../../components/Layered";
 import { announce } from "../../lib/announce";
 
 const QUALITY_CATEGORY_LABEL: Record<QualityItem["category"], string> = {
@@ -108,11 +109,14 @@ export function QualityTab({ projectId }: { projectId: string }) {
 
   return (
     <div>
-      <p className="muted" style={{ marginBottom: 16, maxWidth: 640 }}>
-        Standards to meet, reviews to run, and defects you've found -- a quality log alongside
-        the rest of RAID, since "is this good enough" is a different question from "is something
-        broken."
-      </p>
+      <div style={{ marginBottom: 16 }}>
+        <p className="muted" style={{ margin: "0 0 6px", maxWidth: 640 }}>
+          Standards to meet, reviews to run, and defects you have found.
+        </p>
+        <HowItWorks label="How quality works" article="quality">
+          Quality sits alongside the rest of RAID because is this good enough is a different question from is something broken. Log the standard, the review, or the defect, give it an owner, and mark it passed or failed as the evidence comes in.
+        </HowItWorks>
+      </div>
       <QuickAddForm
         storageKey="quality"
         hasRows={items.length > 0}
@@ -200,13 +204,13 @@ export function QualityTab({ projectId }: { projectId: string }) {
         </div>
       ) : (
       <>
-      <RegisterSummary>
-        {items.filter((q) => q.status === "open" || q.status === "in_progress").length} to do
-        {" \u00b7 "}{items.filter((q) => q.status === "failed").length} failed
-        {" \u00b7 "}{items.filter((q) => q.status === "passed").length} passed
-      </RegisterSummary>
+      <StatCards>
+        <StatCard label="To do" value={String(items.filter((q) => q.status === "open" || q.status === "in_progress").length)} />
+        <StatCard label="Failed" value={String(items.filter((q) => q.status === "failed").length)} tone={items.some((q) => q.status === "failed") ? "bad" : undefined} />
+        <StatCard label="Passed" value={String(items.filter((q) => q.status === "passed").length)} />
+      </StatCards>
       {items.length === 0 ? (
-        <RegisterEmpty>No quality items logged yet. Add a standard to meet, a review to run, or a defect you found.</RegisterEmpty>
+        <TeachEmpty title="No quality items logged yet" body="Add a standard to meet, a review to run, or a defect you found. Quality is tracked separately from issues: this log answers whether the work is good enough, not whether something is broken." article="quality" />
       ) : (
         <ul className="rg-list" aria-label="Quality items">
           {items.map((q) => (

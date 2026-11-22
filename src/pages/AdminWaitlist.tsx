@@ -45,7 +45,7 @@ export default function AdminWaitlist() {
     <div className="project-shell">
       <AppSidebar />
 
-      <main id="main-content" className="project-main">
+      <main id="main-content" className="project-main admin-main">
         <PageHeader title="Waitlist" subtitle="People who asked for an invite." />
         <RegisterSummary>
           {signups.filter((s) => s.status === "pending").length} pending · {signups.filter((s) => s.status === "invited").length} invited

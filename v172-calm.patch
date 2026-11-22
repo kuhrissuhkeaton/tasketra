@@ -1,0 +1,3659 @@
+--- a/src/__tests__/delight.component.test.tsx
++++ b/src/__tests__/delight.component.test.tsx
+@@ -162,6 +162,10 @@
+ 
+   it("an answer inside the hour earns the line, with the real minutes", async () => {
+     await mount("decisions", decisionsHandler);
++    // v172: decided cards live in the collapsed Decided group; open it first.
++    await settle(() => !!host.querySelector("button.layer-group-btn"));
++    const toggle = host.querySelector<HTMLButtonElement>("button.layer-group-btn")!;
++    await act(async () => { toggle.click(); });
+     await settle(() => (host.textContent || "").includes("A record worth framing."));
+     expect(host.textContent).toContain("Answered in 43 minutes. A record worth framing.");
+     expect(errors).toEqual([]);
+@@ -170,6 +174,9 @@
+   it("Delight off: the line is gone, the card is intact", async () => {
+     window.localStorage.setItem("tasketra:delight:u1", "off");
+     await mount("decisions", decisionsHandler);
++    await settle(() => !!host.querySelector("button.layer-group-btn"));
++    const toggle = host.querySelector<HTMLButtonElement>("button.layer-group-btn")!;
++    await act(async () => { toggle.click(); });
+     await settle(() => (host.textContent || "").includes("Pick a vendor"));
+     expect(host.textContent).not.toContain("A record worth framing.");
+   });
+--- a/src/__tests__/healthStrip.test.tsx
++++ b/src/__tests__/healthStrip.test.tsx
+@@ -114,14 +114,20 @@
+ });
+ 
+ describe("HealthStrip placement", () => {
+-  it("sits under the project title on every tab, Home included (one verdict, not two); the v171 calm home is the one exception", async () => {
++  it("sits under the project title on every tab; on the home tab it renders inside the v172 status tier, and the calm home is the one exception", async () => {
+     // @ts-ignore node builtin: the app tsconfig has no node types, vitest runs in node
+     const { readFileSync } = await import("node:fs");
+     const src: string = readFileSync("src/pages/ProjectHome.tsx", "utf8");
+     // v171: a light project's calm home carries no strip (its three quiet
+     // cards are the whole surface); everywhere else the strip renders.
+-    expect(src).toMatch(/\{id && !onCalmHome && <HealthStrip projectId=\{id\}/);
+-    expect(src.indexOf("<HealthStrip")).toBeLessThan(src.indexOf('className="project-tabs primary-tabs"'));
++    // v172: on the standard/full home the standalone strip is replaced by
++    // the StatusTier, which renders the same strip unboxed at its top.
++    expect(src).toMatch(/\{id && !onCalmHome && tab !== "home" && <HealthStrip projectId=\{id\}/);
++    expect(src).toContain('from "../components/StatusTier"');
++    // v172: the in-page tab bars are gone (navigation lives in the
++    // sidebar); the strip still sits under the page head, before the
++    // tab content renders.
++    expect(src.indexOf("<HealthStrip")).toBeLessThan(src.indexOf('tab === "home" && onCalmHome'));
+     expect(src.indexOf("<HealthStrip")).toBeGreaterThan(src.indexOf("project-page-head"));
+   });
+ });
+--- a/src/__tests__/projectPage.smoke.test.tsx
++++ b/src/__tests__/projectPage.smoke.test.tsx
+@@ -30,6 +30,7 @@
+ 
+ import ProjectHome from "../pages/ProjectHome";
+ import { ConfirmProvider } from "../components/ConfirmDialog";
++import { clearApiCache } from "../lib/api";
+ 
+ // Every tab id, read from the Tab type so a new tab is picked up automatically.
+ const TAB_IDS: string[] = (() => {
+@@ -271,18 +272,28 @@
+     expect(errors, errors.join("\n---\n")).toEqual([]);
+   });
+ 
+-  it("shows the six main tabs, and every section reachable when all tabs are shown", async () => {
++  it("shows every section in the sidebar, grouped, when all tabs are shown (v172)", async () => {
+     await mountProject("full", "issues");
+-    const main = [...host.querySelectorAll('nav[aria-label="Project views"] .project-tab')].map((b) => b.textContent);
+-    expect(main).toEqual(["Overview", "Tasks", "Plan", "Risks & issues", "People and decisions", "Docs"]);
+-    expect(host.querySelector('nav[aria-label="Project views"] .is-active')?.textContent).toBe("Risks & issues");
+-    const sections = [...host.querySelectorAll('.section-tabs .section-tab')].map((b) => b.textContent);
+-    expect(sections).toEqual(["Issues", "Risks", "Assumptions", "Dependencies", "Quality", "Compliance"]);
++    // v172: project navigation moved from the two in-page tab bars into
++    // the sidebar. Project items carry the tour's data-tour="tab-*" ids.
++    const items = [...host.querySelectorAll(".side-nav .side-tab[data-tour^='tab-']")].map((b) =>
++      (b.textContent ?? "").replace(/\d+$/, ""),
++    );
++    expect(items).toEqual([
++      "Overview", "Tasks",
++      "Roadmap", "Budget", "Meetings", "Charter", "OKRs",
++      "Issues", "Risks", "Assumptions", "Dependencies", "Quality", "Compliance",
++      "Decisions", "Stakeholders", "Settings", "RACI", "Vendors", "Comms Plan",
++      "Documents", "Weekly Report", "Closure", "Templates", "Export", "Connections",
++    ]);
++    expect(host.querySelector(".side-nav .side-tab.active")?.getAttribute("data-tour")).toBe("tab-issues");
++    const labels = [...host.querySelectorAll(".side-nav-label")].map((b) => (b.textContent ?? "").replace(/▾$/, ""));
++    expect(labels).toEqual(expect.arrayContaining(["Plan", "Risks & issues", "People and decisions", "Docs"]));
+   });
+ 
+-  it("the sidebar no longer lists project tabs, only the project name", async () => {
++  it("the sidebar lists the project tabs under the project name (v172)", async () => {
+     await mountProject("full", "home");
+-    expect(host.querySelectorAll(".side-nav .side-tab[data-tour^='tab-']").length).toBe(0);
++    expect(host.querySelectorAll(".side-nav .side-tab[data-tour^='tab-']").length).toBeGreaterThan(0);
+   });
+ 
+   it("decision cards lead with the wait, and Nudge copies a ready reminder (v160, F-16)", async () => {
+@@ -333,4 +344,43 @@
+     expect(cards[1].querySelector(".decision-actions")?.textContent).not.toContain("Nudge");
+     expect(errors, errors.join("\n---\n")).toEqual([]);
+   });
++
++  it("decided requests drop into a collapsed Decided group below the waiting ones (v172)", async () => {
++    clearApiCache();
++    const now = new Date().toISOString();
++    await mountProject("full", "decisions", (url) => {
++      if (/\/api\/decisions\?projectId=/.test(url)) {
++        return {
++          decisions: [
++            {
++              id: "d1", title: "Approve the charter", context: "", options: ["Approve", "Reject"],
++              status: "open", deadline: null, created_at: now, public_token: "tok123",
++              recipients: [], records: [],
++            },
++            {
++              id: "d2", title: "Pick the venue", context: "", options: ["A", "B"],
++              status: "decided", deadline: null, created_at: now, public_token: "tok456",
++              recipients: [], records: [], chosen_option: "A", responder_name: "Sponsor Sam",
++              responded_at: now, outcome_confirmed_at: null,
++            },
++          ],
++        };
++      }
++      if (/\/api\/stakeholders\?projectId=/.test(url)) return { stakeholders: [] };
++      return undefined;
++    });
++    // Only the waiting card renders; the decided one waits behind the group.
++    const cards = [...host.querySelectorAll(".decision-card")];
++    expect(cards).toHaveLength(1);
++    expect(cards[0].textContent).toContain("Approve the charter");
++    const toggle = host.querySelector<HTMLButtonElement>("button.layer-group-btn")!;
++    expect(toggle).toBeTruthy();
++    expect(toggle.textContent).toContain("Decided");
++    await act(async () => { toggle.click(); });
++    const all = [...host.querySelectorAll(".decision-card")];
++    expect(all).toHaveLength(2);
++    expect(all[1].textContent).toContain("Pick the venue");
++    expect(all[1].textContent).toContain("Decided:");
++    expect(errors, errors.join("\n---\n")).toEqual([]);
++  });
+ });
+--- a/src/__tests__/resourcesHub.test.tsx
++++ b/src/__tests__/resourcesHub.test.tsx
+@@ -70,7 +70,7 @@
+   it("shows the three doors and every section, each with its one-line summary", async () => {
+     await mount();
+     const doors = [...host.querySelectorAll(".hub-door-title")].map((x) => x.textContent);
+-    expect(doors).toEqual(["Start a project", "Run the week", "Look it up"]);
++    expect(doors).toEqual(["Start", "Learn", "Reference"]);
+     for (const id of ["templates", "how-it-works", "forms", "meetings", "status-reports", "methodologies", "formulas", "raid", "stakeholder-matrix"]) {
+       expect(host.querySelector(`#${CSS.escape(id)}`), id).not.toBeNull();
+     }
+@@ -102,7 +102,7 @@
+   it("a door opens all of its sections at once", async () => {
+     await mount();
+     const door = [...host.querySelectorAll<HTMLButtonElement>(".hub-door")]
+-      .find((b) => b.textContent?.includes("Look it up"))!;
++      .find((b) => b.textContent?.includes("Reference"))!;
+     await click(door);
+     for (const id of ["methodologies", "formulas", "raid", "stakeholder-matrix"]) {
+       expect(section(id).body.hidden, id).toBe(false);
+--- a/src/components/AppSidebar.tsx
++++ b/src/components/AppSidebar.tsx
+@@ -234,7 +234,7 @@
+             className={pathname === "/app/resources" ? "side-tab active" : "side-tab"}
+           >
+             <NavIcon name="resources" active={pathname === "/app/resources"} />
+-            Resource hub
++            Learn
+           </Link>
+           <Link
+             to="/app/whats-new"
+--- a/src/components/CalmHome.tsx
++++ b/src/components/CalmHome.tsx
+@@ -16,7 +16,7 @@
+ // usually reaches for them. Timeline (roadmap) is not hidden by size, but
+ // it belongs here: on the calm home it is the one core surface with no
+ // card of its own.
+-const GROW_PIECES: { id: string; label: string }[] = [
++export const GROW_PIECES: { id: string; label: string }[] = [
+   { id: "roadmap", label: "Timeline" },
+   { id: "budget", label: "Budget" },
+   { id: "meetings", label: "Meetings" },
+--- a/src/components/CharterTab.tsx
++++ b/src/components/CharterTab.tsx
+@@ -1,5 +1,6 @@
+ import { useEffect, useState } from "react";
+ import { api, type CharterApproval } from "../lib/api";
++import { HowItWorks } from "./Layered";
+ import { fmtDate } from "../lib/format";
+ import {
+   CHARTER_LIGHT_FIELDS, cleanCharter, isCharterComplete, objectiveLines, sameCharter,
+@@ -46,6 +47,9 @@
+   const [asking, setAsking] = useState(false);
+   const [approvalError, setApprovalError] = useState("");
+   const [copied, setCopied] = useState(false);
++  // v172: the charter reads as a document; one section at a time can be
++  // open for editing.
++  const [editingKey, setEditingKey] = useState<CharterField | null>(null);
+ 
+   useEffect(() => {
+     api.getCharterApproval(projectId).then(({ approval }) => setApproval(approval)).catch(() => {});
+@@ -138,6 +142,97 @@
+   );
+   const byKey = (k: CharterField) => FIELD_ROWS.find((f) => f.key === k)!;
+ 
++  // v172 (Plan A): document headings are short; the guiding questions
++  // stay on the form labels shown while editing.
++  const DOC_LABEL: Record<CharterField, string> = {
++    purpose: "Purpose",
++    objectives: "Objectives",
++    scope_in: "In scope",
++    scope_out: "Out of scope",
++    sponsor: "Sponsor",
++    budget: "Summary budget",
++    timeline: "Summary timeline",
++    success: "Success measures",
++  };
++  const FIELD_ID: Record<CharterField, string> = {
++    purpose: "charter-purpose",
++    objectives: "charter-objectives",
++    scope_in: "charter-scope-in",
++    scope_out: "charter-scope-out",
++    sponsor: "charter-sponsor",
++    budget: "charter-budget",
++    timeline: "charter-timeline",
++    success: "charter-success",
++  };
++
++  async function saveSection() {
++    await save();
++    setEditingKey(null);
++  }
++
++  function cancelSection(k: CharterField) {
++    setDraft((d) => ({ ...d, [k]: charter[k] ?? "" }));
++    setEditingKey(null);
++  }
++
++  const sectionEl = (f: (typeof FIELD_ROWS)[number]) => {
++    const value = (charter[f.key] ?? "").trim();
++    if (editingKey === f.key) {
++      return (
++        <div key={f.key} className="charter-field">
++          {fieldEl(f, FIELD_ID[f.key])}
++          {f.key === "objectives" && <p className="charter-hint">One per line.</p>}
++          <div className="charter-section-actions no-print">
++            <button type="button" className="btn btn-primary" disabled={saving} onClick={saveSection}>
++              {saving ? "Saving..." : "Save"}
++            </button>
++            <button type="button" className="btn btn-ghost" onClick={() => cancelSection(f.key)}>
++              Cancel
++            </button>
++          </div>
++        </div>
++      );
++    }
++    return (
++      <section key={f.key} className="charter-section">
++        <div className="charter-section-head">
++          <h3>{DOC_LABEL[f.key]}</h3>
++          {isOwner && (
++            <button type="button" className="btn-link no-print" onClick={() => setEditingKey(f.key)}>
++              {value ? "Edit" : "Add"}
++            </button>
++          )}
++        </div>
++        {value ? (
++          f.key === "objectives" ? (
++            <ul className="charter-objectives-list">
++              {objectiveLines(charter[f.key]).map((l, i) => (
++                <li key={i}>{l}</li>
++              ))}
++            </ul>
++          ) : (
++            <p className="charter-prose">{charter[f.key]}</p>
++          )
++        ) : (
++          <p className="muted charter-unwritten">Not written yet.</p>
++        )}
++        {f.key === "objectives" && value && isOwner && okrsVisible && (
++          <div className="charter-goals no-print">
++            <button type="button" className="btn btn-primary" disabled={makingGoals} onClick={turnIntoGoals}>
++              {makingGoals ? "Adding..." : "Turn these into goals"}
++            </button>
++            {goalsMsg && (
++              <span className="muted" role="status">
++                {goalsMsg}{" "}
++                <button type="button" className="view-banner-link" onClick={() => onOpenTab("okrs")}>Open OKRs</button>
++              </span>
++            )}
++          </div>
++        )}
++      </section>
++    );
++  };
++
+   return (
+     <div className="charter">
+       <div className="charter-head">
+@@ -151,49 +246,43 @@
+ 
+       {!isOwner && <p className="muted">Only the project owner can edit the charter.</p>}
+ 
+-      <div className="settings-card charter-card">
+-        {fieldEl(byKey("purpose"), "charter-purpose")}
+-        <div className="charter-field">
+-          <label htmlFor="charter-objectives">Objectives</label>
+-          <textarea id="charter-objectives" rows={3} value={draft.objectives ?? ""} disabled={!isOwner} onChange={(e) => set("objectives", e.target.value)} />
+-          <p className="charter-hint">One per line.</p>
+-          {isOwner && okrsVisible && objectiveLines(draft.objectives).length > 0 && (
+-            <div className="charter-goals no-print">
+-              <button type="button" className="btn btn-primary" disabled={makingGoals} onClick={turnIntoGoals}>
+-                {makingGoals ? "Adding..." : "Turn these into goals"}
+-              </button>
+-              {goalsMsg && (
+-                <span className="muted" role="status">
+-                  {goalsMsg}{" "}
+-                  <button type="button" className="view-banner-link" onClick={() => onOpenTab("okrs")}>Open OKRs</button>
+-                </span>
+-              )}
+-            </div>
+-          )}
+-        </div>
++      <div className="settings-card charter-card charter-doc">
++        {sectionEl(byKey("purpose"))}
++        {sectionEl(byKey("objectives"))}
+         <div className="charter-row">
+-          {fieldEl(byKey("scope_in"), "charter-scope-in")}
+-          {fieldEl(byKey("scope_out"), "charter-scope-out")}
++          {sectionEl(byKey("scope_in"))}
++          {sectionEl(byKey("scope_out"))}
+         </div>
+         <div className="charter-row">
+-          {fieldEl(byKey("sponsor"), "charter-sponsor")}
+-          {isShown("budget") && fieldEl(byKey("budget"), "charter-budget")}
+-          {isShown("timeline") && fieldEl(byKey("timeline"), "charter-timeline")}
++          {sectionEl(byKey("sponsor"))}
++          {isShown("budget") && sectionEl(byKey("budget"))}
++          {isShown("timeline") && sectionEl(byKey("timeline"))}
+         </div>
+-        {isShown("success") && fieldEl(byKey("success"), "charter-success")}
++        {isShown("success") && sectionEl(byKey("success"))}
+ 
+-        {isOwner && (
++        <p className="muted charter-doc-foot">
++          Assumptions and constraints live in the{" "}
++          <button type="button" className="view-banner-link no-print" onClick={() => onOpenTab("assumptions")}>
++            Assumptions register
++          </button>
++          , so they stay checkable while the project runs.
++        </p>
++
++        {isOwner && !editingKey && dirty && (
+           <div className="charter-save no-print">
+-            <button type="button" className="btn btn-primary" disabled={!dirty || saving} onClick={save}>
++            <button type="button" className="btn btn-primary" disabled={saving} onClick={save}>
+               {saving ? "Saving..." : "Save charter"}
+             </button>
+-            {savedAt && !dirty && <span className="muted" role="status">Saved</span>}
+-            {dirty && !saving && <span className="muted">Unsaved changes</span>}
++            <span className="muted">Unsaved changes</span>
+           </div>
+         )}
++        {savedAt && !dirty && (
++          <p className="muted" role="status" style={{ marginBottom: 0 }}>Saved</p>
++        )}
+         {error && <p className="form-error">{error}</p>}
+       </div>
+ 
++
+       <div className="settings-card charter-approval no-print">
+         <p className="settings-card-label">Approval</p>
+         <p className="muted">Optional. Turns the charter into a Decision your sponsor can approve or ask to change, from a link. Nothing is blocked either way.</p>
+@@ -223,11 +312,12 @@
+         {approvalError && <p className="form-error">{approvalError}</p>}
+       </div>
+ 
+-      <div className="settings-card charter-where no-print">
+-        <p className="settings-card-label">Where this shows up</p>
+-        <p>Purpose at the top of Home</p>
+-        <p>"Write the charter" in the Next up list while you are in Initiate</p>
+-        {okrsVisible && <p>Objectives become OKRs in one click</p>}
++      <div className="no-print" style={{ marginTop: 16 }}>
++        <HowItWorks label="How the charter is used">
++          The purpose shows at the top of Home. While the project is in Initiate, writing the charter
++          sits in the Next up list. Objectives can become OKRs in one click, from the Objectives
++          section above.
++        </HowItWorks>
+       </div>
+ 
+       {size === "light" && !showAll && (
+--- a/src/components/HealthStrip.tsx
++++ b/src/components/HealthStrip.tsx
+@@ -20,7 +20,7 @@
+  * same portfolio rollup the Projects list uses (no new health logic). If the data cannot load,
+  * it renders nothing and the page is unchanged.
+  */
+-export function HealthStrip({ projectId, refreshKey, onOpenTab }: { projectId: string; refreshKey?: string; onOpenTab: (tab: string) => void }) {
++export function HealthStrip({ projectId, refreshKey, onOpenTab, bare }: { projectId: string; refreshKey?: string; onOpenTab: (tab: string) => void; bare?: boolean }) {
+   const [summary, setSummary] = useState<PortfolioProjectSummary | null>(null);
+ 
+   // Refetch when the tab changes as well as when the project does: work added
+@@ -44,7 +44,7 @@
+   // are history, not a current health signal.
+   if (summary.closed_at) {
+     return (
+-      <div className="hs-strip" role="status" aria-label="Project health">
++      <div className={bare ? "hs-strip hs-bare" : "hs-strip"} role="status" aria-label="Project health">
+         <span className="pill pill-neutral">Closed</span>
+         <span className="hs-why">This project has been closed. Everything stays readable — reopen it from the Closure tab if work resumes.</span>
+       </div>
+@@ -67,7 +67,7 @@
+   const shownParts = parts.length > 0 ? parts : [{ text: "Nothing flagged" }];
+ 
+   return (
+-    <div className="hs-strip" role="status" aria-label="Project health">
++    <div className={bare ? "hs-strip hs-bare" : "hs-strip"} role="status" aria-label="Project health">
+       <span className={`pill ${isNew ? "hs-new" : PILL[headline]}`}>{isNew ? "New" : LABEL[headline]}</span>
+       <span className="hs-why">
+         {shownParts.map((p, i) => (
+--- a/src/components/NavIcon.tsx
++++ b/src/components/NavIcon.tsx
+@@ -17,6 +17,11 @@
+  */
+ 
+ export type NavIconName =
++  | "home"
++  | "roadmap"
++  | "tasks"
++  | "budget"
++  | "meetings"
+   | "dashboard"
+   | "today"
+   | "resources"
+@@ -56,6 +61,35 @@
+ type Shape = { tag: "path" | "rect" | "circle"; attrs: SVGProps<SVGElement> };
+ 
+ const SHAPES: Record<NavIconName, Shape[]> = {
++  home: [
++    { tag: "path", attrs: { d: "M3.5 9.8 10 3.8l6.5 6" } },
++    { tag: "path", attrs: { d: "M5.6 8.6v7.6h8.8V8.6" } },
++  ],
++  roadmap: [
++    { tag: "path", attrs: { d: "M3.2 16.8c4.5-9.5 9.3-4.2 13.6-10.3" } },
++    { tag: "circle", attrs: { cx: 3.2, cy: 16.8, r: 1.4 } },
++    { tag: "circle", attrs: { cx: 10, cy: 10.4, r: 1.4 } },
++    { tag: "circle", attrs: { cx: 16.8, cy: 6.5, r: 1.4 } },
++  ],
++  tasks: [
++    { tag: "path", attrs: { d: "M2.8 5.2 3.9 6.3 6 3.9" } },
++    { tag: "path", attrs: { d: "M8.2 5.2h9" } },
++    { tag: "path", attrs: { d: "M2.8 10.4l1.1 1.1L6 9.1" } },
++    { tag: "path", attrs: { d: "M8.2 10.4h9" } },
++    { tag: "path", attrs: { d: "M2.8 15.6l1.1 1.1L6 14.3" } },
++    { tag: "path", attrs: { d: "M8.2 15.6h9" } },
++  ],
++  budget: [
++    { tag: "circle", attrs: { cx: 10, cy: 10, r: 7 } },
++    { tag: "path", attrs: { d: "M10 5.8v8.4" } },
++    { tag: "path", attrs: { d: "M12.4 7.4c-.6-.6-1.4-.9-2.4-.9-1.3 0-2.3.8-2.3 1.8 0 2.4 4.7 1.3 4.7 3.5 0 1-1 1.8-2.4 1.8-1 0-1.9-.4-2.5-1" } },
++  ],
++  meetings: [
++    { tag: "rect", attrs: { x: 3, y: 4.8, width: 14, height: 12, rx: 1.6 } },
++    { tag: "path", attrs: { d: "M3 8.6h14" } },
++    { tag: "path", attrs: { d: "M6.8 3v3.2" } },
++    { tag: "path", attrs: { d: "M13.2 3v3.2" } },
++  ],
+   dashboard: [
+     { tag: "rect", attrs: { x: 3, y: 3, width: 6, height: 6, rx: 1.5 } },
+     { tag: "rect", attrs: { x: 11, y: 3, width: 6, height: 6, rx: 1.5 } },
+--- a/src/components/SnapshotDocument.tsx
++++ b/src/components/SnapshotDocument.tsx
+@@ -128,8 +128,14 @@
+ 
+       {milestones.length > 0 && (
+         <section>
+-          <h2>Milestones</h2>
+-          <ol className="snapshot-milestones">
++          <h2>
++            Milestones{" "}
++            <span className="snapshot-count">
++              · {milestones.filter((x) => x.done).length} of {milestones.length} done
++            </span>
++          </h2>
++          <div className="snapshot-panel">
++            <ol className="snapshot-milestones">
+             {milestones.map((m) => (
+               <li key={`${m.title}-${m.date}`} className={m.done ? "is-done" : undefined}>
+                 <span className="snapshot-milestone-dot" aria-hidden="true" />
+@@ -137,13 +143,16 @@
+                 <span className="muted">{m.done ? "Done · " : ""}{fmtLocalDate(m.date)}</span>
+               </li>
+             ))}
+-          </ol>
++            </ol>
++          </div>
+         </section>
+       )}
+ 
+       {risks.length > 0 && (
+         <section>
+-          <h2>What we are watching</h2>
++          <h2>
++            What we are watching <span className="snapshot-count">· {risks.length}</span>
++          </h2>
+           <ul className="snapshot-risks">
+             {risks.map((r) => (
+               <li key={r.title}>
+@@ -157,7 +166,9 @@
+ 
+       {decisions.length > 0 && (
+         <section>
+-          <h2>Open decisions</h2>
++          <h2>
++            Open decisions <span className="snapshot-count">· {decisions.length}</span>
++          </h2>
+           <ul className="snapshot-decisions">
+             {decisions.map((d) => {
+               const meta = [d.owner, d.deadline ? `needed by ${fmtLocalDate(d.deadline)}` : null]
+--- a/src/index.css
++++ b/src/index.css
+@@ -3048,3 +3048,205 @@
+ .today-checkin-toggle { font-size: 13px; padding: 0; }
+ .today-checkin-open { display: flex; flex-direction: column; gap: 8px; padding-top: 4px; }
+ .today-checkin-open .inline-form { margin-bottom: 0; }
++
++/* ==== v172 (Plan A "Layer It"): layered surfaces + density ====
++   Summary first, grouped detail, teaching text on request. Density is a
++   data attribute on <html> set by src/lib/density.ts: comfortable is the
++   calm default; compact tightens rows and cards for big registers. */
++:root {
++  --pad-card: 20px;
++  --pad-row: 13px;
++  --gap-stack: 22px;
++}
++[data-density="compact"] {
++  --pad-card: 12px;
++  --pad-row: 7px;
++  --gap-stack: 12px;
++}
++[data-density="compact"] .table td,
++[data-density="compact"] .table th {
++  padding-top: 6px;
++  padding-bottom: 6px;
++}
++[data-density="compact"] .card {
++  padding: var(--pad-card);
++}
++
++.layer-stats {
++  display: grid;
++  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
++  gap: 14px;
++  margin-bottom: var(--gap-stack);
++}
++.layer-stat {
++  background: var(--panel);
++  border: 1px solid var(--border);
++  border-radius: var(--radius);
++  padding: var(--pad-card);
++  display: flex;
++  flex-direction: column;
++  gap: 2px;
++  text-align: left;
++}
++.layer-stat-btn { cursor: pointer; font: inherit; }
++.layer-stat-btn:hover { border-color: var(--slate-2); }
++.layer-stat-label {
++  font-size: 12px;
++  letter-spacing: 0.04em;
++  text-transform: uppercase;
++  color: var(--slate-text);
++}
++.layer-stat-value { font-size: 26px; font-weight: 650; color: var(--navy); line-height: 1.15; }
++.layer-stat-sub { font-size: 13px; color: var(--slate-text); }
++.layer-stat-warn .layer-stat-value { color: #8a6d1c; }
++.layer-stat-bad .layer-stat-value { color: var(--red); }
++.layer-stat-ok .layer-stat-value { color: var(--success); }
++
++.layer-group {
++  background: var(--panel);
++  border: 1px solid var(--border);
++  border-radius: var(--radius);
++  margin-bottom: 14px;
++  overflow: hidden;
++}
++.layer-group-head { margin: 0; }
++.layer-group-btn {
++  width: 100%;
++  display: flex;
++  align-items: center;
++  gap: 10px;
++  background: none;
++  border: 0;
++  padding: 14px var(--pad-card);
++  font: inherit;
++  font-weight: 600;
++  color: var(--navy);
++  cursor: pointer;
++  text-align: left;
++}
++.layer-group-chev { transition: transform 0.15s ease; color: var(--slate-text); font-size: 12px; }
++.layer-group-chev.is-open { transform: rotate(90deg); }
++.layer-group-count {
++  background: var(--surface-muted);
++  color: var(--slate-text);
++  border-radius: 999px;
++  padding: 1px 9px;
++  font-size: 12.5px;
++  font-weight: 600;
++}
++.layer-group-body { padding: 0 var(--pad-card) var(--pad-card); }
++
++.layer-how { margin: 4px 0 14px; }
++.layer-how-btn {
++  background: none;
++  border: 0;
++  padding: 0;
++  font: inherit;
++  font-size: 13.5px;
++  color: var(--slate-text);
++  text-decoration: underline;
++  text-underline-offset: 3px;
++  cursor: pointer;
++}
++.layer-how-body {
++  margin-top: 8px;
++  background: var(--surface-muted);
++  border-radius: var(--radius-sm);
++  padding: 14px 16px;
++  max-width: 68ch;
++}
++.layer-how-text { font-size: 14px; line-height: 1.55; color: var(--navy); }
++.layer-how-text p { margin: 0 0 8px; }
++.layer-how-text p:last-child { margin-bottom: 0; }
++.layer-how-link { font-size: 13.5px; display: inline-block; margin-top: 6px; }
++
++.layer-empty {
++  border: 1px dashed var(--border);
++  border-radius: var(--radius);
++  padding: 28px var(--pad-card);
++  text-align: center;
++  background: var(--panel);
++}
++.layer-empty-title { font-size: 16px; font-weight: 600; color: var(--navy); margin: 0 0 6px; }
++.layer-empty-body { font-size: 14px; color: var(--slate-text); line-height: 1.55; margin: 0 auto 14px; max-width: 52ch; }
++.layer-empty-actions { display: flex; gap: 14px; justify-content: center; align-items: center; }
++
++/* v172: sidebar project nav extras (badge, stage line, grow row) */
++.side-badge {
++  margin-left: auto;
++  background: var(--lime);
++  color: var(--ink);
++  border-radius: 999px;
++  padding: 0 8px;
++  font-size: 12px;
++  font-weight: 700;
++  line-height: 1.7;
++}
++.side-project-stage {
++  padding: 0 12px 6px;
++  font-size: 12.5px;
++  color: var(--slate-2);
++  text-transform: capitalize;
++}
++.side-grow-btn {
++  width: 100%;
++  background: none;
++  border: 1px dashed var(--slate-2);
++  border-radius: var(--radius-sm);
++  color: inherit;
++  font: inherit;
++  font-size: 13.5px;
++  padding: 8px 10px;
++  cursor: pointer;
++  text-align: left;
++  opacity: 0.9;
++}
++.side-grow-btn:hover { opacity: 1; }
++
++/* v172: status tier (home) + unboxed health strip */
++.hs-strip.hs-bare { background: transparent; border: none; border-radius: 0; padding: 0; margin: 0; }
++.status-tier { display: flex; flex-direction: column; gap: 10px; margin-bottom: 22px; }
++.status-progress-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
++.status-progress-track { flex: 1 1 180px; }
++.status-progress-text { font-size: 14px; font-weight: 600; }
++.status-chip { background: var(--lime); color: var(--ink); border: none; border-radius: 999px; padding: 3px 12px; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
++.status-nextup { background: none; border: none; color: var(--slate-text); font: inherit; font-size: 13.5px; cursor: pointer; padding: 0; text-align: left; }
++.status-nextup:hover { text-decoration: underline; }
++.status-note { margin: 0; font-size: 13.5px; color: var(--slate-text); }
++.status-tier .first-run-checklist { margin: 4px 0 0; width: 100%; align-self: stretch; }
++.layer-note { font-size: 13px; margin: 0 0 14px; }
++
++/* v172: charter as a document */
++.charter-section { min-width: 0; }
++.charter-section-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 4px; }
++.charter-section-head h3 { margin: 0; font-size: 15px; }
++.charter-prose { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
++.charter-objectives-list { margin: 0; padding-left: 20px; }
++.charter-objectives-list li { margin: 2px 0; }
++.charter-unwritten { margin: 0; font-style: italic; }
++.charter-section-actions { display: flex; gap: 10px; margin-top: 10px; }
++.charter-doc-foot { margin: 0; font-size: 13.5px; }
++.charter-row > .charter-section { flex: 1; min-width: 0; }
++
++/* v172: Learn (the hub, renamed) */
++.learn-path { display: flex; gap: 16px; align-items: flex-start; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 20px; margin-bottom: 20px; }
++.learn-path-label { font-weight: 700; white-space: nowrap; padding-top: 2px; }
++.learn-path-steps { margin: 0; padding-left: 20px; }
++.learn-path-steps li { margin: 3px 0; }
++.learn-article-body { max-width: 680px; }
++.learn-article-body p { line-height: 1.65; }
++.learn-project-card { max-width: 680px; margin-top: 24px; }
++.learn-related { margin-top: 28px; }
++.learn-related ul { padding-left: 20px; }
++.learn-related li { margin: 4px 0; }
++
++/* v172: Snapshot aligned to the layered look: counted headings, panelled detail */
++.snapshot-count { font-weight: 400; color: var(--slate-text); font-size: 13.5px; }
++.snapshot-panel { border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); padding: 14px 18px; }
++.snapshot-doc > section { margin-top: var(--gap-stack); }
++.snapshot-doc > section:first-of-type { margin-top: 0; }
++
++/* v172: admin pages, a light calm pass */
++.admin-main .rg-row { padding-top: var(--pad-row); padding-bottom: var(--pad-row); }
++.admin-main .rg-list { margin-bottom: var(--gap-stack); }
++.admin-main p.muted { line-height: 1.55; }
+--- a/src/lib/__tests__/navIcons.test.ts
++++ b/src/lib/__tests__/navIcons.test.ts
+@@ -1,6 +1,5 @@
+ import { describe, it, expect } from "vitest";
+ import nav from "../projectNav.ts?raw";
+-import { STRIP_TABS } from "../projectNav";
+ import icons from "../../components/NavIcon.tsx?raw";
+ 
+ // A project tab without a sidebar icon crashed the whole project page (v87:
+@@ -8,9 +7,11 @@
+ // cannot catch it; this does.
+ describe("sidebar icons", () => {
+   it("every project nav section has an icon shape", () => {
+-    // Project navigation now lives in lib/projectNav.ts as six groups of sections. The sidebar no
+-    // longer lists them, but the icon shapes are kept in step so a tab can never lack one.
+-    const ids = [...nav.matchAll(/\{ id: "([a-z]+)", label: "[^"]+" \}/g)].map((m) => m[1]).filter((id) => !STRIP_TABS.has(id)); // the old top-strip tabs never had sidebar icons
++    // Project navigation lives in lib/projectNav.ts as six groups of sections.
++    // v172: the sidebar lists every section again (it replaced the in-page
++    // tab bars), including the old top-strip tabs, so every section id
++    // needs an icon shape, no exceptions.
++    const ids = [...nav.matchAll(/\{ id: "([a-z]+)", label: "[^"]+" \}/g)].map((m) => m[1]);
+     expect(ids.length).toBeGreaterThan(15);
+     const shapes = icons.slice(icons.indexOf("const SHAPES"));
+     for (const id of ids) expect(shapes, `missing icon for tab "${id}"`).toMatch(new RegExp(`\\n  ${id}: \\[`));
+--- a/src/lib/whatsNewData.ts
++++ b/src/lib/whatsNewData.ts
+@@ -10,6 +10,12 @@
+ // they can do.
+ export const CHANGES: ChangeEntry[] = [
+   {
++    version: "v172",
++    date: "November 2026",
++    title: "A calmer Tasketra: every page leads with the summary, and the detail waits until you ask for it.",
++    body: "Project pages used to show everything at once. Now each one opens with the few numbers that matter, then groups the rest below, and the groups open and close as you need them. Risks even sort the ones that need a look to the top. The two rows of tabs inside a project are gone: your project's sections live in the sidebar now, grouped the way you think about them, with a small badge on Decisions when someone is waiting on you. The charter reads as a document instead of a form, and you edit one section at a time. The Resource hub is now called Learn, with a Start here path, short guides for every register and weekly habit, and a How this works note on each project section that links to its guide. If you work long lists, Account, Appearance now has a density choice: Comfortable, the calm default, or Compact for tighter rows.",
++  },
++  {
+     version: "v171",
+     date: "November 2026",
+     title: "Start simple: new projects ask one question, and light projects open on a calm home.",
+--- a/src/main.tsx
++++ b/src/main.tsx
+@@ -4,8 +4,11 @@
+ import * as Sentry from "@sentry/react";
+ import App from "./App";
+ import { ErrorPage } from "./components/ErrorPage";
++import { initDensity } from "./lib/density";
+ import "./index.css";
+ 
++initDensity();
++
+ const dsn = import.meta.env.VITE_SENTRY_DSN;
+ if (dsn) {
+   Sentry.init({
+--- a/src/pages/Account.tsx
++++ b/src/pages/Account.tsx
+@@ -7,6 +7,7 @@
+ import { DeleteAccountCard } from "../components/DeleteAccountCard";
+ import { ConnectAiCard } from "../components/ConnectAiCard";
+ import { readStoredTheme, setTheme, type Theme } from "../lib/theme";
++import { readDensity, writeDensity, type Density } from "../lib/density";
+ import { useDelight } from "../lib/delight";
+ import { useDocumentTitle } from "../lib/documentTitle";
+ 
+@@ -44,6 +45,11 @@
+   const [copied, setCopied] = useState(false);
+ 
+   const [theme, setThemeState] = useState<Theme>(() => readStoredTheme());
++  const [density, setDensityState] = useState<Density>(() => readDensity());
++  function chooseDensity(d: Density) {
++    writeDensity(d);
++    setDensityState(d);
++  }
+   function chooseTheme(t: Theme) {
+     setTheme(t);
+     setThemeState(t);
+@@ -204,6 +210,13 @@
+             <button type="button" className={theme === "dark" ? "btn btn-primary" : "btn btn-ghost"} onClick={() => chooseTheme("dark")}>Dark</button>
+             <button type="button" className={theme === "system" ? "btn btn-primary" : "btn btn-ghost"} onClick={() => chooseTheme("system")}>Match system</button>
+           </div>
++          <p className="muted" style={{ marginBottom: 8 }}>
++            Density: comfortable is the calm default. Compact tightens register rows and tables when you are working a long list.
++          </p>
++          <div className="view-toggle" role="group" aria-label="Density">
++            <button type="button" className={density === "comfortable" ? "btn btn-primary" : "btn btn-ghost"} onClick={() => chooseDensity("comfortable")}>Comfortable</button>
++            <button type="button" className={density === "compact" ? "btn btn-primary" : "btn btn-ghost"} onClick={() => chooseDensity("compact")}>Compact</button>
++          </div>
+         </SoftCard>
+ 
+         <SoftCard title="Delight" className="ui-narrow billing-card">
+--- a/src/pages/AdminBroadcast.tsx
++++ b/src/pages/AdminBroadcast.tsx
+@@ -103,7 +103,7 @@
+   return (
+     <div className="project-shell">
+       <AppSidebar />
+-      <main id="main-content" className="project-main">
++      <main id="main-content" className="project-main admin-main">
+         <PageHeader
+           title="Email founding members"
+           subtitle={audience !== null ? `${audience} will receive it.` : undefined}
+--- a/src/pages/AdminFeedback.tsx
++++ b/src/pages/AdminFeedback.tsx
+@@ -67,7 +67,7 @@
+     <div className="project-shell">
+       <AppSidebar />
+ 
+-      <main id="main-content" className="project-main">
++      <main id="main-content" className="project-main admin-main">
+         <PageHeader title="Feedback" subtitle="What people sent from the in-app Feedback link." />
+         <RegisterSummary>{counts.new} new · {counts.planned} planned · {counts.shipped} shipped</RegisterSummary>
+ 
+--- a/src/pages/AdminFounderHub.tsx
++++ b/src/pages/AdminFounderHub.tsx
+@@ -47,7 +47,7 @@
+     <div className="project-shell">
+       <AppSidebar />
+ 
+-      <main id="main-content" className="project-main">
++      <main id="main-content" className="project-main admin-main">
+         <PageHeader title="Founder hub" subtitle="Milestones, money, activation, usage, and friction, from the app's own data." />
+ 
+         {error && <div className="form-error">{error}</div>}
+--- a/src/pages/AdminFoundingMembers.tsx
++++ b/src/pages/AdminFoundingMembers.tsx
+@@ -45,7 +45,7 @@
+     <div className="project-shell">
+       <AppSidebar />
+ 
+-      <main id="main-content" className="project-main">
++      <main id="main-content" className="project-main admin-main">
+         <PageHeader
+           title="Founding members"
+           subtitle={summary ? `${summary.foundingClaimed} of ${summary.cap} spots claimed.` : undefined}
+--- a/src/pages/AdminProjectView.tsx
++++ b/src/pages/AdminProjectView.tsx
+@@ -46,7 +46,7 @@
+   return (
+     <div className="project-shell">
+       <AppSidebar />
+-      <main id="main-content" className="project-main">
++      <main id="main-content" className="project-main admin-main">
+         <PageHeader
+           title="Support view"
+           subtitle={owner ? `Projects owned by ${owner.display_name ? `${owner.display_name} (${owner.email})` : owner.email} — read-only.` : undefined}
+@@ -107,7 +107,7 @@
+   return (
+     <div className="project-shell">
+       <AppSidebar />
+-      <main id="main-content" className="project-main">
++      <main id="main-content" className="project-main admin-main">
+         <PageHeader title={p ? p.name : "Support view"} subtitle="Admin support view" />
+         {p && (
+           <p className="pill pill-gold" role="status">
+--- a/src/pages/AdminWaitlist.tsx
++++ b/src/pages/AdminWaitlist.tsx
+@@ -45,7 +45,7 @@
+     <div className="project-shell">
+       <AppSidebar />
+ 
+-      <main id="main-content" className="project-main">
++      <main id="main-content" className="project-main admin-main">
+         <PageHeader title="Waitlist" subtitle="People who asked for an invite." />
+         <RegisterSummary>
+           {signups.filter((s) => s.status === "pending").length} pending · {signups.filter((s) => s.status === "invited").length} invited
+--- a/src/pages/ProjectHome.tsx
++++ b/src/pages/ProjectHome.tsx
+@@ -23,6 +23,7 @@
+ import { NAV_GROUPS, STRIP_TABS, groupOf, sectionLabel, sectionDirectory, visibleGroups } from "../lib/projectNav";
+ import { useConfirm } from "../components/ConfirmDialog";
+ import { RegisterRow, RegisterSummary, RegisterEmpty } from "../components/ui";
++import { StatCards, StatCard, LayerGroup, HowItWorks, TeachEmpty } from "../components/Layered";
+ import { daysUntil, lateFlag, expiryFlag } from "../lib/rowFlags";
+ import { statusEvidence, STATED_HEALTH_LABEL, STATED_HEALTH_PILL, STATED_HEALTH_VALUES, type StatedHealth, type StatusEvidenceInput } from "../lib/statusEvidence";
+ import { groupTasks, groupOfTask, isTaskSort, TASK_SORT_LABEL, TASK_GROUPS_OPEN_BY_DEFAULT, type TaskSort, type TaskGroupId } from "../lib/taskGroups";
+@@ -39,7 +40,10 @@
+ import { useIsScrollable } from "../lib/scrollRegion";
+ import { announce } from "../lib/announce";
+ import { AddForm } from "../components/AddForm";
+-import CalmHome from "../components/CalmHome";
++import CalmHome, { GROW_PIECES } from "../components/CalmHome";
++import { StatusTier } from "../components/StatusTier";
++import type { ReactNode } from "react";
++import { ProjectSidebarNav } from "../components/ProjectSidebarNav";
+ import { CharterTab } from "../components/CharterTab";
+ import { BaselineCard } from "../components/BaselineCard";
+ import { EscalationSettings } from "../components/EscalationSettings";
+@@ -274,19 +278,50 @@
+     setParams({ tab: tabId as Tab });
+   }
+   const activeGroup = groupOf(tab);
+-  const activeSections = navGroups.find((g) => g.group.id === activeGroup)?.sections ?? [];
+   // Strip views (the old top row) keep the project name as the heading; every other
+   // view gets a breadcrumb and uses the view name as the heading.
+   const viewLabel: string | null = STRIP_TABS.has(tab) ? null : sectionLabel(tab);
+ 
++  // v172: the sidebar's Decisions badge. Refetched on the same triggers
++  // as the project itself (tab change, project-changed event).
++  const [decisionsWaiting, setDecisionsWaiting] = useState(0);
++  useEffect(() => {
++    if (!id) return;
++    let live = true;
++    api
++      .listDecisions(id)
++      .then(({ decisions }) => {
++        if (live) setDecisionsWaiting(decisions.filter((d) => d.status === "open").length);
++      })
++      .catch(() => {
++        /* badge just stays as it was */
++      });
++    return () => {
++      live = false;
++    };
++  }, [id, tab, healthNonce]);
++
++  // v172: the sidebar's grow row offers the pieces the size view still
++  // hides (the calm home's grow list, same order and labels).
++  const sidebarGrowPieces =
++    size === "light" && !showAll
++      ? GROW_PIECES.filter((p) => isTabHidden(p.id, size, showAll, extraTabs))
++      : [];
++
+   return (
+     <div className="project-shell">
+       <AppSidebar menuLabel="Project tools">
+-        <div className="side-nav-group">
+-          {/* v160 (F-24): the label truncates in the narrow sidebar; the
+-              full project name is on hover. */}
+-          <div className="side-nav-label" title={project?.name || "Project"}>{project?.name || "Project"}</div>
+-        </div>
++        <ProjectSidebarNav
++          projectName={project?.name || "Project"}
++          stageLabel={project?.stage ? STAGE_LABEL[project.stage] : null}
++          groups={navGroups}
++          activeTab={tab}
++          activeGroupId={activeGroup}
++          decisionsWaiting={decisionsWaiting}
++          growPieces={sidebarGrowPieces}
++          onOpenTab={(t) => setParams({ tab: t as Tab })}
++          onGrow={(t) => void growTab(t)}
++        />
+       </AppSidebar>
+ 
+       <main id="main-content" className={`project-main${TABLE_TABS.has(tab) ? " project-main-tables" : ""}`}>
+@@ -330,7 +365,7 @@
+                 userId={user.id}
+                 projectId={id}
+                 tab={tab}
+-                hidden={tour.active}
++                hidden={tour.active || (tab === "home" && !onCalmHome)}
+                 onOpenTab={(t) => setParams({ tab: t })}
+               />
+             ))}
+@@ -346,40 +381,13 @@
+           </div>
+         )}
+ 
+-        {id && !onCalmHome && <HealthStrip projectId={id} refreshKey={`${tab}:${healthNonce}`} onOpenTab={(t) => setParams({ tab: t })} />}
+-
+-        {!onCalmHome && (<>
+-        <nav className="project-tabs primary-tabs" aria-label="Project views">
+-          {navGroups.map(({ group, sections, opens }) => (
+-            <button
+-              key={group.id}
+-              type="button"
+-              className={activeGroup === group.id ? "project-tab is-active" : "project-tab"}
+-              aria-current={activeGroup === group.id ? "page" : undefined}
+-              onClick={() => setParams({ tab: opens })}
+-              data-tour={sections.length === 1 ? `tab-${sections[0].id}` : `group-${group.id}`}
+-            >
+-              {group.label}
+-            </button>
+-          ))}
+-        </nav>
+-        {activeSections.length > 1 && (
+-          <nav className="section-tabs" aria-label={`${NAV_GROUPS.find((g) => g.id === activeGroup)?.label} sections`}>
+-            {activeSections.map((sec) => (
+-              <button
+-                key={sec.id}
+-                type="button"
+-                className={tab === sec.id ? "section-tab is-active" : "section-tab"}
+-                aria-current={tab === sec.id ? "page" : undefined}
+-                onClick={() => setParams({ tab: sec.id })}
+-                data-tour={`tab-${sec.id}`}
+-              >
+-                {sec.label}
+-              </button>
+-            ))}
+-          </nav>
+-        )}
+-        </>)}
++        {/* v172: on the standard/full home the strip renders inside the
++            StatusTier instead (HomeTab); everywhere else it stands alone. */}
++        {id && !onCalmHome && tab !== "home" && <HealthStrip projectId={id} refreshKey={`${tab}:${healthNonce}`} onOpenTab={(t) => setParams({ tab: t })} />}
++
++        {/* v172: project navigation moved into the sidebar
++            (ProjectSidebarNav); the two stacked tab bars that used to
++            sit here are gone. ?tab= routing is unchanged. */}
+ 
+         {tab === "home" && onCalmHome ? (
+           <CalmHome
+@@ -403,6 +411,18 @@
+             onShowAllTabs={showAllTabs}
+             onStageChange={(stage: ProjectStage) => setProject((p) => (p ? { ...p, stage } : p))}
+             onOpenTab={(t) => setParams({ tab: t })}
++            statusRefreshKey={`${healthNonce}`}
++            statusChecklist={
++              user && !doingTourState ? (
++                <FirstRunChecklist
++                  userId={user.id}
++                  projectId={id}
++                  tab="home"
++                  hidden={tour.active}
++                  onOpenTab={(t) => setParams({ tab: t })}
++                />
++              ) : undefined
++            }
+           />
+         ) : null}
+         {tab === "roadmap" && <RoadmapTab projectId={id} isOwner={project?.is_owner ?? false} showBudget={!isTabHidden("budget", size, showAll, extraTabs)} />}
+@@ -457,7 +477,7 @@
+   );
+ }
+ 
+-function HomeTab({ projectId, isOwner, purpose, stage, size, showAll, extraTabs, onShowAllTabs, onStageChange, onOpenTab }: {
++function HomeTab({ projectId, isOwner, purpose, stage, size, showAll, extraTabs, onShowAllTabs, onStageChange, onOpenTab, statusChecklist, statusRefreshKey }: {
+   projectId: string;
+   isOwner: boolean;
+   purpose?: string;
+@@ -468,6 +488,8 @@
+   onShowAllTabs: () => void;
+   onStageChange: (stage: ProjectStage) => void;
+   onOpenTab: (tab: string) => void;
++  statusChecklist?: ReactNode;
++  statusRefreshKey?: string;
+ }) {
+   const [view, setView] = useState<"today" | "feed">("today");
+   // v150: the Next Step card's "Write a check-in" jumps to the Feed composer.
+@@ -484,20 +506,23 @@
+   }, [projectId]);
+   return (
+     <div>
+-      {size !== "full" && !showAll && (
+-        <p className="view-banner">
+-          Showing the {SIZE_LABEL[size]} view, which hides {hiddenTabLabels(size, extraTabs).length} tabs.{" "}
+-          {isOwner && (
+-            <button type="button" className="view-banner-link" onClick={onShowAllTabs}>Show all sections</button>
+-          )}
+-        </p>
+-      )}
+-      {!purpose && (stage === "plan" || stage === "execute") && (
+-        <p className="view-banner">
+-          This project is under way without a charter. A short one — why it exists, who it's for, what done looks like — settles the scope questions before they become arguments.{" "}
+-          <button type="button" className="view-banner-link" onClick={() => onOpenTab("charter")}>Write the charter</button>
+-        </p>
+-      )}
++      {/* v172: one status tier leads the home — verdict, progress,
++          decisions waiting, the quiet notice lines, and the setup
++          checklist as its action row. The banners that used to stack
++          above the cockpit now live inside it as plain lines. */}
++      <StatusTier
++        projectId={projectId}
++        stage={stage}
++        purpose={purpose}
++        sizeLabel={size !== "full" && !showAll ? SIZE_LABEL[size] : null}
++        hiddenCount={hiddenTabLabels(size, extraTabs).length}
++        isOwner={isOwner}
++        baselineData={baselineData}
++        checklist={statusChecklist}
++        refreshKey={statusRefreshKey}
++        onOpenTab={onOpenTab}
++        onShowAllTabs={onShowAllTabs}
++      />
+       {purpose && (
+         <p className="home-purpose">
+           <span className="home-purpose-label">Purpose</span>
+@@ -505,24 +530,9 @@
+           <button type="button" className="view-banner-link" onClick={() => onOpenTab("charter")}>Charter</button>
+         </p>
+       )}
+-      {baselineData?.baseline && (
+-        <p className="view-banner">
+-          Baseline locked {fmtDate(baselineData.baseline.lockedAt)} · {baselineData.baseline.taskCount} tasks
+-          {baselineData.variance && (baselineData.variance.movedTasks.length > 0 || baselineData.variance.addedTasks > 0 || baselineData.variance.removedTasks > 0)
+-            ? ` · since then: ${baselineData.variance.movedTasks.length} moved, ${baselineData.variance.addedTasks} added, ${baselineData.variance.removedTasks} removed`
+-            : " · nothing has moved against it yet"}{" "}
+-          <button type="button" className="view-banner-link" onClick={() => onOpenTab("roadmap")}>See it on the Roadmap</button>
+-        </p>
+-      )}
+-      {baselineData && !baselineData.baseline && stage === "execute" && (
+-        <p className="view-banner">
+-          No baseline locked yet. Once the plan settles, locking one gives you a fixed point to measure slippage against.{" "}
+-          <button type="button" className="view-banner-link" onClick={() => onOpenTab("roadmap")}>Go to the Roadmap</button>
+-        </p>
+-      )}
+-      {/* v165: the Project Cockpit leads the Overview -- the shared kit's
+-          gauges, work breakdown and budget picture above the day-to-day
+-          Today/Feed content, which is unchanged below. */}
++      {/* v165: the Project Cockpit follows the status tier as layer 2 --
++          the shared kit's gauges, work breakdown and budget picture above
++          the day-to-day Today/Feed content, which is unchanged below. */}
+       <ProjectCockpit projectId={projectId} onOpenTab={onOpenTab} />
+       <p className="muted" style={{ margin: "0 0 16px" }}>
+         Sharing this project with a sponsor?{" "}
+@@ -2258,6 +2268,9 @@
+         Problems that are already happening and need someone to sort them out. Log them here so they
+         get an owner and a status, not just a mention in a meeting.
+       </p>
++      <HowItWorks label="How issues work" article="issues">
++        An issue is a problem that is already here, unlike a risk, which might happen. When a risk turns real, promote it from the Risks register and it lands here with its history attached.
++      </HowItWorks>
+       <QuickAddForm
+         storageKey="issues"
+         hasRows={issues.length > 0}
+@@ -2345,13 +2358,13 @@
+         </div>
+       ) : (
+       <>
+-      <RegisterSummary>
+-        {issues.filter((i) => i.status !== "resolved").length} open
+-        {" \u00b7 "}{issues.filter((i) => i.status !== "resolved" && (i.severity === "high" || i.severity === "critical")).length} high or critical
+-        {" \u00b7 "}{issues.filter((i) => i.status === "resolved").length} resolved
+-      </RegisterSummary>
++      <StatCards>
++        <StatCard label="Open" value={String(issues.filter((i) => i.status !== "resolved").length)} />
++        <StatCard label="High or critical" value={String(issues.filter((i) => i.status !== "resolved" && (i.severity === "high" || i.severity === "critical")).length)} tone={issues.some((i) => i.status !== "resolved" && (i.severity === "high" || i.severity === "critical")) ? "bad" : undefined} />
++        <StatCard label="Resolved" value={String(issues.filter((i) => i.status === "resolved").length)} />
++      </StatCards>
+       {issues.length === 0 ? (
+-        <RegisterEmpty action={{ label: "Log an issue", onClick: () => { issueTitleRef.current?.scrollIntoView({ block: "center" }); issueTitleRef.current?.focus(); } }}>No issues logged yet. Log one when something goes wrong or gets in the way.</RegisterEmpty>
++        <TeachEmpty title="No issues logged yet" body="Log one when something goes wrong or gets in the way. An issue is a problem that is already here; a risk that has not happened yet belongs in Risks." actionLabel="Log an issue" onAction={() => { issueTitleRef.current?.scrollIntoView({ block: "center" }); issueTitleRef.current?.focus(); }} article="issues" />
+       ) : (
+         <ul className="rg-list" aria-label="Issues">
+           {issues.map((i) => {
+@@ -2687,10 +2700,17 @@
+ 
+   return (
+     <div>
+-      <p className="muted" style={{ marginBottom: 16, maxWidth: 640 }}>
+-        Things that might go wrong, rated by how likely they are and how much they would hurt. Write
+-        down what you will do about each one before it happens.
+-      </p>
++      <div style={{ marginBottom: 16 }}>
++        <p className="muted" style={{ margin: "0 0 6px", maxWidth: 640 }}>
++          Things that might go wrong, rated by how likely they are and how much they would hurt.
++        </p>
++        <HowItWorks label="How risks work" article="risks">
++          Score each risk on probability and impact, 1 to 5. The exposure band (low, medium, high) follows
++          from the two scores. Write down what you will do about each one before it happens, that is the
++          mitigation, and give it an owner. When a risk actually happens, turn it into an issue from its
++          card so the history carries over.
++        </HowItWorks>
++      </div>
+       <QuickAddForm
+         storageKey="risks"
+         hasRows={risks.length > 0}
+@@ -2823,27 +2843,65 @@
+         </div>
+       ) : (
+       <>
+-      <RegisterSummary>
+-        {risks.filter((r) => r.status !== "resolved").length} open
+-        {" \u00b7 "}{risks.filter((r) => isHighExposureRisk(r)).length} high exposure
+-        {" \u00b7 "}{risks.filter((r) => r.status === "resolved").length} resolved
+-        {(() => {
+-          const open = risks.filter((r) => r.status !== "resolved");
+-          // Egg 3 (v158): every open risk scored and owned. Egg 11
+-          // (v163): no open risks at all -- the two states are mutually
+-          // exclusive, and each line appears and vanishes with its
+-          // condition, which is its dismissal.
+-          if (!delight) return null;
+-          if (open.length > 0 && open.every((r) => riskScore(r) !== null && (r.owner_name ?? "").trim() !== ""))
+-            return <>{" \u00b7 "}Fully loaded register</>;
+-          if (risks.length > 0 && open.length === 0)
+-            return <>{" \u00b7 "}All quiet on the risk front.</>;
+-          return null;
+-        })()}
+-      </RegisterSummary>
+-      {risks.length === 0 ? (
+-        <RegisterEmpty>No risks logged yet. Add one above if something's worth tracking.</RegisterEmpty>
+-      ) : (
++      {(() => {
++        const openRisks = risks.filter((r) => r.status !== "resolved");
++        const needsLook = openRisks.filter(
++          (r) => isHighExposureRisk(r) || riskScore(r) === null || (r.owner_name ?? "").trim() === "",
++        );
++        return (
++          <>
++            <StatCards>
++              <StatCard label="Open" value={String(openRisks.length)} />
++              <StatCard
++                label="High exposure"
++                value={String(risks.filter((r) => isHighExposureRisk(r)).length)}
++                tone={risks.some((r) => isHighExposureRisk(r)) ? "bad" : undefined}
++              />
++              <StatCard label="Resolved" value={String(risks.length - openRisks.length)} />
++              <StatCard
++                label="Needs a look"
++                value={String(needsLook.length)}
++                tone={needsLook.length > 0 ? "warn" : undefined}
++              />
++            </StatCards>
++            {delight && openRisks.length > 0 && openRisks.every((r) => riskScore(r) !== null && (r.owner_name ?? "").trim() !== "") && (
++              <p className="muted layer-note">Fully loaded register, every open risk scored and owned.</p>
++            )}
++            {delight && risks.length > 0 && openRisks.length === 0 && (
++              <p className="muted layer-note">All quiet on the risk front.</p>
++            )}
++            {risks.length === 0 ? (
++              <TeachEmpty
++                title="No risks logged yet"
++                body="Add one above if something is worth tracking. A risk is anything that might go wrong, written down before it does, with a plan for what you will do about it."
++                article="risks"
++              />
++            ) : (
++              <>
++                {needsLook.length > 0 && (
++                  <LayerGroup id="risks-needs" title="Needs a look" count={needsLook.length} defaultOpen>
++                    <ul className="rg-list" aria-label="Risks needing a look">
++                      {needsLook.map((r) => (
++                        <RegisterRow
++                          key={r.id}
++                          title={<button type="button" className="row-title-btn" onClick={() => openDrawer(r)}>{r.title}</button>}
++                          meta={[
++                            isHighExposureRisk(r) ? "High exposure" : null,
++                            riskScore(r) === null ? "Not scored yet" : null,
++                            (r.owner_name ?? "").trim() === "" ? "No owner" : r.owner_name,
++                          ].filter(Boolean).join(" \u00b7 ")}
++                          pill={
++                            <span className={`pill ${EXPOSURE_PILL[riskExposureFor(r)]}`}>
++                              {LEVEL_LABEL[riskExposureFor(r)]}
++                            </span>
++                          }
++                          actions={<button className="btn-link" type="button" onClick={() => openDrawer(r)}>Details</button>}
++                        />
++                      ))}
++                    </ul>
++                  </LayerGroup>
++                )}
++                <LayerGroup id="risks-all" title="Full register" count={risks.length} defaultOpen={needsLook.length === 0}>
+         <ul className="rg-list" aria-label="Risks">
+           {sortedRisks.map((r) => (
+             <RegisterRow
+@@ -2893,9 +2951,13 @@
+               }
+             />
+           ))}
+-        </ul>
++            </ul>
++          </LayerGroup>
++        </>
+       )}
+       </>
++      ); })()}
++      </>
+       )}
+ 
+       <Drawer
+@@ -3103,6 +3165,9 @@
+         Things you're treating as true for planning purposes. Write them down so the plan gets
+         revisited if one turns out wrong.
+       </p>
++      <HowItWorks label="How assumptions work" article="assumptions">
++        Each assumption gets a check date, the day someone confirms it still holds. When one turns out wrong, revisit the plan in the same sitting, because it usually moves dates, money, or scope.
++      </HowItWorks>
+       <QuickAddForm
+         storageKey="assumptions"
+         hasRows={assumptions.length > 0}
+@@ -3185,13 +3250,13 @@
+         </div>
+       ) : (
+       <>
+-      <RegisterSummary>
+-        {assumptions.filter((a) => a.status === "unconfirmed").length} to check
+-        {" \u00b7 "}{assumptions.filter((a) => a.status === "unconfirmed" && (daysUntil(a.check_by) ?? 1) < 0).length} past their check date
+-        {" \u00b7 "}{assumptions.filter((a) => a.status === "confirmed").length} confirmed
+-      </RegisterSummary>
++      <StatCards>
++        <StatCard label="To check" value={String(assumptions.filter((a) => a.status === "unconfirmed").length)} />
++        <StatCard label="Past check date" value={String(assumptions.filter((a) => a.status === "unconfirmed" && (daysUntil(a.check_by) ?? 1) < 0).length)} tone={assumptions.some((a) => a.status === "unconfirmed" && (daysUntil(a.check_by) ?? 1) < 0) ? "warn" : undefined} />
++        <StatCard label="Confirmed" value={String(assumptions.filter((a) => a.status === "confirmed").length)} />
++      </StatCards>
+       {assumptions.length === 0 ? (
+-        <RegisterEmpty>No assumptions logged yet. Add one above to track what you're taking for granted.</RegisterEmpty>
++        <TeachEmpty title="No assumptions logged yet" body="Add one above to track what you are taking for granted. Give each assumption a check date so it gets re-tested before it quietly becomes a problem." article="assumptions" />
+       ) : (
+         <ul className="rg-list" aria-label="Assumptions">
+           {assumptions.map((a) => (
+@@ -3354,6 +3419,9 @@
+         Work that can't start or finish until something else does -- internal (another task) or
+         external (a vendor, client, or regulatory step).
+       </p>
++      <HowItWorks label="How dependencies work" article="dependencies">
++        Log what you are waiting on and the date you need it by. A dependency drifting past that date shows up as late in the counts before it stops the work, while there is still time to chase it.
++      </HowItWorks>
+       <QuickAddForm
+         storageKey="dependencies"
+         hasRows={dependencies.length > 0}
+@@ -3444,13 +3512,13 @@
+         </div>
+       ) : (
+       <>
+-      <RegisterSummary>
+-        {dependencies.filter((d) => d.status !== "resolved").length} waiting
+-        {" \u00b7 "}{dependencies.filter((d) => d.status !== "resolved" && (daysUntil(d.needed_by) ?? 1) < 0).length} late
+-        {" \u00b7 "}{dependencies.filter((d) => d.status === "resolved").length} resolved
+-      </RegisterSummary>
++      <StatCards>
++        <StatCard label="Waiting" value={String(dependencies.filter((d) => d.status !== "resolved").length)} />
++        <StatCard label="Late" value={String(dependencies.filter((d) => d.status !== "resolved" && (daysUntil(d.needed_by) ?? 1) < 0).length)} tone={dependencies.some((d) => d.status !== "resolved" && (daysUntil(d.needed_by) ?? 1) < 0) ? "bad" : undefined} />
++        <StatCard label="Resolved" value={String(dependencies.filter((d) => d.status === "resolved").length)} />
++      </StatCards>
+       {dependencies.length === 0 ? (
+-        <RegisterEmpty>No dependencies logged yet. Add one above if this project is waiting on something.</RegisterEmpty>
++        <TeachEmpty title="No dependencies logged yet" body="Add one above if this project is waiting on something. Mark what you are waiting on and when you need it by, so a late arrival is visible before it stops the work." article="dependencies" />
+       ) : (
+         <ul className="rg-list" aria-label="Dependencies">
+           {dependencies.map((d) => (
+@@ -3711,11 +3779,14 @@
+ 
+   return (
+     <div>
+-      <p className="muted" style={{ marginBottom: 16, maxWidth: 640 }}>
+-        The handful of outcomes this project is actually driving toward, each broken into the
+-        measurable key results that say whether it's happening -- separate from the day-to-day
+-        work in Tasks, and rolled up onto the portfolio Dashboard across every project.
++      <p className="muted" style={{ margin: "0 0 6px", maxWidth: 640 }}>
++        The handful of outcomes this project is actually driving toward, each broken into measurable key results.
+       </p>
++      <HowItWorks label="How OKRs work" article="okrs">
++        OKRs sit apart from the day-to-day work in Tasks: objectives say where the project is going,
++        key results say whether it is getting there. Charter objectives can become OKRs in one click
++        from the Charter, and progress rolls up onto the portfolio Dashboard across every project.
++      </HowItWorks>
+ 
+       <QuickAddForm
+         storageKey="objectives"
+@@ -3995,6 +4066,9 @@
+         a tracked workflow, so entries don't have a status; edit or remove one when the arrangement
+         changes.
+       </p>
++      <HowItWorks label="How the comms plan works" article="comms">
++        One row per audience. The plan carries no statuses on purpose: when the arrangement changes, edit the row, and when an audience stops mattering, remove it.
++      </HowItWorks>
+       <QuickAddForm
+         storageKey="comms-plan"
+         hasRows={items.length > 0}
+@@ -4031,12 +4105,12 @@
+       />
+       {error && <p className="form-error">{error}</p>}
+ 
+-      <RegisterSummary>
+-        {`${items.length} ${items.length === 1 ? "audience" : "audiences"}`}
+-        {" \u00b7 "}{items.filter((i) => i.frequency === "weekly" || i.frequency === "daily").length} hear from you weekly or more
+-      </RegisterSummary>
++      <StatCards>
++        <StatCard label="Audiences" value={String(items.length)} />
++        <StatCard label="Weekly or more" value={String(items.filter((i) => i.frequency === "weekly" || i.frequency === "daily").length)} sub="Hear from you weekly or daily" />
++      </StatCards>
+       {items.length === 0 ? (
+-        <RegisterEmpty>No communications plan yet. Add a row for who needs to hear what, and how often.</RegisterEmpty>
++        <TeachEmpty title="No communications plan yet" body="Add a row for who needs to hear what, and how often. A comms plan is a reference, not a workflow: one row per audience, with the channel and the rhythm." article="comms" />
+       ) : (
+         <ul className="rg-list" aria-label="Communications plan">
+           {items.map((item) => (
+@@ -4230,6 +4304,9 @@
+         the same way as the rest of RAID, since "do we have an agreement with this vendor" is a
+         different question from "is this task done."
+       </p>
++      <HowItWorks label="How vendors work" article="vendors">
++        Log a vendor when sourcing starts, not when the contract signs. The requested and in-progress states are where the delays live, and a register that only shows signed contracts hides exactly that part.
++      </HowItWorks>
+       <QuickAddForm
+         storageKey="vendors"
+         hasRows={items.length > 0}
+@@ -4334,13 +4411,13 @@
+         </div>
+       ) : (
+       <>
+-      <RegisterSummary>
+-        {items.filter((p) => p.status === "active" || p.status === "in_progress" || p.status === "requested").length} open
+-        {" \u00b7 "}{items.filter((p) => p.status === "active").length} active
+-        {" \u00b7 "}{items.filter((p) => p.status === "completed" || p.status === "cancelled").length} finished
+-      </RegisterSummary>
++      <StatCards>
++        <StatCard label="Open" value={String(items.filter((p) => p.status === "active" || p.status === "in_progress" || p.status === "requested").length)} />
++        <StatCard label="Active" value={String(items.filter((p) => p.status === "active").length)} />
++        <StatCard label="Finished" value={String(items.filter((p) => p.status === "completed" || p.status === "cancelled").length)} />
++      </StatCards>
+       {items.length === 0 ? (
+-        <RegisterEmpty>No vendors or contracts logged yet. Add one above when you're sourcing or have an agreement in place.</RegisterEmpty>
++        <TeachEmpty title="No vendors or contracts logged yet" body="Add one above when you are sourcing or have an agreement in place. Vendors are tracked separately from tasks because having an agreement and finishing the work are different questions." article="vendors" />
+       ) : (
+         <ul className="rg-list" aria-label="Vendors">
+           {items.map((p) => (
+@@ -4539,6 +4616,57 @@
+         </p>
+       )}
+ 
++      {/* v172: the budget summary tier — the four numbers that answer
++          "where do we stand?" lead; the earned value grid is the detail
++          layer below. */}
++      <StatCards>
++        <StatCard label="Work budget" value={budgetAtCompletion !== null ? fmtMoney(budgetAtCompletion) : "Not set"} />
++        <StatCard
++          label="Spent so far"
++          value={fmtMoney(costEntries.reduce((n, c) => n + Number(c.amount), 0))}
++          sub={`${costEntries.length} logged ${costEntries.length === 1 ? "cost" : "costs"}`}
++        />
++        <StatCard
++          label="Forecast final cost"
++          value={metrics.eac !== null && metrics.eac !== undefined ? fmtMoney(metrics.eac) : "—"}
++          sub={metrics.eac !== null && metrics.eac !== undefined ? "At the current pace" : "Once costs and tasks land"}
++        />
++        <StatCard
++          label="Projected variance"
++          value={metrics.vac !== null && metrics.vac !== undefined ? fmtMoney(metrics.vac) : "—"}
++          tone={metrics.vac === null || metrics.vac === undefined ? undefined : metrics.vac >= 0 ? "ok" : "bad"}
++        />
++      </StatCards>
++      {budgetAtCompletion !== null && budgetAtCompletion > 0 && (
++        <div className="status-progress-row" style={{ marginBottom: 16 }}>
++          <div
++            className="progress-track status-progress-track"
++            role="progressbar"
++            aria-valuenow={Math.min(100, Math.round((costEntries.reduce((n, c) => n + Number(c.amount), 0) / budgetAtCompletion) * 100))}
++            aria-valuemin={0}
++            aria-valuemax={100}
++            aria-label="Share of work budget spent"
++          >
++            <div
++              className="progress-fill"
++              style={{ width: `${Math.min(100, (costEntries.reduce((n, c) => n + Number(c.amount), 0) / budgetAtCompletion) * 100)}%` }}
++            />
++          </div>
++          <span className="muted" style={{ fontSize: 13.5 }}>
++            {Math.round((costEntries.reduce((n, c) => n + Number(c.amount), 0) / budgetAtCompletion) * 100)}% of the work budget spent
++          </span>
++        </div>
++      )}
++      <div style={{ marginBottom: 8 }}>
++        <HowItWorks label="How the budget works" article="budget">
++          The work budget is what the project itself may spend. A contingency reserve, if you set one, sits
++          beside it for known risks and is not counted in the earned value figures. Earned value compares
++          the work actually done (EV) with what was planned by now (PV) and what it really cost (AC). CPI
++          above 1 means the work is costing less than planned, SPI above 1 means it is ahead of pace. The
++          forecast (EAC) projects the final cost at the current efficiency.
++        </HowItWorks>
++      </div>
++
+       {taskStats.totalTasks === 0 && (
+         <p className="muted" style={{ marginTop: 12 }}>Add tasks with due dates to compute schedule-based metrics (PV, SPI, SV).</p>
+       )}
+@@ -4548,7 +4676,7 @@
+       )}
+ 
+       {hasEvmData && hasEvmActivity && (
+-      <>
++      <LayerGroup id="budget-evm" title="Earned value detail" defaultOpen={false}>
+       <div className="evm-grid">
+         <div className="evm-card" title="Planned Value: % of tasks due by today x BAC">
+           <div className="evm-label">PV</div>
+@@ -4606,7 +4734,7 @@
+           Early forecast: only {taskStats.doneTasks} of {taskStats.totalTasks} tasks {taskStats.doneTasks === 1 ? "is" : "are"} done, so EAC and the other forecasts will swing a lot as more work completes. Treat them as a rough guide for now.
+         </p>
+       )}
+-      </>
++      </LayerGroup>
+       )}
+ 
+       <h2 className="heading-sm" style={{ marginTop: 28 }}>Log actual cost</h2>
+@@ -4617,13 +4745,16 @@
+         <button className="btn btn-primary">Add cost</button>
+       </AddForm>
+ 
+-      <RegisterSummary>
+-        {costEntries.length} logged {costEntries.length === 1 ? "cost" : "costs"}
+-        {" \u00b7 "}{fmtMoney(costEntries.reduce((n, c) => n + Number(c.amount), 0))} total
+-      </RegisterSummary>
+       {costEntries.length === 0 ? (
+-        <RegisterEmpty action={{ label: "Log a cost", onClick: () => { costDescRef.current?.scrollIntoView({ block: "center" }); costDescRef.current?.focus(); } }}>No costs logged yet. Log one to start tracking spend.</RegisterEmpty>
++        <TeachEmpty
++          title="No costs logged yet"
++          body="Log one to start tracking spend. Each cost you log feeds the spent total and the earned value figures above."
++          actionLabel="Log a cost"
++          onAction={() => { costDescRef.current?.scrollIntoView({ block: "center" }); costDescRef.current?.focus(); }}
++          article="budget"
++        />
+       ) : (
++        <LayerGroup id="budget-costs" title="Logged costs" count={costEntries.length}>
+         <ul className="rg-list" aria-label="Logged costs">
+           {costEntries.map((c) => (
+             <RegisterRow
+@@ -4635,6 +4766,7 @@
+             />
+           ))}
+         </ul>
++        </LayerGroup>
+       )}
+     </div>
+   );
+@@ -5225,6 +5357,9 @@
+         A record of the meetings that actually drive a project -- who was there, what was decided,
+         and action items that carry straight into Tasks so nothing gets lost between the call and the work.
+       </p>
++      <HowItWorks label="How meetings work" article="meetings">
++        Action items logged here carry into the project's work instead of evaporating when the call ends. Ready-made agendas for the recurring meetings (kickoff, weekly status, steering, retro) live in Learn.
++      </HowItWorks>
+ 
+       <AddForm className="stacked-form" style={{ maxWidth: "none" }} onSubmit={addMeeting}>
+         <label htmlFor="f-projecthome-4748">Meeting</label>
+@@ -5256,12 +5391,12 @@
+       </AddForm>
+       {error && <p className="form-error">{error}</p>}
+ 
+-      <RegisterSummary>
+-        {`${meetings.length} ${meetings.length === 1 ? "meeting" : "meetings"}`}
+-        {" \u00b7 "}{meetings.reduce((n, m) => n + (m.action_items || []).filter((it) => !it.done).length, 0)} open action items
+-      </RegisterSummary>
++      <StatCards>
++        <StatCard label="Meetings" value={String(meetings.length)} />
++        <StatCard label="Open action items" value={String(meetings.reduce((n, m) => n + (m.action_items || []).filter((it) => !it.done).length, 0))} tone={meetings.some((m) => (m.action_items || []).some((it) => !it.done)) ? "warn" : undefined} />
++      </StatCards>
+       {meetings.length === 0 ? (
+-        <RegisterEmpty>No meetings logged yet. Add one above to start a record.</RegisterEmpty>
++        <TeachEmpty title="No meetings logged yet" body="Add one above to start a record. Note who was there, what was decided, and the action items, so nothing gets lost between the call and the work." article="meetings" />
+       ) : (
+         <ul className="rg-list" aria-label="Meetings">
+           {meetings.map((m) => {
+@@ -5431,6 +5566,9 @@
+         Reference material for this project -- specs, contracts, and other documentation you need close at hand.
+         PDF, Word, Excel, and image files up to 5MB. To update a document, delete the old copy and upload the new one.
+       </p>
++      <HowItWorks label="How documents work" article="documents">
++        Documents are reference, not workflow. Decisions about a document belong in Decisions, and work on it belongs in Tasks. This shelf just keeps the current version one click away.
++      </HowItWorks>
+ 
+       {storage && <StorageMeter storage={storage} />}
+ 
+@@ -5458,11 +5596,11 @@
+         </p>
+       )}
+ 
+-      <RegisterSummary>
+-        {`${documents.length} ${documents.length === 1 ? "document" : "documents"}`}
+-      </RegisterSummary>
++      <StatCards>
++        <StatCard label="Documents" value={String(documents.length)} />
++      </StatCards>
+       {documents.length === 0 ? (
+-        <RegisterEmpty>No documents uploaded yet. Add one above to start building a reference library.</RegisterEmpty>
++        <TeachEmpty title="No documents uploaded yet" body="Add one above to start building a reference library. Specs, contracts, and other documentation you need close at hand live here." article="documents" />
+       ) : (
+         <ul className="rg-list" aria-label="Documents">
+           {documents.map((doc) => {
+@@ -5610,10 +5748,18 @@
+ 
+   return (
+     <div>
+-      <p className="muted" style={{ marginBottom: 16, maxWidth: 640 }}>
+-        Everyone with a stake in this project: sponsors, customers, teams, and anyone who can help or
+-        block it. Rate their power and interest so you know how closely to keep them in the loop.
+-      </p>
++      <div style={{ marginBottom: 16 }}>
++        <p className="muted" style={{ margin: "0 0 6px", maxWidth: 640 }}>
++          Everyone with a stake in this project: sponsors, customers, teams, and anyone who can help or
++          block it.
++        </p>
++        <HowItWorks label="How stakeholders work" article="stakeholders">
++          Rate each person on power (how much they can affect the project) and interest (how much they
++          care). High power and high interest means keep them closely involved. High power, low interest
++          means keep them satisfied with short, high-level updates. The grid view places everyone on
++          those two axes so the pattern is visible at a glance.
++        </HowItWorks>
++      </div>
+       <AddForm className="inline-form inline-form-wide" onSubmit={addStakeholder}>
+         <input aria-label="Name" aria-required="true" placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} />
+         <input aria-label="Email (optional)" placeholder="Email (optional)" value={email} onChange={(e) => setEmail(e.target.value)} />
+@@ -5645,13 +5791,26 @@
+ 
+       {shView === "list" && (
+       <>
+-        <RegisterSummary>
+-          {`${stakeholders.length} ${stakeholders.length === 1 ? "person" : "people"}`}
+-          {" \u00b7 "}{stakeholders.filter((s) => s.power_level === "high").length} stakeholders with high power
+-          {" \u00b7 "}{(() => { const n = stakeholders.reduce((t, s) => t + (s.decisions_sent ?? 0) - (s.decisions_resolved ?? 0), 0); return `${n} ${n === 1 ? "decision" : "decisions"} awaiting a response`; })()}
+-        </RegisterSummary>
++        <StatCards>
++          <StatCard label="People" value={String(stakeholders.length)} />
++          <StatCard
++            label="High power"
++            value={String(stakeholders.filter((s) => s.power_level === "high").length)}
++            sub="Keep these closest"
++          />
++          <StatCard
++            label="Awaiting response"
++            value={String(stakeholders.reduce((t, s) => t + (s.decisions_sent ?? 0) - (s.decisions_resolved ?? 0), 0))}
++            tone={stakeholders.reduce((t, s) => t + (s.decisions_sent ?? 0) - (s.decisions_resolved ?? 0), 0) > 0 ? "warn" : undefined}
++            sub="Decisions sent, not yet answered"
++          />
++        </StatCards>
+         {stakeholders.length === 0 ? (
+-          <RegisterEmpty>No stakeholders yet. Add one above to start your register.</RegisterEmpty>
++          <TeachEmpty
++            title="No stakeholders yet"
++            body="Add one above to start your register. Sponsors, customers, teams, anyone who can help or block the project belongs here."
++            article="stakeholders"
++          />
+         ) : (
+           <ul className="rg-list" aria-label="Stakeholders">
+             {stakeholders.map((s) => {
+@@ -5934,118 +6093,12 @@
+     load();
+   }
+ 
+-  if (loading) return <div className="skel-loading-block"><div className="skel skel-text" style={{ width: "45%" }} /><div className="skel skel-text" style={{ width: "80%" }} /><div className="skel skel-text" style={{ width: "60%", marginBottom: 0 }} /></div>;
+-
+-  return (
+-    <div>
+-      <button className="btn btn-primary" onClick={() => setShowForm((v) => !v)} type="button">
+-        {showForm ? "Cancel" : "New decision request"}
+-      </button>
+-
+-      {lastShareUrl && (
+-        <div className="callout">
+-          Share this link with the stakeholder. No account needed to respond:
+-          <br />
+-          <input
+-            className="share-url"
+-            type="text"
+-            readOnly
+-            value={`${window.location.origin}${lastShareUrl}`}
+-            onFocus={(e) => e.target.select()}
+-            aria-label="Decision share link"
+-          />
+-        </div>
+-      )}
+-
+-      {showForm && (
+-        <AddForm className="stacked-form" onSubmit={createDecision}>
+-          <label htmlFor="f-projecthome-5349">Title</label>
+-          <input id="f-projecthome-5349" value={title} onChange={(e) => setTitle(e.target.value)} aria-required="true" autoFocus />
+-          <label htmlFor="f-projecthome-5351">Context</label>
+-          <textarea id="f-projecthome-5351" value={context} onChange={(e) => setContext(e.target.value)} rows={3} />
+-          <label htmlFor="f-projecthome-5353">Options (comma separated)</label>
+-          <input id="f-projecthome-5353" value={options} onChange={(e) => { setOptions(e.target.value); if (error) setError(""); }} aria-required="true" aria-describedby={error ? "decision-error" : undefined} aria-invalid={error ? true : undefined} />
+-          <label htmlFor="f-projecthome-5355">Deadline (optional)</label>
+-          <DateField id="f-projecthome-5355" value={deadline} onChange={setDeadline} />
+-          <label>Send to</label>
+-          <div className="checkbox-list">
+-            {stakeholders.map((s) => (
+-              <label key={s.id} className="checkbox-row">
+-                <input
+-                  type="checkbox"
+-                  checked={selectedStakeholders.includes(s.id)}
+-                  onChange={(e) => {
+-                    setSelectedStakeholders((prev) =>
+-                      e.target.checked ? [...prev, s.id] : prev.filter((id) => id !== s.id)
+-                    );
+-                  }}
+-                />
+-                {s.name}
+-              </label>
+-            ))}
+-            {stakeholders.length === 0 && <p className="muted">Add stakeholders first to route this to someone.</p>}
+-          </div>
+-          {/* v162 (F-11): the accountable owner -- one stakeholder or role --
+-              distinct from the Send-to list above: the list is who gets
+-              asked, the owner is whose call it is. Optional, as it always
+-              was implicitly. */}
+-          <label htmlFor="f-decision-owner">Decision owner (optional)</label>
+-          <select id="f-decision-owner" value={ownerStakeholder} onChange={(e) => setOwnerStakeholder(e.target.value)}>
+-            <option value="">No owner</option>
+-            {stakeholders.map((s) => (
+-              <option key={s.id} value={s.id}>{stakeholderOptionLabel(s)}</option>
+-            ))}
+-          </select>
+-          {/* v161 (F-09): the decider's-eye preview. It mirrors the public
+-              decision page (DecisionPublic) field for field -- same title,
+-              context, "Needed by" line, and option rows -- and updates
+-              live as the form is filled, so the sender sees exactly what
+-              the decider will see before the link exists. */}
+-          <div className="decision-preview" aria-label="Preview of what the decider sees">
+-            <p className="decision-preview-label">What they'll see</p>
+-            <p className="decision-preview-title">{title.trim() || "Your decision title"}</p>
+-            {context.trim() && <p className="decision-preview-context">{context.trim()}</p>}
+-            {deadline && <p className="muted">Needed by: {deadline}</p>}
+-            <div className="option-list">
+-              {options
+-                .split(",")
+-                .map((o) => o.trim())
+-                .filter(Boolean)
+-                .map((opt) => (
+-                  <span key={opt} className="option-row decision-preview-option">
+-                    {/* A drawn radio dot, not a real input: the preview is
+-                        a picture of the decider's page, not a form. */}
+-                    <span className="decision-preview-radio" aria-hidden="true" />
+-                    {opt}
+-                  </span>
+-                ))}
+-            </div>
+-            <p className="muted decision-preview-note">
+-              They pick one, add their name, and submit -- no account needed. You confirm the final call.
+-            </p>
+-          </div>
+-          <button className="btn btn-primary" type="submit">Create decision request</button>
+-          {error && <p id="decision-error" className="form-error" role="alert">{error}</p>}
+-        </AddForm>
+-      )}
+-
+-      {showForm && stakeholders.length === 0 && (
+-        <StakeholderQuickAdd
+-          projectId={projectId}
+-          onAdded={(s) => {
+-            setStakeholders((cur) => [...cur, s]);
+-            setSelectedStakeholders((cur) => [...cur, s.id]);
+-          }}
+-        />
+-      )}
+-
+-      {decisions.length > 0 && (
+-        <p className="muted" style={{ marginBottom: 12 }}>
+-          {decisions.filter((d) => d.status === "open").length} awaiting a response · {decisions.filter((d) => d.status !== "open").length} decided
+-        </p>
+-      )}
+-      <div className="decision-list">
+-        {decisions.map((d) => (
++  // v172 (Plan A): the list leads with what is still waiting; decided
++  // requests drop into a collapsed Decided group below it. decisionCard
++  // is the one card renderer both lists share.
++  const openDecisions = decisions.filter((d) => d.status === "open");
++  const decidedDecisions = decisions.filter((d) => d.status !== "open");
++  const decisionCard = (d: Decision) => (
+           <div key={d.id} className={`decision-card ${d.status}`}>
+             <div className="decision-card-head">
+               <h4>{d.title}</h4>
+@@ -6167,9 +6220,141 @@
+               <button className="btn-link btn-link-danger" type="button" onClick={() => removeDecision(d.id, d.title)}>Delete</button>
+             </div>
+           </div>
+-        ))}
+-        {decisions.length === 0 && <p className="muted">No decisions requested yet. Use New decision request above to ask for one.</p>}
++  );
++
++  if (loading) return <div className="skel-loading-block"><div className="skel skel-text" style={{ width: "45%" }} /><div className="skel skel-text" style={{ width: "80%" }} /><div className="skel skel-text" style={{ width: "60%", marginBottom: 0 }} /></div>;
++
++  return (
++    <div>
++      <button className="btn btn-primary" onClick={() => setShowForm((v) => !v)} type="button">
++        {showForm ? "Cancel" : "New decision request"}
++      </button>
++
++      {lastShareUrl && (
++        <div className="callout">
++          Share this link with the stakeholder. No account needed to respond:
++          <br />
++          <input
++            className="share-url"
++            type="text"
++            readOnly
++            value={`${window.location.origin}${lastShareUrl}`}
++            onFocus={(e) => e.target.select()}
++            aria-label="Decision share link"
++          />
++        </div>
++      )}
++
++      {showForm && (
++        <AddForm className="stacked-form" onSubmit={createDecision}>
++          <label htmlFor="f-projecthome-5349">Title</label>
++          <input id="f-projecthome-5349" value={title} onChange={(e) => setTitle(e.target.value)} aria-required="true" autoFocus />
++          <label htmlFor="f-projecthome-5351">Context</label>
++          <textarea id="f-projecthome-5351" value={context} onChange={(e) => setContext(e.target.value)} rows={3} />
++          <label htmlFor="f-projecthome-5353">Options (comma separated)</label>
++          <input id="f-projecthome-5353" value={options} onChange={(e) => { setOptions(e.target.value); if (error) setError(""); }} aria-required="true" aria-describedby={error ? "decision-error" : undefined} aria-invalid={error ? true : undefined} />
++          <label htmlFor="f-projecthome-5355">Deadline (optional)</label>
++          <DateField id="f-projecthome-5355" value={deadline} onChange={setDeadline} />
++          <label>Send to</label>
++          <div className="checkbox-list">
++            {stakeholders.map((s) => (
++              <label key={s.id} className="checkbox-row">
++                <input
++                  type="checkbox"
++                  checked={selectedStakeholders.includes(s.id)}
++                  onChange={(e) => {
++                    setSelectedStakeholders((prev) =>
++                      e.target.checked ? [...prev, s.id] : prev.filter((id) => id !== s.id)
++                    );
++                  }}
++                />
++                {s.name}
++              </label>
++            ))}
++            {stakeholders.length === 0 && <p className="muted">Add stakeholders first to route this to someone.</p>}
++          </div>
++          {/* v162 (F-11): the accountable owner -- one stakeholder or role --
++              distinct from the Send-to list above: the list is who gets
++              asked, the owner is whose call it is. Optional, as it always
++              was implicitly. */}
++          <label htmlFor="f-decision-owner">Decision owner (optional)</label>
++          <select id="f-decision-owner" value={ownerStakeholder} onChange={(e) => setOwnerStakeholder(e.target.value)}>
++            <option value="">No owner</option>
++            {stakeholders.map((s) => (
++              <option key={s.id} value={s.id}>{stakeholderOptionLabel(s)}</option>
++            ))}
++          </select>
++          {/* v161 (F-09): the decider's-eye preview. It mirrors the public
++              decision page (DecisionPublic) field for field -- same title,
++              context, "Needed by" line, and option rows -- and updates
++              live as the form is filled, so the sender sees exactly what
++              the decider will see before the link exists. */}
++          <div className="decision-preview" aria-label="Preview of what the decider sees">
++            <p className="decision-preview-label">What they'll see</p>
++            <p className="decision-preview-title">{title.trim() || "Your decision title"}</p>
++            {context.trim() && <p className="decision-preview-context">{context.trim()}</p>}
++            {deadline && <p className="muted">Needed by: {deadline}</p>}
++            <div className="option-list">
++              {options
++                .split(",")
++                .map((o) => o.trim())
++                .filter(Boolean)
++                .map((opt) => (
++                  <span key={opt} className="option-row decision-preview-option">
++                    {/* A drawn radio dot, not a real input: the preview is
++                        a picture of the decider's page, not a form. */}
++                    <span className="decision-preview-radio" aria-hidden="true" />
++                    {opt}
++                  </span>
++                ))}
++            </div>
++            <p className="muted decision-preview-note">
++              They pick one, add their name, and submit -- no account needed. You confirm the final call.
++            </p>
++          </div>
++          <button className="btn btn-primary" type="submit">Create decision request</button>
++          {error && <p id="decision-error" className="form-error" role="alert">{error}</p>}
++        </AddForm>
++      )}
++
++      {showForm && stakeholders.length === 0 && (
++        <StakeholderQuickAdd
++          projectId={projectId}
++          onAdded={(s) => {
++            setStakeholders((cur) => [...cur, s]);
++            setSelectedStakeholders((cur) => [...cur, s.id]);
++          }}
++        />
++      )}
++
++      {decisions.length > 0 && (
++        <div style={{ marginBottom: 12 }}>
++          <StatCards>
++            <StatCard
++              label="Waiting"
++              value={String(decisions.filter((d) => d.status === "open").length)}
++              tone={decisions.some((d) => d.status === "open") ? "warn" : undefined}
++              sub="Awaiting a response"
++            />
++            <StatCard label="Decided" value={String(decisions.filter((d) => d.status !== "open").length)} />
++          </StatCards>
++        </div>
++      )}
++      <div className="decision-list">
++        {openDecisions.map(decisionCard)}
++        {decisions.length === 0 && (
++          <TeachEmpty
++            title="No decisions requested yet"
++            body="Use New decision request above to ask for one. A decision request names who decides, what the options are, and when you need the answer, so approvals stop living in chat threads."
++            article="decisions"
++          />
++        )}
+       </div>
++      {decidedDecisions.length > 0 && (
++        <LayerGroup id="decisions-decided" title="Decided" count={decidedDecisions.length} defaultOpen={false}>
++          <div className="decision-list">{decidedDecisions.map(decisionCard)}</div>
++        </LayerGroup>
++      )}
+     </div>
+   );
+ }
+@@ -6312,6 +6497,9 @@
+         Scope changes worth a paper trail -- what's changing, why, who asked for it, and what it
+         does to schedule and budget.
+       </p>
++      <HowItWorks label="How change requests work" article="change-requests">
++        The assessment is the point: writing down the schedule and budget effect before approval turns a casual yes into an informed one, and the record stays whether the answer is yes or no.
++      </HowItWorks>
+       <QuickAddForm
+         storageKey="change-requests"
+         hasRows={items.length > 0}
+@@ -6423,7 +6611,7 @@
+         ))}
+       </ul>
+       {items.length === 0 && (
+-        <RegisterEmpty>No change requests logged yet. Add one above if scope shifts.</RegisterEmpty>
++        <TeachEmpty title="No change requests logged yet" body="Add one above if scope shifts. A change request records what is changing, why, who asked for it, and what it does to schedule and budget." article="change-requests" />
+       )}
+     </div>
+   );
+@@ -7334,8 +7522,11 @@
+     <div>
+       <p className="muted" style={{ marginBottom: 16, maxWidth: 640 }}>
+         What went well, what didn't, and what to change next time -- mirrors the retro template in
+-        the Resource hub. Log entries any time, not just at project close.
++        Learn. Log entries any time, not just at project close.
+       </p>
++      <HowItWorks label="How lessons work" article="lessons">
++        A useful lesson names the situation and the change, not just the feeling. The retro template in Learn gives the end-of-project session a shape, and the lessons written there are the ones the next project inherits.
++      </HowItWorks>
+       <QuickAddForm
+         storageKey="lessons"
+         hasRows={lessons.length > 0}
+@@ -7405,7 +7596,7 @@
+         ))}
+       </ul>
+       {lessons.length === 0 && (
+-        <RegisterEmpty>No lessons logged yet. Log one any time, not just at project close.</RegisterEmpty>
++        <TeachEmpty title="No lessons logged yet" body="Log one any time, not just at project close. What went well, what did not, and what to change next time, written down while it is still fresh." article="lessons" />
+       )}
+     </div>
+   );
+--- a/src/pages/Resources.tsx
++++ b/src/pages/Resources.tsx
+@@ -1,5 +1,5 @@
+ import { useEffect, useState } from "react";
+-import { useLocation, useNavigate } from "react-router-dom";
++import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+ import { AppSidebar } from "../components/AppSidebar";
+ import { PageHeader, RegisterRow } from "../components/ui";
+ import { api } from "../lib/api";
+@@ -11,6 +11,7 @@
+ import { ProjectFlowGuide } from "../components/ProjectFlowGuide";
+ import { STAKEHOLDER_QUADRANTS } from "../lib/stakeholderGrid";
+ import { useDocumentTitle } from "../lib/documentTitle";
++import { LEARN_ARTICLES, articleBySlug } from "../lib/learnArticles";
+ 
+ type Methodology = { name: string; points: string[]; bestWhen: string };
+ 
+@@ -283,11 +284,15 @@
+ /** v166: the hub is organized by intent -- three doors. Every section
+  *  that was on the old stacked page is still here, behind one door or
+  *  another; sections start collapsed with a one-line summary each and
+- *  open in place. */
++ *  open in place.
++ *  v172 (Plan A): the hub is Learn now. The doors became the three
++ *  shelves (Start, Learn, Reference), a Start here path leads the page,
++ *  and the short guides the app's surfaces link to live here as
++ *  articles (?article=<slug>), written from the old inline explainers. */
+ const DOORS: { id: string; title: string; blurb: string; sections: HubSectionDef[] }[] = [
+   {
+     id: "start",
+-    title: "Start a project",
++    title: "Start",
+     blurb: "Templates to start from, and how a project runs here.",
+     sections: [
+       { id: "templates", title: "Project templates", blurb: "Start a new project with phases, starter tasks, likely risks and roles already in place." },
+@@ -296,9 +301,10 @@
+   },
+   {
+     id: "run",
+-    title: "Run the week",
++    title: "Learn",
+     blurb: "The handouts, meetings and reporting of the weekly rhythm.",
+     sections: [
++      { id: "guides", title: "Guides for the weekly work", blurb: "Short reads on stakeholders, decisions, meetings, comms and lessons." },
+       { id: "forms", title: "Forms & downloads", blurb: "Documents built from a project's live data: the charter, the registers and the weekly report." },
+       { id: "meetings", title: "Meeting cadence templates", blurb: "Ready-made agendas and cadences, from kickoff to closeout." },
+       { id: "status-reports", title: "Status reporting -- what good looks like", blurb: "Five rules for a status report people can scan in under a minute." },
+@@ -306,9 +312,10 @@
+   },
+   {
+     id: "reference",
+-    title: "Look it up",
++    title: "Reference",
+     blurb: "Plain-English reference for the moments you need a definition or a formula.",
+     sections: [
++      { id: "register-guides", title: "Register guides", blurb: "What each register is for and how to work it, one short read each." },
+       { id: "methodologies", title: "Methodologies", blurb: "Agile, Waterfall, Hybrid and the rest, in plain English, with when each one fits." },
+       { id: "formulas", title: "EVM & scheduling formulas", blurb: "CPI, SPI, float, PERT and friends, each with what it actually means." },
+       { id: "raid", title: "RAID log guide", blurb: "Risks, Issues, Assumptions and Dependencies explained, plus Quality and Compliance." },
+@@ -342,7 +349,7 @@
+ }
+ 
+ export default function Resources() {
+-  useDocumentTitle("Resource hub");
++  useDocumentTitle("Learn");
+   const [query, setQuery] = useState("");
+   const [replaying, setReplaying] = useState(false);
+   const [applyTemplateId, setApplyTemplateId] = useState<string | null>(null);
+@@ -367,6 +374,85 @@
+     return () => window.clearTimeout(timer);
+   }, [hash]);
+ 
++  // v172: a Learn article (?article=<slug>) replaces the hub with the
++  // article page. The app's surfaces link here from their "How this
++  // works" disclosures and teaching empty states.
++  const [searchParams] = useSearchParams();
++  const article = articleBySlug(searchParams.get("article"));
++  const [firstProject, setFirstProject] = useState<{ id: string; name: string } | null | undefined>(undefined);
++  useEffect(() => {
++    if (!article) return;
++    let live = true;
++    api
++      .listProjects()
++      .then(({ projects }) => {
++        if (live) setFirstProject(projects[0] ? { id: projects[0].id, name: projects[0].name } : null);
++      })
++      .catch(() => {
++        if (live) setFirstProject(null);
++      });
++    return () => {
++      live = false;
++    };
++  }, [article]);
++
++  if (article) {
++    const related = LEARN_ARTICLES.filter((a) => a.shelf === article.shelf && a.slug !== article.slug).slice(0, 3);
++    return (
++      <div className="project-shell">
++        <AppSidebar />
++        <main id="main-content" className="project-main">
++          <p style={{ margin: "0 0 10px" }}>
++            <Link to="/app/resources">← Learn</Link>
++          </p>
++          <PageHeader title={article.title} subtitle={article.blurb} />
++          <div className="learn-article-body">
++            {article.body.map((para, i) => (
++              <p key={i}>{para}</p>
++            ))}
++          </div>
++
++          <div className="resource-card learn-project-card">
++            <h3 className="heading-sm" style={{ marginTop: 0 }}>In your project</h3>
++            {firstProject === undefined && <p className="muted">Loading your projects…</p>}
++            {firstProject && (
++              <>
++                <p>
++                  See it live in <strong>{firstProject.name}</strong>.
++                </p>
++                <Link className="btn btn-primary" to={`/app/projects/${firstProject.id}?tab=${article.tab}`}>
++                  Open {article.tabLabel}
++                </Link>
++              </>
++            )}
++            {firstProject === null && (
++              <>
++                <p className="muted">You have no projects yet. Start one and this guide's subject is one of its sections.</p>
++                <Link className="btn btn-primary" to="/app/projects">
++                  Start a project
++                </Link>
++              </>
++            )}
++          </div>
++
++          {related.length > 0 && (
++            <div className="learn-related">
++              <h3 className="heading-sm">Keep reading</h3>
++              <ul>
++                {related.map((a) => (
++                  <li key={a.slug}>
++                    <Link to={`/app/resources?article=${a.slug}`}>{a.title}</Link>
++                    <span className="muted">, {a.blurb}</span>
++                  </li>
++                ))}
++              </ul>
++            </div>
++          )}
++        </main>
++      </div>
++    );
++  }
++
+   async function replayTour() {
+     setReplaying(true);
+     setReplayNotice(null);
+@@ -394,6 +480,8 @@
+     matches(st.name, st.goal, st.checklist, "tasketra", "how it works", "stage", "guide", ...st.steps.flatMap((x) => [x.title, x.tab, x.why])));
+   const forms = matches("forms", "downloads", "printable", "charter", "risk register", "risk matrix", "raci", "weekly report", "pdf", "share") ? [1] : [];
+   const statusTips = STATUS_REPORT_TIPS.filter((t) => matches(t, "status report", "status update"));
++  const learnGuides = LEARN_ARTICLES.filter((a) => a.shelf === "learn" && matches(a.title, a.blurb, "guide"));
++  const registerGuides = LEARN_ARTICLES.filter((a) => a.shelf === "reference" && matches(a.title, a.blurb, "guide", "register"));
+ 
+   const showById: Record<string, boolean> = {
+     templates: templates.length > 0,
+@@ -405,6 +493,8 @@
+     "stakeholder-matrix": quadrants.length > 0,
+     meetings: meetings.length > 0,
+     "status-reports": statusTips.length > 0,
++    guides: learnGuides.length > 0,
++    "register-guides": registerGuides.length > 0,
+   };
+ 
+   // While searching, every section still standing is open -- the results
+@@ -432,7 +522,7 @@
+ 
+   const nothingMatches =
+     templates.length === 0 && forms.length === 0 && guideStages.length === 0 && methodologies.length === 0 && formulas.length === 0 && raidItems.length === 0 &&
+-    quadrants.length === 0 && meetings.length === 0 && statusTips.length === 0;
++    quadrants.length === 0 && meetings.length === 0 && statusTips.length === 0 && learnGuides.length === 0 && registerGuides.length === 0;
+ 
+   const sectionBody = (def: HubSectionDef) => {
+     switch (def.id) {
+@@ -599,6 +689,21 @@
+             </div>
+           </>
+         );
++      case "guides":
++      case "register-guides": {
++        const list = def.id === "guides" ? learnGuides : registerGuides;
++        return (
++          <ul className="rg-list rg-plain" aria-label={def.title}>
++            {list.map((a) => (
++              <RegisterRow
++                key={a.slug}
++                title={<Link to={`/app/resources?article=${a.slug}`}>{a.title}</Link>}
++                meta={a.blurb}
++              />
++            ))}
++          </ul>
++        );
++      }
+       default:
+         return null;
+     }
+@@ -610,8 +715,8 @@
+ 
+       <main id="main-content" className="project-main">
+         <PageHeader
+-          title="Resource hub"
+-          subtitle="Starting points and plain-English reference for running a project. The reference sections are read-only; your project's own sections hold the live data. Templates are the one exception: starting from one creates a new project for you."
++          title="Learn"
++          subtitle="Guides, templates, and plain-English reference for running a project. Follow the Start here path if you are new; the guides are the same ones the app's sections link to from their How this works notes."
+         />
+ 
+         <div className="inline-form" style={{ marginBottom: 20, alignItems: "center" }}>
+@@ -636,6 +741,26 @@
+         />
+ 
+         {!searching && (
++          <div className="learn-path" aria-label="Start here">
++            <span className="learn-path-label">Start here</span>
++            <ol className="learn-path-steps">
++              <li>
++                <Link to="/app/resources#how-it-works">See how a project runs</Link>
++                <span className="muted">, the four stages and what to do in each</span>
++              </li>
++              <li>
++                <Link to="/app/resources#templates">Start from a template</Link>
++                <span className="muted">, with phases, starter tasks and likely risks in place</span>
++              </li>
++              <li>
++                <Link to="/app/resources?article=risks">Read a guide</Link>
++                <span className="muted">, how risks work, in three short paragraphs</span>
++              </li>
++            </ol>
++          </div>
++        )}
++
++        {!searching && (
+           <div className="hub-doors">
+             {DOORS.map((d) => (
+               <button key={d.id} type="button" className="hub-door" onClick={() => openDoor(d)}>
+--- a/src/pages/project/ComplianceTab.tsx
++++ b/src/pages/project/ComplianceTab.tsx
+@@ -6,7 +6,8 @@
+ import { QuickAddForm } from "../../components/QuickAddForm";
+ import { DateField } from "../../components/DateField";
+ import { useConfirm } from "../../components/ConfirmDialog";
+-import { RegisterRow, RegisterSummary, RegisterEmpty } from "../../components/ui";
++import { RegisterRow } from "../../components/ui";
++import { StatCards, StatCard, HowItWorks, TeachEmpty } from "../../components/Layered";
+ import { announce } from "../../lib/announce";
+ import { fmtLocalDate } from "../../lib/format";
+ import { expiryFlag } from "../../lib/rowFlags";
+@@ -117,11 +118,14 @@
+ 
+   return (
+     <div>
+-      <p className="muted" style={{ marginBottom: 16, maxWidth: 640 }}>
+-        Regulatory, policy, standard, or contractual obligations this project needs to satisfy --
+-        tracked alongside the rest of RAID, since "are we compliant with this" is a different
+-        question from "is this good enough" (Quality) or "is something broken" (Issues).
+-      </p>
++      <div style={{ marginBottom: 16 }}>
++        <p className="muted" style={{ margin: "0 0 6px", maxWidth: 640 }}>
++          Regulatory, policy, standard, or contractual obligations this project needs to satisfy.
++        </p>
++        <HowItWorks label="How compliance works" article="compliance">
++          Compliance is tracked alongside the rest of RAID because are we compliant with this is a different question from is this good enough (Quality) or is something broken (Issues). Log the obligation, name who owns it, and set the date it has to be satisfied by.
++        </HowItWorks>
++      </div>
+       <QuickAddForm
+         storageKey="compliance"
+         hasRows={items.length > 0}
+@@ -210,13 +214,13 @@
+         </div>
+       ) : (
+       <>
+-      <RegisterSummary>
+-        {items.filter((c) => c.status === "not_started" || c.status === "in_progress").length} to do
+-        {" \u00b7 "}{items.filter((c) => c.status === "non_compliant").length} non-compliant
+-        {" \u00b7 "}{items.filter((c) => c.status === "compliant").length} compliant
+-      </RegisterSummary>
++      <StatCards>
++        <StatCard label="To do" value={String(items.filter((c) => c.status === "not_started" || c.status === "in_progress").length)} />
++        <StatCard label="Non-compliant" value={String(items.filter((c) => c.status === "non_compliant").length)} tone={items.some((c) => c.status === "non_compliant") ? "bad" : undefined} />
++        <StatCard label="Compliant" value={String(items.filter((c) => c.status === "compliant").length)} />
++      </StatCards>
+       {items.length === 0 ? (
+-        <RegisterEmpty>No compliance items logged yet. Add a regulation, policy, or standard this project needs to satisfy.</RegisterEmpty>
++        <TeachEmpty title="No compliance items logged yet" body="Add a regulation, policy, or standard this project needs to satisfy. Each item gets an owner and a due date, so an obligation is never just something someone remembers." article="compliance" />
+       ) : (
+         <ul className="rg-list" aria-label="Compliance items">
+           {items.map((c) => (
+--- a/src/pages/project/QualityTab.tsx
++++ b/src/pages/project/QualityTab.tsx
+@@ -5,7 +5,8 @@
+ import { RowActionsMenu } from "../../components/RowActionsMenu";
+ import { QuickAddForm } from "../../components/QuickAddForm";
+ import { useConfirm } from "../../components/ConfirmDialog";
+-import { RegisterRow, RegisterSummary, RegisterEmpty } from "../../components/ui";
++import { RegisterRow } from "../../components/ui";
++import { StatCards, StatCard, HowItWorks, TeachEmpty } from "../../components/Layered";
+ import { announce } from "../../lib/announce";
+ 
+ const QUALITY_CATEGORY_LABEL: Record<QualityItem["category"], string> = {
+@@ -108,11 +109,14 @@
+ 
+   return (
+     <div>
+-      <p className="muted" style={{ marginBottom: 16, maxWidth: 640 }}>
+-        Standards to meet, reviews to run, and defects you've found -- a quality log alongside
+-        the rest of RAID, since "is this good enough" is a different question from "is something
+-        broken."
+-      </p>
++      <div style={{ marginBottom: 16 }}>
++        <p className="muted" style={{ margin: "0 0 6px", maxWidth: 640 }}>
++          Standards to meet, reviews to run, and defects you have found.
++        </p>
++        <HowItWorks label="How quality works" article="quality">
++          Quality sits alongside the rest of RAID because is this good enough is a different question from is something broken. Log the standard, the review, or the defect, give it an owner, and mark it passed or failed as the evidence comes in.
++        </HowItWorks>
++      </div>
+       <QuickAddForm
+         storageKey="quality"
+         hasRows={items.length > 0}
+@@ -200,13 +204,13 @@
+         </div>
+       ) : (
+       <>
+-      <RegisterSummary>
+-        {items.filter((q) => q.status === "open" || q.status === "in_progress").length} to do
+-        {" \u00b7 "}{items.filter((q) => q.status === "failed").length} failed
+-        {" \u00b7 "}{items.filter((q) => q.status === "passed").length} passed
+-      </RegisterSummary>
++      <StatCards>
++        <StatCard label="To do" value={String(items.filter((q) => q.status === "open" || q.status === "in_progress").length)} />
++        <StatCard label="Failed" value={String(items.filter((q) => q.status === "failed").length)} tone={items.some((q) => q.status === "failed") ? "bad" : undefined} />
++        <StatCard label="Passed" value={String(items.filter((q) => q.status === "passed").length)} />
++      </StatCards>
+       {items.length === 0 ? (
+-        <RegisterEmpty>No quality items logged yet. Add a standard to meet, a review to run, or a defect you found.</RegisterEmpty>
++        <TeachEmpty title="No quality items logged yet" body="Add a standard to meet, a review to run, or a defect you found. Quality is tracked separately from issues: this log answers whether the work is good enough, not whether something is broken." article="quality" />
+       ) : (
+         <ul className="rg-list" aria-label="Quality items">
+           {items.map((q) => (
+--- a/src/__tests__/charterDoc.test.tsx
++++ b/src/__tests__/charterDoc.test.tsx
+@@ -0,0 +1,96 @@
++// @vitest-environment jsdom
++//
++// v172 CharterTab document view: the charter reads as a document with
++// per-section editing, not as one long form.
++import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
++import { createRoot, type Root } from "react-dom/client";
++import { act } from "react";
++
++const m = vi.hoisted(() => ({ getCharterApproval: vi.fn(), updateProject: vi.fn() }));
++vi.mock("../lib/api", async (importOriginal) => {
++  const actual = await importOriginal<typeof import("../lib/api")>();
++  return { ...actual, api: { ...actual.api, ...m } };
++});
++
++import { CharterTab } from "../components/CharterTab";
++import type { Charter } from "../lib/charter";
++
++let container: HTMLDivElement;
++let root: Root;
++beforeAll(() => {
++  (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
++});
++beforeEach(() => {
++  m.getCharterApproval.mockReset();
++  m.updateProject.mockReset();
++  m.getCharterApproval.mockResolvedValue({ approval: null });
++  m.updateProject.mockResolvedValue({ project: { charter: {} } });
++  container = document.createElement("div");
++  document.body.appendChild(container);
++  root = createRoot(container);
++});
++afterEach(() => {
++  act(() => root.unmount());
++  container.remove();
++});
++
++async function mount(charter: Charter, isOwner = true) {
++  await act(async () => {
++    root.render(
++      <CharterTab
++        projectId="p1"
++        projectName="Clinic"
++        charter={charter}
++        isOwner={isOwner}
++        size="full"
++        showAll
++        okrsVisible={false}
++        onSaved={vi.fn()}
++        onOpenTab={vi.fn()}
++      />,
++    );
++  });
++  await act(async () => {
++    await new Promise((r) => setTimeout(r, 5));
++  });
++}
++
++describe("CharterTab document view (v172)", () => {
++  it("reads as a document: prose sections and objectives as a list", async () => {
++    await mount({
++      purpose: "Replace the clinic's intake system.",
++      objectives: "Cut check-in time\nFewer no-shows",
++      scope_in: "Intake and scheduling",
++      sponsor: "Dr. Patel",
++    });
++    expect(container.querySelector(".charter-doc")).not.toBeNull();
++    expect(container.textContent).toContain("Replace the clinic's intake system.");
++    const list = container.querySelector(".charter-objectives-list");
++    expect(list?.querySelectorAll("li").length).toBe(2);
++    // No form fields in read mode.
++    expect(container.querySelector("textarea")).toBeNull();
++    expect(container.querySelector(".charter-card input")).toBeNull();
++    // Empty sections say so quietly.
++    expect(container.textContent).toContain("Not written yet.");
++  });
++
++  it("Edit opens just that section's field, and Cancel restores it", async () => {
++    await mount({ purpose: "Old purpose", objectives: "One goal", scope_in: "X", sponsor: "Sam" });
++    const editBtn = [...container.querySelectorAll("button")].find((b) => b.textContent === "Edit") as HTMLButtonElement;
++    await act(async () => editBtn.click());
++    const area = container.querySelector("textarea") as HTMLTextAreaElement;
++    expect(area).not.toBeNull();
++    expect(area.value).toBe("Old purpose");
++    const cancel = [...container.querySelectorAll("button")].find((b) => b.textContent === "Cancel") as HTMLButtonElement;
++    await act(async () => cancel.click());
++    expect(container.querySelector("textarea")).toBeNull();
++    expect(container.textContent).toContain("Old purpose");
++    expect(m.updateProject).not.toHaveBeenCalled();
++  });
++
++  it("non-owners get the document without edit controls", async () => {
++    await mount({ purpose: "Read only purpose" }, false);
++    expect(container.textContent).toContain("Read only purpose");
++    expect([...container.querySelectorAll("button")].some((b) => b.textContent === "Edit" || b.textContent === "Add")).toBe(false);
++  });
++});
+--- a/src/__tests__/density.test.ts
++++ b/src/__tests__/density.test.ts
+@@ -0,0 +1,33 @@
++// @vitest-environment jsdom
++//
++// v172 density preference: stored per device, applied as a
++// data-density attribute on <html>, comfortable by default.
++import { describe, it, expect, beforeEach } from "vitest";
++import { readDensity, writeDensity, initDensity } from "../lib/density";
++
++beforeEach(() => {
++  window.localStorage.clear();
++  delete document.documentElement.dataset.density;
++});
++
++describe("density preference (v172)", () => {
++  it("defaults to comfortable and applies on init", () => {
++    expect(readDensity()).toBe("comfortable");
++    expect(initDensity()).toBe("comfortable");
++    expect(document.documentElement.dataset.density).toBe("comfortable");
++  });
++
++  it("write persists and applies compact", () => {
++    writeDensity("compact");
++    expect(window.localStorage.getItem("tasketra:density")).toBe("compact");
++    expect(document.documentElement.dataset.density).toBe("compact");
++    expect(readDensity()).toBe("compact");
++  });
++
++  it("a stored compact survives init; junk values fall back", () => {
++    window.localStorage.setItem("tasketra:density", "compact");
++    expect(initDensity()).toBe("compact");
++    window.localStorage.setItem("tasketra:density", "banana");
++    expect(readDensity()).toBe("comfortable");
++  });
++});
+--- a/src/__tests__/layered.test.tsx
++++ b/src/__tests__/layered.test.tsx
+@@ -0,0 +1,103 @@
++// @vitest-environment jsdom
++//
++// v172 layered primitives: summary cards, collapsible groups with
++// remembered state, the teaching disclosure, and the density preference.
++import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
++import { createRoot, type Root } from "react-dom/client";
++import { act } from "react";
++import { MemoryRouter } from "react-router-dom";
++import { StatCards, StatCard, LayerGroup, HowItWorks, TeachEmpty } from "../components/Layered";
++import { readDensity, writeDensity, initDensity } from "../lib/density";
++
++let root: Root | null = null;
++let host: HTMLDivElement | null = null;
++
++beforeEach(() => {
++  window.localStorage.clear();
++  host = document.createElement("div");
++  document.body.appendChild(host);
++  root = createRoot(host);
++});
++
++afterEach(() => {
++  act(() => root?.unmount());
++  host?.remove();
++  root = null;
++  host = null;
++});
++
++function render(node: React.ReactNode) {
++  act(() => {
++    root?.render(<MemoryRouter>{node}</MemoryRouter>);
++  });
++}
++
++describe("Layered primitives", () => {
++  it("renders stat cards with label, value and sub", () => {
++    render(
++      <StatCards>
++        <StatCard label="High" value="6" sub="Needs attention" tone="bad" />
++      </StatCards>,
++    );
++    expect(host?.textContent).toContain("6");
++    expect(host?.textContent).toContain("Needs attention");
++  });
++
++  it("collapses a layer group and remembers it", () => {
++    render(
++      <LayerGroup id="test-group" title="Medium" count={11}>
++        <p>group body</p>
++      </LayerGroup>,
++    );
++    expect(host?.textContent).toContain("group body");
++    const btn = host?.querySelector(".layer-group-btn") as HTMLButtonElement;
++    act(() => btn.click());
++    expect(host?.textContent).not.toContain("group body");
++    expect(window.localStorage.getItem("tasketra:layer:test-group")).toBe("0");
++  });
++
++  it("keeps teaching text hidden until the disclosure is opened", () => {
++    render(
++      <HowItWorks label="How risks work" article="risks">
++        <p>The quiet explanation.</p>
++      </HowItWorks>,
++    );
++    expect(host?.textContent).not.toContain("The quiet explanation.");
++    const btn = host?.querySelector(".layer-how-btn") as HTMLButtonElement;
++    act(() => btn.click());
++    expect(host?.textContent).toContain("The quiet explanation.");
++    expect(host?.querySelector(".layer-how-link")?.getAttribute("href")).toBe(
++      "/app/resources?article=risks",
++    );
++  });
++
++  it("teaching empty state offers its action", () => {
++    const onAction = vi.fn();
++    render(
++      <TeachEmpty
++        title="No risks yet"
++        body="A risk is something that might happen."
++        actionLabel="Add your first risk"
++        onAction={onAction}
++      />,
++    );
++    expect(host?.textContent).toContain("No risks yet");
++    const btn = [...(host?.querySelectorAll("button") ?? [])].find((b) =>
++      b.textContent?.includes("Add your first risk"),
++    ) as HTMLButtonElement;
++    act(() => btn.click());
++    expect(onAction).toHaveBeenCalledOnce();
++  });
++});
++
++describe("density preference", () => {
++  it("defaults to comfortable and persists compact", () => {
++    expect(readDensity()).toBe("comfortable");
++    writeDensity("compact");
++    expect(readDensity()).toBe("compact");
++    expect(document.documentElement.dataset.density).toBe("compact");
++    expect(initDensity()).toBe("compact");
++    writeDensity("comfortable");
++    expect(document.documentElement.dataset.density).toBe("comfortable");
++  });
++});
+--- a/src/__tests__/learn.test.tsx
++++ b/src/__tests__/learn.test.tsx
+@@ -0,0 +1,111 @@
++// @vitest-environment jsdom
++//
++// v172 Learn: the article data every surface links to, the article
++// page (?article=<slug>) with its In-your-project card, and the hub's
++// Start here path + guide shelves.
++import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
++import { act } from "react";
++import { createRoot, type Root } from "react-dom/client";
++import { MemoryRouter, Routes, Route } from "react-router-dom";
++
++const m = vi.hoisted(() => ({ listProjects: vi.fn() }));
++vi.mock("../lib/api", async (importOriginal) => {
++  const actual = await importOriginal<typeof import("../lib/api")>();
++  return { ...actual, api: { ...actual.api, ...m } };
++});
++vi.mock("../lib/auth-context", () => ({
++  useAuth: () => ({
++    user: { id: "u1", email: "owner@example.com", tour_completed_at: "2026-01-01T00:00:00Z", display_name: "Owner" },
++    loading: false,
++    refresh: async () => {},
++    logout: async () => {},
++  }),
++  AuthProvider: ({ children }: { children: unknown }) => children,
++}));
++
++import Resources from "../pages/Resources";
++import { ConfirmProvider } from "../components/ConfirmDialog";
++import { LEARN_ARTICLES, articleBySlug } from "../lib/learnArticles";
++
++let host: HTMLDivElement;
++let root: Root;
++
++async function mount(path: string) {
++  await act(async () => {
++    root.render(
++      <MemoryRouter initialEntries={[path]}>
++        <ConfirmProvider>
++          <Routes>
++            <Route path="/app/resources" element={<Resources />} />
++          </Routes>
++        </ConfirmProvider>
++      </MemoryRouter>,
++    );
++  });
++  await act(async () => {
++    await new Promise((r) => setTimeout(r, 20));
++  });
++}
++
++beforeEach(() => {
++  m.listProjects.mockReset();
++  m.listProjects.mockResolvedValue({ projects: [{ id: "p1", name: "Clinic" }] });
++  vi.stubGlobal("fetch", vi.fn(() => new Promise(() => {})));
++  (window.HTMLElement.prototype as any).scrollIntoView = () => {};
++  host = document.createElement("div");
++  document.body.appendChild(host);
++  root = createRoot(host);
++});
++afterEach(async () => {
++  await act(async () => {
++    root.unmount();
++  });
++  host.remove();
++  vi.unstubAllGlobals();
++});
++
++describe("Learn articles data", () => {
++  it("covers every slug the app's surfaces link to, with real bodies", () => {
++    const expected = [
++      "risks", "issues", "assumptions", "dependencies", "quality", "compliance",
++      "budget", "vendors", "documents", "stakeholders", "decisions", "meetings",
++      "comms", "change-requests", "lessons", "okrs",
++    ];
++    expect(LEARN_ARTICLES.map((a) => a.slug).sort()).toEqual([...expected].sort());
++    expect(new Set(LEARN_ARTICLES.map((a) => a.slug)).size).toBe(LEARN_ARTICLES.length);
++    for (const a of LEARN_ARTICLES) {
++      expect(a.body.length, a.slug).toBeGreaterThanOrEqual(2);
++      expect(a.tab, a.slug).toBeTruthy();
++      expect(articleBySlug(a.slug)?.title).toBe(a.title);
++    }
++    expect(articleBySlug("nope")).toBeNull();
++  });
++});
++
++describe("Learn article page", () => {
++  it("renders the article with its In-your-project card", async () => {
++    await mount("/app/resources?article=risks");
++    expect(host.textContent).toContain("How risks work");
++    expect(host.textContent).toContain("written down before it does");
++    expect(host.textContent).toContain("In your project");
++    const link = [...host.querySelectorAll("a")].find((a) => a.textContent === "Open Risks") as HTMLAnchorElement;
++    expect(link).toBeTruthy();
++    expect(link.getAttribute("href")).toBe("/app/projects/p1?tab=risks");
++    // The hub doors are not on the article page.
++    expect(host.querySelector(".hub-doors")).toBeNull();
++  });
++
++  it("an unknown slug falls back to the hub", async () => {
++    await mount("/app/resources?article=nope");
++    expect(host.querySelector(".hub-doors")).not.toBeNull();
++    expect(host.textContent).toContain("Start here");
++  });
++
++  it("the hub carries the guide shelves and the Start here path", async () => {
++    await mount("/app/resources");
++    expect(host.querySelector("#guides")).not.toBeNull();
++    expect(host.querySelector("#register-guides")).not.toBeNull();
++    expect(host.querySelector(".learn-path")).not.toBeNull();
++    expect([...host.querySelectorAll(".hub-door-title")].map((x) => x.textContent)).toEqual(["Start", "Learn", "Reference"]);
++  });
++});
+--- a/src/__tests__/projectSidebarNav.test.tsx
++++ b/src/__tests__/projectSidebarNav.test.tsx
+@@ -0,0 +1,99 @@
++// @vitest-environment jsdom
++//
++// v172 ProjectSidebarNav: grouped project sections in the sidebar, the
++// decisions waiting badge, and the light project's grow row.
++import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
++import { createRoot, type Root } from "react-dom/client";
++import { act } from "react";
++import { MemoryRouter } from "react-router-dom";
++import { ProjectSidebarNav } from "../components/ProjectSidebarNav";
++import { NAV_GROUPS } from "../lib/projectNav";
++
++let root: Root | null = null;
++let host: HTMLDivElement | null = null;
++
++beforeEach(() => {
++  window.localStorage.clear();
++  host = document.createElement("div");
++  document.body.appendChild(host);
++  root = createRoot(host);
++});
++
++afterEach(() => {
++  act(() => root?.unmount());
++  host?.remove();
++  root = null;
++  host = null;
++});
++
++const groups = NAV_GROUPS.map((group) => ({
++  group,
++  sections: group.sections,
++  opens: group.sections[0].id,
++}));
++
++function render(extra: Partial<React.ComponentProps<typeof ProjectSidebarNav>> = {}) {
++  const props: React.ComponentProps<typeof ProjectSidebarNav> = {
++    projectName: "Clinic Construction",
++    stageLabel: "Plan",
++    groups,
++    activeTab: "risks",
++    activeGroupId: "health",
++    decisionsWaiting: 0,
++    growPieces: [],
++    onOpenTab: vi.fn(),
++    onGrow: vi.fn(),
++    ...extra,
++  };
++  act(() => {
++    root?.render(
++      <MemoryRouter>
++        <ProjectSidebarNav {...props} />
++      </MemoryRouter>,
++    );
++  });
++  return props;
++}
++
++describe("ProjectSidebarNav", () => {
++  it("renders the project name, stage, and every section", () => {
++    render();
++    expect(host?.textContent).toContain("Clinic Construction");
++    expect(host?.textContent).toContain("Plan stage");
++    const items = [...(host?.querySelectorAll(".side-tab[data-tour^='tab-']") ?? [])];
++    expect(items.length).toBe(25);
++    expect(host?.querySelector(".side-tab.active")?.getAttribute("data-tour")).toBe("tab-risks");
++  });
++
++  it("shows the decisions badge only when decisions are waiting", () => {
++    render({ decisionsWaiting: 3 });
++    expect(host?.querySelector(".side-badge")?.textContent).toBe("3");
++    act(() => root?.unmount());
++    root = createRoot(host!);
++    render({ decisionsWaiting: 0 });
++    expect(host?.querySelector(".side-badge")).toBeNull();
++  });
++
++  it("opens a tab when an item is clicked", () => {
++    const props = render();
++    const btn = host?.querySelector("[data-tour='tab-budget']") as HTMLButtonElement;
++    act(() => btn.click());
++    expect(props.onOpenTab).toHaveBeenCalledWith("budget");
++  });
++
++  it("grow row appears only with grow pieces and grows in place", () => {
++    const props = render({ growPieces: [{ id: "budget", label: "Budget" }] });
++    const growBtn = [...(host?.querySelectorAll("button") ?? [])].find((b) =>
++      b.textContent?.includes("Need more for this project?"),
++    ) as HTMLButtonElement;
++    expect(growBtn).toBeTruthy();
++    act(() => growBtn.click());
++    // Grow pieces are the side-tabs without a data-tour id (the regular
++    // Budget section item has one and opens the tab instead).
++    const piece = [...(host?.querySelectorAll(".side-tab:not([data-tour])") ?? [])].find((b) =>
++      b.textContent?.includes("Budget"),
++    ) as HTMLButtonElement;
++    act(() => piece.click());
++    expect(props.onGrow).toHaveBeenCalledWith("budget");
++  });
++});
+--- a/src/__tests__/statusTier.test.tsx
++++ b/src/__tests__/statusTier.test.tsx
+@@ -0,0 +1,125 @@
++// @vitest-environment jsdom
++//
++// v172 StatusTier: the merged home status card — verdict strip unboxed,
++// one-line progress, decisions waiting, quiet notice lines, checklist
++// as the action row.
++import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
++import { createRoot, type Root } from "react-dom/client";
++import { act } from "react";
++
++const m = vi.hoisted(() => ({ getPortfolio: vi.fn(), listTasks: vi.fn(), listDecisions: vi.fn() }));
++vi.mock("../lib/api", async (importOriginal) => {
++  const actual = await importOriginal<typeof import("../lib/api")>();
++  return { ...actual, api: { ...actual.api, ...m } };
++});
++
++import { StatusTier } from "../components/StatusTier";
++
++const summary = (over: Record<string, unknown> = {}) => ({
++  id: "p1", name: "Harbor", stage: "execute", nextUp: null, escalations: [], totalTasks: 8, doneTasks: 3, overdueTasks: 0,
++  openRisks: 0, highRisks: 0, openIssues: 0, highIssues: 0, cpi: null, spi: null, objectivesCount: 0, avgObjectiveProgress: null,
++  health: "on_track", ...over,
++});
++
++let container: HTMLDivElement;
++let root: Root;
++beforeAll(() => {
++  (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
++});
++beforeEach(() => {
++  m.getPortfolio.mockReset();
++  m.listTasks.mockReset();
++  m.listDecisions.mockReset();
++  m.getPortfolio.mockResolvedValue({ projects: [summary()] });
++  m.listTasks.mockResolvedValue({
++    tasks: [
++      { id: "t1", title: "Done thing", status: "done", due_date: null },
++      { id: "t2", title: "Pour the slab", status: "todo", due_date: "2027-01-05" },
++      { id: "t3", title: "Frame walls", status: "todo", due_date: null },
++    ],
++  });
++  m.listDecisions.mockResolvedValue({
++    decisions: [
++      { id: "d1", status: "open" },
++      { id: "d2", status: "open" },
++      { id: "d3", status: "decided" },
++    ],
++  });
++  container = document.createElement("div");
++  document.body.appendChild(container);
++  root = createRoot(container);
++});
++afterEach(() => {
++  act(() => root.unmount());
++  container.remove();
++});
++
++async function mount(extra: Partial<React.ComponentProps<typeof StatusTier>> = {}) {
++  const props: React.ComponentProps<typeof StatusTier> = {
++    projectId: "p1",
++    stage: "execute",
++    purpose: "Build the clinic",
++    sizeLabel: null,
++    hiddenCount: 0,
++    isOwner: true,
++    baselineData: null,
++    onOpenTab: vi.fn(),
++    onShowAllTabs: vi.fn(),
++    ...extra,
++  };
++  await act(async () => {
++    root.render(<StatusTier {...props} />);
++  });
++  await act(async () => {
++    await new Promise((r) => setTimeout(r, 5));
++  });
++  return props;
++}
++
++describe("StatusTier", () => {
++  it("merges verdict, progress, decisions waiting, and next up in one card", async () => {
++    const props = await mount();
++    const tier = container.querySelector(".status-tier");
++    expect(tier).not.toBeNull();
++    // The health strip renders unboxed inside the tier.
++    expect(tier!.querySelector(".hs-strip.hs-bare")).not.toBeNull();
++    expect(tier!.querySelector(".pill")!.textContent).toBe("On track");
++    // Progress line.
++    expect(tier!.textContent).toContain("1 of 3 tasks done");
++    expect(tier!.querySelector('[role="progressbar"]')?.getAttribute("aria-valuenow")).toBe("33");
++    // Decisions waiting chip navigates.
++    const chip = [...tier!.querySelectorAll("button")].find((b) => b.textContent?.includes("decisions waiting")) as HTMLButtonElement;
++    expect(chip.textContent).toContain("2 decisions waiting");
++    await act(async () => chip.click());
++    expect(props.onOpenTab).toHaveBeenCalledWith("decisions");
++    // Next up names the earliest dated open task.
++    expect(tier!.textContent).toContain("Next up: Pour the slab");
++  });
++
++  it("folds the old banners in as quiet notes", async () => {
++    await mount({
++      purpose: undefined,
++      sizeLabel: "Standard",
++      hiddenCount: 9,
++      baselineData: { baseline: null, variance: null },
++    });
++    const notes = [...container.querySelectorAll(".status-note")].map((n) => n.textContent);
++    expect(notes.some((t) => t?.includes("Showing the Standard view, which hides 9 tabs"))).toBe(true);
++    expect(notes.some((t) => t?.includes("under way without a charter"))).toBe(true);
++    expect(notes.some((t) => t?.includes("No baseline locked yet"))).toBe(true);
++    expect(container.querySelector(".view-banner")).toBeNull();
++  });
++
++  it("renders the checklist node as the action row", async () => {
++    await mount({ checklist: <div className="checklist-marker">steps here</div> });
++    expect(container.querySelector(".status-tier .checklist-marker")?.textContent).toBe("steps here");
++  });
++
++  it("stays quiet when there is nothing to report", async () => {
++    m.listTasks.mockResolvedValue({ tasks: [] });
++    m.listDecisions.mockResolvedValue({ decisions: [] });
++    await mount({ baselineData: { baseline: { lockedAt: "2026-11-01", taskCount: 4 }, variance: null } });
++    expect(container.querySelector(".status-progress-row")).toBeNull();
++    expect(container.textContent).toContain("Baseline locked");
++  });
++});
+--- a/src/components/Layered.tsx
++++ b/src/components/Layered.tsx
+@@ -0,0 +1,187 @@
++// v172 (Plan A, "Layer It"): the shared building blocks every layered
++// surface is made from, so Risks, Budget, Decisions and the rest are one
++// kit, not eleven one-offs. Three ideas from the research: lead with a
++// summary (StatCards), group the detail and let groups collapse
++// (LayerGroup), and keep teaching text behind a user-triggered
++// disclosure (HowItWorks) or in an empty state that teaches (TeachEmpty).
++//
++// LayerGroup remembers its open state per group id in localStorage,
++// following the dashPrefs pattern, so a group a user collapsed stays
++// collapsed on the next visit.
++
++import { useId, useState } from "react";
++import { Link } from "react-router-dom";
++
++export function StatCards({ children }: { children: React.ReactNode }) {
++  return <div className="layer-stats">{children}</div>;
++}
++
++export function StatCard({
++  label,
++  value,
++  sub,
++  tone,
++  onClick,
++}: {
++  label: string;
++  value: string;
++  sub?: string;
++  tone?: "warn" | "bad" | "ok";
++  onClick?: () => void;
++}) {
++  const cls = `layer-stat${tone ? ` layer-stat-${tone}` : ""}`;
++  const inner = (
++    <>
++      <span className="layer-stat-label">{label}</span>
++      <span className="layer-stat-value">{value}</span>
++      {sub && <span className="layer-stat-sub">{sub}</span>}
++    </>
++  );
++  if (onClick) {
++    return (
++      <button type="button" className={`${cls} layer-stat-btn`} onClick={onClick}>
++        {inner}
++      </button>
++    );
++  }
++  return <div className={cls}>{inner}</div>;
++}
++
++function readGroupOpen(key: string, fallback: boolean): boolean {
++  try {
++    const v = window.localStorage.getItem(key);
++    return v === null ? fallback : v === "1";
++  } catch {
++    return fallback;
++  }
++}
++
++export function LayerGroup({
++  id,
++  title,
++  count,
++  defaultOpen = true,
++  children,
++}: {
++  id: string;
++  title: string;
++  count?: number;
++  defaultOpen?: boolean;
++  children: React.ReactNode;
++}) {
++  const key = `tasketra:layer:${id}`;
++  const [open, setOpen] = useState<boolean>(() => readGroupOpen(key, defaultOpen));
++  const panelId = useId();
++  const headId = useId();
++
++  function toggle() {
++    const next = !open;
++    setOpen(next);
++    try {
++      window.localStorage.setItem(key, next ? "1" : "0");
++    } catch {
++      // session-only is fine
++    }
++  }
++
++  return (
++    <section className="layer-group" aria-labelledby={headId}>
++      <h3 className="layer-group-head" id={headId}>
++        <button
++          type="button"
++          className="layer-group-btn"
++          aria-expanded={open}
++          aria-controls={panelId}
++          onClick={toggle}
++        >
++          <span className={`layer-group-chev${open ? " is-open" : ""}`} aria-hidden="true">
++            ▸
++          </span>
++          <span className="layer-group-title">{title}</span>
++          {typeof count === "number" && <span className="layer-group-count">{count}</span>}
++        </button>
++      </h3>
++      <div id={panelId} className="layer-group-body" hidden={!open}>
++        {open ? children : null}
++      </div>
++    </section>
++  );
++}
++
++/**
++ * The teaching-text disclosure: one quiet line on the working surface
++ * ("How risks work"), the explanation appears only when asked for, and a
++ * Learn link is offered when a full article exists. `article` is a Learn
++ * article slug; the link lands on /app/resources?article=<slug>.
++ */
++export function HowItWorks({
++  label,
++  article,
++  children,
++}: {
++  label: string;
++  article?: string;
++  children: React.ReactNode;
++}) {
++  const [open, setOpen] = useState(false);
++  const panelId = useId();
++  return (
++    <div className="layer-how">
++      <button
++        type="button"
++        className="layer-how-btn"
++        aria-expanded={open}
++        aria-controls={panelId}
++        onClick={() => setOpen(!open)}
++      >
++        {label}
++      </button>
++      <div id={panelId} className="layer-how-body" hidden={!open}>
++        {open && (
++          <>
++            <div className="layer-how-text">{children}</div>
++            {article && (
++              <Link className="layer-how-link" to={`/app/resources?article=${article}`}>
++                Read more in Learn
++              </Link>
++            )}
++          </>
++        )}
++      </div>
++    </div>
++  );
++}
++
++/** An empty state that teaches: what this is, why it matters, one action. */
++export function TeachEmpty({
++  title,
++  body,
++  actionLabel,
++  onAction,
++  article,
++}: {
++  title: string;
++  body: string;
++  actionLabel?: string;
++  onAction?: () => void;
++  article?: string;
++}) {
++  return (
++    <div className="layer-empty">
++      <p className="layer-empty-title">{title}</p>
++      <p className="layer-empty-body">{body}</p>
++      <div className="layer-empty-actions">
++        {actionLabel && onAction && (
++          <button type="button" className="btn btn-primary" onClick={onAction}>
++            {actionLabel}
++          </button>
++        )}
++        {article && (
++          <Link className="btn-link" to={`/app/resources?article=${article}`}>
++            How this works
++          </Link>
++        )}
++      </div>
++    </div>
++  );
++}
+--- a/src/components/ProjectSidebarNav.tsx
++++ b/src/components/ProjectSidebarNav.tsx
+@@ -0,0 +1,122 @@
++// v172 (Plan A, "Layer It"): the project's navigation lives in the
++// sidebar now, one contextual column instead of the two stacked tab bars
++// that used to sit on top of every project page. The global Workspace
++// group stays above this in AppSidebar; this component renders only the
++// project block: its name and stage, its sections grouped the way
++// projectNav already groups them, and (for light projects) the same
++// grow-in-place row the calm home offers.
++//
++// Behavior is unchanged underneath: selecting a section is the same
++// ?tab= navigation the pill bars used, the size system still decides
++// which sections exist, and the product tour's data-tour targets moved
++// here with the buttons, so every tour step still finds its element.
++
++import { useState } from "react";
++import { NavGroup } from "./AppSidebar";
++import { NavIcon, type NavIconName } from "./NavIcon";
++import type { NavGroup as NavGroupData, NavSection } from "../lib/projectNav";
++
++export type SidebarGroup = { group: NavGroupData; sections: NavSection[]; opens: string };
++
++export function ProjectSidebarNav({
++  projectName,
++  stageLabel,
++  groups,
++  activeTab,
++  activeGroupId,
++  decisionsWaiting,
++  growPieces,
++  onOpenTab,
++  onGrow,
++}: {
++  projectName: string;
++  stageLabel?: string | null;
++  groups: SidebarGroup[];
++  activeTab: string;
++  activeGroupId: string | null;
++  decisionsWaiting: number;
++  growPieces: { id: string; label: string }[];
++  onOpenTab: (tab: string) => void;
++  onGrow: (tab: string) => void;
++}) {
++  const [growOpen, setGrowOpen] = useState(false);
++
++  function item(sec: NavSection) {
++    const active = activeTab === sec.id;
++    return (
++      <button
++        key={sec.id}
++        type="button"
++        className={active ? "side-tab active" : "side-tab"}
++        aria-current={active ? "page" : undefined}
++        onClick={() => onOpenTab(sec.id)}
++        data-tour={`tab-${sec.id}`}
++      >
++        <NavIcon name={sec.id as NavIconName} active={active} />
++        {sec.label}
++        {sec.id === "decisions" && decisionsWaiting > 0 && (
++          <span className="side-badge" aria-label={`${decisionsWaiting} waiting`}>
++            {decisionsWaiting}
++          </span>
++        )}
++      </button>
++    );
++  }
++
++  return (
++    <>
++      <div className="side-nav-group">
++        {/* The label truncates in the narrow sidebar; the full project
++            name is on hover (kept from v160, F-24). */}
++        <div className="side-nav-label" title={projectName}>
++          {projectName}
++        </div>
++        {stageLabel && <div className="side-project-stage">{stageLabel} stage</div>}
++      </div>
++
++      {groups.map(({ group, sections }) =>
++        sections.length === 1 ? (
++          <div className="side-nav-group" key={group.id}>
++            <div className="side-nav-items">{item(sections[0])}</div>
++          </div>
++        ) : (
++          <NavGroup
++            key={group.id}
++            label={group.label}
++            defaultCollapsed={group.id !== activeGroupId && group.id === "docs"}
++          >
++            {sections.map(item)}
++          </NavGroup>
++        ),
++      )}
++
++      {growPieces.length > 0 && (
++        <div className="side-nav-group">
++          <button
++            type="button"
++            className="side-grow-btn"
++            aria-expanded={growOpen}
++            onClick={() => setGrowOpen((o) => !o)}
++          >
++            + Need more for this project?
++          </button>
++          {growOpen && (
++            <div className="side-nav-items">
++              {growPieces.map((piece) => (
++                <button
++                  key={piece.id}
++                  type="button"
++                  className="side-tab"
++                  onClick={() => onGrow(piece.id)}
++                >
++                  <NavIcon name={piece.id as NavIconName} active={false} />
++                  {piece.label}
++                </button>
++              ))}
++            </div>
++          )}
++        </div>
++      )}
++    </>
++  );
++}
+--- a/src/components/StatusTier.tsx
++++ b/src/components/StatusTier.tsx
+@@ -0,0 +1,169 @@
++// v172 (Plan A, "Layer It"): the standard/full project home used to open
++// with a stack — a setup checklist in the page head, a health strip, up
++// to three notice banners, then the cockpit gauges — five surfaces all
++// answering "how is this project?" before the work started. The status
++// tier is the merge: ONE card at the top of the home tab holding the
++// health verdict (the HealthStrip, unboxed), a one-line progress bar,
++// the decisions waiting count, what needs the user next, the quiet
++// notice lines the banners used to shout, and the first-run checklist
++// as the tier's action row. The cockpit follows as layer 2.
++//
++// On every other tab the HealthStrip still renders on its own, exactly
++// as before; this tier exists only on the home tab.
++
++import { useEffect, useState, type ReactNode } from "react";
++import { api, type ProjectStage } from "../lib/api";
++import { HealthStrip } from "./HealthStrip";
++import { fmtDate } from "../lib/format";
++
++type BaselineLike = {
++  baseline: { lockedAt: string; taskCount: number } | null;
++  variance: { movedTasks: unknown[]; addedTasks: number; removedTasks: number } | null;
++} | null;
++
++export function StatusTier({
++  projectId,
++  stage,
++  purpose,
++  sizeLabel,
++  hiddenCount,
++  isOwner,
++  baselineData,
++  checklist,
++  refreshKey,
++  onOpenTab,
++  onShowAllTabs,
++}: {
++  projectId: string;
++  stage: ProjectStage;
++  purpose?: string;
++  sizeLabel: string | null; // non-null when a size view is hiding tabs
++  hiddenCount: number;
++  isOwner: boolean;
++  baselineData: BaselineLike;
++  checklist?: ReactNode;
++  refreshKey?: string;
++  onOpenTab: (tab: string) => void;
++  onShowAllTabs: () => void;
++}) {
++  const [taskStats, setTaskStats] = useState<{ total: number; done: number; nextUp: string | null } | null>(null);
++  const [decisionsWaiting, setDecisionsWaiting] = useState(0);
++
++  useEffect(() => {
++    let live = true;
++    Promise.allSettled([api.listTasks(projectId), api.listDecisions(projectId)]).then(([t, d]) => {
++      if (!live) return;
++      if (t.status === "fulfilled") {
++        const open = t.value.tasks.filter((x) => x.status !== "done");
++        const next =
++          open.find((x) => x.due_date && x.due_date < new Date().toISOString().slice(0, 10)) ??
++          open.find((x) => x.due_date) ??
++          open[0];
++        setTaskStats({
++          total: t.value.tasks.length,
++          done: t.value.tasks.length - open.length,
++          nextUp: next ? next.title : null,
++        });
++      }
++      if (d.status === "fulfilled") {
++        setDecisionsWaiting(d.value.decisions.filter((x) => x.status === "open").length);
++      }
++    });
++    return () => {
++      live = false;
++    };
++    // eslint-disable-next-line react-hooks/exhaustive-deps
++  }, [projectId, refreshKey]);
++
++  const pct = taskStats && taskStats.total > 0 ? Math.round((taskStats.done / taskStats.total) * 100) : 0;
++  const showCharterNote = !purpose && (stage === "plan" || stage === "execute");
++  const baseline = baselineData?.baseline;
++  const variance = baselineData?.variance;
++  const baselineMoved =
++    variance && (variance.movedTasks.length > 0 || variance.addedTasks > 0 || variance.removedTasks > 0);
++
++  return (
++    <section className="card status-tier" aria-label="Project status">
++      <HealthStrip projectId={projectId} refreshKey={refreshKey} onOpenTab={onOpenTab} bare />
++
++      {taskStats && taskStats.total > 0 && (
++        <div className="status-progress-row">
++          <div
++            className="progress-track status-progress-track"
++            role="progressbar"
++            aria-valuenow={pct}
++            aria-valuemin={0}
++            aria-valuemax={100}
++            aria-label="Tasks complete"
++          >
++            <div className="progress-fill" style={{ width: `${pct}%` }} />
++          </div>
++          <span className="status-progress-text">
++            {taskStats.done} of {taskStats.total} tasks done
++          </span>
++          {decisionsWaiting > 0 && (
++            <button type="button" className="status-chip" onClick={() => onOpenTab("decisions")}>
++              {decisionsWaiting} decision{decisionsWaiting === 1 ? "" : "s"} waiting
++            </button>
++          )}
++          {taskStats.nextUp && (
++            <button type="button" className="status-nextup" onClick={() => onOpenTab("tasks")}>
++              Next up: {taskStats.nextUp}
++            </button>
++          )}
++        </div>
++      )}
++      {taskStats && taskStats.total === 0 && decisionsWaiting > 0 && (
++        <div className="status-progress-row">
++          <button type="button" className="status-chip" onClick={() => onOpenTab("decisions")}>
++            {decisionsWaiting} decision{decisionsWaiting === 1 ? "" : "s"} waiting
++          </button>
++        </div>
++      )}
++
++      {sizeLabel && (
++        <p className="status-note">
++          Showing the {sizeLabel} view, which hides {hiddenCount} tabs.{" "}
++          {isOwner && (
++            <button type="button" className="view-banner-link" onClick={onShowAllTabs}>
++              Show all sections
++            </button>
++          )}
++        </p>
++      )}
++      {showCharterNote && (
++        <p className="status-note">
++          This project is under way without a charter. A short one, why it exists, who it is for, what done looks
++          like, settles the scope questions before they become arguments.{" "}
++          <button type="button" className="view-banner-link" onClick={() => onOpenTab("charter")}>
++            Write the charter
++          </button>
++        </p>
++      )}
++      {baseline && (
++        <p className="status-note">
++          Baseline locked {fmtDate(baseline.lockedAt)} · {baseline.taskCount} tasks
++          {variance
++            ? baselineMoved
++              ? ` · since then: ${variance.movedTasks.length} moved, ${variance.addedTasks} added, ${variance.removedTasks} removed`
++              : " · nothing has moved against it yet"
++            : ""}{" "}
++          <button type="button" className="view-banner-link" onClick={() => onOpenTab("roadmap")}>
++            See it on the Roadmap
++          </button>
++        </p>
++      )}
++      {baselineData && !baseline && stage === "execute" && (
++        <p className="status-note">
++          No baseline locked yet. Once the plan settles, locking one gives you a fixed point to measure slippage
++          against.{" "}
++          <button type="button" className="view-banner-link" onClick={() => onOpenTab("roadmap")}>
++            Go to the Roadmap
++          </button>
++        </p>
++      )}
++
++      {checklist}
++    </section>
++  );
++}
+--- a/src/lib/density.ts
++++ b/src/lib/density.ts
+@@ -0,0 +1,53 @@
++// v172 (Plan A, "Layer It"): display density, borrowed from Plan B at Kk's
++// direction. One preference, two values: "comfortable" (the calm default,
++// generous spacing) and "compact" (tighter rows and cards for people
++// working a big register). Stored per device in localStorage, applied as
++// a data-density attribute on <html>; the CSS does the rest, so every
++// layered surface responds without knowing the preference exists.
++
++export type Density = "comfortable" | "compact";
++
++const KEY = "tasketra:density";
++export const DEFAULT_DENSITY: Density = "comfortable";
++
++export function readDensity(): Density {
++  try {
++    return window.localStorage.getItem(KEY) === "compact" ? "compact" : DEFAULT_DENSITY;
++  } catch {
++    return DEFAULT_DENSITY;
++  }
++}
++
++export function applyDensity(d: Density): void {
++  try {
++    document.documentElement.dataset.density = d;
++  } catch {
++    // no document (tests, SSR): nothing to apply to
++  }
++}
++
++export function writeDensity(d: Density): void {
++  try {
++    window.localStorage.setItem(KEY, d);
++  } catch {
++    // private mode etc.: the attribute still applies for this session
++  }
++  applyDensity(d);
++  listeners.forEach((fn) => fn(d));
++}
++
++/** Apply the stored preference. Called once at startup from main.tsx. */
++export function initDensity(): Density {
++  const d = readDensity();
++  applyDensity(d);
++  return d;
++}
++
++const listeners = new Set<(d: Density) => void>();
++
++export function subscribeDensity(fn: (d: Density) => void): () => void {
++  listeners.add(fn);
++  return () => {
++    listeners.delete(fn);
++  };
++}
+--- a/src/lib/learnArticles.ts
++++ b/src/lib/learnArticles.ts
+@@ -0,0 +1,236 @@
++// v172 (Plan A): the Learn articles. Every register and weekly surface
++// in the app links here from its "How this works" disclosure and its
++// teaching empty state (/app/resources?article=<slug>). The text grows
++// out of the explainers that used to sit inline on those surfaces:
++// short, plain, and written for someone in the middle of real work.
++//
++// `tab` is where the article's subject lives inside a project, used by
++// the article page's "In your project" card.
++
++export type LearnShelf = "learn" | "reference";
++
++export type LearnArticle = {
++  slug: string;
++  title: string;
++  blurb: string;
++  shelf: LearnShelf;
++  tab: string;
++  tabLabel: string;
++  body: string[];
++};
++
++export const LEARN_ARTICLES: LearnArticle[] = [
++  {
++    slug: "risks",
++    title: "How risks work",
++    blurb: "Anything that might go wrong, written down before it does.",
++    shelf: "reference",
++    tab: "risks",
++    tabLabel: "Risks",
++    body: [
++      "A risk is anything that might go wrong, written down before it does. The point of the register is not the list itself. It is that each risk gets thought about while there is still time to do something cheap about it.",
++      "Score each risk on probability and impact, 1 to 5. The exposure band (low, medium, high) follows from the two scores, and the register sorts by exposure so the dangerous ones sit on top. A risk with no score and no owner is not being managed yet, so the register calls those out in the Needs a look group.",
++      "Write the mitigation while the risk is still hypothetical: what you will do now to make it less likely, or less painful if it lands. Give it a named owner. And when a risk actually happens, turn it into an issue from its card, so the history carries over instead of starting again from a blank page.",
++    ],
++  },
++  {
++    slug: "issues",
++    title: "How issues work",
++    blurb: "Problems that are already here, with an owner and a status.",
++    shelf: "reference",
++    tab: "issues",
++    tabLabel: "Issues",
++    body: [
++      "An issue is a problem that is already here: a blocker, a failure, a disagreement that is stopping work now. It gets logged so it has an owner and a status, instead of living as a mention in a meeting that everyone forgets by Friday.",
++      "The difference from a risk is timing. A risk might happen. An issue has happened. When a risk turns real, promote it from the Risks register and it becomes an issue with its history attached.",
++      "Rate severity honestly. High and critical issues are the ones the project home and the health verdict pay attention to, so a register where everything is critical teaches people to ignore all of it. Resolve issues in the open, where the team can see the count coming down.",
++    ],
++  },
++  {
++    slug: "assumptions",
++    title: "How assumptions work",
++    blurb: "What the plan treats as true, with a date to re-check it.",
++    shelf: "reference",
++    tab: "assumptions",
++    tabLabel: "Assumptions",
++    body: [
++      "Every plan treats some things as true without proof: the vendor will deliver on time, the budget will be approved, the team will stay the size it is. An assumption is one of those, written down on purpose.",
++      "The register exists because assumptions fail quietly. Nobody announces that the thing everyone counted on stopped being true. So each assumption gets a check date, the day someone will look at it again and confirm it still holds.",
++      "When an assumption turns out wrong, that is not a paperwork event. It usually moves dates, money, or scope, so mark it wrong in the register and revisit the plan in the same sitting, while the consequences are still cheap.",
++    ],
++  },
++  {
++    slug: "dependencies",
++    title: "How dependencies work",
++    blurb: "What this project is waiting on, and when it is needed by.",
++    shelf: "reference",
++    tab: "dependencies",
++    tabLabel: "Dependencies",
++    body: [
++      "A dependency is work that cannot start or finish until something else happens first. The something else can be internal, another task or another team, or external: a vendor delivery, a client approval, a regulatory step.",
++      "Log what you are waiting on and the date you need it by. That date is what makes the register useful, because a dependency drifting past its needed-by date shows up as late in the counts before it stops the work, while there is still time to chase it or plan around it.",
++      "Chase dependencies like tasks. Each one wants an owner on your side, even when the work sits on someone else's side, because the other side rarely feels your deadline the way you do.",
++    ],
++  },
++  {
++    slug: "quality",
++    title: "How quality works",
++    blurb: "Standards to meet, reviews to run, defects to answer for.",
++    shelf: "reference",
++    tab: "quality",
++    tabLabel: "Quality",
++    body: [
++      "The quality log answers a different question from the issue log. Issues ask whether something is broken. Quality asks whether the work is good enough: the standard it has to meet, the review it has to pass, the defect that has to be fixed before anyone calls it done.",
++      "Log the standard, the review, or the defect, give it an owner, and mark it passed or failed as the evidence comes in. A failed quality item is information, not blame. It is far cheaper here than in a customer's hands.",
++      "Quality sits inside RAID because it behaves like the rest of the family: it needs an owner, a status, and a regular look, or it quietly stops happening.",
++    ],
++  },
++  {
++    slug: "compliance",
++    title: "How compliance works",
++    blurb: "Obligations the project has to satisfy, each with a date.",
++    shelf: "reference",
++    tab: "compliance",
++    tabLabel: "Compliance",
++    body: [
++      "A compliance item is an obligation the project has to satisfy: a regulation, a policy, a standard, a clause in a contract. It is tracked separately from quality because are we allowed to do this is a different question from is this good enough.",
++      "Each item gets an owner and a due date. Compliance work has a habit of surfacing at the worst moment, usually right before a launch or an audit, so the register's job is to make the obligation visible while it is still boring.",
++      "Mark items compliant only on evidence: the approval received, the document filed, the review signed off. If it is not satisfied yet, the honest status is worth more than a hopeful one.",
++    ],
++  },
++  {
++    slug: "budget",
++    title: "How the budget works",
++    blurb: "Work budget, reserve, and the earned value picture.",
++    shelf: "reference",
++    tab: "budget",
++    tabLabel: "Budget",
++    body: [
++      "The work budget is what the project itself may spend. A contingency reserve, if you set one, sits beside it for known risks. The reserve is real money, but it is not counted in the earned value figures, because spending the reserve is a decision, not a drift.",
++      "Every cost you log feeds the spent total. Earned value then compares three numbers: the work that was planned by now (PV), the work actually done, priced at budget rates (EV), and what that work really cost (AC). From those come the two indexes worth knowing. CPI above 1 means work is costing less than planned. SPI above 1 means it is ahead of pace.",
++      "The forecast, EAC, projects the final cost if today's efficiency continues. Early in a project it swings a lot, because a handful of tasks is not a pattern. Treat it as a rough guide until a third of the work is done, then start treating it as a promise you need to manage.",
++    ],
++  },
++  {
++    slug: "vendors",
++    title: "How vendors work",
++    blurb: "Who you are buying from, what it costs, where it stands.",
++    shelf: "reference",
++    tab: "procurement",
++    tabLabel: "Vendors",
++    body: [
++      "The vendor register tracks who you are buying from or contracting with, what it costs, and where the agreement stands. It sits apart from Tasks because do we have an agreement with this vendor is a different question from is this task done.",
++      "Log a vendor when sourcing starts, not when the contract signs. The requested and in-progress states are where the delays live, and a register that only shows signed contracts hides exactly the part that needs managing.",
++      "Keep the cost on the vendor row current. Together the register answers the two questions sponsors actually ask: who are we committed to, and what have we promised to pay them.",
++    ],
++  },
++  {
++    slug: "documents",
++    title: "How documents work",
++    blurb: "The project's reference library, close at hand.",
++    shelf: "reference",
++    tab: "documents",
++    tabLabel: "Documents",
++    body: [
++      "Documents is the project's reference library: specs, contracts, and other material the team needs close at hand while the work runs. If people keep asking where something lives, it belongs here.",
++      "PDF, Word, Excel, and image files up to 5MB can be uploaded. To update a document, delete the old copy and upload the new one, so nobody works from a stale version by accident.",
++      "Documents are reference, not workflow. Decisions about a document still belong in Decisions, and work on it belongs in Tasks. This shelf just makes sure the current version is one click away.",
++    ],
++  },
++  {
++    slug: "stakeholders",
++    title: "How stakeholders work",
++    blurb: "Power and interest, and how closely to keep each person.",
++    shelf: "learn",
++    tab: "stakeholders",
++    tabLabel: "Stakeholders",
++    body: [
++      "A stakeholder is anyone with a stake in the project: sponsors, customers, the teams doing the work, and anyone who can help it or block it. The register is the project's memory of who those people are and what they need.",
++      "Rate each person on power, how much they can affect the project, and interest, how much they care. The grid view places everyone on those two axes. High power and high interest means keep them closely involved, with real detail and early sight of problems. High power and low interest means keep them satisfied with short, high-level updates, and no surprises.",
++      "The ratings are a working tool, not a judgment of the person. They change as the project moves, so revisit them when the phases change, and keep contact details current so the register is the place people actually look.",
++    ],
++  },
++  {
++    slug: "decisions",
++    title: "How decisions work",
++    blurb: "Ask for a decision like you mean it: who, what, by when.",
++    shelf: "learn",
++    tab: "decisions",
++    tabLabel: "Decisions",
++    body: [
++      "Projects stall on unmade decisions more than on any other single thing. A decision request makes the ask concrete: who decides, what the options are, and the date the answer is needed by. The decider gets a link, answers from it, and the answer lands back in the register.",
++      "The waiting count is the number to watch. A decision that has waited a week is usually not being considered, it is being avoided, so the register shows how long each one has been waiting and offers a nudge you can copy and send.",
++      "Decided is not the end of the record. Months later, when someone asks why the project went the way it did, the decided list is the answer, with the date and the decider attached. Scope changes worth a paper trail go in Change requests, in this same tab.",
++    ],
++  },
++  {
++    slug: "meetings",
++    title: "How meetings work",
++    blurb: "A record of who was there, what was decided, what is owed.",
++    shelf: "learn",
++    tab: "meetings",
++    tabLabel: "Meetings",
++    body: [
++      "The meetings log is a record of the meetings that actually drive the project: who was there, what was decided, and the action items that came out of it. Meetings that produce none of those three rarely needed to happen.",
++      "Action items are the point. Logged here, they carry into the project's work instead of evaporating when the call ends, and the open action item count tells you whether meetings are producing commitments or just conversation.",
++      "Use the agenda templates in Learn to give recurring meetings a shape: the kickoff, the weekly status, the steering session, and the retro each have a ready-made agenda, so the record starts consistent.",
++    ],
++  },
++  {
++    slug: "comms",
++    title: "How the comms plan works",
++    blurb: "One row per audience: what they hear, how often, by what channel.",
++    shelf: "learn",
++    tab: "comms",
++    tabLabel: "Comms Plan",
++    body: [
++      "A communications plan answers three questions for every audience the project has: what do they need to hear, how often, and by what channel. One row per audience keeps it a reference you can check in ten seconds.",
++      "It is a plan, not a workflow, so rows have no status. When the arrangement changes, edit the row. When an audience stops mattering, remove it. A short, current plan beats a long, stale one every time.",
++      "Most project friction that looks like a people problem is a comms problem underneath: someone senior heard about a problem too late, or a team got detail it never needed. The plan is where you fix that on purpose instead of by accident.",
++    ],
++  },
++  {
++    slug: "change-requests",
++    title: "How change requests work",
++    blurb: "Scope changes with a paper trail: what, why, who, and the cost.",
++    shelf: "learn",
++    tab: "decisions",
++    tabLabel: "Decisions",
++    body: [
++      "A change request records a scope change worth a paper trail: what is changing, why, who asked for it, and what it does to the schedule and the budget. Small changes ride along in Tasks. The ones that move dates or money belong here.",
++      "The value is the assessment, not the form. Writing down the schedule and budget effect before approval turns a casual yes into an informed one, and it gives the sponsor the trade in plain terms: this addition costs these days or this money.",
++      "Change requests live in the Decisions tab because that is what they are: decisions, with consequences attached. Approved, they become part of the plan. Declined, they stay on record, so the same ask does not return every month wearing a new hat.",
++    ],
++  },
++  {
++    slug: "okrs",
++    title: "How OKRs work",
++    blurb: "Outcomes the project is driving toward, and the results that prove them.",
++    shelf: "learn",
++    tab: "okrs",
++    tabLabel: "OKRs",
++    body: [
++      "OKRs are the handful of outcomes this project is actually driving toward, stated separately from the day-to-day work. Tasks say what people are doing. Objectives say where the project is going, and key results say whether it is getting there.",
++      "A good key result is measurable without argument: a number, a date, a count. If reasonable people could disagree about whether it happened, it is not finished being written yet. A few key results per objective is plenty; a long list dilutes the few that matter.",
++      "Charter objectives can become OKRs in one click from the Charter, so the thinking done at kickoff carries straight in. Progress rolls up onto the portfolio Dashboard, which is where OKRs earn their keep across projects: leadership sees outcomes, not activity.",
++    ],
++  },
++  {
++    slug: "lessons",
++    title: "How lessons work",
++    blurb: "What went well, what did not, logged while it is still fresh.",
++    shelf: "learn",
++    tab: "closure",
++    tabLabel: "Closure",
++    body: [
++      "Lessons are the project's memory of itself: what went well, what did not, and what to change next time. They are logged in Closure, but they are not only for the end. Log one any time something teaches you something, while the details are still fresh.",
++      "A useful lesson names the situation and the change, not just the feeling. Vendor reviews need two weeks, not two days is a lesson a future project can act on. Communication could be better is not.",
++      "The retro template in Learn gives the end-of-project session a shape. The lessons written there are the ones the next project inherits, which is the whole point of writing them down.",
++    ],
++  },
++];
++
++export function articleBySlug(slug: string | null | undefined): LearnArticle | null {
++  if (!slug) return null;
++  return LEARN_ARTICLES.find((a) => a.slug === slug) ?? null;
++}
