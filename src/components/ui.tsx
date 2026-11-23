@@ -92,8 +92,10 @@ export function ListRow({
 /**
  * A register row (Issues, Risks, Assumptions, Dependencies, Quality, Compliance, Tasks).
  * Same idea as ListRow, with the controls a register needs: title + one plain line,
- * then fixed columns for the pill, the flag ("3 days late"), the date, the status
- * control and the row actions. Empty columns stay empty, so nothing ever shifts.
+ * then columns for the pill, the flag ("3 days late"), the date, the status
+ * control and the row actions. Every column is always rendered; since v173.1 the
+ * columns size to their content (see .rg-row) so the title takes the room the
+ * empty columns used to hold.
  */
 export function RegisterRow({
   title, meta, pill, flag, date, dateLabel, control, actions, rowRef, lead, indent = 0,

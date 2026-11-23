@@ -1,0 +1,47 @@
+--- a/founding-status.js
++++ b/founding-status.js
+@@ -1,9 +1,11 @@
+-/* Tasketra — live founding-member spot count.
+-   Pulls the real claimed/remaining count from app.tasketra.com and, once
+-   all 100 are gone, swaps the Founding Member pricing card from a live
+-   CTA into a plain "all spots taken" state. Fails silently: if the check
+-   can't complete, the card just keeps showing its default "Limited /
+-   Claim your spot" copy, same as before this existed. */
++/* Tasketra — founding-member card state.
++   The founding cohort is closed: all 100 spots are claimed and the card
++   on the pricing page permanently shows its closed state ("Full" /
++   "All 100 spots claimed" / "See Pro instead"). That closed copy is the
++   card's static default in pricing.html. This script only re-confirms it
++   against the live count from app.tasketra.com; it never re-opens the
++   cohort or shows a remaining-spots count. Fails silently: if the check
++   can't complete, the card keeps its static closed copy. */
+ (function () {
+   "use strict";
+ 
+@@ -32,12 +34,11 @@
+     .then(function (data) {
+       if (data && data.full) {
+         markFull();
+-      } else if (data && typeof data.remaining === "number") {
+-        var subtitle = document.getElementById("founding-subtitle");
+-        if (subtitle) subtitle.textContent = data.remaining + " of " + (data.cap || 100) + " spots left";
+       }
++      /* Any other response leaves the static closed copy in place:
++         the cohort does not reopen, so no count is ever displayed. */
+     })
+     .catch(function () {
+-      /* leave the default copy in place */
++      /* leave the static closed copy in place */
+     });
+ })();
+--- a/style.css
++++ b/style.css
+@@ -100,7 +100,7 @@
+ .hero{padding-top:70px;padding-bottom:60px;position:relative;overflow:hidden;}
+ .hero-grid{display:grid;grid-template-columns:1.05fr 0.95fr;gap:40px;align-items:center;}
+ .hero h1{font-size:58px;letter-spacing:-0.01em;}
+-.hero h1 .hl{color:var(--lime-dark);background:linear-gradient(transparent 62%, var(--lime) 62%);display:inline;}
++.hero h1 .hl{color:var(--lime-dark);background:linear-gradient(var(--lime), var(--lime));background-repeat:no-repeat;background-size:100% 38%;background-position:0 96%;display:inline;}
+ .hero p{font-size:18px;color:var(--muted);margin:26px 0 34px;max-width:480px;}
+ .hero-ctas{display:flex;gap:16px;flex-wrap:wrap;}
+ .hero-art{position:relative;height:460px;}

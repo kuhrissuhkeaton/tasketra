@@ -148,3 +148,23 @@ export function sortRisks<T extends SortableRisk>(risks: T[], sort: RiskSort): T
   else out.sort(compareRisksByExposure);
   return out;
 }
+
+/**
+ * The Risks tab's "Needs a look" group (v173.1): the open risks that are
+ * high exposure, not scored yet, or ownerless -- taken from the SORTED
+ * register, so the group reads in the order the register's sort control
+ * promises (highest exposure first by default). Before v173.1 the group
+ * was filtered from the raw API order (created_at DESC within a tier),
+ * so under "Highest exposure" it could run backwards -- a score-10 risk
+ * logged last read above the score-12 risks it sat under in the register.
+ */
+export function risksNeedingALook<T extends SortableRisk & { owner_name?: string | null }>(
+  risks: T[],
+  sort: RiskSort,
+): T[] {
+  return sortRisks(risks, sort).filter(
+    (r) =>
+      r.status !== "resolved" &&
+      (isHighExposureRisk(r) || riskScore(r) === null || (r.owner_name ?? "").trim() === ""),
+  );
+}

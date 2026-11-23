@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { riskExposure, isHighExposureRisk, riskExposureFor, riskScore, bandForScore, LEVEL_LABEL, SCORE_LABEL, sortRisks, compareRisksByExposure } from "../riskExposure";
+import { riskExposure, isHighExposureRisk, riskExposureFor, riskScore, bandForScore, LEVEL_LABEL, SCORE_LABEL, sortRisks, compareRisksByExposure, risksNeedingALook } from "../riskExposure";
 
 describe("riskExposure", () => {
   it("high only when both are high", () => {
@@ -67,6 +67,81 @@ describe("isHighExposureRisk with numeric scores", () => {
     expect(isHighExposureRisk({ probability: "high", impact: "high", status: "open", probability_score: null, impact_score: null })).toBe(true);
     expect(isHighExposureRisk({ probability: "high", impact: "high", status: "open", probability_score: 1, impact_score: null })).toBe(true);
     expect(isHighExposureRisk({ probability: "medium", impact: "high", status: "open", probability_score: null, impact_score: 5 })).toBe(false);
+  });
+});
+
+// v173.1: the beta spot-check's Clinic set -- five risks at score 12 and one
+// at score 10 (2 x 5, so the impact-5 rule is what carries it). The register
+// header counts 6 high exposure for that set; this pins the shared definition
+// at set level so the count every surface shares (register header, Overview,
+// the snapshot's ranking) cannot quietly drift for exactly these numbers.
+describe("isHighExposureRisk on the spot-check score set", () => {
+  it("counts all six: five at score 12 and one at score 10 with impact 5", () => {
+    const mk = (probability_score: number, impact_score: number) => ({
+      probability: bandForScore(probability_score),
+      impact: bandForScore(impact_score),
+      status: "open",
+      probability_score,
+      impact_score,
+    });
+    const risks = [mk(3, 4), mk(3, 4), mk(3, 4), mk(4, 3), mk(3, 4), mk(2, 5)];
+    expect(risks.map((r) => riskScore(r))).toEqual([12, 12, 12, 12, 12, 10]);
+    expect(risks.filter((r) => isHighExposureRisk(r)).length).toBe(6);
+  });
+});
+
+// v173.1: the "Needs a look" group must read in the register's sort order.
+// The API hands risks back created_at DESC within a tier, so before the fix
+// the group (filtered from the raw array) ran in log order under a sort
+// control reading "Highest exposure" -- the score-10 risk logged last read
+// first. The selector now sorts first, then filters.
+describe("risksNeedingALook", () => {
+  const mk = (title: string, over: Partial<Parameters<typeof risksNeedingALook>[0][number]> = {}) => ({
+    title,
+    probability: "medium" as const,
+    impact: "medium" as const,
+    status: "open",
+    created_at: "2026-01-01T00:00:00Z",
+    probability_score: null,
+    impact_score: null,
+    owner_name: "Sam Sponsor",
+    ...over,
+  });
+
+  it("orders the group by exposure, not by API (newest-first) order", () => {
+    // In API order: the score-10 risk is the newest, the score-12 risks older.
+    const risks = [
+      mk("score 10, logged last", { probability_score: 2, impact_score: 5, probability: "low", impact: "high", created_at: "2026-01-06T00:00:00Z" }),
+      mk("score 12, logged first", { probability_score: 3, impact_score: 4, probability: "medium", impact: "high", created_at: "2026-01-01T00:00:00Z" }),
+      mk("score 15", { probability_score: 3, impact_score: 5, probability: "medium", impact: "high", created_at: "2026-01-03T00:00:00Z" }),
+    ];
+    expect(risksNeedingALook(risks, "exposure").map((r) => r.title)).toEqual([
+      "score 15",
+      "score 12, logged first",
+      "score 10, logged last",
+    ]);
+  });
+
+  it("keeps the membership rule: high exposure, unscored, or ownerless -- open only", () => {
+    const risks = [
+      mk("quiet scored risk", { probability_score: 2, impact_score: 2, probability: "low", impact: "low" }),
+      mk("unscored", { probability: "low", impact: "low" }),
+      mk("ownerless", { probability_score: 2, impact_score: 2, probability: "low", impact: "low", owner_name: "  " }),
+      mk("resolved furnace", { probability_score: 5, impact_score: 5, probability: "high", impact: "high", status: "resolved" }),
+    ];
+    // Exposure order within the group: the scored ownerless risk (4) reads
+    // above the unscored low/low one (band product 1).
+    expect(risksNeedingALook(risks, "exposure").map((r) => r.title)).toEqual(["ownerless", "unscored"]);
+  });
+
+  it("follows the register's chosen sort", () => {
+    const risks = [
+      mk("Beta risk", { probability_score: 3, impact_score: 4, probability: "medium", impact: "high", created_at: "2026-01-01T00:00:00Z" }),
+      mk("Alpha risk", { probability_score: 3, impact_score: 5, probability: "medium", impact: "high", created_at: "2026-01-02T00:00:00Z" }),
+    ];
+    expect(risksNeedingALook(risks, "title").map((r) => r.title)).toEqual(["Alpha risk", "Beta risk"]);
+    expect(risksNeedingALook(risks, "newest").map((r) => r.title)).toEqual(["Alpha risk", "Beta risk"]);
+    expect(risksNeedingALook(risks, "exposure").map((r) => r.title)).toEqual(["Alpha risk", "Beta risk"]);
   });
 });
 

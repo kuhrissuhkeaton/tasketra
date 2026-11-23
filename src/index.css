@@ -2777,16 +2777,22 @@ a.dash-attention-next:hover { text-decoration: underline; text-underline-offset:
 @media (max-width: 600px) { .section-tabs { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 4px; scrollbar-width: thin; } .section-tab { flex: none; } }
 @media (max-width: 560px) { .primary-tabs { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); } }
 
-/* Register rows (v124): title + one plain line, then fixed columns so a "3 days late" flag
-   never moves the pill or the date. Same tokens as the Today look, dark mode included. */
+/* Register rows (v124): title + one plain line, then the pill, flag, date, control and
+   actions columns. v173.1: the columns size to their content (auto) instead of fixed
+   widths -- the fixed tracks reserved 566px before the title got a pixel, so in a
+   narrow content column the title was crushed into a sliver (~110px) while empty
+   flag/date/control tracks held dead space. Now empty tracks take no room, populated
+   ones take what they need (their contents are near-uniform within a list, so columns
+   still line up), and the title takes everything left. Same tokens as the Today look,
+   dark mode included. */
 .rg-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--border); }
 .rg-row::before { content: none; }
-.rg-row { display: grid; grid-template-columns: minmax(0, 1fr) 92px 116px 92px 150px 116px; column-gap: 10px; align-items: center; padding: 10px 2px; border-bottom: 1px solid var(--border); min-width: 0; }
+.rg-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto auto auto; column-gap: 10px; align-items: center; padding: 10px 2px; border-bottom: 1px solid var(--border); min-width: 0; }
 .rg-main { min-width: 0; display: flex; align-items: flex-start; gap: 8px; }
 .rg-text { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
-.rg-title { font-weight: 600; color: var(--navy); overflow-wrap: anywhere; }
+.rg-title { font-weight: 600; color: var(--navy); overflow-wrap: break-word; }
 .rg-title .row-title-btn { font: inherit; font-weight: 600; text-align: left; }
-.rg-meta { font-size: 13px; overflow-wrap: anywhere; }
+.rg-meta { font-size: 13px; overflow-wrap: break-word; }
 .rg-pill, .rg-flag, .rg-date, .rg-control, .rg-actions { display: flex; align-items: center; min-width: 0; font-size: 12px; font-variant-numeric: tabular-nums; }
 .rg-flag { font-weight: 600; color: var(--slate-text); }
 .rg-flag.is-bad { color: var(--red); font-weight: 700; }
@@ -2850,7 +2856,7 @@ a.dash-attention-next:hover { text-decoration: underline; text-underline-offset:
 .rg-amount { font-variant-numeric: tabular-nums; color: var(--navy); }
 
 /* Rows inside a narrow card (Team workload): only the columns that have content, so the title never collapses. */
-.rg-compact .rg-row { grid-template-columns: minmax(0, 1fr) 92px 92px; }
+.rg-compact .rg-row { grid-template-columns: minmax(0, 1fr) auto auto; }
 .rg-compact .rg-row > .rg-date, .rg-compact .rg-row > .rg-control, .rg-compact .rg-row > .rg-actions { display: none; }
 
 /* ---- App pages in the Today look (v129) ---- */

@@ -8,7 +8,7 @@ import { DateField } from "../components/DateField";
 import { fmtRoadmapRange } from "../lib/roadmapDates";
 import { phaseProgress } from "../lib/phaseProgress";
 import { mailtoHref, telHref } from "../lib/contactLinks";
-import { LEVEL_LABEL, SCORE_LABEL, isHighExposureRisk, riskExposureFor, riskScore, sortRisks, isRiskSort, RISK_SORT_LABEL, type RiskSort } from "../lib/riskExposure";
+import { LEVEL_LABEL, SCORE_LABEL, isHighExposureRisk, riskExposureFor, riskScore, sortRisks, risksNeedingALook, isRiskSort, RISK_SORT_LABEL, type RiskSort } from "../lib/riskExposure";
 import { ApplyTemplateDrawer } from "../components/ApplyTemplateDrawer";
 import { SaveTemplateDrawer } from "../components/SaveTemplateDrawer";
 import { StakeholderGrid } from "../components/StakeholderGrid";
@@ -2846,9 +2846,10 @@ function RisksTab({ projectId, highlightId }: { projectId: string; highlightId?:
       <>
       {(() => {
         const openRisks = risks.filter((r) => r.status !== "resolved");
-        const needsLook = openRisks.filter(
-          (r) => isHighExposureRisk(r) || riskScore(r) === null || (r.owner_name ?? "").trim() === "",
-        );
+        // v173.1: the group is selected from the sorted register, so it
+        // honors the same sort the Full register below it shows (highest
+        // exposure first by default) instead of the raw API order.
+        const needsLook = risksNeedingALook(risks, riskSort);
         return (
           <>
             <StatCards>

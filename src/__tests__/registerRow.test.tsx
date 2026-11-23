@@ -51,9 +51,14 @@ describe("RegisterRow", () => {
     expect(el.textContent).toContain("Nothing yet.");
   });
 
-  it("fixed column widths and the phone wrap are in the stylesheet", async () => {
+  it("content-sized columns, word-boundary title wrapping and the phone wrap are in the stylesheet", async () => {
     const css = await readText("src/index.css");
-    expect(css).toMatch(/\.rg-row\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) 92px 116px 92px 150px 116px/);
+    // v173.1: fixed tracks (92px 116px 92px 150px 116px) reserved 566px before the
+    // title got a pixel and crushed titles into a sliver in narrow content columns;
+    // the columns now size to their content and the title takes the rest, wrapping
+    // at word boundaries (break-word), never mid-word (anywhere).
+    expect(css).toMatch(/\.rg-row\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) auto auto auto auto auto/);
+    expect(css).toMatch(/\.rg-title\s*\{[^}]*overflow-wrap: break-word/);
     expect(css).toMatch(/@media \(max-width: 760px\)\s*\{\s*\.rg-row \{ display: flex; flex-wrap: wrap/);
   });
 });
