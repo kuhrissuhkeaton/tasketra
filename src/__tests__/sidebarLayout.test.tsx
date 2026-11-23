@@ -44,10 +44,20 @@ describe("sidebar layout", () => {
     mount({ id: "u1", email: "a@example.com", plan: "free" });
     const nav = hrefs("nav.side-nav");
     expect(nav).toContain("/app");
-    expect(nav).toContain("/app/activity");
+    expect(nav).toContain("/app/projects");
+    expect(nav).toContain("/app/sync");
+    expect(nav).toContain("/app/workload");
+    // v174: the cross-project views live in the sidebar's Portfolio group,
+    // and What's new / My activity moved to the footer.
+    expect(nav).toContain("/app/decisions");
+    expect(nav).toContain("/app/risks");
+    expect(nav).toContain("/app/resources");
+    expect(nav).not.toContain("/app/activity");
     expect(nav).not.toContain("/app/account");
     expect(nav).not.toContain("/app/billing");
     const foot = hrefs(".sidebar-footer");
+    expect(foot).toContain("/app/whats-new");
+    expect(foot).toContain("/app/activity");
     expect(foot).toContain("/app/account");
     expect(foot).toContain("/app/billing");
     expect(foot).not.toContain("/app/founding");

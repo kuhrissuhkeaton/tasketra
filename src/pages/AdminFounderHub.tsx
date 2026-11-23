@@ -29,7 +29,7 @@ function Stat({ label, value }: { label: string; value: string | number }) {
 const statGrid: React.CSSProperties = { display: "flex", flexWrap: "wrap", gap: 24, margin: "8px 0" };
 
 export default function AdminFounderHub() {
-  useDocumentTitle("Founder hub");
+  useDocumentTitle("Founder console");
   const [data, setData] = useState<FounderHubData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -48,7 +48,7 @@ export default function AdminFounderHub() {
       <AppSidebar />
 
       <main id="main-content" className="project-main admin-main">
-        <PageHeader title="Founder hub" subtitle="Milestones, money, activation, usage, and friction, from the app's own data." />
+        <PageHeader title="Founder console" subtitle="Milestones, money, activation, usage, and friction, from the app's own data." />
 
         {error && <div className="form-error">{error}</div>}
 

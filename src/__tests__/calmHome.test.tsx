@@ -102,7 +102,7 @@ describe("CalmHome", () => {
     const props = await render();
     await act(async () => { button("+ Budget").click(); });
     expect(props.onGrowTab).toHaveBeenCalledWith("budget");
-    await act(async () => { button("+ Timeline").click(); });
+    await act(async () => { button("+ Roadmap").click(); });
     expect(props.onOpenTab).toHaveBeenCalledWith("roadmap");
     // A piece already grown back just opens.
     const props2 = await render({ extraTabs: ["budget"] });

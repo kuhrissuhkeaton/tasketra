@@ -8,14 +8,14 @@ import { FeedbackModal } from "./FeedbackModal";
 import { NavIcon } from "./NavIcon";
 import { NotificationBell } from "./NotificationBell";
 import { GlobalSearch } from "./GlobalSearch";
-import { AppTabs } from "./AppTabs";
+import { PhoneBottomBar } from "./PhoneBottomBar";
 import { readSidebarCollapsed, writeSidebarCollapsed, readNavGroupCollapsed, writeNavGroupCollapsed } from "../lib/sidebarState";
 
-/** Collapsible nav section used by both the sidebar's own global group and
- * ProjectHome's secondary (non-pill-bar) groups -- clicking the label
- * toggles a chevron and shows/hides the items below it. On mobile the
- * items always render regardless of collapsed state (see the CSS media
- * query), since the label/chevron affordance is hidden there. */
+/** Collapsible nav section used by both the sidebar's own groups and
+ * ProjectHome's project groups -- clicking the label toggles a chevron
+ * and shows/hides the items below it. On phones the items always render
+ * regardless of collapsed state (see the CSS media query in v174: nav
+ * groups never sit collapsed in the phone Menu sheet). */
 export function NavGroup({
   label,
   children,
@@ -64,13 +64,15 @@ export function NavGroup({
 }
 
 /**
- * The single persistent left-rail shell used by every logged-in screen --
- * Dashboard, Resource hub, Admin waitlist, and (with a project nav slot
- * passed as children) individual project pages. Keeps global navigation and
- * account controls in one place so the app always feels like one product,
- * not a set of disconnected top bars.
+ * The single persistent navigation system (v174, navigation consolidation).
+ * One left rail carries everything: the primary destinations, the Portfolio
+ * group (the cross-project Decisions and Risks & Issues views that used to
+ * live only in the retired AppTabs top bar), the project block ProjectHome
+ * passes as children, Help, and the footer. On phones the rail's body
+ * becomes the Menu sheet behind the bottom bar's Menu button, with groups
+ * always expanded and the account items listed flat.
  */
-export function AppSidebar({ children, menuLabel = "Menu" }: { children?: ReactNode; menuLabel?: string }) {
+export function AppSidebar({ children }: { children?: ReactNode }) {
   const { user, logout } = useAuth();
   const { pathname, search } = useLocation();
   const navigate = useNavigate();
@@ -79,14 +81,26 @@ export function AppSidebar({ children, menuLabel = "Menu" }: { children?: ReactN
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [tourBusy, setTourBusy] = useState(false);
   const [helpNotice, setHelpNotice] = useState<string | null>(null);
-  // Phone-width menu. On desktop the sidebar is always open and this does nothing;
-  // below 860px the navigation sits behind a Menu button instead of a strip you
-  // had to know to scroll sideways.
+  // Phone-width menu sheet. On desktop the sidebar is always open and this
+  // does nothing; below 860px the navigation sits in a sheet the bottom
+  // bar's Menu button opens (PhoneBottomBar).
   const [menuOpen, setMenuOpen] = useState(false);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   // Desktop only: tuck the sidebar down to a strip of icons. Remembered per browser.
   const [collapsed, setCollapsed] = useState<boolean>(() => readSidebarCollapsed());
   const asideRef = useRef<HTMLElement>(null);
+  // The Portfolio Decisions badge: open decision requests across the
+  // member's projects, from the same rollup the Dashboard uses.
+  const [decisionsWaiting, setDecisionsWaiting] = useState(0);
+
+  useEffect(() => {
+    let live = true;
+    api
+      .getPortfolio()
+      .then((d) => { if (live) setDecisionsWaiting(d.openDecisions?.length ?? 0); })
+      .catch(() => { /* badge just stays as it was */ });
+    return () => { live = false; };
+  }, [pathname]);
 
   // Going somewhere closes the menus.
   useEffect(() => { setMenuOpen(false); setUserMenuOpen(false); }, [pathname, search]);
@@ -157,6 +171,8 @@ export function AppSidebar({ children, menuLabel = "Menu" }: { children?: ReactN
     .filter(Boolean)
     .join(" ");
 
+  const tabCls = (active: boolean) => (active ? "side-tab active" : "side-tab");
+
   return (
     <>
     <aside ref={asideRef} className={sidebarClass}>
@@ -183,16 +199,6 @@ export function AppSidebar({ children, menuLabel = "Menu" }: { children?: ReactN
           <NotificationBell />
           <button
             type="button"
-            ref={menuButtonRef}
-            className="sidebar-menu-btn"
-            aria-expanded={menuOpen}
-            aria-controls="sidebar-nav"
-            onClick={() => setMenuOpen((o) => !o)}
-          >
-            {menuOpen ? "Close" : menuLabel}
-          </button>
-          <button
-            type="button"
             className="sidebar-collapse-btn"
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             aria-expanded={!collapsed}
@@ -206,49 +212,54 @@ export function AppSidebar({ children, menuLabel = "Menu" }: { children?: ReactN
 
       <GlobalSearch />
 
+      {/* On phones this wrapper is the Menu sheet (fixed, above the bottom
+          bar); on desktop it is display:contents and the rail lays out as
+          before. */}
+      <div className="sidebar-body">
       <nav className="side-nav" id="sidebar-nav" aria-label="Main">
-        {/* v151 (Part E1): Workspace starts expanded everywhere, project
-            pages included -- the old defaultCollapsed={!!children} hid the
-            global nav behind an unmarked header on exactly the pages where
-            people need it to escape the project. A stored user choice
-            still wins (see NavGroup). */}
-        <NavGroup label="Workspace">
-          <Link to="/app" className={pathname === "/app" ? "side-tab active" : "side-tab"}>
-            <NavIcon name="today" active={pathname === "/app"} />
-            Today
+        <Link to="/app/projects?new=1" className="sidebar-new-project" title="New project">
+          <span aria-hidden="true" className="sidebar-new-plus">+</span>
+          <span className="sidebar-new-label">New project</span>
+        </Link>
+
+        {/* The primary list: ungrouped since v174 (the "Workspace" label
+            named the container, not a job, and earned nothing). */}
+        <div className="side-nav-group">
+          <div className="side-nav-items">
+            <Link to="/app" className={tabCls(pathname === "/app")}>
+              <NavIcon name="today" active={pathname === "/app"} />
+              Today
+            </Link>
+            <Link to="/app/projects" className={tabCls(pathname === "/app/projects")}>
+              <NavIcon name="dashboard" active={pathname === "/app/projects"} />
+              Projects
+            </Link>
+            <Link to="/app/sync" className={tabCls(pathname === "/app/sync")}>
+              <NavIcon name="decisions" active={pathname === "/app/sync"} />
+              Weekly Sync
+            </Link>
+            <Link to="/app/workload" className={tabCls(pathname === "/app/workload")}>
+              <NavIcon name="team" active={pathname === "/app/workload"} />
+              Workload
+            </Link>
+          </div>
+        </div>
+
+        {/* The cross-project views, moved here from the retired tab bar so
+            they live in the same system as everything else. */}
+        <NavGroup label="Portfolio">
+          <Link to="/app/decisions" className={tabCls(pathname === "/app/decisions")}>
+            <NavIcon name="decisions" active={pathname === "/app/decisions"} />
+            Decisions
+            {decisionsWaiting > 0 && (
+              <span className="side-badge" aria-label={`${decisionsWaiting} waiting`}>
+                {decisionsWaiting}
+              </span>
+            )}
           </Link>
-          <Link to="/app/projects" className={pathname === "/app/projects" ? "side-tab active" : "side-tab"}>
-            <NavIcon name="dashboard" active={pathname === "/app/projects"} />
-            Projects
-          </Link>
-          <Link to="/app/sync" className={pathname === "/app/sync" ? "side-tab active" : "side-tab"}>
-            <NavIcon name="decisions" active={pathname === "/app/sync"} />
-            Weekly sync
-          </Link>
-          <Link to="/app/workload" className={pathname === "/app/workload" ? "side-tab active" : "side-tab"}>
-            <NavIcon name="team" active={pathname === "/app/workload"} />
-            Workload
-          </Link>
-          <Link
-            to="/app/resources"
-            className={pathname === "/app/resources" ? "side-tab active" : "side-tab"}
-          >
-            <NavIcon name="resources" active={pathname === "/app/resources"} />
-            Learn
-          </Link>
-          <Link
-            to="/app/whats-new"
-            className={pathname === "/app/whats-new" ? "side-tab active" : "side-tab"}
-          >
-            <NavIcon name="whatsnew" active={pathname === "/app/whats-new"} />
-            What's new
-          </Link>
-          <Link
-            to="/app/activity"
-            className={pathname === "/app/activity" ? "side-tab active" : "side-tab"}
-          >
-            <NavIcon name="report" active={pathname === "/app/activity"} />
-            My activity
+          <Link to="/app/risks" className={tabCls(pathname === "/app/risks")}>
+            <NavIcon name="risks" active={pathname === "/app/risks"} />
+            Risks &amp; Issues
           </Link>
         </NavGroup>
 
@@ -258,47 +269,54 @@ export function AppSidebar({ children, menuLabel = "Menu" }: { children?: ReactN
           <NavGroup label="Admin" defaultCollapsed={!!children}>
             <Link
               to="/admin/waitlist"
-              className={pathname === "/admin/waitlist" ? "side-tab active" : "side-tab"}
+              className={tabCls(pathname === "/admin/waitlist")}
             >
               <NavIcon name="waitlist" active={pathname === "/admin/waitlist"} />
               Waitlist
             </Link>
             <Link
               to="/admin/feedback"
-              className={pathname === "/admin/feedback" ? "side-tab active" : "side-tab"}
+              className={tabCls(pathname === "/admin/feedback")}
             >
               <NavIcon name="feedback" active={pathname === "/admin/feedback"} />
               Feedback inbox
             </Link>
             <Link
               to="/admin/founding-members"
-              className={pathname === "/admin/founding-members" ? "side-tab active" : "side-tab"}
+              className={tabCls(pathname === "/admin/founding-members")}
             >
               <NavIcon name="founding" active={pathname === "/admin/founding-members"} />
               Founding members
             </Link>
             <Link
               to="/admin/founder-hub"
-              className={pathname === "/admin/founder-hub" ? "side-tab active" : "side-tab"}
+              className={tabCls(pathname === "/admin/founder-hub")}
             >
               <NavIcon name="founding" active={pathname === "/admin/founder-hub"} />
-              Founder hub
+              Founder console
+            </Link>
+            <Link
+              to="/admin/email-founding-members"
+              className={tabCls(pathname === "/admin/email-founding-members")}
+            >
+              <NavIcon name="email" active={pathname === "/admin/email-founding-members"} />
+              Email members
             </Link>
           </NavGroup>
         )}
 
-        {/* v159 (F-07/F-19): a persistent Help entry at the bottom of the
-            nav -- the tour is no longer reachable only from the Resource
-            hub, and the guides and feedback live beside it. */}
+        {/* v174: Help carries the single Learn entry (the old "Guides"
+            duplicate is gone, so the double active state is impossible),
+            the tour and feedback. */}
         <NavGroup label="Help">
+          <Link to="/app/resources" className={tabCls(pathname === "/app/resources")}>
+            <NavIcon name="resources" active={pathname === "/app/resources"} />
+            Learn
+          </Link>
           <button type="button" className="side-tab sidebar-help-item" disabled={tourBusy} onClick={() => void replayTour()}>
             <NavIcon name="tour" active={false} />
             {tourBusy ? "Loading..." : "Tour"}
           </button>
-          <Link to="/app/resources" className={pathname === "/app/resources" ? "side-tab active" : "side-tab"}>
-            <NavIcon name="resources" active={pathname === "/app/resources"} />
-            Guides
-          </Link>
           <button type="button" className="side-tab sidebar-help-item" onClick={() => setFeedbackOpen(true)}>
             <NavIcon name="feedback" active={false} />
             Feedback
@@ -308,15 +326,84 @@ export function AppSidebar({ children, menuLabel = "Menu" }: { children?: ReactN
       </nav>
 
       <div className="sidebar-footer">
+        <Link
+          to="/app/whats-new"
+          className={tabCls(pathname === "/app/whats-new")}
+          style={{ marginBottom: 4 }}
+        >
+          <NavIcon name="whatsnew" active={pathname === "/app/whats-new"} />
+          What&apos;s new
+        </Link>
+        <Link
+          to="/app/activity"
+          className={tabCls(pathname === "/app/activity")}
+          style={{ marginBottom: 4 }}
+        >
+          <NavIcon name="report" active={pathname === "/app/activity"} />
+          My activity
+        </Link>
+        <a
+          href="https://discord.gg/R66gSFz9d"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="side-tab"
+          style={{ marginBottom: 4 }}
+        >
+          <NavIcon name="community" active={false} />
+          Community
+        </a>
+        <Link to="/legal" className="side-tab" style={{ marginBottom: 4 }}>
+          <NavIcon name="legal" active={false} />
+          Legal
+        </Link>
+        {/* Phones only (CSS): the account items listed flat in the Menu
+            sheet, so Account and Billing are two taps from anywhere
+            instead of three through the nested user menu. */}
+        <div className="phone-account-links">
+          <Link
+            to="/app/account"
+            className={tabCls(pathname === "/app/account")}
+            style={{ marginBottom: 4 }}
+          >
+            <NavIcon name="account" active={pathname === "/app/account"} />
+            Account
+          </Link>
+          {user?.plan === "founding" && (
+            <Link
+              to="/app/founding"
+              className={tabCls(pathname === "/app/founding")}
+              style={{ marginBottom: 4 }}
+            >
+              <NavIcon name="founding" active={pathname === "/app/founding"} />
+              Founder hub
+            </Link>
+          )}
+          {/* Founding members have Pro for free: nothing to bill, so no Billing entry. */}
+          {user?.plan !== "founding" && (
+            <Link
+              to="/app/billing"
+              className={tabCls(pathname === "/app/billing")}
+              style={{ marginBottom: 4 }}
+            >
+              <NavIcon name="billing" active={pathname === "/app/billing"} />
+              Billing
+            </Link>
+          )}
+          <button type="button" className="side-tab user-menu-signout" onClick={() => logout()}>
+            <NavIcon name="signout" active={false} />
+            Sign out
+          </button>
+        </div>
         {/* v159 (F-19): one compact user menu -- initials, Account, Billing,
             Sign out -- instead of a stack of plain account rows. The panel
             stays in the DOM while closed (hidden) so the entries are always
-            reachable by keyboard and assistive tech through the button. */}
+            reachable by keyboard and assistive tech through the button.
+            Desktop pattern; phones use the flat list above. */}
         <div className="user-menu">
           <div className="user-menu-panel" hidden={!userMenuOpen}>
             <Link
               to="/app/account"
-              className={pathname === "/app/account" ? "side-tab active" : "side-tab"}
+              className={tabCls(pathname === "/app/account")}
               style={{ marginBottom: 4 }}
               onClick={() => setUserMenuOpen(false)}
             >
@@ -326,7 +413,7 @@ export function AppSidebar({ children, menuLabel = "Menu" }: { children?: ReactN
             {user?.plan === "founding" && (
               <Link
                 to="/app/founding"
-                className={pathname === "/app/founding" ? "side-tab active" : "side-tab"}
+                className={tabCls(pathname === "/app/founding")}
                 style={{ marginBottom: 4 }}
                 onClick={() => setUserMenuOpen(false)}
               >
@@ -338,7 +425,7 @@ export function AppSidebar({ children, menuLabel = "Menu" }: { children?: ReactN
             {user?.plan !== "founding" && (
               <Link
                 to="/app/billing"
-                className={pathname === "/app/billing" ? "side-tab active" : "side-tab"}
+                className={tabCls(pathname === "/app/billing")}
                 style={{ marginBottom: 4 }}
                 onClick={() => setUserMenuOpen(false)}
               >
@@ -369,29 +456,15 @@ export function AppSidebar({ children, menuLabel = "Menu" }: { children?: ReactN
             <span className="user-menu-chev" aria-hidden="true">▾</span>
           </button>
         </div>
-        <a
-          href="https://discord.gg/R66gSFz9d"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="side-tab"
-          style={{ marginBottom: 4 }}
-        >
-          <NavIcon name="community" active={false} />
-          Community
-        </a>
-        <Link to="/legal" className="side-tab" style={{ marginBottom: 4 }}>
-          <NavIcon name="legal" active={false} />
-          Legal
-        </Link>
+      </div>
       </div>
 
       {feedbackOpen && <FeedbackModal onClose={() => setFeedbackOpen(false)} />}
     </aside>
-    {/* v164: the portfolio top tabs render alongside the sidebar (fixed
-        across the top on desktop, a static strip under the top bar on
-        phones) -- see AppTabs.tsx for why the rail maps onto this
-        sidebar instead of replacing it. */}
-    <AppTabs />
+    {/* v174: the portfolio top tabs (AppTabs) are retired; on phones the
+        bottom bar takes their place as the persistent chrome, and its
+        Menu button opens the sidebar body above as a sheet. */}
+    <PhoneBottomBar menuOpen={menuOpen} onToggleMenu={() => setMenuOpen((o) => !o)} menuButtonRef={menuButtonRef} />
     </>
   );
 }

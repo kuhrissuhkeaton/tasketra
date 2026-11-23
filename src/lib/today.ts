@@ -88,6 +88,24 @@ export function greeting(hour: number): string {
   return hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
 }
 
+/**
+ * v174: which project the Today "Jump back in" card points at -- the most
+ * recently active open project. When no open project has recorded activity
+ * yet, the fallback is the member's FIRST project (earliest created), not
+ * the newest: the card is a way back to where work started, and a brand-new
+ * empty project must not outrank one with real activity just because it was
+ * created later. Returns null when there are no open projects.
+ */
+export function pickJumpProject<T extends { created_at: string; last_activity_at?: string | null; closed_at?: string | null }>(projects: T[]): T | null {
+  const open = projects.filter((p) => !p.closed_at);
+  if (!open.length) return null;
+  const active = open.filter((p) => p.last_activity_at);
+  if (active.length) {
+    return [...active].sort((a, b) => (a.last_activity_at! < b.last_activity_at! ? 1 : a.last_activity_at! > b.last_activity_at! ? -1 : 0))[0];
+  }
+  return [...open].sort((a, b) => (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0))[0];
+}
+
 /** Count tasks finished on the viewer's local calendar day. */
 export function closedToday(done: { updated_at: string }[], todayKey: string): number {
   return done.filter((d) => localDateKey(new Date(d.updated_at)) === todayKey).length;

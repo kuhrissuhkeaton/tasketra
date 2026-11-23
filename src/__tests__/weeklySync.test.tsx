@@ -204,9 +204,9 @@ describe("Weekly sync", () => {
     expect(container.querySelector('[role="alert"]')?.textContent).toContain("Couldn't load your weekly sync.");
   });
 
-  it("puts a Weekly sync link in the sidebar", async () => {
+  it("puts a Weekly Sync link in the sidebar", async () => {
     m.getWeeklySync.mockResolvedValue({ projects: [], asks: [] });
     await renderPage();
-    expect(container.querySelector('a[href="/app/sync"]')?.textContent).toContain("Weekly sync");
+    expect(container.querySelector('a[href="/app/sync"]')?.textContent).toContain("Weekly Sync");
   });
 });

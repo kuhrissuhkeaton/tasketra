@@ -1,0 +1,3284 @@
+diff --git a/src/__tests__/appSidebarNav.test.tsx b/src/__tests__/appSidebarNav.test.tsx
+new file mode 100644
+index 0000000..06c2ce4
+--- /dev/null
++++ b/src/__tests__/appSidebarNav.test.tsx
+@@ -0,0 +1,107 @@
++// @vitest-environment jsdom
++//
++// v174 sidebar structure: one system (no tab bar), the Portfolio group,
++// Learn exactly once (Guides retired), the admin Founder hub renamed to
++// Founder console with an Email members entry, and the phone account
++// list that replaces the nested user menu.
++import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
++import { createRoot, type Root } from "react-dom/client";
++import { act } from "react";
++import { MemoryRouter } from "react-router-dom";
++import type { User } from "../lib/api";
++
++let currentUser: User;
++vi.mock("../lib/auth-context", () => ({
++  useAuth: () => ({ user: currentUser, loading: false, refresh: async () => {}, logout: async () => {} }),
++  AuthProvider: ({ children }: { children: unknown }) => children,
++}));
++vi.mock("../lib/api", async (importOriginal) => {
++  const orig = await importOriginal<typeof import("../lib/api")>();
++  return {
++    ...orig,
++    api: {
++      ...orig.api,
++      getPortfolio: async () => ({ openDecisions: [{ id: "d1" }, { id: "d2" }, { id: "d3" }] }),
++      getNotifications: async () => [],
++    },
++  };
++});
++
++import { AppSidebar } from "../components/AppSidebar";
++
++let container: HTMLDivElement;
++let root: Root;
++beforeAll(() => { (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true; });
++beforeEach(() => {
++  container = document.createElement("div");
++  document.body.appendChild(container);
++  root = createRoot(container);
++});
++afterEach(() => { act(() => root.unmount()); container.remove(); });
++
++async function render(user: User) {
++  currentUser = user;
++  await act(async () => {
++    root.render(<MemoryRouter initialEntries={["/app"]}><AppSidebar /></MemoryRouter>);
++  });
++  await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
++}
++
++const texts = (sel: string) => [...container.querySelectorAll(sel)].map((e) => e.textContent?.trim() ?? "");
++const hrefs = (sel: string) => [...container.querySelectorAll(sel)].map((e) => e.getAttribute("href"));
++
++describe("AppSidebar v174 structure", () => {
++  it("Learn appears exactly once and Guides is gone; the old tab bar is not rendered", async () => {
++    await render({ id: "u1", email: "a@x.co", plan: "free" } as User);
++    expect(texts("#sidebar-nav a").filter((t) => t === "Learn")).toHaveLength(1);
++    expect(texts("#sidebar-nav a, .sidebar-footer a")).not.toContain("Guides");
++    expect(container.querySelector(".app-tabs")).toBeNull();
++  });
++
++  it("the primary list is ungrouped and the cross-project views sit under Portfolio", async () => {
++    await render({ id: "u1", email: "a@x.co", plan: "free" } as User);
++    const navHrefs = hrefs("#sidebar-nav a");
++    expect(navHrefs.slice(0, 5)).toEqual(["/app/projects?new=1", "/app", "/app/projects", "/app/sync", "/app/workload"]);
++    expect(texts(".side-nav-label").map((t) => t.replace("▾", ""))).toEqual(["Portfolio", "Help"]);
++    expect(navHrefs).toContain("/app/decisions");
++    expect(navHrefs).toContain("/app/risks");
++  });
++
++  it("the Portfolio Decisions row carries the waiting count", async () => {
++    await render({ id: "u1", email: "a@x.co", plan: "free" } as User);
++    const decisions = [...container.querySelectorAll("#sidebar-nav a")].find((a) => a.getAttribute("href") === "/app/decisions")!;
++    expect(decisions.querySelector(".side-badge")?.textContent).toBe("3");
++  });
++
++  it("admins get Founder console (renamed) and Email members; the member Founder hub keeps its name", async () => {
++    await render({ id: "u2", email: "a@x.co", plan: "founding", isAdmin: true } as User);
++    const navTexts = texts("#sidebar-nav a");
++    expect(navTexts).toContain("Founder console");
++    expect(navTexts).toContain("Email members");
++    expect(hrefs("#sidebar-nav a")).toContain("/admin/email-founding-members");
++    expect(hrefs("#sidebar-nav a")).toContain("/admin/founder-hub");
++    // The member-facing Founder hub link (footer user menu) is untouched.
++    const chip = container.querySelector<HTMLButtonElement>(".user-menu-btn")!;
++    await act(async () => { chip.click(); });
++    expect(texts(".user-menu-panel a")).toContain("Founder hub");
++  });
++
++  it("the phone account list lists Account, Founder hub and Sign out flat for founding members, with no Billing", async () => {
++    await render({ id: "u3", email: "f@x.co", plan: "founding" } as User);
++    const phoneTexts = texts(".phone-account-links a, .phone-account-links button");
++    expect(phoneTexts).toEqual(["Account", "Founder hub", "Sign out"]);
++  });
++
++  it("the phone account list shows Billing for paying-plan members", async () => {
++    await render({ id: "u4", email: "p@x.co", plan: "active" } as User);
++    const phoneTexts = texts(".phone-account-links a, .phone-account-links button");
++    expect(phoneTexts).toEqual(["Account", "Billing", "Sign out"]);
++  });
++
++  it("the New project button sits at the head of the nav", async () => {
++    await render({ id: "u1", email: "a@x.co", plan: "free" } as User);
++    const btn = container.querySelector(".sidebar-new-project")!;
++    expect(btn).not.toBeNull();
++    expect(btn.getAttribute("href")).toBe("/app/projects?new=1");
++  });
++});
+diff --git a/src/__tests__/appTabs.test.tsx b/src/__tests__/appTabs.test.tsx
+deleted file mode 100644
+index 8c7e280..0000000
+--- a/src/__tests__/appTabs.test.tsx
++++ /dev/null
+@@ -1,86 +0,0 @@
+-// @vitest-environment jsdom
+-//
+-// The v164 portfolio top tabs (AppTabs, rendered by AppSidebar): the seven
+-// cross-project views, the + New project link, and which tab reads active
+-// on which route -- Dashboard and Projects are the same page in its two
+-// views, so their active split follows the ?view= param.
+-import { describe, it, expect, beforeAll, beforeEach, afterEach } from "vitest";
+-import { createRoot, type Root } from "react-dom/client";
+-import { act } from "react";
+-import { MemoryRouter } from "react-router-dom";
+-import { AppTabs } from "../components/AppTabs";
+-
+-let container: HTMLDivElement;
+-let root: Root;
+-beforeAll(() => { (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true; });
+-beforeEach(() => {
+-  container = document.createElement("div");
+-  document.body.appendChild(container);
+-  root = createRoot(container);
+-});
+-afterEach(() => { act(() => root.unmount()); container.remove(); });
+-
+-async function renderAt(path: string) {
+-  // A fresh root per path: MemoryRouter only reads initialEntries on
+-  // mount, so re-rendering into the same root would keep the first route.
+-  act(() => root.unmount());
+-  root = createRoot(container);
+-  await act(async () => { root.render(<MemoryRouter initialEntries={[path]}><AppTabs /></MemoryRouter>); });
+-}
+-
+-const tab = (label: string) => [...container.querySelectorAll("a.app-tab")].find((a) => a.textContent === label);
+-const activeLabels = () => [...container.querySelectorAll("a.app-tab-active")].map((a) => a.textContent);
+-
+-describe("AppTabs", () => {
+-  it("renders the seven tabs in plan order plus the New project link", async () => {
+-    await renderAt("/app");
+-    expect([...container.querySelectorAll("a.app-tab")].map((a) => a.textContent)).toEqual([
+-      "Dashboard", "Today", "Projects", "Decisions", "Risks & Issues", "Weekly Sync", "Workload",
+-    ]);
+-    expect(tab("Dashboard")?.getAttribute("href")).toBe("/app/projects?view=dashboard");
+-    expect(tab("Decisions")?.getAttribute("href")).toBe("/app/decisions");
+-    expect(tab("Risks & Issues")?.getAttribute("href")).toBe("/app/risks");
+-    const newLink = container.querySelector("a.app-tabs-new");
+-    expect(newLink?.getAttribute("href")).toBe("/app/projects?new=1");
+-    expect(newLink?.textContent).toContain("New project");
+-  });
+-
+-  it("marks Today active on /app and nothing else", async () => {
+-    await renderAt("/app");
+-    expect(activeLabels()).toEqual(["Today"]);
+-    expect(tab("Today")?.getAttribute("aria-current")).toBe("page");
+-  });
+-
+-  it("splits Dashboard and Projects by the view param, and keeps Projects active inside a project", async () => {
+-    await renderAt("/app/projects?view=dashboard");
+-    expect(activeLabels()).toEqual(["Dashboard"]);
+-    await renderAt("/app/projects");
+-    expect(activeLabels()).toEqual(["Projects"]);
+-    await renderAt("/app/projects/p1");
+-    expect(activeLabels()).toEqual(["Projects"]);
+-  });
+-
+-  it("keeps the New project link outside the scrolling tab strip (v164.1)", async () => {
+-    await renderAt("/app");
+-    const strip = container.querySelector(".app-tabs-scroll");
+-    expect(strip).not.toBeNull();
+-    // All seven tabs scroll inside the strip...
+-    expect(strip?.querySelectorAll("a.app-tab").length).toBe(7);
+-    // ...and the button is the nav's own child, so it can never be
+-    // scrolled or clipped off the bar's right edge.
+-    const newLink = container.querySelector("a.app-tabs-new");
+-    expect(newLink?.parentElement?.classList.contains("app-tabs")).toBe(true);
+-    expect(strip?.contains(newLink)).toBe(false);
+-  });
+-
+-  it("marks the cross-project views active on their routes", async () => {
+-    await renderAt("/app/decisions");
+-    expect(activeLabels()).toEqual(["Decisions"]);
+-    await renderAt("/app/risks");
+-    expect(activeLabels()).toEqual(["Risks & Issues"]);
+-    await renderAt("/app/sync");
+-    expect(activeLabels()).toEqual(["Weekly Sync"]);
+-    await renderAt("/app/workload");
+-    expect(activeLabels()).toEqual(["Workload"]);
+-  });
+-});
+diff --git a/src/__tests__/calmHome.test.tsx b/src/__tests__/calmHome.test.tsx
+index 9659acd..bc1b578 100644
+--- a/src/__tests__/calmHome.test.tsx
++++ b/src/__tests__/calmHome.test.tsx
+@@ -102,7 +102,7 @@ describe("CalmHome", () => {
+     const props = await render();
+     await act(async () => { button("+ Budget").click(); });
+     expect(props.onGrowTab).toHaveBeenCalledWith("budget");
+-    await act(async () => { button("+ Timeline").click(); });
++    await act(async () => { button("+ Roadmap").click(); });
+     expect(props.onOpenTab).toHaveBeenCalledWith("roadmap");
+     // A piece already grown back just opens.
+     const props2 = await render({ extraTabs: ["budget"] });
+diff --git a/src/__tests__/globalSearch.test.tsx b/src/__tests__/globalSearch.test.tsx
+index c3b74bf..e764c87 100644
+--- a/src/__tests__/globalSearch.test.tsx
++++ b/src/__tests__/globalSearch.test.tsx
+@@ -98,6 +98,21 @@ describe("GlobalSearch", () => {
+     expect(document.querySelector(".search-panel")?.textContent).toContain("Nothing matches");
+   });
+ 
++  it("resolves feature names instantly (v174): snapshot leads the results", async () => {
++    await mount();
++    const trigger = [...container.querySelectorAll("button")].find((b) => b.textContent?.includes("Search"))!;
++    await act(async () => { trigger.click(); });
++    const input = document.querySelector<HTMLInputElement>(".search-input")!;
++    await type(input, "snapshot");
++    const panel = document.querySelector(".search-panel")!;
++    const groups = [...panel.querySelectorAll(".search-group-title")].map((g) => g.textContent);
++    expect(groups[0]).toBe("Pages & features");
++    expect(panel.textContent).toContain("Client Snapshot");
++    await key(input, "ArrowDown");
++    await key(input, "Enter");
++    expect(container.querySelector("[data-where]")?.getAttribute("data-where")).toBe("/app/projects");
++  });
++
+   it("Escape closes the palette", async () => {
+     await mount();
+     const trigger = [...container.querySelectorAll("button")].find((b) => b.textContent?.includes("Search"))!;
+diff --git a/src/__tests__/navFixPass.test.tsx b/src/__tests__/navFixPass.test.tsx
+new file mode 100644
+index 0000000..23a91b3
+--- /dev/null
++++ b/src/__tests__/navFixPass.test.tsx
+@@ -0,0 +1,128 @@
++// @vitest-environment jsdom
++//
++// v174 fix pass (Wren's Step 4 re-check): D1 HealthStrip problem links carry
++// a full-strength link underline; D2 the Overview snapshot card's "Share by
++// link" opens the real share controls (the same ShareBox / share-links
++// machinery the snapshot page uses) instead of linking to the print view;
++// D3 .side-project-name has the truncation rule its component documents.
++import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
++import { createRoot, type Root } from "react-dom/client";
++import { act } from "react";
++import { MemoryRouter, Routes, Route } from "react-router-dom";
++
++// @ts-ignore node types are not in the app tsconfig
++const readText = async (p: string) => (await import("node:fs")).readFileSync(p, "utf8") as string;
++
++vi.mock("../lib/auth-context", () => ({
++  useAuth: () => ({
++    user: { id: "u1", email: "owner@example.com", tour_completed_at: "2026-01-01T00:00:00Z", display_name: "Owner" },
++    loading: false, refresh: async () => {}, logout: async () => {},
++  }),
++  AuthProvider: ({ children }: { children: unknown }) => children,
++}));
++
++import ProjectHome from "../pages/ProjectHome";
++import { ConfirmProvider } from "../components/ConfirmDialog";
++import { clearApiCache } from "../lib/api";
++
++describe("CSS contracts (D1, D3)", () => {
++  it("D1: .hs-link underlines at full strength in the link colour, not a 35% tint", async () => {
++    const css = await readText("src/index.css");
++    const rule = css.match(/\.hs-link \{[^}]*\}/)?.[0] ?? "";
++    expect(rule).toContain("text-decoration: underline");
++    expect(rule).toContain("text-decoration-color: var(--navy)");
++    expect(rule).not.toContain("35%");
++  });
++
++  it("D3: .side-project-name has a rule, and it truncates with an ellipsis", async () => {
++    const css = await readText("src/index.css");
++    const rule = css.match(/\.side-project-name \{[^}]*\}/)?.[0] ?? "";
++    expect(rule).toContain("text-overflow: ellipsis");
++    expect(rule).toContain("white-space: nowrap");
++    expect(rule).toContain("overflow: hidden");
++  });
++});
++
++let host: HTMLDivElement;
++let root: Root;
++let posts: { url: string; body: any }[];
++
++beforeAll(() => {
++  (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
++  (globalThis as any).ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
++  const zero = { width: 0, height: 0, top: 0, left: 0, right: 0, bottom: 0, x: 0, y: 0, toJSON() {} };
++  (Range.prototype as any).getBoundingClientRect = () => zero;
++  (Range.prototype as any).getClientRects = () => [];
++  window.matchMedia = window.matchMedia || ((q: string) => ({ matches: false, media: q, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, onchange: null, dispatchEvent: () => false }) as any);
++  Element.prototype.scrollIntoView = () => {};
++  window.scrollTo = (() => {}) as any;
++});
++
++beforeEach(() => {
++  sessionStorage.clear();
++  clearApiCache();
++  posts = [];
++  host = document.createElement("div");
++  document.body.appendChild(host);
++});
++afterEach(async () => { await act(async () => { root?.unmount(); }); host.remove(); vi.restoreAllMocks(); });
++
++const json = (b: unknown) => Promise.resolve(new Response(JSON.stringify(b), { status: 200, headers: { "content-type": "application/json" } }));
++
++async function mountHome(isOwner = true) {
++  const project = { id: "p1", name: "Fix Pass Project", description: "", is_owner: isOwner, size: "standard", approach: "hybrid", show_all_tabs: true, stage: "plan", created_at: "2026-09-01T00:00:00Z" };
++  vi.stubGlobal("fetch", vi.fn((input: unknown, init?: RequestInit) => {
++    const url = String(input);
++    const method = init?.method ?? "GET";
++    if (method === "POST" && /\/api\/share-links/.test(url)) {
++      posts.push({ url, body: init?.body ? JSON.parse(String(init.body)) : null });
++      return json({ link: { token: "tok123", created_at: "2026-11-23T00:00:00Z" } });
++    }
++    if (method !== "GET") return json({ ok: true });
++    if (/\/api\/project\?id=/.test(url)) return json({ project });
++    if (/\/api\/share-links/.test(url)) return json({ link: null });
++    return new Promise(() => {});
++  }));
++  root = createRoot(host);
++  await act(async () => {
++    root.render(
++      <MemoryRouter initialEntries={["/app/projects/p1?tab=home"]}>
++        <ConfirmProvider><Routes><Route path="/app/projects/:id" element={<ProjectHome />} /></Routes></ConfirmProvider>
++      </MemoryRouter>
++    );
++  });
++  await act(async () => { await new Promise((r) => setTimeout(r, 40)); });
++}
++
++const card = () => host.querySelector(".snapshot-card");
++const buttonByText = (text: string) => [...host.querySelectorAll("button")].find((b) => b.textContent === text);
++
++describe("D2: Overview snapshot card share action", () => {
++  it("the card's only print link is 'Open the client snapshot'; 'Share by link' is a button, not a link", async () => {
++    await mountHome(true);
++    expect(card()).not.toBeNull();
++    const printLinks = [...card()!.querySelectorAll("a")].filter((a) => a.getAttribute("href") === "/app/projects/p1/print/snapshot");
++    expect(printLinks.map((a) => a.textContent)).toEqual(["Open the client snapshot"]);
++    expect(buttonByText("Share by link")).toBeTruthy();
++  });
++
++  it("clicking 'Share by link' opens the real share controls and creating a link posts to the existing share-links endpoint", async () => {
++    await mountHome(true);
++    await act(async () => { buttonByText("Share by link")!.click(); });
++    await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
++    const createBtn = buttonByText("Create share link");
++    expect(createBtn).toBeTruthy();
++    await act(async () => { createBtn!.click(); });
++    await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
++    expect(posts).toHaveLength(1);
++    expect(posts[0].body).toMatchObject({ projectId: "p1", kind: "snapshot" });
++    const urlInput = host.querySelector<HTMLInputElement>(".share-url");
++    expect(urlInput?.value).toContain("/s/tok123");
++  });
++
++  it("non-owners get no share button (the snapshot page's ShareBox is owner-only too)", async () => {
++    await mountHome(false);
++    expect(card()).not.toBeNull();
++    expect(buttonByText("Share by link")).toBeUndefined();
++  });
++});
+diff --git a/src/__tests__/phoneBottomBar.test.tsx b/src/__tests__/phoneBottomBar.test.tsx
+new file mode 100644
+index 0000000..1a2faef
+--- /dev/null
++++ b/src/__tests__/phoneBottomBar.test.tsx
+@@ -0,0 +1,118 @@
++// @vitest-environment jsdom
++//
++// v174 phone bottom bar: Today · Projects · Create · Sync · Menu, the
++// Create action sheet (quick-add task with a project picker, New
++// project), active-state rules, and the Menu toggle contract with the
++// sidebar (the bar only carries the button; AppSidebar owns the sheet).
++import { act } from "react";
++import { createRoot, type Root } from "react-dom/client";
++import { MemoryRouter } from "react-router-dom";
++import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from "vitest";
++
++vi.mock("../lib/auth-context", () => ({
++  useAuth: () => ({ user: { id: "u1", email: "a@x.co", display_name: "Test User", plan: "free" }, loading: false, refresh: async () => {}, logout: async () => {} }),
++  AuthProvider: ({ children }: { children: unknown }) => children,
++}));
++vi.mock("../lib/api", () => ({
++  api: {
++    listProjects: vi.fn(async () => ({ projects: [{ id: "p1", name: "Clinic Construction" }] })),
++    createTask: vi.fn(async () => ({ id: "t1" })),
++  },
++}));
++
++import { PhoneBottomBar } from "../components/PhoneBottomBar";
++import { api } from "../lib/api";
++
++let container: HTMLDivElement;
++let root: Root;
++
++async function mount(path: string, onToggleMenu = vi.fn()) {
++  container = document.createElement("div");
++  document.body.appendChild(container);
++  root = createRoot(container);
++  const menuButtonRef = { current: null };
++  await act(async () => {
++    root.render(
++      <MemoryRouter initialEntries={[path]}>
++        <PhoneBottomBar menuOpen={false} onToggleMenu={onToggleMenu} menuButtonRef={menuButtonRef} />
++      </MemoryRouter>,
++    );
++  });
++  return onToggleMenu;
++}
++
++const items = () => [...container.querySelectorAll<HTMLElement>(".phone-bar-item")];
++const itemByLabel = (label: string) => items().find((e) => e.textContent?.includes(label))!;
++const sheetItem = (label: string) =>
++  [...container.querySelectorAll<HTMLElement>(".phone-sheet-item")].find((e) => e.textContent?.includes(label));
++
++beforeAll(() => { (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true; });
++beforeEach(() => { vi.clearAllMocks(); });
++afterEach(async () => {
++  await act(async () => { root.unmount(); });
++  container.remove();
++});
++
++describe("PhoneBottomBar", () => {
++  it("renders Today, Projects, Create, Sync and Menu in order, with the right destinations", async () => {
++    await mount("/app");
++    expect(items().map((e) => e.textContent?.trim())).toEqual(["Today", "Projects", "+Create", "Sync", "Menu"]);
++    expect(itemByLabel("Today").getAttribute("href")).toBe("/app");
++    expect(itemByLabel("Projects").getAttribute("href")).toBe("/app/projects");
++    expect(itemByLabel("Sync").getAttribute("href")).toBe("/app/sync");
++    expect(itemByLabel("Create").tagName).toBe("BUTTON");
++    expect(itemByLabel("Menu").tagName).toBe("BUTTON");
++  });
++
++  it("marks Projects active anywhere under /app/projects, and only there", async () => {
++    await mount("/app/projects/p1?tab=tasks");
++    expect(itemByLabel("Projects").className).toContain("active");
++    expect(itemByLabel("Today").className).not.toContain("active");
++    expect(itemByLabel("Sync").className).not.toContain("active");
++  });
++
++  it("marks Sync active on the sync page", async () => {
++    await mount("/app/sync");
++    expect(itemByLabel("Sync").className).toContain("active");
++    expect(itemByLabel("Projects").className).not.toContain("active");
++  });
++
++  it("Create opens an action sheet with Quick-add task and New project, and Escape closes it", async () => {
++    await mount("/app");
++    expect(container.querySelector(".phone-sheet")).toBeNull();
++    await act(async () => { itemByLabel("Create").click(); });
++    expect(container.querySelector(".phone-sheet")).not.toBeNull();
++    expect(sheetItem("Quick-add task")).toBeTruthy();
++    expect(sheetItem("New project")).toBeTruthy();
++    expect(sheetItem("New project")!.getAttribute("href")).toBe("/app/projects?new=1");
++    await act(async () => {
++      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
++    });
++    expect(container.querySelector(".phone-sheet")).toBeNull();
++  });
++
++  it("quick-add posts the task to the chosen project and closes the sheet", async () => {
++    await mount("/app");
++    await act(async () => { itemByLabel("Create").click(); });
++    await act(async () => { sheetItem("Quick-add task")!.click(); });
++    const input = container.querySelector<HTMLInputElement>("#phone-quickadd-title")!;
++    expect(input).toBeTruthy();
++    await act(async () => {
++      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!;
++      setter.call(input, "Call the inspector");
++      input.dispatchEvent(new Event("input", { bubbles: true }));
++    });
++    const form = container.querySelector<HTMLFormElement>(".phone-quickadd")!;
++    await act(async () => {
++      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
++    });
++    expect(api.createTask).toHaveBeenCalledWith("p1", "Call the inspector", "Test User");
++    expect(container.querySelector(".phone-sheet")).toBeNull();
++  });
++
++  it("the Menu button toggles the sidebar sheet through the callback", async () => {
++    const onToggleMenu = await mount("/app");
++    await act(async () => { itemByLabel("Menu").click(); });
++    expect(onToggleMenu).toHaveBeenCalledTimes(1);
++  });
++});
+diff --git a/src/__tests__/projectChrome.test.tsx b/src/__tests__/projectChrome.test.tsx
+index 6d9182c..278a43a 100644
+--- a/src/__tests__/projectChrome.test.tsx
++++ b/src/__tests__/projectChrome.test.tsx
+@@ -1,8 +1,9 @@
+ // @vitest-environment jsdom
+ //
+-// Project page chrome (v113): Trash lives in the Project actions menu, sidebar views
+-// and Trash get a breadcrumb and use the view name as the heading, strip views are
+-// unchanged, and Trash restore still works.
++// Project page chrome: every view gets a breadcrumb (v174; strip views
++// keep the project name as the heading, the rest use the view name),
++// Trash is a regular sidebar section in Wrap up (it lived in a one-item
++// "Project actions" menu until v174), and Trash restore still works.
+ import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
+ import { createRoot, type Root } from "react-dom/client";
+ import { act } from "react";
+@@ -68,8 +69,6 @@ async function mount(tab: string, isOwner = true) {
+ 
+ const crumb = () => host.querySelector<HTMLElement>('nav[aria-label="Breadcrumb"]');
+ const h1 = () => host.querySelector("h1")!.textContent;
+-const menuBtn = () => host.querySelector<HTMLButtonElement>('button[aria-label="Project actions"]')!;
+-const items = () => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')];
+ 
+ describe("breadcrumb and page heading", () => {
+   it("sidebar view: breadcrumb with real links, current page text, heading is the view name", async () => {
+@@ -85,16 +84,16 @@ describe("breadcrumb and page heading", () => {
+     expect(h1()).toBe("Risks");
+   });
+ 
+-  it("uses the sidebar label for the view (Weekly report, Comms plan)", async () => {
++  it("uses the sidebar label for the view (Communication plan since v174)", async () => {
+     await mount("comms");
+-    expect(crumb()!.querySelector('[aria-current="page"]')!.textContent).toBe("Comms Plan");
+-    expect(h1()).toBe("Comms Plan");
++    expect(crumb()!.querySelector('[aria-current="page"]')!.textContent).toBe("Communication plan");
++    expect(h1()).toBe("Communication plan");
+   });
+ 
+-  it("strip views have no breadcrumb and keep the project name as the heading", async () => {
++  it("strip views get a breadcrumb too (v174) and keep the project name as the heading", async () => {
+     for (const tab of ["home", "tasks", "roadmap", "budget", "meetings"]) {
+       await mount(tab);
+-      expect(crumb(), tab).toBeNull();
++      expect(crumb(), tab).not.toBeNull();
+       expect(h1(), tab).toBe("Chrome Project");
+       await act(async () => { root.unmount(); });
+       host.innerHTML = "";
+@@ -109,49 +108,27 @@ describe("breadcrumb and page heading", () => {
+   });
+ });
+ 
+-describe("Project actions menu", () => {
+-  it("is in the page header, closed by default, and the sidebar no longer lists Trash", async () => {
++describe("Trash in the sidebar (v174)", () => {
++  it("there is no Project actions menu, and the sidebar lists Trash as a section", async () => {
+     await mount("home");
+-    expect(menuBtn()).not.toBeNull();
+-    expect(menuBtn().getAttribute("aria-haspopup")).toBe("menu");
+-    expect(menuBtn().getAttribute("aria-expanded")).toBe("false");
+-    expect(host.closest("body")!.querySelector('[role="menu"]')).toBeNull();
+-    const sideLabels = [...host.querySelectorAll(".side-tab, .side-nav-label")].map((e) => e.textContent?.trim());
+-    expect(sideLabels).not.toContain("Trash");
+-    expect(sideLabels).not.toContain("Reference");
++    expect(host.querySelector('button[aria-label="Project actions"]')).toBeNull();
++    const trash = host.querySelector<HTMLElement>("[data-tour='tab-trash']");
++    expect(trash).not.toBeNull();
++    expect(trash!.textContent).toContain("Trash");
+   });
+ 
+-  it("click opens a menu with Trash; choosing it opens the Trash view (?tab=trash)", async () => {
++  it("choosing the sidebar Trash section opens the Trash view (?tab=trash)", async () => {
+     await mount("risks");
+-    await act(async () => { menuBtn().click(); });
+-    expect(menuBtn().getAttribute("aria-expanded")).toBe("true");
+-    expect(items().map((i) => i.textContent)).toEqual(["Trash"]);
+-    await act(async () => { items()[0].click(); });
++    const trash = host.querySelector<HTMLButtonElement>("[data-tour='tab-trash']")!;
++    await act(async () => { trash.click(); });
+     await act(async () => { await new Promise((r) => setTimeout(r, 40)); });
+     expect(h1()).toBe("Trash");
+     expect(host.textContent).toContain("Old risk");
+   });
+ 
+-  it("keyboard: ArrowDown opens and focuses the first item, Escape closes and returns focus", async () => {
+-    await mount("home");
+-    menuBtn().focus();
+-    await act(async () => { menuBtn().dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })); });
+-    expect(items().length).toBe(1);
+-    expect(document.activeElement).toBe(items()[0]);
+-    await act(async () => { items()[0].dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); });
+-    expect(items().length).toBe(0);
+-    expect(document.activeElement).toBe(menuBtn());
+-  });
+-
+   it("is available to non-owners too (Trash access is unchanged)", async () => {
+     await mount("home", false);
+-    expect(menuBtn()).not.toBeNull();
+-  });
+-
+-  it("Delete project is not in the menu", async () => {
+-    await mount("home");
+-    await act(async () => { menuBtn().click(); });
+-    expect(items().map((i) => i.textContent.toLowerCase()).join()).not.toContain("delete");
++    expect(host.querySelector("[data-tour='tab-trash']")).not.toBeNull();
+   });
+ });
+ 
+diff --git a/src/__tests__/projectNav.test.ts b/src/__tests__/projectNav.test.ts
+index d6de327..aa7f3ca 100644
+--- a/src/__tests__/projectNav.test.ts
++++ b/src/__tests__/projectNav.test.ts
+@@ -1,7 +1,9 @@
+-// Six-tab project navigation (redesign batch 2): the group map, the old-link guarantee,
+-// and the unchanged size-hiding rules.
++// Project navigation (v174 consolidation): the job-shaped group map, the
++// old-link guarantee (every one of the 26 existing tab ids keeps its
++// meaning), the unchanged size-hiding rules, and the "More sections"
++// list that replaced the three old grow mechanisms.
+ import { describe, it, expect } from "vitest";
+-import { NAV_GROUPS, allNavTabIds, groupOf, sectionLabel, sectionDirectory, visibleGroups, visibleSections, STRIP_TABS } from "../lib/projectNav";
++import { NAV_GROUPS, allNavTabIds, groupOf, sectionLabel, hiddenSections, visibleGroups, visibleSections, STRIP_TABS } from "../lib/projectNav";
+ import { hiddenTabIds } from "../lib/projectView";
+ // @ts-ignore node builtin: the app tsconfig has no node types, vitest runs in node
+ const read = async (p: string) => (await import("node:fs")).readFileSync(p, "utf8") as string;
+@@ -13,50 +15,58 @@ const TAB_TYPE = async () => {
+ };
+ 
+ describe("group map", () => {
+-  it("there are six groups, in order", () => {
+-    expect(NAV_GROUPS.map((g) => g.label)).toEqual(["Overview", "Tasks", "Plan", "Risks & issues", "People and decisions", "Docs"]);
++  it("there are six groups, in order, named by the job", () => {
++    expect(NAV_GROUPS.map((g) => g.label)).toEqual(["Overview", "Plan", "Track", "People", "Wrap up", "Project settings"]);
+   });
+ 
+   it("every one of the 26 existing tab ids lands in exactly one group, so every old ?tab= link still works", async () => {
+     const ids = await TAB_TYPE();
+     expect(ids).toHaveLength(26);
+     for (const id of ids) expect(groupOf(id), `${id} has no group`).not.toBeNull();
+-    const seen = NAV_GROUPS.flatMap((g) => g.sections.map((s) => s.id));
++    const seen = NAV_GROUPS.flatMap((g) => g.sections.filter((s) => !s.href).map((s) => s.id));
+     expect(new Set(seen).size).toBe(seen.length);
+     expect(allNavTabIds().sort()).toEqual([...ids].sort());
+   });
+ 
+-  it("maps each old id to the group the Look Book promised", () => {
++  it("maps each old id to its job-shaped group", () => {
+     const expected: Record<string, string> = {
+-      home: "overview", tasks: "tasks",
+-      roadmap: "plan", budget: "plan", meetings: "plan", charter: "plan", okrs: "plan",
+-      issues: "health", risks: "health", assumptions: "health", dependencies: "health", quality: "health", compliance: "health",
+-      decisions: "people", stakeholders: "people", team: "people", raci: "people", procurement: "people", comms: "people",
+-      documents: "docs", report: "docs", closure: "docs", templates: "docs", export: "docs", connections: "docs", trash: "docs",
++      home: "overview",
++      roadmap: "plan", charter: "plan", budget: "plan", meetings: "plan", okrs: "plan",
++      tasks: "track", issues: "track", risks: "track", assumptions: "track", dependencies: "track", quality: "track", compliance: "track",
++      stakeholders: "people", decisions: "people", raci: "people", procurement: "people", comms: "people",
++      documents: "wrapup", report: "wrapup", closure: "wrapup", templates: "wrapup", export: "wrapup", trash: "wrapup",
++      team: "settings", connections: "settings",
+     };
+     for (const [tab, group] of Object.entries(expected)) expect(groupOf(tab), tab).toBe(group);
+     expect(groupOf("nope")).toBeNull();
+   });
+ 
+-  it("the risks group keeps its 'health' id under its new label, so ?tab= links and bookmarks survive the rename (v160, F-24)", () => {
+-    const g = NAV_GROUPS.find((x) => x.label === "Risks & issues")!;
+-    expect(g.id).toBe("health");
+-    expect(groupOf("risks")).toBe("health");
+-    expect(groupOf("issues")).toBe("health");
++  it("Client Snapshot is a link section in Wrap up, not a tab id", () => {
++    expect(groupOf("snapshot")).toBe("wrapup");
++    expect(sectionLabel("snapshot")).toBe("Client Snapshot");
++    expect(allNavTabIds()).not.toContain("snapshot");
++    const snap = NAV_GROUPS.find((g) => g.id === "wrapup")!.sections.find((s) => s.id === "snapshot")!;
++    expect(snap.href!("p1")).toBe("/app/projects/p1/print/snapshot");
+   });
+ 
+-  it("labels sections the way the old nav did", () => {
++  it("labels sections with the plain-word-first names", () => {
+     expect(sectionLabel("procurement")).toBe("Vendors");
+-    expect(sectionLabel("comms")).toBe("Comms Plan");
++    expect(sectionLabel("comms")).toBe("Communication plan");
++    expect(sectionLabel("okrs")).toBe("Goals (OKRs)");
++    expect(sectionLabel("raci")).toBe("Roles (RACI)");
++    expect(sectionLabel("report")).toBe("Status report");
++    expect(sectionLabel("templates")).toBe("Saved templates");
++    expect(sectionLabel("connections")).toBe("Webhooks");
++    expect(sectionLabel("team")).toBe("Project settings");
+     expect(sectionLabel("trash")).toBe("Trash");
+     expect(sectionLabel("zzz")).toBeNull();
+   });
+ });
+ 
+ describe("size hiding is unchanged", () => {
+-  it("Light hides the same sections as before, and its Risks & issues group keeps just Issues and Risks", () => {
+-    const health = NAV_GROUPS.find((g) => g.id === "health")!;
+-    expect(visibleSections(health, "issues", "light", false).map((s) => s.id)).toEqual(["issues", "risks"]);
++  it("Light hides the same sections as before, and its Track group keeps Tasks, Issues and Risks", () => {
++    const track = NAV_GROUPS.find((g) => g.id === "track")!;
++    expect(visibleSections(track, "issues", "light", false).map((s) => s.id)).toEqual(["tasks", "issues", "risks"]);
+     for (const id of hiddenTabIds("light")) {
+       const g = NAV_GROUPS.find((x) => x.sections.some((s) => s.id === id))!;
+       expect(visibleSections(g, "home", "light", false).map((s) => s.id)).not.toContain(id);
+@@ -64,9 +74,9 @@ describe("size hiding is unchanged", () => {
+   });
+ 
+   it("Standard hides Quality, Compliance and Comms; Full hides nothing", () => {
+-    const health = NAV_GROUPS.find((g) => g.id === "health")!;
+-    expect(visibleSections(health, "issues", "standard", false).map((s) => s.id)).not.toContain("quality");
+-    expect(visibleSections(health, "issues", "full", false)).toHaveLength(6);
++    const track = NAV_GROUPS.find((g) => g.id === "track")!;
++    expect(visibleSections(track, "issues", "standard", false).map((s) => s.id)).not.toContain("quality");
++    expect(visibleSections(track, "issues", "full", false)).toHaveLength(7);
+   });
+ 
+   it("show-all reveals everything, and the section being viewed is never hidden", () => {
+@@ -77,9 +87,10 @@ describe("size hiding is unchanged", () => {
+ 
+   it("every group stays visible on a Light project, and a click opens its first visible section", () => {
+     const groups = visibleGroups("home", "light", false);
+-    expect(groups.map((g) => g.group.id)).toEqual(["overview", "tasks", "plan", "health", "people", "docs"]);
++    expect(groups.map((g) => g.group.id)).toEqual(["overview", "plan", "track", "people", "wrapup", "settings"]);
+     expect(groups.find((g) => g.group.id === "plan")!.opens).toBe("roadmap");
+-    expect(groups.find((g) => g.group.id === "people")!.opens).toBe("decisions");
++    expect(groups.find((g) => g.group.id === "people")!.opens).toBe("stakeholders");
++    expect(groups.find((g) => g.group.id === "wrapup")!.opens).toBe("documents");
+   });
+ });
+ 
+@@ -89,47 +100,31 @@ describe("heading rule", () => {
+   });
+ });
+ 
+-describe("All sections directory (v153.1)", () => {
+-  const dirIds = (size: "light" | "standard" | "full", showAll: boolean) =>
+-    sectionDirectory(size, showAll).flatMap((x) => x.sections.map((s) => s.id));
+-
+-  it("a Standard project without show-all does NOT list the sections its size hides", () => {
+-    const ids = dirIds("standard", false);
+-    for (const hidden of ["quality", "compliance", "comms", "okrs", "raci", "templates"]) {
+-      expect(ids, hidden).not.toContain(hidden);
+-    }
+-    // What Standard keeps is still listed, in the groups it belongs to.
+-    const health = sectionDirectory("standard", false).find((x) => x.group.id === "health")!;
+-    expect(health.sections.map((s) => s.id)).toEqual(["issues", "risks", "assumptions", "dependencies"]);
+-    const people = sectionDirectory("standard", false).find((x) => x.group.id === "people")!;
+-    expect(people.sections.map((s) => s.id)).toEqual(["decisions", "stakeholders", "team", "procurement"]);
++describe("More sections (the hidden-by-size list)", () => {
++  it("lists exactly the sections the size hides", () => {
++    expect(hiddenSections("light", false).map((s) => s.id).sort()).toEqual([...hiddenTabIds("light")].sort());
++    expect(hiddenSections("standard", false).map((s) => s.id).sort()).toEqual(
++      ["quality", "compliance", "comms", "okrs", "raci", "templates"].sort(),
++    );
++    expect(hiddenSections("full", false)).toEqual([]);
+   });
+ 
+-  it("show-all on a Standard project lists everything the directory ever lists", () => {
+-    expect(dirIds("standard", true)).toHaveLength(24);
+-    for (const id of ["quality", "compliance", "comms", "okrs", "raci", "templates"]) {
+-      expect(dirIds("standard", true)).toContain(id);
+-    }
++  it("comes back in nav order", () => {
++    const order = NAV_GROUPS.flatMap((g) => g.sections.map((s) => s.id));
++    const ids = hiddenSections("light", false).map((s) => s.id);
++    expect(ids).toEqual([...ids].sort((a, b) => order.indexOf(a) - order.indexOf(b)));
+   });
+ 
+-  it("a Full project lists everything, unchanged", () => {
+-    expect(dirIds("full", false)).toHaveLength(24);
+-    expect(dirIds("full", false)).toEqual(dirIds("standard", true));
++  it("shrinks as sections are grown back, and empties under show-all", () => {
++    const withBudget = hiddenSections("light", false, ["budget"]).map((s) => s.id);
++    expect(withBudget).not.toContain("budget");
++    expect(withBudget).toHaveLength(hiddenSections("light", false).length - 1);
++    expect(hiddenSections("light", true)).toEqual([]);
+   });
+ 
+-  it("the Overview entry itself is never listed, its empty group disappears, and no listed group is empty", () => {
++  it("never lists the Client Snapshot link section", () => {
+     for (const size of ["light", "standard", "full"] as const) {
+-      const dir = sectionDirectory(size, false);
+-      expect(dirIds(size, false)).not.toContain("home");
+-      expect(dir.map((x) => x.group.id)).not.toContain("overview");
+-      for (const x of dir) expect(x.sections.length).toBeGreaterThan(0);
++      expect(hiddenSections(size, false).map((s) => s.id)).not.toContain("snapshot");
+     }
+   });
+-
+-  it("a Light project keeps every group but only its visible sections", () => {
+-    const dir = sectionDirectory("light", false);
+-    expect(dir.map((x) => x.group.id)).toEqual(["tasks", "plan", "health", "people", "docs"]);
+-    expect(dirIds("light", false)).not.toContain("budget");
+-    expect(dirIds("light", false)).toContain("roadmap");
+-  });
+ });
+diff --git a/src/__tests__/projectPage.smoke.test.tsx b/src/__tests__/projectPage.smoke.test.tsx
+index 12478ff..9b68c05 100644
+--- a/src/__tests__/projectPage.smoke.test.tsx
++++ b/src/__tests__/projectPage.smoke.test.tsx
+@@ -207,7 +207,10 @@ describe("project page smoke test", () => {
+ 
+   it("the phone Menu button opens and closes the navigation, and Escape closes it", async () => {
+     await mountProject("standard", "charter");
+-    const btn = host.querySelector("button.sidebar-menu-btn") as HTMLButtonElement;
++    // v174: the Menu button lives in the phone bottom bar; the old
++    // in-header .sidebar-menu-btn retired with the tab bar.
++    const btn = [...host.querySelectorAll<HTMLButtonElement>(".phone-bar-item")].find((b) => b.textContent?.includes("Menu"))!;
++    expect(btn).toBeTruthy();
+     expect(btn.getAttribute("aria-expanded")).toBe("false");
+     expect(host.querySelector(".sidebar-open")).toBeNull();
+     await act(async () => btn.click());
+@@ -273,23 +276,26 @@ describe("project page smoke test", () => {
+     expect(errors, errors.join("\n---\n")).toEqual([]);
+   });
+ 
+-  it("shows every section in the sidebar, grouped, when all tabs are shown (v172)", async () => {
++  it("shows every section in the sidebar, grouped, when all tabs are shown (v174 order)", async () => {
+     await mountProject("full", "issues");
+-    // v172: project navigation moved from the two in-page tab bars into
+-    // the sidebar. Project items carry the tour's data-tour="tab-*" ids.
++    // Project items carry the tour's data-tour="tab-*" ids. v174
++    // regrouped them by job (Plan / Track / People / Wrap up + a settings
++    // tail), renamed the jargon labels plain-word-first, and made Client
++    // Snapshot and Trash regular entries: 26 tabs plus the snapshot link.
+     const items = [...host.querySelectorAll(".side-nav .side-tab[data-tour^='tab-']")].map((b) =>
+       (b.textContent ?? "").replace(/\d+$/, ""),
+     );
+     expect(items).toEqual([
+-      "Overview", "Tasks",
+-      "Roadmap", "Budget", "Meetings", "Charter", "OKRs",
+-      "Issues", "Risks", "Assumptions", "Dependencies", "Quality", "Compliance",
+-      "Decisions", "Stakeholders", "Settings", "RACI", "Vendors", "Comms Plan",
+-      "Documents", "Weekly Report", "Closure", "Templates", "Export", "Connections",
++      "Overview",
++      "Roadmap", "Charter", "Budget", "Meetings", "Goals (OKRs)",
++      "Tasks", "Issues", "Risks", "Assumptions", "Dependencies", "Quality", "Compliance",
++      "Stakeholders", "Decisions", "Roles (RACI)", "Vendors", "Communication plan",
++      "Documents", "Status report", "Client Snapshot", "Closure", "Saved templates", "Export", "Trash",
++      "Project settings", "Webhooks",
+     ]);
+     expect(host.querySelector(".side-nav .side-tab.active")?.getAttribute("data-tour")).toBe("tab-issues");
+     const labels = [...host.querySelectorAll(".side-nav-label")].map((b) => (b.textContent ?? "").replace(/▾$/, ""));
+-    expect(labels).toEqual(expect.arrayContaining(["Plan", "Risks & issues", "People and decisions", "Docs"]));
++    expect(labels).toEqual(expect.arrayContaining(["Plan", "Track", "People", "Wrap up"]));
+   });
+ 
+   it("the sidebar lists the project tabs under the project name (v172)", async () => {
+diff --git a/src/__tests__/projectSidebarNav.test.tsx b/src/__tests__/projectSidebarNav.test.tsx
+index ac116db..c5b78fe 100644
+--- a/src/__tests__/projectSidebarNav.test.tsx
++++ b/src/__tests__/projectSidebarNav.test.tsx
+@@ -34,11 +34,12 @@ const groups = NAV_GROUPS.map((group) => ({
+ 
+ function render(extra: Partial<React.ComponentProps<typeof ProjectSidebarNav>> = {}) {
+   const props: React.ComponentProps<typeof ProjectSidebarNav> = {
++    projectId: "p1",
+     projectName: "Clinic Construction",
+     stageLabel: "Plan",
+     groups,
+     activeTab: "risks",
+-    activeGroupId: "health",
++    activeGroupId: "track",
+     decisionsWaiting: 0,
+     growPieces: [],
+     onOpenTab: vi.fn(),
+@@ -61,10 +62,27 @@ describe("ProjectSidebarNav", () => {
+     expect(host?.textContent).toContain("Clinic Construction");
+     expect(host?.textContent).toContain("Plan stage");
+     const items = [...(host?.querySelectorAll(".side-tab[data-tour^='tab-']") ?? [])];
+-    expect(items.length).toBe(25);
++    // 26 tab sections plus the Client Snapshot link section.
++    expect(items.length).toBe(27);
+     expect(host?.querySelector(".side-tab.active")?.getAttribute("data-tour")).toBe("tab-risks");
+   });
+ 
++  it("renders Client Snapshot as a link to the snapshot route, not a tab button", () => {
++    render();
++    const snap = host?.querySelector("[data-tour='tab-snapshot']") as HTMLAnchorElement;
++    expect(snap).toBeTruthy();
++    expect(snap.tagName).toBe("A");
++    expect(snap.getAttribute("href")).toBe("/app/projects/p1/print/snapshot");
++  });
++
++  it("lists Trash as a regular section that opens the trash tab", () => {
++    const props = render();
++    const trash = host?.querySelector("[data-tour='tab-trash']") as HTMLButtonElement;
++    expect(trash).toBeTruthy();
++    act(() => trash.click());
++    expect(props.onOpenTab).toHaveBeenCalledWith("trash");
++  });
++
+   it("shows the decisions badge only when decisions are waiting", () => {
+     render({ decisionsWaiting: 3 });
+     expect(host?.querySelector(".side-badge")?.textContent).toBe("3");
+@@ -84,7 +102,7 @@ describe("ProjectSidebarNav", () => {
+   it("grow row appears only with grow pieces and grows in place", () => {
+     const props = render({ growPieces: [{ id: "budget", label: "Budget" }] });
+     const growBtn = [...(host?.querySelectorAll("button") ?? [])].find((b) =>
+-      b.textContent?.includes("Need more for this project?"),
++      b.textContent?.includes("More sections"),
+     ) as HTMLButtonElement;
+     expect(growBtn).toBeTruthy();
+     act(() => growBtn.click());
+diff --git a/src/__tests__/projectView.test.ts b/src/__tests__/projectView.test.ts
+index 240ae8f..94f44af 100644
+--- a/src/__tests__/projectView.test.ts
++++ b/src/__tests__/projectView.test.ts
+@@ -1,7 +1,7 @@
+ // v171: extra_tabs parsing and the grow-in-place visibility rule.
+ import { describe, it, expect } from "vitest";
+ import { parseExtraTabs, isTabHidden, hiddenTabLabels, hiddenTabIds } from "../lib/projectView";
+-import { visibleGroups, sectionDirectory } from "../lib/projectNav";
++import { visibleGroups, hiddenSections } from "../lib/projectNav";
+ 
+ describe("parseExtraTabs", () => {
+   it("parses a stored JSON array of tab ids", () => {
+@@ -40,15 +40,14 @@ describe("grow-in-place visibility", () => {
+     expect(hiddenTabLabels("light", ["budget"])).toEqual(all.filter((l) => l !== "Budget"));
+   });
+ 
+-  it("the nav and the section directory include a grown-back section", () => {
++  it("the nav and the More sections list include a grown-back section", () => {
+     const groups = visibleGroups("home", "light", false, ["budget"]);
+     const plan = groups.find((g) => g.group.id === "plan");
+     expect(plan?.sections.map((s) => s.id)).toContain("budget");
+-    const dir = sectionDirectory("light", false, ["budget"]);
+-    const dirPlan = dir.find((g) => g.group.id === "plan");
+-    expect(dirPlan?.sections.map((s) => s.id)).toContain("budget");
+-    // And without the extra, budget stays out of both.
++    expect(hiddenSections("light", false, ["budget"]).map((s) => s.id)).not.toContain("budget");
++    // And without the extra, budget stays out of the nav and in the list.
+     const plain = visibleGroups("home", "light", false);
+     expect(plain.find((g) => g.group.id === "plan")?.sections.map((s) => s.id)).not.toContain("budget");
++    expect(hiddenSections("light", false).map((s) => s.id)).toContain("budget");
+   });
+ });
+diff --git a/src/__tests__/sidebarLayout.test.tsx b/src/__tests__/sidebarLayout.test.tsx
+index e4ffe4e..dac6d7f 100644
+--- a/src/__tests__/sidebarLayout.test.tsx
++++ b/src/__tests__/sidebarLayout.test.tsx
+@@ -44,10 +44,20 @@ describe("sidebar layout", () => {
+     mount({ id: "u1", email: "a@example.com", plan: "free" });
+     const nav = hrefs("nav.side-nav");
+     expect(nav).toContain("/app");
+-    expect(nav).toContain("/app/activity");
++    expect(nav).toContain("/app/projects");
++    expect(nav).toContain("/app/sync");
++    expect(nav).toContain("/app/workload");
++    // v174: the cross-project views live in the sidebar's Portfolio group,
++    // and What's new / My activity moved to the footer.
++    expect(nav).toContain("/app/decisions");
++    expect(nav).toContain("/app/risks");
++    expect(nav).toContain("/app/resources");
++    expect(nav).not.toContain("/app/activity");
+     expect(nav).not.toContain("/app/account");
+     expect(nav).not.toContain("/app/billing");
+     const foot = hrefs(".sidebar-footer");
++    expect(foot).toContain("/app/whats-new");
++    expect(foot).toContain("/app/activity");
+     expect(foot).toContain("/app/account");
+     expect(foot).toContain("/app/billing");
+     expect(foot).not.toContain("/app/founding");
+diff --git a/src/__tests__/today.test.ts b/src/__tests__/today.test.ts
+index 0a96811..9da60e7 100644
+--- a/src/__tests__/today.test.ts
++++ b/src/__tests__/today.test.ts
+@@ -1,6 +1,6 @@
+ import { describe, it, expect } from "vitest";
+ import {
+-  addDays, bucketTasks, closedToday, daysLate, greeting, isAfterHours, isMineOrUnassigned, localDateKey, startHere, weekendMode, wrapUpNote,
++  addDays, bucketTasks, closedToday, daysLate, greeting, isAfterHours, isMineOrUnassigned, localDateKey, pickJumpProject, startHere, weekendMode, wrapUpNote,
+   type TodayTask,
+ } from "../lib/today";
+ 
+@@ -112,3 +112,44 @@ describe("v163 eggs: weekendMode (Egg 4) and isAfterHours (Egg 5)", () => {
+     expect(isAfterHours(new Date(2026, 10, 13, 23, 30))).toBe(true);
+   });
+ });
++
++describe("pickJumpProject (v174 fix pass, proposal fallback)", () => {
++  const p = (id: string, over: Record<string, unknown> = {}) => ({
++    id, created_at: "2026-09-01T00:00:00Z", last_activity_at: null as string | null, closed_at: null as string | null, ...over,
++  });
++
++  it("points at the most recently active open project", () => {
++    const projects = [
++      p("old", { created_at: "2026-08-01T00:00:00Z", last_activity_at: "2026-11-20T00:00:00Z" }),
++      p("newer-active", { created_at: "2026-09-01T00:00:00Z", last_activity_at: "2026-11-22T00:00:00Z" }),
++    ];
++    expect(pickJumpProject(projects)?.id).toBe("newer-active");
++  });
++
++  it("recorded activity beats a later-created project with none", () => {
++    const projects = [
++      p("worked-on", { created_at: "2026-08-01T00:00:00Z", last_activity_at: "2026-11-20T00:00:00Z" }),
++      p("just-created", { created_at: "2026-11-23T00:00:00Z" }),
++    ];
++    expect(pickJumpProject(projects)?.id).toBe("worked-on");
++  });
++
++  it("with no activity anywhere, falls back to the FIRST project, not the newest", () => {
++    const projects = [
++      p("second", { created_at: "2026-09-15T00:00:00Z" }),
++      p("first", { created_at: "2026-09-01T00:00:00Z" }),
++      p("third", { created_at: "2026-10-01T00:00:00Z" }),
++    ];
++    expect(pickJumpProject(projects)?.id).toBe("first");
++  });
++
++  it("ignores closed projects and returns null when nothing is open", () => {
++    const projects = [
++      p("closed-recent", { created_at: "2026-08-01T00:00:00Z", last_activity_at: "2026-11-22T00:00:00Z", closed_at: "2026-11-23T00:00:00Z" }),
++      p("open", { created_at: "2026-09-01T00:00:00Z" }),
++    ];
++    expect(pickJumpProject(projects)?.id).toBe("open");
++    expect(pickJumpProject([p("c", { closed_at: "2026-11-23T00:00:00Z" })])).toBeNull();
++    expect(pickJumpProject([])).toBeNull();
++  });
++});
+diff --git a/src/__tests__/weeklySync.test.tsx b/src/__tests__/weeklySync.test.tsx
+index bd892e8..ed18e43 100644
+--- a/src/__tests__/weeklySync.test.tsx
++++ b/src/__tests__/weeklySync.test.tsx
+@@ -204,9 +204,9 @@ describe("Weekly sync", () => {
+     expect(container.querySelector('[role="alert"]')?.textContent).toContain("Couldn't load your weekly sync.");
+   });
+ 
+-  it("puts a Weekly sync link in the sidebar", async () => {
++  it("puts a Weekly Sync link in the sidebar", async () => {
+     m.getWeeklySync.mockResolvedValue({ projects: [], asks: [] });
+     await renderPage();
+-    expect(container.querySelector('a[href="/app/sync"]')?.textContent).toContain("Weekly sync");
++    expect(container.querySelector('a[href="/app/sync"]')?.textContent).toContain("Weekly Sync");
+   });
+ });
+diff --git a/src/components/AppSidebar.tsx b/src/components/AppSidebar.tsx
+index 837a209..fe38a15 100644
+--- a/src/components/AppSidebar.tsx
++++ b/src/components/AppSidebar.tsx
+@@ -8,14 +8,14 @@ import { FeedbackModal } from "./FeedbackModal";
+ import { NavIcon } from "./NavIcon";
+ import { NotificationBell } from "./NotificationBell";
+ import { GlobalSearch } from "./GlobalSearch";
+-import { AppTabs } from "./AppTabs";
++import { PhoneBottomBar } from "./PhoneBottomBar";
+ import { readSidebarCollapsed, writeSidebarCollapsed, readNavGroupCollapsed, writeNavGroupCollapsed } from "../lib/sidebarState";
+ 
+-/** Collapsible nav section used by both the sidebar's own global group and
+- * ProjectHome's secondary (non-pill-bar) groups -- clicking the label
+- * toggles a chevron and shows/hides the items below it. On mobile the
+- * items always render regardless of collapsed state (see the CSS media
+- * query), since the label/chevron affordance is hidden there. */
++/** Collapsible nav section used by both the sidebar's own groups and
++ * ProjectHome's project groups -- clicking the label toggles a chevron
++ * and shows/hides the items below it. On phones the items always render
++ * regardless of collapsed state (see the CSS media query in v174: nav
++ * groups never sit collapsed in the phone Menu sheet). */
+ export function NavGroup({
+   label,
+   children,
+@@ -64,13 +64,15 @@ export function NavGroup({
+ }
+ 
+ /**
+- * The single persistent left-rail shell used by every logged-in screen --
+- * Dashboard, Resource hub, Admin waitlist, and (with a project nav slot
+- * passed as children) individual project pages. Keeps global navigation and
+- * account controls in one place so the app always feels like one product,
+- * not a set of disconnected top bars.
++ * The single persistent navigation system (v174, navigation consolidation).
++ * One left rail carries everything: the primary destinations, the Portfolio
++ * group (the cross-project Decisions and Risks & Issues views that used to
++ * live only in the retired AppTabs top bar), the project block ProjectHome
++ * passes as children, Help, and the footer. On phones the rail's body
++ * becomes the Menu sheet behind the bottom bar's Menu button, with groups
++ * always expanded and the account items listed flat.
+  */
+-export function AppSidebar({ children, menuLabel = "Menu" }: { children?: ReactNode; menuLabel?: string }) {
++export function AppSidebar({ children }: { children?: ReactNode }) {
+   const { user, logout } = useAuth();
+   const { pathname, search } = useLocation();
+   const navigate = useNavigate();
+@@ -79,14 +81,26 @@ export function AppSidebar({ children, menuLabel = "Menu" }: { children?: ReactN
+   const [userMenuOpen, setUserMenuOpen] = useState(false);
+   const [tourBusy, setTourBusy] = useState(false);
+   const [helpNotice, setHelpNotice] = useState<string | null>(null);
+-  // Phone-width menu. On desktop the sidebar is always open and this does nothing;
+-  // below 860px the navigation sits behind a Menu button instead of a strip you
+-  // had to know to scroll sideways.
++  // Phone-width menu sheet. On desktop the sidebar is always open and this
++  // does nothing; below 860px the navigation sits in a sheet the bottom
++  // bar's Menu button opens (PhoneBottomBar).
+   const [menuOpen, setMenuOpen] = useState(false);
+   const menuButtonRef = useRef<HTMLButtonElement>(null);
+   // Desktop only: tuck the sidebar down to a strip of icons. Remembered per browser.
+   const [collapsed, setCollapsed] = useState<boolean>(() => readSidebarCollapsed());
+   const asideRef = useRef<HTMLElement>(null);
++  // The Portfolio Decisions badge: open decision requests across the
++  // member's projects, from the same rollup the Dashboard uses.
++  const [decisionsWaiting, setDecisionsWaiting] = useState(0);
++
++  useEffect(() => {
++    let live = true;
++    api
++      .getPortfolio()
++      .then((d) => { if (live) setDecisionsWaiting(d.openDecisions?.length ?? 0); })
++      .catch(() => { /* badge just stays as it was */ });
++    return () => { live = false; };
++  }, [pathname]);
+ 
+   // Going somewhere closes the menus.
+   useEffect(() => { setMenuOpen(false); setUserMenuOpen(false); }, [pathname, search]);
+@@ -157,6 +171,8 @@ export function AppSidebar({ children, menuLabel = "Menu" }: { children?: ReactN
+     .filter(Boolean)
+     .join(" ");
+ 
++  const tabCls = (active: boolean) => (active ? "side-tab active" : "side-tab");
++
+   return (
+     <>
+     <aside ref={asideRef} className={sidebarClass}>
+@@ -181,16 +197,6 @@ export function AppSidebar({ children, menuLabel = "Menu" }: { children?: ReactN
+         </Link>
+         <div className="sidebar-bar-actions">
+           <NotificationBell />
+-          <button
+-            type="button"
+-            ref={menuButtonRef}
+-            className="sidebar-menu-btn"
+-            aria-expanded={menuOpen}
+-            aria-controls="sidebar-nav"
+-            onClick={() => setMenuOpen((o) => !o)}
+-          >
+-            {menuOpen ? "Close" : menuLabel}
+-          </button>
+           <button
+             type="button"
+             className="sidebar-collapse-btn"
+@@ -206,49 +212,54 @@ export function AppSidebar({ children, menuLabel = "Menu" }: { children?: ReactN
+ 
+       <GlobalSearch />
+ 
++      {/* On phones this wrapper is the Menu sheet (fixed, above the bottom
++          bar); on desktop it is display:contents and the rail lays out as
++          before. */}
++      <div className="sidebar-body">
+       <nav className="side-nav" id="sidebar-nav" aria-label="Main">
+-        {/* v151 (Part E1): Workspace starts expanded everywhere, project
+-            pages included -- the old defaultCollapsed={!!children} hid the
+-            global nav behind an unmarked header on exactly the pages where
+-            people need it to escape the project. A stored user choice
+-            still wins (see NavGroup). */}
+-        <NavGroup label="Workspace">
+-          <Link to="/app" className={pathname === "/app" ? "side-tab active" : "side-tab"}>
+-            <NavIcon name="today" active={pathname === "/app"} />
+-            Today
+-          </Link>
+-          <Link to="/app/projects" className={pathname === "/app/projects" ? "side-tab active" : "side-tab"}>
+-            <NavIcon name="dashboard" active={pathname === "/app/projects"} />
+-            Projects
+-          </Link>
+-          <Link to="/app/sync" className={pathname === "/app/sync" ? "side-tab active" : "side-tab"}>
+-            <NavIcon name="decisions" active={pathname === "/app/sync"} />
+-            Weekly sync
+-          </Link>
+-          <Link to="/app/workload" className={pathname === "/app/workload" ? "side-tab active" : "side-tab"}>
+-            <NavIcon name="team" active={pathname === "/app/workload"} />
+-            Workload
+-          </Link>
+-          <Link
+-            to="/app/resources"
+-            className={pathname === "/app/resources" ? "side-tab active" : "side-tab"}
+-          >
+-            <NavIcon name="resources" active={pathname === "/app/resources"} />
+-            Learn
+-          </Link>
+-          <Link
+-            to="/app/whats-new"
+-            className={pathname === "/app/whats-new" ? "side-tab active" : "side-tab"}
+-          >
+-            <NavIcon name="whatsnew" active={pathname === "/app/whats-new"} />
+-            What's new
++        <Link to="/app/projects?new=1" className="sidebar-new-project" title="New project">
++          <span aria-hidden="true" className="sidebar-new-plus">+</span>
++          <span className="sidebar-new-label">New project</span>
++        </Link>
++
++        {/* The primary list: ungrouped since v174 (the "Workspace" label
++            named the container, not a job, and earned nothing). */}
++        <div className="side-nav-group">
++          <div className="side-nav-items">
++            <Link to="/app" className={tabCls(pathname === "/app")}>
++              <NavIcon name="today" active={pathname === "/app"} />
++              Today
++            </Link>
++            <Link to="/app/projects" className={tabCls(pathname === "/app/projects")}>
++              <NavIcon name="dashboard" active={pathname === "/app/projects"} />
++              Projects
++            </Link>
++            <Link to="/app/sync" className={tabCls(pathname === "/app/sync")}>
++              <NavIcon name="decisions" active={pathname === "/app/sync"} />
++              Weekly Sync
++            </Link>
++            <Link to="/app/workload" className={tabCls(pathname === "/app/workload")}>
++              <NavIcon name="team" active={pathname === "/app/workload"} />
++              Workload
++            </Link>
++          </div>
++        </div>
++
++        {/* The cross-project views, moved here from the retired tab bar so
++            they live in the same system as everything else. */}
++        <NavGroup label="Portfolio">
++          <Link to="/app/decisions" className={tabCls(pathname === "/app/decisions")}>
++            <NavIcon name="decisions" active={pathname === "/app/decisions"} />
++            Decisions
++            {decisionsWaiting > 0 && (
++              <span className="side-badge" aria-label={`${decisionsWaiting} waiting`}>
++                {decisionsWaiting}
++              </span>
++            )}
+           </Link>
+-          <Link
+-            to="/app/activity"
+-            className={pathname === "/app/activity" ? "side-tab active" : "side-tab"}
+-          >
+-            <NavIcon name="report" active={pathname === "/app/activity"} />
+-            My activity
++          <Link to="/app/risks" className={tabCls(pathname === "/app/risks")}>
++            <NavIcon name="risks" active={pathname === "/app/risks"} />
++            Risks &amp; Issues
+           </Link>
+         </NavGroup>
+ 
+@@ -258,47 +269,54 @@ export function AppSidebar({ children, menuLabel = "Menu" }: { children?: ReactN
+           <NavGroup label="Admin" defaultCollapsed={!!children}>
+             <Link
+               to="/admin/waitlist"
+-              className={pathname === "/admin/waitlist" ? "side-tab active" : "side-tab"}
++              className={tabCls(pathname === "/admin/waitlist")}
+             >
+               <NavIcon name="waitlist" active={pathname === "/admin/waitlist"} />
+               Waitlist
+             </Link>
+             <Link
+               to="/admin/feedback"
+-              className={pathname === "/admin/feedback" ? "side-tab active" : "side-tab"}
++              className={tabCls(pathname === "/admin/feedback")}
+             >
+               <NavIcon name="feedback" active={pathname === "/admin/feedback"} />
+               Feedback inbox
+             </Link>
+             <Link
+               to="/admin/founding-members"
+-              className={pathname === "/admin/founding-members" ? "side-tab active" : "side-tab"}
++              className={tabCls(pathname === "/admin/founding-members")}
+             >
+               <NavIcon name="founding" active={pathname === "/admin/founding-members"} />
+               Founding members
+             </Link>
+             <Link
+               to="/admin/founder-hub"
+-              className={pathname === "/admin/founder-hub" ? "side-tab active" : "side-tab"}
++              className={tabCls(pathname === "/admin/founder-hub")}
+             >
+               <NavIcon name="founding" active={pathname === "/admin/founder-hub"} />
+-              Founder hub
++              Founder console
++            </Link>
++            <Link
++              to="/admin/email-founding-members"
++              className={tabCls(pathname === "/admin/email-founding-members")}
++            >
++              <NavIcon name="email" active={pathname === "/admin/email-founding-members"} />
++              Email members
+             </Link>
+           </NavGroup>
+         )}
+ 
+-        {/* v159 (F-07/F-19): a persistent Help entry at the bottom of the
+-            nav -- the tour is no longer reachable only from the Resource
+-            hub, and the guides and feedback live beside it. */}
++        {/* v174: Help carries the single Learn entry (the old "Guides"
++            duplicate is gone, so the double active state is impossible),
++            the tour and feedback. */}
+         <NavGroup label="Help">
++          <Link to="/app/resources" className={tabCls(pathname === "/app/resources")}>
++            <NavIcon name="resources" active={pathname === "/app/resources"} />
++            Learn
++          </Link>
+           <button type="button" className="side-tab sidebar-help-item" disabled={tourBusy} onClick={() => void replayTour()}>
+             <NavIcon name="tour" active={false} />
+             {tourBusy ? "Loading..." : "Tour"}
+           </button>
+-          <Link to="/app/resources" className={pathname === "/app/resources" ? "side-tab active" : "side-tab"}>
+-            <NavIcon name="resources" active={pathname === "/app/resources"} />
+-            Guides
+-          </Link>
+           <button type="button" className="side-tab sidebar-help-item" onClick={() => setFeedbackOpen(true)}>
+             <NavIcon name="feedback" active={false} />
+             Feedback
+@@ -308,15 +326,84 @@ export function AppSidebar({ children, menuLabel = "Menu" }: { children?: ReactN
+       </nav>
+ 
+       <div className="sidebar-footer">
++        <Link
++          to="/app/whats-new"
++          className={tabCls(pathname === "/app/whats-new")}
++          style={{ marginBottom: 4 }}
++        >
++          <NavIcon name="whatsnew" active={pathname === "/app/whats-new"} />
++          What&apos;s new
++        </Link>
++        <Link
++          to="/app/activity"
++          className={tabCls(pathname === "/app/activity")}
++          style={{ marginBottom: 4 }}
++        >
++          <NavIcon name="report" active={pathname === "/app/activity"} />
++          My activity
++        </Link>
++        <a
++          href="https://discord.gg/R66gSFz9d"
++          target="_blank"
++          rel="noopener noreferrer"
++          className="side-tab"
++          style={{ marginBottom: 4 }}
++        >
++          <NavIcon name="community" active={false} />
++          Community
++        </a>
++        <Link to="/legal" className="side-tab" style={{ marginBottom: 4 }}>
++          <NavIcon name="legal" active={false} />
++          Legal
++        </Link>
++        {/* Phones only (CSS): the account items listed flat in the Menu
++            sheet, so Account and Billing are two taps from anywhere
++            instead of three through the nested user menu. */}
++        <div className="phone-account-links">
++          <Link
++            to="/app/account"
++            className={tabCls(pathname === "/app/account")}
++            style={{ marginBottom: 4 }}
++          >
++            <NavIcon name="account" active={pathname === "/app/account"} />
++            Account
++          </Link>
++          {user?.plan === "founding" && (
++            <Link
++              to="/app/founding"
++              className={tabCls(pathname === "/app/founding")}
++              style={{ marginBottom: 4 }}
++            >
++              <NavIcon name="founding" active={pathname === "/app/founding"} />
++              Founder hub
++            </Link>
++          )}
++          {/* Founding members have Pro for free: nothing to bill, so no Billing entry. */}
++          {user?.plan !== "founding" && (
++            <Link
++              to="/app/billing"
++              className={tabCls(pathname === "/app/billing")}
++              style={{ marginBottom: 4 }}
++            >
++              <NavIcon name="billing" active={pathname === "/app/billing"} />
++              Billing
++            </Link>
++          )}
++          <button type="button" className="side-tab user-menu-signout" onClick={() => logout()}>
++            <NavIcon name="signout" active={false} />
++            Sign out
++          </button>
++        </div>
+         {/* v159 (F-19): one compact user menu -- initials, Account, Billing,
+             Sign out -- instead of a stack of plain account rows. The panel
+             stays in the DOM while closed (hidden) so the entries are always
+-            reachable by keyboard and assistive tech through the button. */}
++            reachable by keyboard and assistive tech through the button.
++            Desktop pattern; phones use the flat list above. */}
+         <div className="user-menu">
+           <div className="user-menu-panel" hidden={!userMenuOpen}>
+             <Link
+               to="/app/account"
+-              className={pathname === "/app/account" ? "side-tab active" : "side-tab"}
++              className={tabCls(pathname === "/app/account")}
+               style={{ marginBottom: 4 }}
+               onClick={() => setUserMenuOpen(false)}
+             >
+@@ -326,7 +413,7 @@ export function AppSidebar({ children, menuLabel = "Menu" }: { children?: ReactN
+             {user?.plan === "founding" && (
+               <Link
+                 to="/app/founding"
+-                className={pathname === "/app/founding" ? "side-tab active" : "side-tab"}
++                className={tabCls(pathname === "/app/founding")}
+                 style={{ marginBottom: 4 }}
+                 onClick={() => setUserMenuOpen(false)}
+               >
+@@ -338,7 +425,7 @@ export function AppSidebar({ children, menuLabel = "Menu" }: { children?: ReactN
+             {user?.plan !== "founding" && (
+               <Link
+                 to="/app/billing"
+-                className={pathname === "/app/billing" ? "side-tab active" : "side-tab"}
++                className={tabCls(pathname === "/app/billing")}
+                 style={{ marginBottom: 4 }}
+                 onClick={() => setUserMenuOpen(false)}
+               >
+@@ -369,29 +456,15 @@ export function AppSidebar({ children, menuLabel = "Menu" }: { children?: ReactN
+             <span className="user-menu-chev" aria-hidden="true">▾</span>
+           </button>
+         </div>
+-        <a
+-          href="https://discord.gg/R66gSFz9d"
+-          target="_blank"
+-          rel="noopener noreferrer"
+-          className="side-tab"
+-          style={{ marginBottom: 4 }}
+-        >
+-          <NavIcon name="community" active={false} />
+-          Community
+-        </a>
+-        <Link to="/legal" className="side-tab" style={{ marginBottom: 4 }}>
+-          <NavIcon name="legal" active={false} />
+-          Legal
+-        </Link>
++      </div>
+       </div>
+ 
+       {feedbackOpen && <FeedbackModal onClose={() => setFeedbackOpen(false)} />}
+     </aside>
+-    {/* v164: the portfolio top tabs render alongside the sidebar (fixed
+-        across the top on desktop, a static strip under the top bar on
+-        phones) -- see AppTabs.tsx for why the rail maps onto this
+-        sidebar instead of replacing it. */}
+-    <AppTabs />
++    {/* v174: the portfolio top tabs (AppTabs) are retired; on phones the
++        bottom bar takes their place as the persistent chrome, and its
++        Menu button opens the sidebar body above as a sheet. */}
++    <PhoneBottomBar menuOpen={menuOpen} onToggleMenu={() => setMenuOpen((o) => !o)} menuButtonRef={menuButtonRef} />
+     </>
+   );
+ }
+diff --git a/src/components/AppTabs.tsx b/src/components/AppTabs.tsx
+deleted file mode 100644
+index 08d2e54..0000000
+--- a/src/components/AppTabs.tsx
++++ /dev/null
+@@ -1,61 +0,0 @@
+-import { Link, useLocation } from "react-router-dom";
+-
+-// The portfolio top tabs (v164, Portfolio Command): the cross-project
+-// views as a tab bar across the top of every signed-in page -- Dashboard
+-// (the visual portfolio home), Today, Projects, and the two NEW
+-// cross-project views, Decisions and Risks & Issues, alongside Weekly
+-// Sync and Workload. Rendered by AppSidebar next to the sidebar, which
+-// keeps everything it already carried (logo, Cmd-K search, Help,
+-// Settings/Account, the user avatar menu) -- the plan's slim rail maps
+-// onto that sidebar rather than replacing it, so no existing route,
+-// deep link or tested sidebar behavior moves. The Dashboard tab and the
+-// Projects tab point at the same page in its two views, the split the
+-// page's own List/Dashboard toggle has always made.
+-const TABS: { label: string; to: string; isActive: (pathname: string, view: string | null) => boolean }[] = [
+-  {
+-    label: "Dashboard",
+-    to: "/app/projects?view=dashboard",
+-    isActive: (p, view) => p === "/app/dashboard" || (p === "/app/projects" && view === "dashboard"),
+-  },
+-  { label: "Today", to: "/app", isActive: (p) => p === "/app" },
+-  {
+-    label: "Projects",
+-    to: "/app/projects",
+-    isActive: (p, view) => (p === "/app/projects" && view !== "dashboard") || p.startsWith("/app/projects/"),
+-  },
+-  { label: "Decisions", to: "/app/decisions", isActive: (p) => p === "/app/decisions" },
+-  { label: "Risks & Issues", to: "/app/risks", isActive: (p) => p === "/app/risks" },
+-  { label: "Weekly Sync", to: "/app/sync", isActive: (p) => p === "/app/sync" },
+-  { label: "Workload", to: "/app/workload", isActive: (p) => p === "/app/workload" },
+-];
+-
+-export function AppTabs() {
+-  const { pathname, search } = useLocation();
+-  const view = new URLSearchParams(search).get("view");
+-  return (
+-    <nav className="app-tabs" aria-label="Portfolio views">
+-      {/* v164.1: the tabs live in their own scrollable strip and the
+-          + New project link sits outside it. As one long row (v164) the
+-          button was the last item in the scrolling area, so on any
+-          window narrower than the full row it slid off the right edge
+-          with the scrollbar hidden and no way to see it was there. Now
+-          the strip scrolls under the button, which never moves. */}
+-      <div className="app-tabs-scroll">
+-        {TABS.map((t) => {
+-          const active = t.isActive(pathname, view);
+-          return (
+-            <Link
+-              key={t.label}
+-              to={t.to}
+-              className={active ? "app-tab app-tab-active" : "app-tab"}
+-              aria-current={active ? "page" : undefined}
+-            >
+-              {t.label}
+-            </Link>
+-          );
+-        })}
+-      </div>
+-      <Link className="app-tabs-new" to="/app/projects?new=1">+ New project</Link>
+-    </nav>
+-  );
+-}
+diff --git a/src/components/CalmHome.tsx b/src/components/CalmHome.tsx
+index 8056f1c..ff18253 100644
+--- a/src/components/CalmHome.tsx
++++ b/src/components/CalmHome.tsx
+@@ -13,11 +13,12 @@ import { fmtDate } from "../lib/format";
+ import { hiddenTabIds, type ProjectSize } from "../lib/projectView";
+ 
+ // The pieces offered on the grow row, in the order a growing project
+-// usually reaches for them. Timeline (roadmap) is not hidden by size, but
+-// it belongs here: on the calm home it is the one core surface with no
+-// card of its own.
++// usually reaches for them. Roadmap is not hidden by size, but it
++// belongs here: on the calm home it is the one core surface with no
++// card of its own. (v174: the piece is called "Roadmap" here too --
++// "Timeline" used to name this tab, a Tasks view, and a component.)
+ export const GROW_PIECES: { id: string; label: string }[] = [
+-  { id: "roadmap", label: "Timeline" },
++  { id: "roadmap", label: "Roadmap" },
+   { id: "budget", label: "Budget" },
+   { id: "meetings", label: "Meetings" },
+   { id: "stakeholders", label: "Stakeholders" },
+@@ -182,7 +183,7 @@ export default function CalmHome({
+       </div>
+ 
+       <div className="calm-grow">
+-        <p className="calm-grow-label">Need more for this project?</p>
++        <p className="calm-grow-label">More sections</p>
+         <div className="calm-grow-row">
+           {GROW_PIECES.map((piece) => (
+             <button key={piece.id} type="button" className="calm-chip" onClick={() => grow(piece.id)}>
+diff --git a/src/components/FormsAndDownloads.tsx b/src/components/FormsAndDownloads.tsx
+index cb4b2bb..b1422e4 100644
+--- a/src/components/FormsAndDownloads.tsx
++++ b/src/components/FormsAndDownloads.tsx
+@@ -63,21 +63,10 @@ export function FormsAndDownloads() {
+                 </button>
+               </div>
+             ))}
+-            <div className="template-card">
+-              <h2 className="heading-sm">Risk matrix and register</h2>
+-              <p className="muted">Printable page with the probability and impact grid. Save as PDF, or share a read-only link.</p>
+-              <Link className="btn btn-primary" to={`/app/projects/${projectId}/print/risks`}>Open printable page</Link>
+-            </div>
+-            <div className="template-card">
+-              <h2 className="heading-sm">RACI chart</h2>
+-              <p className="muted">Printable page of who is Responsible, Accountable, Consulted and Informed. Save as PDF, or share a read-only link.</p>
+-              <Link className="btn btn-primary" to={`/app/projects/${projectId}/print/raci`}>Open printable page</Link>
+-            </div>
+-            <div className="template-card">
+-              <h2 className="heading-sm">Stakeholder grid</h2>
+-              <p className="muted">Printable power / interest grid showing who to manage closely, keep satisfied, keep informed or monitor. Save as PDF.</p>
+-              <Link className="btn btn-primary" to={`/app/projects/${projectId}/print/stakeholders`}>Open printable page</Link>
+-            </div>
++            {/* v174: the printable risk / RACI / stakeholder pages are no
++                longer linked from here -- each print view keeps exactly
++                two doors (its own section and the project's Export
++                section). Learn keeps the downloadable forms above. */}
+             <div className="template-card">
+               <h2 className="heading-sm">Weekly report</h2>
+               <p className="muted">The week's progress, risks and next steps, ready to print or save as PDF.</p>
+diff --git a/src/components/GlobalSearch.tsx b/src/components/GlobalSearch.tsx
+index 204e3df..0287e1a 100644
+--- a/src/components/GlobalSearch.tsx
++++ b/src/components/GlobalSearch.tsx
+@@ -1,11 +1,12 @@
+ import { useEffect, useMemo, useRef, useState } from "react";
+ import { createPortal } from "react-dom";
+-import { useNavigate } from "react-router-dom";
++import { useLocation, useNavigate } from "react-router-dom";
+ import { api, type SearchResults } from "../lib/api";
+-import { flattenSearchResults, moveSearchIndex, type SearchItem } from "../lib/search";
++import { useAuth } from "../lib/auth-context";
++import { featureMatches, flattenSearchResults, moveSearchIndex, type SearchItem } from "../lib/search";
+ 
+ const EMPTY: SearchResults = { projects: [], tasks: [], decisions: [], risks: [] };
+-const GROUP_ORDER: SearchItem["group"][] = ["Projects", "Tasks", "Decisions", "Risks"];
++const GROUP_ORDER: SearchItem["group"][] = ["Pages & features", "Projects", "Tasks", "Decisions", "Risks"];
+ 
+ /**
+  * Global search (v159, F-18): a search box in the sidebar bar and a
+@@ -13,9 +14,14 @@ const GROUP_ORDER: SearchItem["group"][] = ["Projects", "Tasks", "Decisions", "R
+  * grouped by type; arrow keys move, Enter opens, Escape closes. Picking a
+  * result lands on the project tab where the thing lives (tasks, decisions
+  * and risks each have their own tab; a project lands on its Overview).
++ * Since v174 the palette also knows the product's own pages and features
++ * (lib/search's feature index), so "snapshot", "webhooks" and "connect
++ * your AI" resolve instead of returning nothing.
+  */
+ export function GlobalSearch() {
+   const navigate = useNavigate();
++  const { pathname } = useLocation();
++  const { user } = useAuth();
+   const [open, setOpen] = useState(false);
+   const [query, setQuery] = useState("");
+   const [results, setResults] = useState<SearchResults>(EMPTY);
+@@ -72,7 +78,12 @@ export function GlobalSearch() {
+     return () => clearTimeout(t);
+   }, [query, open]);
+ 
+-  const items = useMemo(() => flattenSearchResults(results), [results]);
++  const projectId = useMemo(() => pathname.match(/^\/app\/projects\/([^/]+)/)?.[1] ?? null, [pathname]);
++  const features = useMemo(
++    () => (open ? featureMatches(query, { projectId, plan: user?.plan }) : []),
++    [open, query, projectId, user?.plan],
++  );
++  const items = useMemo(() => [...features, ...flattenSearchResults(results)], [features, results]);
+   const grouped = useMemo(
+     () => GROUP_ORDER.map((g) => ({ group: g, items: items.filter((i) => i.group === g) })).filter((g) => g.items.length > 0),
+     [items],
+@@ -139,16 +150,16 @@ export function GlobalSearch() {
+                 aria-expanded={items.length > 0}
+                 aria-controls="search-results"
+                 aria-activedescendant={active >= 0 && items[active] ? `search-item-${items[active].key}` : undefined}
+-                placeholder="Search projects, tasks, decisions, risks…"
+-                aria-label="Search projects, tasks, decisions, risks"
++                placeholder="Search projects, tasks, pages and features…"
++                aria-label="Search projects, tasks, pages and features"
+                 value={query}
+                 onChange={(e) => setQuery(e.target.value)}
+                 onKeyDown={onInputKeyDown}
+               />
+               <div className="search-results" id="search-results" role="listbox" aria-label="Search results">
+-                {query.trim().length < 2 ? (
++                {items.length === 0 && query.trim().length < 2 ? (
+                   <p className="search-hint muted">Type at least two characters to search across your projects.</p>
+-                ) : loading ? (
++                ) : items.length === 0 && loading ? (
+                   <p className="search-hint muted">Searching…</p>
+                 ) : items.length === 0 ? (
+                   <p className="search-hint muted">Nothing matches “{query.trim()}”.</p>
+diff --git a/src/components/NavIcon.tsx b/src/components/NavIcon.tsx
+index 7f74ed7..0771b8d 100644
+--- a/src/components/NavIcon.tsx
++++ b/src/components/NavIcon.tsx
+@@ -53,6 +53,9 @@ export type NavIconName =
+   | "templates"
+   | "export"
+   | "connections"
++  | "snapshot"
++  | "email"
++  | "menu"
+   | "trash"
+   | "help"
+   | "tour"
+@@ -237,6 +240,20 @@ const SHAPES: Record<NavIconName, Shape[]> = {
+     { tag: "rect", attrs: { x: 3, y: 8.3, width: 8, height: 4.2, rx: 2.1, transform: "rotate(-35 7 10.4)" } },
+     { tag: "rect", attrs: { x: 9, y: 6.3, width: 8, height: 4.2, rx: 2.1, transform: "rotate(-35 13 8.4)" } },
+   ],
++  snapshot: [
++    { tag: "rect", attrs: { x: 3, y: 4.5, width: 14, height: 11.5, rx: 1.5 } },
++    { tag: "circle", attrs: { cx: 7.3, cy: 8.3, r: 1.3 } },
++    { tag: "path", attrs: { d: "M3.5 14.5 8 10.8l2.8 2.3 2.4-1.9 3.3 2.7" } },
++  ],
++  email: [
++    { tag: "rect", attrs: { x: 2.8, y: 5, width: 14.4, height: 10.5, rx: 1.5 } },
++    { tag: "path", attrs: { d: "M3.5 6.5 10 11l6.5-4.5" } },
++  ],
++  menu: [
++    { tag: "path", attrs: { d: "M3.5 5.8h13" } },
++    { tag: "path", attrs: { d: "M3.5 10h13" } },
++    { tag: "path", attrs: { d: "M3.5 14.2h13" } },
++  ],
+   trash: [
+     { tag: "path", attrs: { d: "M4 6h12" } },
+     { tag: "path", attrs: { d: "M8 6V4.5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1V6" } },
+diff --git a/src/components/PhoneBottomBar.tsx b/src/components/PhoneBottomBar.tsx
+new file mode 100644
+index 0000000..a064cd7
+--- /dev/null
++++ b/src/components/PhoneBottomBar.tsx
+@@ -0,0 +1,176 @@
++import { useEffect, useRef, useState, type RefObject } from "react";
++import { Link, useLocation } from "react-router-dom";
++import { api, type Project } from "../lib/api";
++import { useAuth } from "../lib/auth-context";
++import { announce } from "../lib/announce";
++import { NavIcon } from "./NavIcon";
++
++/**
++ * The phone bottom bar (v174, navigation consolidation): Today ·
++ * Projects · ＋ · Sync · Menu, persistent on every signed-in screen at
++ * ≤860px (CSS hides it above that width and in print). The ＋ opens an
++ * action sheet -- it creates, it does not navigate: Quick-add task (the
++ * same in-place add Today offers, with a project picker) and New
++ * project. Menu opens the sidebar body as a sheet (AppSidebar owns that
++ * state; this bar only carries the button).
++ */
++export function PhoneBottomBar({
++  menuOpen,
++  onToggleMenu,
++  menuButtonRef,
++}: {
++  menuOpen: boolean;
++  onToggleMenu: () => void;
++  menuButtonRef: RefObject<HTMLButtonElement | null>;
++}) {
++  const { pathname } = useLocation();
++  const { user } = useAuth();
++  const [sheet, setSheet] = useState<"actions" | "quickadd" | null>(null);
++  const [projects, setProjects] = useState<Project[] | null>(null);
++  const [projectId, setProjectId] = useState("");
++  const [title, setTitle] = useState("");
++  const [adding, setAdding] = useState(false);
++  const [error, setError] = useState<string | null>(null);
++  const titleRef = useRef<HTMLInputElement>(null);
++
++  // Leaving the page closes the sheet.
++  useEffect(() => { setSheet(null); }, [pathname]);
++
++  useEffect(() => {
++    if (sheet !== "quickadd") return;
++    titleRef.current?.focus();
++    if (projects === null) {
++      api
++        .listProjects()
++        .then(({ projects: list }) => {
++          setProjects(list);
++          if (list.length > 0) setProjectId((cur) => cur || list[0].id);
++        })
++        .catch(() => setProjects([]));
++    }
++  }, [sheet, projects]);
++
++  useEffect(() => {
++    if (!sheet) return;
++    function onKey(e: KeyboardEvent) {
++      if (e.key === "Escape") setSheet(null);
++    }
++    document.addEventListener("keydown", onKey);
++    return () => document.removeEventListener("keydown", onKey);
++  }, [sheet]);
++
++  async function addTask(e: React.FormEvent) {
++    e.preventDefault();
++    const trimmed = title.trim();
++    if (!trimmed || !projectId || adding) return;
++    setAdding(true);
++    setError(null);
++    try {
++      await api.createTask(projectId, trimmed, user?.display_name ?? undefined);
++      announce(`Added: ${trimmed}`);
++      setTitle("");
++      setSheet(null);
++    } catch {
++      setError("That task didn't save. Give it another try.");
++    } finally {
++      setAdding(false);
++    }
++  }
++
++  const itemCls = (active: boolean) => (active ? "phone-bar-item active" : "phone-bar-item");
++  const onProjects = pathname === "/app/projects" || pathname.startsWith("/app/projects/");
++
++  return (
++    <>
++      <nav className="phone-bottom-bar" aria-label="Quick navigation">
++        <Link to="/app" className={itemCls(pathname === "/app")} aria-current={pathname === "/app" ? "page" : undefined}>
++          <NavIcon name="today" active={pathname === "/app"} />
++          <span className="phone-bar-label">Today</span>
++        </Link>
++        <Link to="/app/projects" className={itemCls(onProjects)} aria-current={onProjects ? "page" : undefined}>
++          <NavIcon name="dashboard" active={onProjects} />
++          <span className="phone-bar-label">Projects</span>
++        </Link>
++        <button
++          type="button"
++          className="phone-bar-item phone-bar-plus"
++          aria-label="Create"
++          aria-expanded={sheet !== null}
++          onClick={() => setSheet((s) => (s === null ? "actions" : null))}
++        >
++          <span className="phone-bar-plus-glyph" aria-hidden="true">+</span>
++          <span className="phone-bar-label">Create</span>
++        </button>
++        <Link to="/app/sync" className={itemCls(pathname === "/app/sync")} aria-current={pathname === "/app/sync" ? "page" : undefined}>
++          <NavIcon name="decisions" active={pathname === "/app/sync"} />
++          <span className="phone-bar-label">Sync</span>
++        </Link>
++        <button
++          type="button"
++          ref={menuButtonRef}
++          className="phone-bar-item"
++          aria-expanded={menuOpen}
++          aria-controls="sidebar-nav"
++          onClick={onToggleMenu}
++        >
++          <NavIcon name="menu" active={menuOpen} />
++          <span className="phone-bar-label">Menu</span>
++        </button>
++      </nav>
++
++      {sheet && (
++        <div className="phone-sheet-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) setSheet(null); }}>
++          <div className="phone-sheet" role="dialog" aria-modal="true" aria-label={sheet === "actions" ? "Create" : "Quick-add task"}>
++            {sheet === "actions" ? (
++              <>
++                <button type="button" className="phone-sheet-item" onClick={() => setSheet("quickadd")}>
++                  Quick-add task
++                </button>
++                <Link to="/app/projects?new=1" className="phone-sheet-item" onClick={() => setSheet(null)}>
++                  New project
++                </Link>
++                <button type="button" className="phone-sheet-item phone-sheet-cancel" onClick={() => setSheet(null)}>
++                  Cancel
++                </button>
++              </>
++            ) : (
++              <form className="phone-quickadd" onSubmit={addTask}>
++                <label className="phone-quickadd-label" htmlFor="phone-quickadd-title">Quick-add task</label>
++                <input
++                  id="phone-quickadd-title"
++                  ref={titleRef}
++                  type="text"
++                  value={title}
++                  onChange={(e) => setTitle(e.target.value)}
++                  placeholder="Task title"
++                  maxLength={200}
++                />
++                {projects === null ? (
++                  <p className="muted">Loading your projects…</p>
++                ) : projects.length === 0 ? (
++                  <p className="muted">Create a project first, then you can quick-add tasks to it.</p>
++                ) : (
++                  <>
++                    <label className="sr-only" htmlFor="phone-quickadd-project">Project</label>
++                    <select id="phone-quickadd-project" value={projectId} onChange={(e) => setProjectId(e.target.value)}>
++                      {projects.map((p) => (
++                        <option key={p.id} value={p.id}>{p.name}</option>
++                      ))}
++                    </select>
++                  </>
++                )}
++                {error && <p className="form-error" role="alert">{error}</p>}
++                <div className="phone-quickadd-actions">
++                  <button type="button" className="btn btn-ghost" onClick={() => setSheet(null)}>Cancel</button>
++                  <button type="submit" className="btn btn-primary" disabled={adding || !title.trim() || !projectId}>
++                    {adding ? "Adding…" : "Add task"}
++                  </button>
++                </div>
++              </form>
++            )}
++          </div>
++        </div>
++      )}
++    </>
++  );
++}
+diff --git a/src/components/ProjectSidebarNav.tsx b/src/components/ProjectSidebarNav.tsx
+index 8ddccd9..0e9d745 100644
+--- a/src/components/ProjectSidebarNav.tsx
++++ b/src/components/ProjectSidebarNav.tsx
+@@ -1,34 +1,39 @@
+ // v172 (Plan A, "Layer It"): the project's navigation lives in the
+ // sidebar now, one contextual column instead of the two stacked tab bars
+-// that used to sit on top of every project page. The global Workspace
+-// group stays above this in AppSidebar; this component renders only the
+-// project block: its name and stage, its sections grouped the way
+-// projectNav already groups them, and (for light projects) the same
+-// grow-in-place row the calm home offers.
++// that used to sit on top of every project page. The global destinations
++// stay above this in AppSidebar; this component renders only the project
++// block: its name and stage, its sections in the v174 job-shaped groups
++// (Plan / Track / People / Wrap up, plus the ungrouped settings tail),
++// and the "More sections" grow list.
+ //
+ // Behavior is unchanged underneath: selecting a section is the same
+ // ?tab= navigation the pill bars used, the size system still decides
+ // which sections exist, and the product tour's data-tour targets moved
+ // here with the buttons, so every tour step still finds its element.
++// Client Snapshot is the one link section: it opens the snapshot print
++// route instead of a tab (it never had a ?tab= id).
+ 
+-import { useState } from "react";
++import { useEffect, useState } from "react";
++import { Link, useNavigate } from "react-router-dom";
+ import { NavGroup } from "./AppSidebar";
+ import { NavIcon, type NavIconName } from "./NavIcon";
++import { api } from "../lib/api";
+ import type { NavGroup as NavGroupData, NavSection } from "../lib/projectNav";
+ 
+ export type SidebarGroup = { group: NavGroupData; sections: NavSection[]; opens: string };
+ 
+ export function ProjectSidebarNav({
++  projectId,
+   projectName,
+   stageLabel,
+   groups,
+   activeTab,
+-  activeGroupId,
+   decisionsWaiting,
+   growPieces,
+   onOpenTab,
+   onGrow,
+ }: {
++  projectId: string;
+   projectName: string;
+   stageLabel?: string | null;
+   groups: SidebarGroup[];
+@@ -40,9 +45,40 @@ export function ProjectSidebarNav({
+   onGrow: (tab: string) => void;
+ }) {
+   const [growOpen, setGrowOpen] = useState(false);
++  const navigate = useNavigate();
++  // Phone Menu sheet only (CSS hides this above 860px): a project
++  // switcher at the top of the project's zone in the sheet.
++  const [projects, setProjects] = useState<{ id: string; name: string }[]>([]);
++  useEffect(() => {
++    let live = true;
++    api
++      .listProjects()
++      .then(({ projects: list }) => { if (live) setProjects(list.map((p) => ({ id: p.id, name: p.name }))); })
++      .catch(() => { /* the switcher just doesn't render */ });
++    return () => { live = false; };
++  }, []);
+ 
+   function item(sec: NavSection) {
+     const active = activeTab === sec.id;
++    const badge = sec.id === "decisions" && decisionsWaiting > 0 && (
++      <span className="side-badge" aria-label={`${decisionsWaiting} waiting`}>
++        {decisionsWaiting}
++      </span>
++    );
++    if (sec.href) {
++      return (
++        <Link
++          key={sec.id}
++          to={sec.href(projectId)}
++          className="side-tab"
++          data-tour={`tab-${sec.id}`}
++        >
++          <NavIcon name={sec.id as NavIconName} active={false} />
++          {sec.label}
++          {badge}
++        </Link>
++      );
++    }
+     return (
+       <button
+         key={sec.id}
+@@ -54,37 +90,49 @@ export function ProjectSidebarNav({
+       >
+         <NavIcon name={sec.id as NavIconName} active={active} />
+         {sec.label}
+-        {sec.id === "decisions" && decisionsWaiting > 0 && (
+-          <span className="side-badge" aria-label={`${decisionsWaiting} waiting`}>
+-            {decisionsWaiting}
+-          </span>
+-        )}
++        {badge}
+       </button>
+     );
+   }
+ 
+   return (
+-    <>
++    <div className="side-project-block">
+       <div className="side-nav-group">
+         {/* The label truncates in the narrow sidebar; the full project
+             name is on hover (kept from v160, F-24). */}
+-        <div className="side-nav-label" title={projectName}>
++        <div className="side-nav-label side-project-name" title={projectName}>
+           {projectName}
+         </div>
++        {projects.length > 1 && (
++          <div className="side-project-switcher">
++            <label className="sr-only" htmlFor="side-project-switch">Switch project</label>
++            <select
++              id="side-project-switch"
++              value={projectId}
++              onChange={(e) => navigate(`/app/projects/${e.target.value}`)}
++            >
++              {projects.map((p) => (
++                <option key={p.id} value={p.id}>{p.name}</option>
++              ))}
++            </select>
++          </div>
++        )}
+         {stageLabel && <div className="side-project-stage">{stageLabel} stage</div>}
+       </div>
+ 
+       {groups.map(({ group, sections }) =>
+-        sections.length === 1 ? (
++        group.id === "settings" ? (
++          // The settings tail is ungrouped (v174): two entries at the end
++          // of the list, no collapsible label of their own.
++          <div className="side-nav-group" key={group.id}>
++            <div className="side-nav-items">{sections.map(item)}</div>
++          </div>
++        ) : sections.length === 1 ? (
+           <div className="side-nav-group" key={group.id}>
+             <div className="side-nav-items">{item(sections[0])}</div>
+           </div>
+         ) : (
+-          <NavGroup
+-            key={group.id}
+-            label={group.label}
+-            defaultCollapsed={group.id !== activeGroupId && group.id === "docs"}
+-          >
++          <NavGroup key={group.id} label={group.label}>
+             {sections.map(item)}
+           </NavGroup>
+         ),
+@@ -98,7 +146,7 @@ export function ProjectSidebarNav({
+             aria-expanded={growOpen}
+             onClick={() => setGrowOpen((o) => !o)}
+           >
+-            + Need more for this project?
++            + More sections
+           </button>
+           {growOpen && (
+             <div className="side-nav-items">
+@@ -117,6 +165,6 @@ export function ProjectSidebarNav({
+           )}
+         </div>
+       )}
+-    </>
++    </div>
+   );
+ }
+diff --git a/src/index.css b/src/index.css
+index 5d9098b..9ba43fd 100644
+--- a/src/index.css
++++ b/src/index.css
+@@ -716,23 +716,8 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
+ .today-section { margin-bottom: 24px; }
+ .today-section h4, .today-section h3 { margin-bottom: 8px; }
+ 
+-/* --- All sections directory (v153.1): one even grid of tiles per group,
+-   replacing the underlined link list. Tiles follow the card recipe. --- */
+-.section-dir { display: flex; flex-direction: column; gap: var(--ds-space-6); margin-top: var(--ds-space-3); }
+-.section-dir-label {
+-  margin: 0 0 var(--ds-space-2); font-size: var(--ds-text-xs); font-weight: 700;
+-  text-transform: uppercase; letter-spacing: 0.04em; color: var(--slate-text);
+-}
+-.section-dir-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: var(--ds-space-3); }
+-.section-dir-item {
+-  display: block; width: 100%; height: 100%; text-align: left; cursor: pointer;
+-  background: var(--cream); border: 1px solid var(--border); border-radius: var(--radius);
+-  box-shadow: var(--ds-shadow-resting); padding: var(--ds-space-3) var(--ds-space-4);
+-  font-family: inherit; transition: box-shadow var(--ease), transform var(--ease);
+-}
+-.section-dir-item:hover { box-shadow: var(--ds-shadow-raised); transform: translateY(-1px); }
+-.section-dir-name { display: block; font-size: var(--ds-text-md); font-weight: 700; color: var(--navy); line-height: var(--ds-leading-tight); }
+-.section-dir-blurb { display: block; margin-top: var(--ds-space-1); font-size: var(--ds-text-sm); color: var(--slate-text); line-height: var(--ds-leading-normal); }
++/* (The v153.1 "All sections" directory styles lived here; v174 removed
++   the directory itself, and the rules went with it.) */
+ .today-list { list-style: none; margin: 0; padding: 0; }
+ .today-list li {
+   padding: 10px 6px; border-bottom: 1px solid var(--border); font-size: 14px;
+@@ -879,49 +864,10 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
+    tabs keep 960px. */
+ .project-main.project-main-tables { max-width: 1240px; padding-left: 28px; padding-right: 28px; }
+ 
+-/* v164 (Portfolio Command): the portfolio top tabs. On desktop the bar is
+-   fixed across the top of the content column (offset by the sidebar's
+-   width, which the collapse toggle changes), and .project-main takes a
+-   matching top margin so nothing slides under it. On phones the shell is
+-   a column, so the bar simply sits in the flow under the sidebar's top
+-   bar and scrolls sideways. Print drops it entirely. */
+-.app-tabs {
+-  display: flex; align-items: center; gap: 2px; height: 49px; padding: 0 12px;
+-  background: var(--panel); border-bottom: 1px solid var(--border);
+-}
+-/* v164.1: only the tab strip scrolls (sideways, scrollbar hidden as
+-   before); the + New project button is a sibling outside the strip with
+-   flex-shrink: 0, so it is always fully on screen -- in v164 it was the
+-   last item inside the scrolling row and clipped off the right edge on
+-   narrower windows, mid-label, with no visible way to scroll to it. */
+-.app-tabs-scroll {
+-  display: flex; align-items: center; gap: 2px; flex: 1 1 auto; min-width: 0;
+-  overflow-x: auto; scrollbar-width: none;
+-}
+-.app-tabs-scroll::-webkit-scrollbar { display: none; }
+-.app-tab {
+-  padding: 7px 12px; border-radius: var(--radius-pill); font-size: 14px; font-weight: 600;
+-  color: var(--navy); text-decoration: none; white-space: nowrap; flex-shrink: 0;
+-}
+-/* The hover colors are spelled out on purpose: the global a:hover rule
+-   (color: var(--navy), specificity 0-1-1) otherwise beats .app-tab-active's
+-   color (0-1-0) and repaints the active tab's label navy on its ink pill --
+-   black-on-black until the cursor moves away (v164.1 fix). Same for the
+-   New project link, whose ink text the global rule turned navy on hover. */
+-.app-tab:hover { background: rgba(127, 127, 127, 0.14); color: var(--navy); }
+-.app-tab-active { background: var(--ink); color: var(--ivory); }
+-.app-tab-active:hover { background: var(--ink); color: var(--ivory); }
+-.app-tabs-new {
+-  margin-left: auto; flex-shrink: 0; padding: 7px 14px; border-radius: var(--radius-pill); white-space: nowrap;
+-  background: var(--lime); color: var(--ink); font-size: 14px; font-weight: 700; text-decoration: none;
+-}
+-.app-tabs-new:hover { filter: brightness(0.96); color: var(--ink); }
+-@media (min-width: 861px) {
+-  .app-tabs { position: fixed; top: 0; left: 264px; right: 0; z-index: 45; }
+-  .sidebar-collapsed + .app-tabs { left: 68px; }
+-  .project-main { margin-top: 49px; }
+-}
+-@media print { .app-tabs { display: none; } .project-main { margin-top: 0; } }
++/* v174: the v164 portfolio top tabs (.app-tabs) are retired -- the
++   sidebar is the one navigation system now, and the 49px top margin
++   .project-main carried for the fixed tab bar went with them. The phone
++   bottom bar styles live in the v174 section further down. */
+ 
+ /* v164 shared visual kit (src/components/charts/): gauges, donut, variance
+    bars. Categorical colors come from palette.ts; status colors only ever
+@@ -1021,8 +967,10 @@ a.dash-list-title:hover { text-decoration: underline; }
+ 
+ @media (max-width: 860px) {
+   .project-shell { flex-direction: column; }
+-  /* On a phone the sidebar is a slim top bar (wordmark + Menu button). Tapping
+-     Menu opens the same navigation the desktop sidebar shows, stacked. */
++  /* On a phone the sidebar is a slim top bar (wordmark + bell). The
++     navigation itself lives in the Menu sheet: the bottom bar's Menu
++     button opens .sidebar-body as a fixed sheet above the bar (v174
++     section below). */
+   .sidebar {
+     width: 100%; height: auto; position: static; padding: 12px 16px;
+     flex-direction: column; align-items: stretch; gap: 0; overflow: visible;
+@@ -1030,19 +978,9 @@ a.dash-list-title:hover { text-decoration: underline; }
+   }
+   .sidebar-bar { display: flex; align-items: center; justify-content: space-between; }
+   .sidebar-wordmark { margin-bottom: 0; }
+-  .sidebar-menu-btn {
+-    display: inline-flex; align-items: center; min-height: 40px; padding: 0 16px;
+-    border-radius: var(--radius-pill); border: 1.5px solid rgba(242, 235, 217, 0.4);
+-    background: none; color: var(--ivory); font-family: inherit; font-size: 14px; font-weight: 700; cursor: pointer;
+-  }
+-  .sidebar-menu-btn:hover { background: rgba(255, 255, 255, 0.08); }
+-  .sidebar .side-nav, .sidebar .sidebar-footer { display: none; }
+-  .sidebar.sidebar-open .side-nav { display: block; margin-top: 14px; }
+-  .sidebar.sidebar-open .sidebar-footer { display: block; }
+   .sidebar-project { display: none; }
+   .project-main, .project-main.project-main-tables { padding: 20px 16px; max-width: none; }
+ }
+-@media (min-width: 861px) { .sidebar-menu-btn { display: none; } }
+ 
+ /* Collapsible sidebar (desktop only): a narrow rail of icons. Text is hidden by
+    zeroing the font size (the icons are fixed-size boxes), so every nav group,
+@@ -1051,7 +989,8 @@ a.dash-list-title:hover { text-decoration: underline; }
+ .sidebar-bar-actions { display: flex; align-items: center; gap: 6px; }
+ /* Notification bell: same round outline as the collapse button, always visible (phone and desktop). */
+ .sidebar-bell-btn {
+-  position: relative; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; flex-shrink: 0;
++  /* v174: 44px, the touch-target guideline (it was 32px). */
++  position: relative; display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; flex-shrink: 0;
+   border-radius: var(--radius-pill); border: 1.5px solid rgba(242, 235, 217, 0.4); background: none;
+   color: var(--ivory); cursor: pointer;
+ }
+@@ -1405,7 +1344,6 @@ a.dash-list-title:hover { text-decoration: underline; }
+ .feed-composer { margin-bottom: 24px; }
+ .feed-composer-title { margin: 0 0 2px; font-size: 1.05rem; }
+ .feed-composer-help { margin: 0 0 10px; }
+-.project-section-line { margin: 2px 0 0; font-size: 0.9rem; }
+ .feed-composer-form { margin-bottom: 0; }
+ .status-pill-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+ .status-pill { border: 2px solid transparent; cursor: pointer; font-family: inherit; opacity: 0.55; }
+@@ -2732,8 +2670,11 @@ a.dash-attention-next:hover { text-decoration: underline; text-underline-offset:
+    One calm line under the project title. Only the pill is coloured. */
+ .hs-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 4px 0 14px; padding: 9px 14px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); font-size: 14px; min-width: 0; }
+ .hs-why { flex: 1 1 220px; min-width: 0; overflow-wrap: anywhere; }
+-.hs-link { background: none; border: 0; padding: 0; font: inherit; font-weight: 600; color: var(--navy); text-decoration: underline; text-underline-offset: 3px; text-decoration-color: color-mix(in srgb, var(--navy) 35%, transparent); cursor: pointer; }
+-.hs-link:hover { text-decoration-color: var(--navy); }
++/* v174 (proposal row 68): the problem links carry a full-strength underline
++   in the link colour -- the old 35%-strength decoration read as plain bold
++   text, so the buttons gave no visual sign they navigate. */
++.hs-link { background: none; border: 0; padding: 0; font: inherit; font-weight: 600; color: var(--navy); text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--navy); cursor: pointer; }
++.hs-link:hover { text-decoration-thickness: 2px; }
+ .hs-next { font-size: 13px; min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+ .hs-new { background: var(--border); color: var(--slate-text); }
+ .hs-stated { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; font-size: 13px; min-width: 0; }
+@@ -3204,6 +3145,13 @@ a.dash-attention-next:hover { text-decoration: underline; text-underline-offset:
+   color: var(--slate-2);
+   text-transform: capitalize;
+ }
++/* The project name in the sidebar block truncates in the narrow sidebar
++   (the full name is on hover via the title attribute, v160 F-24). */
++.side-project-name {
++  overflow: hidden;
++  text-overflow: ellipsis;
++  white-space: nowrap;
++}
+ .side-grow-btn {
+   width: 100%;
+   background: none;
+@@ -3266,3 +3214,144 @@ a.dash-attention-next:hover { text-decoration: underline; text-underline-offset:
+ .admin-main .rg-row { padding-top: var(--pad-row); padding-bottom: var(--pad-row); }
+ .admin-main .rg-list { margin-bottom: var(--gap-stack); }
+ .admin-main p.muted { line-height: 1.55; }
++
++/* --- v174: navigation consolidation -----------------------------------
++   One sidebar system; the phone bottom bar; the Menu sheet. The bar
++   height is a variable so the sheet, the content padding and the
++   QuickAddJump button all clear the same bar. */
++:root { --phone-bar-height: 60px; }
++
++/* The sidebar body wrapper is transparent on desktop: the rail lays out
++   exactly as if the nav and footer were direct children of the aside. */
++.sidebar-body { display: contents; }
++.phone-account-links { display: none; }
++.side-project-switcher { display: none; }
++
++/* The + New project button at the head of the nav (it lived in the
++   retired tab bar). Lime, like the tab bar's button was. */
++.sidebar-new-project {
++  display: flex; align-items: center; gap: 10px; width: 100%; box-sizing: border-box;
++  padding: 10px 14px; margin-bottom: 14px; border-radius: var(--radius-pill);
++  background: var(--lime); color: var(--ink); font-size: 15px; font-weight: 700;
++  text-decoration: none;
++}
++.sidebar-new-project:hover { filter: brightness(0.96); color: var(--ink); }
++.sidebar-new-plus { font-size: 17px; line-height: 1; font-weight: 700; }
++.sidebar-collapsed .sidebar-new-label { display: none; }
++.sidebar-collapsed .sidebar-new-project { justify-content: center; }
++
++/* The phone bottom bar: hidden above phone width and in print. */
++.phone-bottom-bar { display: none; }
++@media (max-width: 860px) {
++  .phone-bottom-bar {
++    display: flex; align-items: stretch; position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
++    height: calc(var(--phone-bar-height) + env(safe-area-inset-bottom, 0px));
++    padding-bottom: env(safe-area-inset-bottom, 0px); box-sizing: border-box;
++    background: var(--ink); border-top: 1px solid rgba(242, 235, 217, 0.18);
++  }
++  .phone-bar-item {
++    flex: 1 1 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
++    min-height: 48px; padding: 6px 2px; background: none; border: none; cursor: pointer;
++    color: #B9C2A3; font-family: inherit; font-size: 11.5px; font-weight: 600; text-decoration: none;
++  }
++  .phone-bar-item .nav-icon-wrap { background: rgba(207, 234, 70, 0.14); }
++  /* Active state is a lime pill with dark text, never lime text on a
++     light ground (the contrast pair the proposal pins). */
++  .phone-bar-item.active { color: var(--ink); }
++  .phone-bar-item.active .nav-icon-wrap { background: var(--lime); }
++  .phone-bar-item.active .nav-icon-glyph * { stroke: var(--ink); }
++  .phone-bar-label { line-height: 1; }
++  .phone-bar-item.active .phone-bar-label {
++    background: var(--lime); border-radius: var(--radius-pill); padding: 2px 8px;
++  }
++  .phone-bar-plus-glyph { font-size: 24px; line-height: 1; font-weight: 600; height: 22px; display: flex; align-items: center; }
++
++  /* Content clears the bar, and the QuickAddJump rescue button floats
++     above it instead of under it. */
++  .project-main { padding-bottom: calc(var(--phone-bar-height) + env(safe-area-inset-bottom, 0px) + 24px); }
++  .quick-add-jump { bottom: calc(var(--phone-bar-height) + env(safe-area-inset-bottom, 0px) + 12px); }
++
++  /* The Menu sheet: the sidebar body, fixed above the bottom bar. */
++  .sidebar-body { display: none; }
++  .sidebar.sidebar-open .sidebar-body {
++    display: block; position: fixed; left: 0; right: 0;
++    bottom: calc(var(--phone-bar-height) + env(safe-area-inset-bottom, 0px));
++    z-index: 55; max-height: min(72vh, 640px); overflow-y: auto;
++    background: var(--ink); border-radius: 16px 16px 0 0;
++    box-shadow: 0 -12px 32px rgba(28, 36, 21, 0.35);
++    padding: 16px 16px 8px;
++  }
++  .sidebar.sidebar-open .side-nav { display: flex; flex-direction: column; }
++  /* Inside a project, the project's block leads the sheet. */
++  .sidebar.sidebar-open .side-project-block { order: -1; }
++  /* Groups never sit collapsed on the phone (the trap the old CSS left:
++     a group collapsed on desktop stayed collapsed in the phone menu). */
++  .sidebar .side-nav-group.collapsed .side-nav-items { display: block; }
++  .sidebar .side-nav-chevron { display: none; }
++  .sidebar .side-nav-label.collapsible { cursor: default; }
++  /* Sheet rows meet the 44px touch guideline. */
++  .sidebar.sidebar-open .side-tab { min-height: 44px; }
++  /* The nested user menu flattens: account items list directly. */
++  .sidebar .user-menu { display: none; }
++  .phone-account-links { display: block; }
++  /* The project switcher shows in the sheet (and only there). */
++  .side-project-switcher { display: block; margin: 2px 0 6px; }
++  .side-project-switcher select {
++    width: 100%; min-height: 44px; padding: 8px 10px; border-radius: var(--radius-sm);
++    border: 1.5px solid rgba(242, 235, 217, 0.4); background: var(--ink); color: var(--ivory);
++    font-family: inherit; font-size: 15px; font-weight: 600;
++  }
++}
++@media print {
++  .phone-bottom-bar { display: none !important; }
++  .sidebar-body { display: contents; }
++}
++
++/* The + Create action sheet and its quick-add form. */
++.phone-sheet-backdrop {
++  position: fixed; inset: 0; z-index: 56; background: rgba(28, 36, 21, 0.45);
++  display: flex; align-items: flex-end; justify-content: center;
++}
++.phone-sheet {
++  background: var(--panel); width: 100%; max-width: 520px; max-height: 82vh; overflow-y: auto;
++  border-radius: 16px 16px 0 0; padding: 12px 16px calc(16px + env(safe-area-inset-bottom, 0px));
++  box-sizing: border-box;
++}
++.phone-sheet-item {
++  display: block; width: 100%; box-sizing: border-box; text-align: left;
++  min-height: 48px; padding: 13px 10px; background: none; border: none; border-bottom: 1px solid var(--border);
++  font-family: inherit; font-size: 16px; font-weight: 600; color: var(--navy); cursor: pointer; text-decoration: none;
++}
++.phone-sheet-item:last-child { border-bottom: none; }
++.phone-sheet-cancel { color: var(--slate); }
++.phone-quickadd { display: flex; flex-direction: column; gap: 10px; padding: 6px 2px 2px; }
++.phone-quickadd-label { font-size: 16px; font-weight: 700; color: var(--navy); }
++.phone-quickadd input[type="text"], .phone-quickadd select {
++  min-height: 44px; padding: 9px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border);
++  font-family: inherit; font-size: 15px; box-sizing: border-box; width: 100%;
++}
++.phone-quickadd-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 2px; }
++@media (min-width: 861px) {
++  /* The action sheet is a phone pattern; on desktop it bottom-centers
++     like a small dialog if it is ever opened there. */
++  .phone-sheet-backdrop { align-items: center; }
++  .phone-sheet { border-radius: 16px; margin: 0 16px; }
++}
++
++/* Overview: the client snapshot card and the More sections row. */
++.snapshot-card {
++  display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
++  background: var(--cream); border: 1px solid var(--border); border-radius: var(--radius);
++  padding: 16px 18px; margin: 0 0 16px;
++}
++.snapshot-card-title { margin: 0 0 4px; font-size: 16px; color: var(--navy); }
++.snapshot-card-text { margin: 0; max-width: 52ch; }
++.snapshot-card-actions { display: flex; gap: 8px; flex-wrap: wrap; }
++/* The inline share controls (D2 fix) take their own full-width row under
++   the card's actions instead of squeezing into the flex line. */
++.snapshot-card .share-box { flex: 1 1 100%; margin-bottom: 0; background: var(--panel); }
++.more-sections-row { display: flex; flex-wrap: wrap; gap: 8px; }
++
++/* Today: the Jump back in card. */
++.jump-back-in-name { margin: 0 0 8px; font-weight: 700; }
++.jump-back-in-links { display: flex; gap: 14px; flex-wrap: wrap; }
+diff --git a/src/lib/__tests__/hubGuide.test.ts b/src/lib/__tests__/hubGuide.test.ts
+index 8a6335c..bf2601f 100644
+--- a/src/lib/__tests__/hubGuide.test.ts
++++ b/src/lib/__tests__/hubGuide.test.ts
+@@ -23,9 +23,9 @@ describe("Resource hub guide", () => {
+   });
+ 
+   it("only points at tabs that exist in the project navigation", () => {
+-    // Tab labels come from the nav arrays in ProjectHome.tsx and from
+-    // projectView.ts; the home-grown extras are sub-views that the app names
+-    // inside another tab ("Weekly report" hosts Lessons).
++    // Tab labels come from the nav arrays in projectNav.ts (v174 labels:
++    // "Roles (RACI)", "Communication plan", "Status report"); the guide
++    // must name sections exactly as the sidebar does.
+     for (const name of guideTabNames()) {
+       expect(projectHome.includes(`label: "${name}"`), `tab "${name}" is not labelled in ProjectHome.tsx`).toBe(true);
+     }
+@@ -37,6 +37,6 @@ describe("Resource hub guide", () => {
+ 
+   it("marks exactly the steps whose tabs Light hides", () => {
+     const flagged = GUIDE_STAGES.flatMap((s) => s.steps.filter((x) => x.lightHides).map((x) => x.tab)).sort();
+-    expect(flagged).toEqual(["Budget", "Budget", "Comms Plan", "RACI"]);
++    expect(flagged).toEqual(["Budget", "Budget", "Communication plan", "Roles (RACI)"]);
+   });
+ });
+diff --git a/src/lib/__tests__/projectView.test.ts b/src/lib/__tests__/projectView.test.ts
+index 555ff26..62ba33c 100644
+--- a/src/lib/__tests__/projectView.test.ts
++++ b/src/lib/__tests__/projectView.test.ts
+@@ -8,7 +8,7 @@ describe("isTabHidden", () => {
+   });
+ 
+   it("hides the frozen governance suite in Standard", () => {
+-    expect(hiddenTabLabels("standard")).toEqual(["Quality", "Compliance", "Comms Plan", "OKRs", "RACI", "Templates"]);
++    expect(hiddenTabLabels("standard")).toEqual(["Quality", "Compliance", "Communication plan", "Goals (OKRs)", "Roles (RACI)", "Saved templates"]);
+     expect(isTabHidden("quality", "standard", false)).toBe(true);
+     expect(isTabHidden("okrs", "standard", false)).toBe(true);
+     expect(isTabHidden("raci", "standard", false)).toBe(true);
+diff --git a/src/lib/__tests__/search.test.ts b/src/lib/__tests__/search.test.ts
+index 4df934c..0995784 100644
+--- a/src/lib/__tests__/search.test.ts
++++ b/src/lib/__tests__/search.test.ts
+@@ -1,5 +1,5 @@
+ import { describe, it, expect } from "vitest";
+-import { flattenSearchResults, moveSearchIndex } from "../search";
++import { featureMatches, flattenSearchResults, moveSearchIndex } from "../search";
+ import type { SearchResults } from "../api";
+ 
+ // v159 (F-18): the palette's list plumbing -- grouping order, link targets
+@@ -39,6 +39,52 @@ describe("flattenSearchResults", () => {
+   });
+ });
+ 
++describe("featureMatches (v174 pages & features index)", () => {
++  it("resolves the features members could never find: snapshot, webhooks, connect your AI", () => {
++    const snap = featureMatches("snapshot", { projectId: "p1", plan: "free" });
++    expect(snap[0]).toMatchObject({ title: "Client Snapshot", href: "/app/projects/p1/print/snapshot", group: "Pages & features" });
++
++    const hooks = featureMatches("webhooks", { projectId: "p1", plan: "free" });
++    expect(hooks.map((i) => i.href)).toContain("/app/projects/p1?tab=connections");
++
++    const ai = featureMatches("connect your AI", { projectId: null, plan: "free" });
++    expect(ai.map((i) => i.title)).toContain("Account");
++    expect(ai.find((i) => i.title === "Account")!.href).toBe("/app/account");
++  });
++
++  it("without a project context, project features point at the Projects list", () => {
++    const snap = featureMatches("snapshot", { projectId: null, plan: "free" });
++    expect(snap[0]).toMatchObject({ title: "Client Snapshot", href: "/app/projects", projectName: "Pick a project first" });
++  });
++
++  it("keeps the old labels working as aliases for one cycle (Comms Plan, Weekly Report, OKRs, RACI)", () => {
++    const ctx = { projectId: "p1", plan: "free" };
++    expect(featureMatches("comms plan", ctx).map((i) => i.href)).toContain("/app/projects/p1?tab=comms");
++    expect(featureMatches("weekly report", ctx).map((i) => i.href)).toContain("/app/projects/p1?tab=report");
++    expect(featureMatches("okrs", ctx).map((i) => i.href)).toContain("/app/projects/p1?tab=okrs");
++    expect(featureMatches("raci", ctx).map((i) => i.href)).toContain("/app/projects/p1?tab=raci");
++    expect(featureMatches("guides", ctx).map((i) => i.href)).toContain("/app/resources");
++  });
++
++  it("never offers Billing to founding members, and offers Founder hub only to them", () => {
++    expect(featureMatches("billing", { projectId: null, plan: "founding" })).toEqual([]);
++    expect(featureMatches("upgrade", { projectId: null, plan: "founding" })).toEqual([]);
++    expect(featureMatches("billing", { projectId: null, plan: "free" }).map((i) => i.title)).toContain("Billing");
++    expect(featureMatches("founder hub", { projectId: null, plan: "founding" }).map((i) => i.href)).toContain("/app/founding");
++    expect(featureMatches("founder hub", { projectId: null, plan: "free" })).toEqual([]);
++  });
++
++  it("matches the plain destinations by name and stays quiet below two characters", () => {
++    expect(featureMatches("workload", { plan: "free" })[0]).toMatchObject({ title: "Workload", href: "/app/workload" });
++    expect(featureMatches("w", { plan: "free" })).toEqual([]);
++    expect(featureMatches("zzzz", { plan: "free" })).toEqual([]);
++  });
++
++  it("caps the feature list so it cannot swamp content results", () => {
++    expect(featureMatches("project", { projectId: "p1", plan: "free" }).length).toBeLessThanOrEqual(8);
++  });
++});
++
+ describe("moveSearchIndex", () => {
+   it("moves down and up, wrapping at both ends", () => {
+     expect(moveSearchIndex(0, 1, 3)).toBe(1);
+diff --git a/src/lib/hubGuide.ts b/src/lib/hubGuide.ts
+index ddb570a..323100a 100644
+--- a/src/lib/hubGuide.ts
++++ b/src/lib/hubGuide.ts
+@@ -51,10 +51,10 @@ export const GUIDE_STAGES: GuideStage[] = [
+     steps: [
+       { title: "Lay out phases and milestones", tab: "Roadmap", why: "Phases, milestones and releases on a timeline, grouped by swimlane. Share a read-only link with people outside the project." },
+       { title: "Build the work breakdown and give tasks dates", tab: "Tasks", why: "Sub-tasks make a work breakdown. Pick a phase on each task and the Roadmap shows how full each phase is." },
+-      { title: "Agree who does what", tab: "RACI", why: "Phases and milestones down the side, people across the top. Mark each as Responsible, Accountable, Consulted or Informed, with exactly one Accountable per row. Print it or share a link.", lightHides: true },
++      { title: "Agree who does what", tab: "Roles (RACI)", why: "Phases and milestones down the side, people across the top. Mark each as Responsible, Accountable, Consulted or Informed, with exactly one Accountable per row. Print it or share a link.", lightHides: true },
+       { title: "Set the budget baseline", tab: "Budget", why: "Needed to compare cost against plan later. Add a contingency reserve if you hold one.", lightHides: true },
+       { title: "Lock the baseline", tab: "Roadmap", why: "A snapshot of every task's dates and the budget once the plan is agreed, so you can see what moves afterwards. Only the owner can lock it, and nothing is blocked." },
+-      { title: "Plan how you will talk, buy and check quality", tab: "Comms Plan", why: "Comms Plan, Vendors, Quality and Compliance are there when the project is big or regulated enough to need them.", lightHides: true },
++      { title: "Plan how you will talk, buy and check quality", tab: "Communication plan", why: "Communication plan, Vendors, Quality and Compliance are there when the project is big or regulated enough to need them.", lightHides: true },
+     ],
+     checklist: "Work breakdown, schedule dates, stakeholders, budget baseline, risks, baseline locked.",
+   },
+@@ -68,7 +68,7 @@ export const GUIDE_STAGES: GuideStage[] = [
+       { title: "Handle changes properly", tab: "Decisions", why: "Change requests record the reason and the schedule and budget impact, with change board approval if you use one. Decisions can also be sent to stakeholders by link." },
+       { title: "Re-score risks and clear issues", tab: "Issues", why: "A risk that has happened becomes an issue in one click. Risks not reviewed in 30 days are flagged on Home." },
+       { title: "Compare cost to the baseline", tab: "Budget", why: "Earned value metrics (CPI, SPI, EAC) work out whether you are over or under.", lightHides: true },
+-      { title: "Send the weekly status report", tab: "Weekly Report", why: "Built from your live data, ready to print or save as PDF. Lessons learned are captured in the same section as you go." },
++      { title: "Send the weekly status report", tab: "Status report", why: "Built from your live data, ready to print or save as PDF. Lessons learned are captured in the same section as you go." },
+     ],
+     checklist: "Change requests decided, risks re-scored, budget compared to baseline, weekly status shared.",
+   },
+@@ -80,7 +80,7 @@ export const GUIDE_STAGES: GuideStage[] = [
+     steps: [
+       { title: "Work through the closure checklist", tab: "Closure", why: "Five items: final lessons, open items resolved, budget reconciled, stakeholder sign-off, documents archived. Nothing here blocks you from closing." },
+       { title: "Resolve or accept open issues and risks", tab: "Issues", why: "Anything left open is listed so closing it is a choice, not an oversight." },
+-      { title: "Capture lessons learned", tab: "Weekly Report", why: "What went well, what did not and one action for next time. Switch to the Lessons view." },
++      { title: "Capture lessons learned", tab: "Status report", why: "What went well, what did not and one action for next time. Switch to the Lessons view." },
+       { title: "Archive the paperwork", tab: "Documents", why: "Keep contracts, sign-offs and final reports together, and export what you need." },
+     ],
+     checklist: "Closure checklist, open issues, open risks.",
+diff --git a/src/lib/learnArticles.ts b/src/lib/learnArticles.ts
+index 33e3e2a..462ef5f 100644
+--- a/src/lib/learnArticles.ts
++++ b/src/lib/learnArticles.ts
+@@ -182,7 +182,7 @@ export const LEARN_ARTICLES: LearnArticle[] = [
+     blurb: "One row per audience: what they hear, how often, by what channel.",
+     shelf: "learn",
+     tab: "comms",
+-    tabLabel: "Comms Plan",
++    tabLabel: "Communication plan",
+     body: [
+       "A communications plan answers three questions for every audience the project has: what do they need to hear, how often, and by what channel. One row per audience keeps it a reference you can check in ten seconds.",
+       "It is a plan, not a workflow, so rows have no status. When the arrangement changes, edit the row. When an audience stops mattering, remove it. A short, current plan beats a long, stale one every time.",
+@@ -208,7 +208,7 @@ export const LEARN_ARTICLES: LearnArticle[] = [
+     blurb: "Outcomes the project is driving toward, and the results that prove them.",
+     shelf: "learn",
+     tab: "okrs",
+-    tabLabel: "OKRs",
++    tabLabel: "Goals (OKRs)",
+     body: [
+       "OKRs are the handful of outcomes this project is actually driving toward, stated separately from the day-to-day work. Tasks say what people are doing. Objectives say where the project is going, and key results say whether it is getting there.",
+       "A good key result is measurable without argument: a number, a date, a count. If reasonable people could disagree about whether it happened, it is not finished being written yet. A few key results per objective is plenty; a long list dilutes the few that matter.",
+diff --git a/src/lib/projectNav.ts b/src/lib/projectNav.ts
+index 4e5b030..9063582 100644
+--- a/src/lib/projectNav.ts
++++ b/src/lib/projectNav.ts
+@@ -1,7 +1,14 @@
+-// The six places a project is organised into. Each of the 26 existing tab ids
+-// belongs to exactly one group, and `?tab=<id>` keeps meaning what it always
+-// did, so every old link, bookmark and in-app jump still lands on the same screen.
+-// The group is derived from the tab id; nothing else about routing changes.
++// The places a project is organised into (v174, navigation consolidation).
++// The 26 existing tab ids are regrouped from the old build-shaped groups
++// into job-shaped ones -- Plan, Track, People, Wrap up -- plus an Overview
++// entry and an ungrouped settings tail. `?tab=<id>` keeps meaning what it
++// always did, so every old link, bookmark and in-app jump still lands on
++// the same screen. The group is derived from the tab id; nothing else
++// about routing changes.
++//
++// Two sections are not tabs at all: Client Snapshot is a link section
++// (it opens the snapshot print route, it has no ?tab= id), and it is the
++// one section `allNavTabIds` leaves out on purpose.
+ //
+ // Size hiding is unchanged (see projectView.ts): a section is hidden by the project's
+ // size unless "show all tabs" is on, the section being viewed is always kept, and a
+@@ -9,21 +16,26 @@
+ 
+ import { isTabHidden, type ProjectSize } from "./projectView";
+ 
+-export type NavGroupId = "overview" | "tasks" | "plan" | "health" | "people" | "docs";
+-export type NavSection = { id: string; label: string };
++export type NavGroupId = "overview" | "plan" | "track" | "people" | "wrapup" | "settings";
++export type NavSection = {
++  id: string;
++  label: string;
++  /** Link sections render as a route link instead of a ?tab= button. */
++  href?: (projectId: string) => string;
++};
+ export type NavGroup = { id: NavGroupId; label: string; sections: NavSection[] };
+ 
+ export const NAV_GROUPS: NavGroup[] = [
+   { id: "overview", label: "Overview", sections: [{ id: "home", label: "Overview" }] },
+-  { id: "tasks", label: "Tasks", sections: [{ id: "tasks", label: "Tasks" }] },
+   { id: "plan", label: "Plan", sections: [
+     { id: "roadmap", label: "Roadmap" },
++    { id: "charter", label: "Charter" },
+     { id: "budget", label: "Budget" },
+     { id: "meetings", label: "Meetings" },
+-    { id: "charter", label: "Charter" },
+-    { id: "okrs", label: "OKRs" },
++    { id: "okrs", label: "Goals (OKRs)" },
+   ] },
+-  { id: "health", label: "Risks & issues", sections: [
++  { id: "track", label: "Track", sections: [
++    { id: "tasks", label: "Tasks" },
+     { id: "issues", label: "Issues" },
+     { id: "risks", label: "Risks" },
+     { id: "assumptions", label: "Assumptions" },
+@@ -31,35 +43,37 @@ export const NAV_GROUPS: NavGroup[] = [
+     { id: "quality", label: "Quality" },
+     { id: "compliance", label: "Compliance" },
+   ] },
+-  { id: "people", label: "People and decisions", sections: [
+-    { id: "decisions", label: "Decisions" },
++  { id: "people", label: "People", sections: [
+     { id: "stakeholders", label: "Stakeholders" },
+-    { id: "team", label: "Settings" },
+-    { id: "raci", label: "RACI" },
++    { id: "decisions", label: "Decisions" },
++    { id: "raci", label: "Roles (RACI)" },
+     { id: "procurement", label: "Vendors" },
+-    { id: "comms", label: "Comms Plan" },
++    { id: "comms", label: "Communication plan" },
+   ] },
+-  { id: "docs", label: "Docs", sections: [
++  { id: "wrapup", label: "Wrap up", sections: [
+     { id: "documents", label: "Documents" },
+-    { id: "report", label: "Weekly Report" },
++    { id: "report", label: "Status report" },
++    { id: "snapshot", label: "Client Snapshot", href: (projectId) => `/app/projects/${projectId}/print/snapshot` },
+     { id: "closure", label: "Closure" },
+-    { id: "templates", label: "Templates" },
++    { id: "templates", label: "Saved templates" },
+     { id: "export", label: "Export" },
+-    { id: "connections", label: "Connections" },
++    { id: "trash", label: "Trash" },
++  ] },
++  { id: "settings", label: "Project settings", sections: [
++    { id: "team", label: "Project settings" },
++    { id: "connections", label: "Webhooks" },
+   ] },
+ ];
+ 
+-/** Trash is reached from the project menu, not a section pill, but it lives under Docs. */
+-const EXTRA: Record<string, NavGroupId> = { trash: "docs" };
+-
+ export function groupOf(tab: string): NavGroupId | null {
+   for (const g of NAV_GROUPS) if (g.sections.some((s) => s.id === tab)) return g.id;
+-  return EXTRA[tab] ?? null;
++  return null;
+ }
+ 
+-/** Every tab id the nav knows about (sections plus the menu-only ones). */
++/** Every tab id the nav knows about. Link sections (Client Snapshot) are
++ *  not tab ids and are deliberately excluded. */
+ export function allNavTabIds(): string[] {
+-  return [...NAV_GROUPS.flatMap((g) => g.sections.map((s) => s.id)), ...Object.keys(EXTRA)];
++  return NAV_GROUPS.flatMap((g) => g.sections.filter((s) => !s.href).map((s) => s.id));
+ }
+ 
+ export function sectionLabel(tab: string): string | null {
+@@ -67,14 +81,14 @@ export function sectionLabel(tab: string): string | null {
+     const s = g.sections.find((x) => x.id === tab);
+     if (s) return s.label;
+   }
+-  return tab === "trash" ? "Trash" : null;
++  return null;
+ }
+ 
+ export function visibleSections(group: NavGroup, current: string, size: ProjectSize, showAll: boolean, extraTabs: string[] = []): NavSection[] {
+   return group.sections.filter((s) => s.id === current || !isTabHidden(s.id, size, showAll, extraTabs));
+ }
+ 
+-/** The six groups, minus any whose sections are all hidden, each with the tab a click should open. */
++/** The groups, minus any whose sections are all hidden, each with the tab a click should open. */
+ export function visibleGroups(current: string, size: ProjectSize, showAll: boolean, extraTabs: string[] = []) {
+   return NAV_GROUPS
+     .map((g) => ({ group: g, sections: visibleSections(g, current, size, showAll, extraTabs) }))
+@@ -82,20 +96,18 @@ export function visibleGroups(current: string, size: ProjectSize, showAll: boole
+     .map((x) => ({ ...x, opens: x.sections[0].id }));
+ }
+ 
+-/** The Overview "All sections" directory: exactly the sections the sidebar
+- *  shows for this project, under the same size rule (projectView.ts) — a
+- *  section hidden by size is absent here too, unless "show all sections" is
+- *  on. The Overview entry itself is left out (the directory sits on it), and
+- *  a group with nothing visible left is dropped entirely. This is the one
+- *  function that decides what the directory lists; HomeTab renders it as-is. */
+-export function sectionDirectory(size: ProjectSize, showAll: boolean, extraTabs: string[] = []): { group: NavGroup; sections: NavSection[] }[] {
+-  return NAV_GROUPS
+-    .map((group) => ({
+-      group,
+-      sections: visibleSections(group, "home", size, showAll, extraTabs).filter((s) => s.id !== "home"),
+-    }))
+-    .filter((x) => x.sections.length > 0);
++/** The sections a project's size currently hides (and that have not been
++ *  grown back), in nav order -- the "More sections" list the sidebar tail
++ *  and the project home offer with Add actions (v174: the one surviving
++ *  grow pattern; the sidebar grow row, the Overview directory's show-all
++ *  button and the calm home list were three mechanisms doing this job). */
++export function hiddenSections(size: ProjectSize, showAll: boolean, extraTabs: string[] = []): NavSection[] {
++  if (showAll) return [];
++  return NAV_GROUPS.flatMap((g) => g.sections).filter(
++    (s) => !s.href && isTabHidden(s.id, size, showAll, extraTabs),
++  );
+ }
+ 
+-/** Tabs that keep the project name as the page heading (the old top strip). The rest get a breadcrumb. */
++/** Tabs that keep the project name as the page heading (the old top strip).
++ *  Every tab gets the breadcrumb since v174; this set only decides the heading. */
+ export const STRIP_TABS: ReadonlySet<string> = new Set(["home", "roadmap", "tasks", "budget", "meetings"]);
+diff --git a/src/lib/projectView.ts b/src/lib/projectView.ts
+index c220284..7213b0e 100644
+--- a/src/lib/projectView.ts
++++ b/src/lib/projectView.ts
+@@ -18,7 +18,7 @@ export const APPROACH_LABEL: Record<ProjectApproach, string> = { predictive: "Pr
+ export const SIZE_BLURB: Record<ProjectSize, string> = {
+   light: "Small or short. Tasks, roadmap, risks and the essentials.",
+   standard: "Most projects. Adds budget, meetings, vendors and closure.",
+-  full: "Regulated or large. Adds OKRs, RACI, quality, compliance, comms plan and templates.",
++  full: "Regulated or large. Adds goals, roles, quality, compliance, communication plan and saved templates.",
+ };
+ 
+ export const APPROACH_BLURB: Record<ProjectApproach, string> = {
+@@ -39,10 +39,10 @@ const HIDDEN: Record<ProjectSize, string[]> = {
+ };
+ 
+ const TAB_LABEL: Record<string, string> = {
+-  budget: "Budget", meetings: "Meetings", okrs: "OKRs", assumptions: "Assumptions",
++  budget: "Budget", meetings: "Meetings", okrs: "Goals (OKRs)", assumptions: "Assumptions",
+   dependencies: "Dependencies", quality: "Quality", compliance: "Compliance",
+-  procurement: "Vendors", comms: "Comms Plan", templates: "Templates", export: "Export",
+-  connections: "Connections", raci: "RACI",
++  procurement: "Vendors", comms: "Communication plan", templates: "Saved templates", export: "Export",
++  connections: "Webhooks", raci: "Roles (RACI)",
+ };
+ 
+ export function hiddenTabIds(size: ProjectSize): string[] {
+diff --git a/src/lib/search.ts b/src/lib/search.ts
+index 6972bb6..68cac43 100644
+--- a/src/lib/search.ts
++++ b/src/lib/search.ts
+@@ -5,13 +5,15 @@
+ // and matches the order the groups render in.
+ 
+ import type { SearchResults } from "./api";
++import { NAV_GROUPS } from "./projectNav";
+ 
+ export type SearchItem = {
+   /** Stable key for React and for aria-activedescendant. */
+   key: string;
+-  group: "Projects" | "Tasks" | "Decisions" | "Risks";
++  group: "Pages & features" | "Projects" | "Tasks" | "Decisions" | "Risks";
+   title: string;
+-  /** The project the item lives in; for a project hit, the project itself. */
++  /** The project the item lives in; for a project hit, the project itself.
++   *  For a page/feature hit, a short where-it-lives line instead. */
+   projectName: string;
+   href: string;
+ };
+@@ -33,6 +35,132 @@ export function flattenSearchResults(results: SearchResults): SearchItem[] {
+   return items;
+ }
+ 
++/* --- Pages & features index (v174) -------------------------------------
++ * Until v174 the palette indexed content only, so the product's own
++ * features were unfindable: "snapshot", "webhooks" and "connect your AI"
++ * returned nothing, and a member once had to email the founder to ask
++ * whether a capability existed. This static index knows the pages and
++ * features themselves. Matching is a plain substring test against the
++ * title and its aliases; the aliases deliberately include the OLD labels
++ * for one release cycle (R7 in the consolidation proposal), so a member
++ * hunting for "Comms Plan" or "Weekly Report" still lands in the right
++ * place after the rename. */
++
++export type FeatureContext = {
++  /** The project whose page the palette was opened on, if any. */
++  projectId?: string | null;
++  /** The signed-in plan; founding members never see Billing (Brooks #6). */
++  plan?: string | null;
++};
++
++type FeatureDef = {
++  title: string;
++  aliases: string[];
++  href: (ctx: FeatureContext) => string;
++  subtitle: string | ((ctx: FeatureContext) => string);
++  visible?: (ctx: FeatureContext) => boolean;
++};
++
++const inProject = (ctx: FeatureContext) => (ctx.projectId ? "This project" : "Pick a project first");
++
++const GLOBAL_FEATURES: FeatureDef[] = [
++  { title: "Today", aliases: ["home", "start here", "my day"], href: () => "/app", subtitle: "Page" },
++  { title: "Projects", aliases: ["dashboard", "project list", "all projects"], href: () => "/app/projects", subtitle: "Page" },
++  { title: "New project", aliases: ["create project", "start a project", "add project"], href: () => "/app/projects?new=1", subtitle: "Page" },
++  { title: "Weekly Sync", aliases: ["sync", "weekly"], href: () => "/app/sync", subtitle: "Page" },
++  { title: "Workload", aliases: ["capacity", "team load", "who is busy"], href: () => "/app/workload", subtitle: "Page" },
++  { title: "Decisions", aliases: ["waiting decisions", "approvals", "decision requests"], href: () => "/app/decisions", subtitle: "All projects" },
++  { title: "Risks & Issues", aliases: ["risks", "issues", "risk register"], href: () => "/app/risks", subtitle: "All projects" },
++  { title: "Learn", aliases: ["guides", "help", "how to", "project templates", "articles"], href: () => "/app/resources", subtitle: "Page" },
++  { title: "What's new", aliases: ["changelog", "updates", "new features", "release notes"], href: () => "/app/whats-new", subtitle: "Page" },
++  { title: "My activity", aliases: ["history", "recent activity", "audit"], href: () => "/app/activity", subtitle: "Page" },
++  {
++    title: "Account",
++    aliases: ["profile", "my settings", "password", "connect your ai", "mcp", "api tokens", "tokens", "referral"],
++    href: () => "/app/account",
++    subtitle: "Page",
++  },
++  {
++    title: "Billing",
++    aliases: ["upgrade", "pro", "trial", "start trial", "subscription", "plan", "payment"],
++    href: () => "/app/billing",
++    subtitle: "Page",
++    visible: (ctx) => ctx.plan !== "founding",
++  },
++  {
++    title: "Founder hub",
++    aliases: ["founding", "founding members"],
++    href: () => "/app/founding",
++    subtitle: "Page",
++    visible: (ctx) => ctx.plan === "founding",
++  },
++  {
++    title: "Client Snapshot",
++    aliases: ["snapshot", "sponsor", "share project", "client view"],
++    href: (ctx) => (ctx.projectId ? `/app/projects/${ctx.projectId}/print/snapshot` : "/app/projects"),
++    subtitle: inProject,
++  },
++  {
++    title: "Webhooks",
++    aliases: ["webhook", "connections", "integrations", "zapier"],
++    href: (ctx) => (ctx.projectId ? `/app/projects/${ctx.projectId}?tab=connections` : "/app/projects"),
++    subtitle: inProject,
++  },
++];
++
++/** Old and alternate names for project sections, keyed by tab id. */
++const SECTION_ALIASES: Record<string, string[]> = {
++  okrs: ["okrs", "objectives", "key results"],
++  raci: ["raci"],
++  comms: ["comms plan", "comms", "communications"],
++  report: ["weekly report"],
++  templates: ["templates"],
++  connections: ["connections", "integrations", "zapier"],
++  team: ["settings", "team", "members", "danger zone"],
++  procurement: ["procurement", "purchases"],
++  trash: ["deleted", "restore", "deleted items"],
++  charter: ["purpose", "sponsor"],
++  snapshot: ["snapshot", "sponsor view"],
++};
++
++const MAX_FEATURE_RESULTS = 8;
++
++function matches(query: string, title: string, aliases: string[]): boolean {
++  const q = query.trim().toLowerCase();
++  if (q.length < 2) return false;
++  if (title.toLowerCase().includes(q)) return true;
++  return aliases.some((a) => a.includes(q));
++}
++
++/** The page/feature hits for a query, in a stable order: global pages
++ *  first, then the current project's sections in nav order. */
++export function featureMatches(query: string, ctx: FeatureContext): SearchItem[] {
++  const out: SearchItem[] = [];
++  const push = (title: string, href: string, subtitle: string) => {
++    out.push({ key: `feature-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${href}`, group: "Pages & features", title, projectName: subtitle, href });
++  };
++  for (const f of GLOBAL_FEATURES) {
++    if (out.length >= MAX_FEATURE_RESULTS) break;
++    if (f.visible && !f.visible(ctx)) continue;
++    if (!matches(query, f.title, f.aliases)) continue;
++    push(f.title, f.href(ctx), typeof f.subtitle === "function" ? f.subtitle(ctx) : f.subtitle);
++  }
++  if (ctx.projectId) {
++    for (const g of NAV_GROUPS) {
++      if (out.length >= MAX_FEATURE_RESULTS) break;
++      for (const s of g.sections) {
++        if (out.length >= MAX_FEATURE_RESULTS) break;
++        if (s.id === "home") continue;
++        if (!matches(query, s.label, SECTION_ALIASES[s.id] ?? [])) continue;
++        // The global Client Snapshot / Webhooks entries already cover these.
++        if (s.id === "snapshot" || s.id === "connections") continue;
++        push(s.label, s.href ? s.href(ctx.projectId) : `/app/projects/${ctx.projectId}?tab=${s.id}`, "This project");
++      }
++    }
++  }
++  return out;
++}
++
+ /** The next active index for arrow-key movement, wrapping at both ends. */
+ export function moveSearchIndex(current: number, delta: 1 | -1, count: number): number {
+   if (count <= 0) return -1;
+diff --git a/src/lib/today.ts b/src/lib/today.ts
+index c64c9b9..aa04214 100644
+--- a/src/lib/today.ts
++++ b/src/lib/today.ts
+@@ -88,6 +88,24 @@ export function greeting(hour: number): string {
+   return hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+ }
+ 
++/**
++ * v174: which project the Today "Jump back in" card points at -- the most
++ * recently active open project. When no open project has recorded activity
++ * yet, the fallback is the member's FIRST project (earliest created), not
++ * the newest: the card is a way back to where work started, and a brand-new
++ * empty project must not outrank one with real activity just because it was
++ * created later. Returns null when there are no open projects.
++ */
++export function pickJumpProject<T extends { created_at: string; last_activity_at?: string | null; closed_at?: string | null }>(projects: T[]): T | null {
++  const open = projects.filter((p) => !p.closed_at);
++  if (!open.length) return null;
++  const active = open.filter((p) => p.last_activity_at);
++  if (active.length) {
++    return [...active].sort((a, b) => (a.last_activity_at! < b.last_activity_at! ? 1 : a.last_activity_at! > b.last_activity_at! ? -1 : 0))[0];
++  }
++  return [...open].sort((a, b) => (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0))[0];
++}
++
+ /** Count tasks finished on the viewer's local calendar day. */
+ export function closedToday(done: { updated_at: string }[], todayKey: string): number {
+   return done.filter((d) => localDateKey(new Date(d.updated_at)) === todayKey).length;
+diff --git a/src/lib/whatsNewData.ts b/src/lib/whatsNewData.ts
+index 586a32d..07c0754 100644
+--- a/src/lib/whatsNewData.ts
++++ b/src/lib/whatsNewData.ts
+@@ -9,6 +9,12 @@ export type ChangeEntry = { version: string; date: string; title: string; body:
+ // about; skip pure bug fixes and internal refactors that don't change what
+ // they can do.
+ export const CHANGES: ChangeEntry[] = [
++  {
++    version: "v174",
++    date: "November 2026",
++    title: "One simpler navigation: everything lives in the sidebar now, and your phone gets a bottom bar.",
++    body: "Tasketra used to have two sets of navigation at once, a sidebar and a row of tabs across the top, and they did not always agree on where you were. Now there is one system. The cross-project Decisions and Risks & Issues views moved into the sidebar's new Portfolio group, and a project's sections are grouped by the job they do: Plan, Track, People, and Wrap up, with project settings at the end. A few names are plainer now (Goals (OKRs), Roles (RACI), Communication plan, Status report, Saved templates, Webhooks), the Client Snapshot and Trash have their own sections instead of hiding, and Learn is a single entry. Search finds pages and features now, not just content: try \"snapshot\", \"webhooks\" or \"connect your AI\". On your phone there is a bottom bar (Today, Projects, Create, Sync, Menu), and the menu opens as a sheet with everything expanded. Nothing changed address: every link, bookmark and email deep link works exactly as before.",
++  },
+   {
+     version: "v173",
+     date: "November 2026",
+diff --git a/src/pages/AdminFounderHub.tsx b/src/pages/AdminFounderHub.tsx
+index 2717152..d81c74b 100644
+--- a/src/pages/AdminFounderHub.tsx
++++ b/src/pages/AdminFounderHub.tsx
+@@ -29,7 +29,7 @@ function Stat({ label, value }: { label: string; value: string | number }) {
+ const statGrid: React.CSSProperties = { display: "flex", flexWrap: "wrap", gap: 24, margin: "8px 0" };
+ 
+ export default function AdminFounderHub() {
+-  useDocumentTitle("Founder hub");
++  useDocumentTitle("Founder console");
+   const [data, setData] = useState<FounderHubData | null>(null);
+   const [loading, setLoading] = useState(true);
+   const [error, setError] = useState<string | null>(null);
+@@ -48,7 +48,7 @@ export default function AdminFounderHub() {
+       <AppSidebar />
+ 
+       <main id="main-content" className="project-main admin-main">
+-        <PageHeader title="Founder hub" subtitle="Milestones, money, activation, usage, and friction, from the app's own data." />
++        <PageHeader title="Founder console" subtitle="Milestones, money, activation, usage, and friction, from the app's own data." />
+ 
+         {error && <div className="form-error">{error}</div>}
+ 
+diff --git a/src/pages/ProjectHome.tsx b/src/pages/ProjectHome.tsx
+index bd531c3..e9f2153 100644
+--- a/src/pages/ProjectHome.tsx
++++ b/src/pages/ProjectHome.tsx
+@@ -2,6 +2,7 @@ import { useEffect, useState, useRef, Fragment } from "react";
+ import { useParams, useSearchParams, useNavigate, useLocation, Link } from "react-router-dom";
+ import { api, ApiError, type Project, type Task, type Stakeholder, type Decision, type Issue, type Risk, type Assumption, type Dependency, type ChangeRequest, type Lesson, type TodayData, type WeeklyReport, type BudgetData, type FeedItem, type TrashItem, type ProjectMember, type Meeting, type MeetingActionItem, type ProjectDocument, type StorageUsage, type RoadmapItem, type RoadmapItemType, type StakeholderInterest, type StakeholderContactMethod, type ProcurementItem, type CommPlanItem, type Objective, type KeyResult, type RiskTaskLink, type IssueTaskLink, type TaskTaskLink, type ProjectStage, type BaselineData, type CharterApproval, type ExampleDataCounts } from "../lib/api";
+ import { RowActionsMenu } from "../components/RowActionsMenu";
++import { ShareBox } from "../components/ShareBox";
+ import { QuickAddForm } from "../components/QuickAddForm";
+ import { RoadmapTimeline, ROADMAP_TYPE_LABEL, ROADMAP_STATUS_LABEL } from "../components/RoadmapTimeline";
+ import { DateField } from "../components/DateField";
+@@ -20,7 +21,7 @@ import { fmtDate, fmtDateTime, fmtLocalDate, fmtMoney, fmtPct, fmtRatio, fmtByte
+ import { capacityLevel, CAPACITY_LABEL, CAPACITY_PILL, type CapacityLevel } from "../lib/capacity";
+ import { useAuth } from "../lib/auth-context";
+ import { AppSidebar } from "../components/AppSidebar";
+-import { NAV_GROUPS, STRIP_TABS, groupOf, sectionLabel, sectionDirectory, visibleGroups } from "../lib/projectNav";
++import { STRIP_TABS, groupOf, sectionLabel, hiddenSections, visibleGroups } from "../lib/projectNav";
+ import { useConfirm } from "../components/ConfirmDialog";
+ import { RegisterRow, RegisterSummary, RegisterEmpty } from "../components/ui";
+ import { StatCards, StatCard, LayerGroup, HowItWorks, TeachEmpty } from "../components/Layered";
+@@ -40,7 +41,7 @@ import { ProjectSetupPicker } from "../components/ProjectSetup";
+ import { useIsScrollable } from "../lib/scrollRegion";
+ import { announce } from "../lib/announce";
+ import { AddForm } from "../components/AddForm";
+-import CalmHome, { GROW_PIECES } from "../components/CalmHome";
++import CalmHome from "../components/CalmHome";
+ import { StatusTier } from "../components/StatusTier";
+ import type { ReactNode } from "react";
+ import { ProjectSidebarNav } from "../components/ProjectSidebarNav";
+@@ -278,9 +279,12 @@ export default function ProjectHome() {
+     setParams({ tab: tabId as Tab });
+   }
+   const activeGroup = groupOf(tab);
+-  // Strip views (the old top row) keep the project name as the heading; every other
+-  // view gets a breadcrumb and uses the view name as the heading.
+-  const viewLabel: string | null = STRIP_TABS.has(tab) ? null : sectionLabel(tab);
++  // v174: the breadcrumb shows on every tab (it used to vanish on the
++  // strip views, so the orientation aid came and went). Strip views (the
++  // old top row) still keep the project name as the heading; every other
++  // view uses the view name as the heading.
++  const viewLabel: string | null = sectionLabel(tab);
++  const stripHeading = STRIP_TABS.has(tab);
+ 
+   // v172: the sidebar's Decisions badge. Refetched on the same triggers
+   // as the project itself (tab change, project-changed event).
+@@ -301,17 +305,17 @@ export default function ProjectHome() {
+     };
+   }, [id, tab, healthNonce]);
+ 
+-  // v172: the sidebar's grow row offers the pieces the size view still
+-  // hides (the calm home's grow list, same order and labels).
+-  const sidebarGrowPieces =
+-    size === "light" && !showAll
+-      ? GROW_PIECES.filter((p) => isTabHidden(p.id, size, showAll, extraTabs))
+-      : [];
++  // v174: the sidebar's "More sections" list offers every section the
++  // size view still hides, on any size (it was a Light-only grow row
++  // before, one of three mechanisms doing this job; see projectNav's
++  // hiddenSections).
++  const sidebarGrowPieces = hiddenSections(size, showAll, extraTabs);
+ 
+   return (
+     <div className="project-shell">
+-      <AppSidebar menuLabel="Project tools">
++      <AppSidebar>
+         <ProjectSidebarNav
++          projectId={projectId}
+           projectName={project?.name || "Project"}
+           stageLabel={project?.stage ? STAGE_LABEL[project.stage] : null}
+           groups={navGroups}
+@@ -335,22 +339,12 @@ export default function ProjectHome() {
+           </nav>
+         )}
+         <div className="page-head project-page-head">
+-          <h1>{viewLabel ?? (project?.name || "Project")}</h1>
++          <h1>{stripHeading ? (project?.name || "Project") : (viewLabel ?? (project?.name || "Project"))}</h1>
+           <div className="page-head-actions">
+             <StageChip stage={project?.stage} />
+-            <RowActionsMenu
+-              label="Project actions"
+-              items={[{ label: "Trash", onSelect: () => setParams({ tab: "trash" }) }]}
+-            />
++            {/* v174: the one-item "Project actions" (⋯) menu is gone --
++                Trash is a real section in the sidebar's Wrap up group. */}
+           </div>
+-          {/* v150: strip views keep the project name as the heading, so name
+-              the section too — the page you land on says what the menu said
+-              (e.g. "Plan · Roadmap" instead of an unnamed roadmap). */}
+-          {!viewLabel && tab !== "home" && sectionLabel(tab) && (
+-            <p className="project-section-line muted" style={{ flexBasis: "100%" }}>
+-              {NAV_GROUPS.find((g) => g.id === activeGroup)?.label} · {sectionLabel(tab)}
+-            </p>
+-          )}
+           {user &&
+             (doingTourState ? (
+               <DoingTour
+@@ -409,6 +403,7 @@ export default function ProjectHome() {
+             showAll={project?.show_all_tabs ?? false}
+             extraTabs={extraTabs}
+             onShowAllTabs={showAllTabs}
++            onGrowTab={growTab}
+             onStageChange={(stage: ProjectStage) => setProject((p) => (p ? { ...p, stage } : p))}
+             onOpenTab={(t) => setParams({ tab: t })}
+             statusRefreshKey={`${healthNonce}`}
+@@ -477,7 +472,7 @@ export default function ProjectHome() {
+   );
+ }
+ 
+-function HomeTab({ projectId, isOwner, purpose, stage, size, showAll, extraTabs, onShowAllTabs, onStageChange, onOpenTab, statusChecklist, statusRefreshKey }: {
++function HomeTab({ projectId, isOwner, purpose, stage, size, showAll, extraTabs, onShowAllTabs, onGrowTab, onStageChange, onOpenTab, statusChecklist, statusRefreshKey }: {
+   projectId: string;
+   isOwner: boolean;
+   purpose?: string;
+@@ -486,12 +481,18 @@ function HomeTab({ projectId, isOwner, purpose, stage, size, showAll, extraTabs,
+   showAll: boolean;
+   extraTabs: string[];
+   onShowAllTabs: () => void;
++  onGrowTab: (tab: string) => void;
+   onStageChange: (stage: ProjectStage) => void;
+   onOpenTab: (tab: string) => void;
+   statusChecklist?: ReactNode;
+   statusRefreshKey?: string;
+ }) {
+   const [view, setView] = useState<"today" | "feed">("today");
++  // v174 fix pass (D2): the snapshot card's "Share by link" opens the real
++  // share controls (the same ShareBox the snapshot page itself carries),
++  // inline in the card -- the button used to be a second link to the print
++  // view, promising a share flow it never started.
++  const [shareOpen, setShareOpen] = useState(false);
+   // v150: the Next Step card's "Write a check-in" jumps to the Feed composer.
+   const [feedFocusNonce, setFeedFocusNonce] = useState(0);
+   function goToCheckIn() {
+@@ -526,19 +527,38 @@ function HomeTab({ projectId, isOwner, purpose, stage, size, showAll, extraTabs,
+       {purpose && (
+         <p className="home-purpose">
+           <span className="home-purpose-label">Purpose</span>
+-          {purpose}{" "}
+-          <button type="button" className="view-banner-link" onClick={() => onOpenTab("charter")}>Charter</button>
++          {purpose}
+         </p>
+       )}
+       {/* v165: the Project Cockpit follows the status tier as layer 2 --
+           the shared kit's gauges, work breakdown and budget picture above
+           the day-to-day Today/Feed content, which is unchanged below. */}
+       <ProjectCockpit projectId={projectId} onOpenTab={onOpenTab} />
+-      <p className="muted" style={{ margin: "0 0 16px" }}>
+-        Sharing this project with a sponsor?{" "}
+-        <Link to={`/app/projects/${projectId}/print/snapshot`}>Open the client snapshot</Link>
+-        {" "}— a read-only page with the status you have stated, the gauges and what needs them. Share it by link from there.
+-      </p>
++      {/* v174: the client snapshot gets a proper card (it was one small
++          link under this card, the only door it had). Client Snapshot is
++          also a section in the sidebar's Wrap up group now. */}
++      <div className="snapshot-card">
++        <div>
++          <h3 className="snapshot-card-title">Client snapshot</h3>
++          <p className="muted snapshot-card-text">
++            A read-only page with the status you have stated, the gauges and what needs them,
++            ready to share with a sponsor.
++          </p>
++        </div>
++        <div className="snapshot-card-actions">
++          <Link className="btn btn-primary" to={`/app/projects/${projectId}/print/snapshot`}>Open the client snapshot</Link>
++          {isOwner && (
++            <button className="btn btn-ghost" type="button" aria-expanded={shareOpen} onClick={() => setShareOpen((v) => !v)}>Share by link</button>
++          )}
++        </div>
++        {isOwner && shareOpen && (
++          <ShareBox
++            projectId={projectId}
++            kind="snapshot"
++            recipientsSee="They see the status you stated at your last check-in, how much of the work, time and budget is used, the milestones, the top three things being watched, and any open decisions a stakeholder owns. Task lists, registers and other projects are never included."
++          />
++        )}
++      </div>
+       <div className="view-toggle">
+         <button
+           className={view === "today" ? "btn btn-primary" : "btn btn-ghost"}
+@@ -564,66 +584,31 @@ function HomeTab({ projectId, isOwner, purpose, stage, size, showAll, extraTabs,
+         <StageRail projectId={projectId} isOwner={isOwner} onStageChange={onStageChange} onOpenTab={onOpenTab} />
+       </div>
+ 
+-      {/* v153.1: the directory is a tidy tile grid, and sectionDirectory()
+-          applies the same size rule as the sidebar — sections hidden by size
+-          are simply not listed (the footnote below says how many). */}
+-      <div className="today-section" style={{ marginTop: 28 }}>
+-        <h4>All sections</h4>
+-        <div className="section-dir">
+-          {sectionDirectory(size, showAll, extraTabs).map(({ group, sections }) => (
+-            <div key={group.id} className="section-dir-group">
+-              <h5 className="section-dir-label">{group.label}</h5>
+-              <div className="section-dir-grid">
+-                {sections.map((s) => (
+-                  <button key={s.id} type="button" className="section-dir-item" onClick={() => onOpenTab(s.id)}>
+-                    <span className="section-dir-name">{s.label}</span>
+-                    {SECTION_BLURB[s.id] && (
+-                      <span className="section-dir-blurb">{SECTION_BLURB[s.id].charAt(0).toUpperCase() + SECTION_BLURB[s.id].slice(1)}</span>
+-                    )}
+-                  </button>
+-                ))}
+-              </div>
+-            </div>
+-          ))}
+-        </div>
+-        {size !== "full" && !showAll && (
+-          <p className="muted" style={{ marginTop: 12 }}>
+-            {hiddenTabLabels(size, extraTabs).length} sections are hidden by the {SIZE_LABEL[size]} view.
+-            {isOwner && <> <button type="button" className="view-banner-link" onClick={onShowAllTabs}>Show all sections</button></>}
++      {/* v174: the "All sections" directory is gone (it re-rendered the
++          whole sidebar a second time on this page; the sidebar is the
++          single section index now). What remains here is the one "More
++          sections" pattern: the sections this project's size hides, each
++          with an Add action that grows it in place and opens it -- the
++          same list the sidebar tail offers. */}
++      {hiddenSections(size, showAll, extraTabs).length > 0 && (
++        <div className="today-section" style={{ marginTop: 28 }}>
++          <h4>More sections</h4>
++          <p className="muted" style={{ marginTop: 0 }}>
++            Hidden by the {SIZE_LABEL[size]} view. Add one and it joins this project&apos;s sidebar.
+           </p>
+-        )}
+-      </div>
++          <div className="more-sections-row">
++            {hiddenSections(size, showAll, extraTabs).map((s) => (
++              <button key={s.id} type="button" className="calm-chip" onClick={() => onGrowTab(s.id)}>
++                + {s.label}
++              </button>
++            ))}
++          </div>
++        </div>
++      )}
+     </div>
+   );
+ }
+ 
+-const SECTION_BLURB: Record<string, string> = {
+-  tasks: "the work list",
+-  roadmap: "phases, milestones, baseline",
+-  budget: "costs and earned value",
+-  meetings: "meeting notes",
+-  charter: "purpose, sponsor, success",
+-  okrs: "objectives and key results",
+-  issues: "problems needing action",
+-  risks: "what might go wrong",
+-  assumptions: "taken for granted, checked",
+-  dependencies: "what waits on what",
+-  quality: "checks and acceptance",
+-  compliance: "requirements and evidence",
+-  decisions: "requests and the decision log",
+-  stakeholders: "who cares, and how much",
+-  team: "members and settings",
+-  raci: "who does, approves, advises",
+-  procurement: "vendors and purchases",
+-  comms: "who hears what, when",
+-  documents: "files and links",
+-  report: "weekly status, ready to send",
+-  closure: "close-out checklist and record",
+-  templates: "save and reuse setups",
+-  export: "audit trails and downloads",
+-  connections: "webhooks and integrations",
+-};
+-
+ function FeedTab({ projectId, focusComposerNonce = 0 }: { projectId: string; focusComposerNonce?: number }) {
+   const { user } = useAuth();
+   const [feed, setFeed] = useState<FeedItem[]>([]);
+diff --git a/src/pages/SharePublic.tsx b/src/pages/SharePublic.tsx
+index 7696f25..27646b4 100644
+--- a/src/pages/SharePublic.tsx
++++ b/src/pages/SharePublic.tsx
+@@ -1,6 +1,7 @@
+ import { useEffect, useState } from "react";
+-import { useParams } from "react-router-dom";
++import { Link, useParams } from "react-router-dom";
+ import { api, type SharedDocument } from "../lib/api";
++import { useAuth } from "../lib/auth-context";
+ import { Wordmark } from "../components/Wordmark";
+ import { RiskDocument } from "../components/RiskDocument";
+ import { SnapshotDocument } from "../components/SnapshotDocument";
+@@ -12,6 +13,7 @@ import { fmtLongDate } from "../lib/format";
+ // visitor; the server only returns it while the owner's link is active.
+ export default function SharePublic() {
+   const { token } = useParams<{ token: string }>();
++  const { user } = useAuth();
+   const [data, setData] = useState<SharedDocument | null>(null);
+   const [error, setError] = useState<string | null>(null);
+ 
+@@ -57,6 +59,15 @@ export default function SharePublic() {
+           <p className="muted no-print" style={{ marginTop: 24, fontSize: 12 }}>
+             This is a read-only view shared by the project owner. Built with Tasketra.
+           </p>
++          {/* v174: a recipient who is also a member gets a way back into
++              the app (the shared payload carries no project id, so the
++              door is the Projects list). Signed-out recipients see no
++              change. */}
++          {user && (
++            <p className="no-print" style={{ marginTop: 12 }}>
++              <Link className="btn btn-ghost" to="/app/projects">Open in Tasketra</Link>
++            </p>
++          )}
+         </>
+       )}
+     </main>
+diff --git a/src/pages/Today.tsx b/src/pages/Today.tsx
+index 0c893cf..5433cac 100644
+--- a/src/pages/Today.tsx
++++ b/src/pages/Today.tsx
+@@ -4,7 +4,7 @@ import { AppSidebar } from "../components/AppSidebar";
+ import { TodayCheckIn } from "../components/TodayCheckIn";
+ import { GettingStartedCard } from "../components/GettingStartedCard";
+ import { StatusExplainer } from "../components/StatusExplainer";
+-import { api, type MyTodayData, type PortfolioData, type PortfolioProjectSummary } from "../lib/api";
++import { api, type MyTodayData, type PortfolioData, type PortfolioProjectSummary, type Project } from "../lib/api";
+ import { useAuth } from "../lib/auth-context";
+ import { useDocumentTitle } from "../lib/documentTitle";
+ import { announce } from "../lib/announce";
+@@ -18,6 +18,7 @@ import {
+   isAfterHours,
+   isMineOrUnassigned,
+   localDateKey,
++  pickJumpProject,
+   startHere,
+   weekendMode,
+   wrapUpNote,
+@@ -39,6 +40,7 @@ export default function Today() {
+   const { user } = useAuth();
+   const [data, setData] = useState<MyTodayData | null>(null);
+   const [portfolio, setPortfolio] = useState<PortfolioData | null>(null);
++  const [projectList, setProjectList] = useState<Project[]>([]);
+   const [error, setError] = useState("");
+   const [mine, setMine] = useState(true);
+   const [wrapOpen, setWrapOpen] = useState(false);
+@@ -58,6 +60,13 @@ export default function Today() {
+       .then((r) => { setData(r); setTasks(r.tasks as TodayTask[]); })
+       .catch(() => setError("Couldn't load your tasks. Refresh to try again."));
+     api.getPortfolio().then(setPortfolio).catch(() => {});
++    // For the Jump back in card: the project list carries the recorded
++    // activity timestamps the portfolio rollup does not.
++    try {
++      Promise.resolve(api.listProjects())
++        .then(({ projects }) => setProjectList(projects))
++        .catch(() => {});
++    } catch { /* the card just doesn't render */ }
+   }, []);
+   useEffect(() => { load(); }, [load]);
+ 
+@@ -177,6 +186,12 @@ export default function Today() {
+     }
+   }
+ 
++  // v174: "Jump back in" -- the most recently active open project, from
++  // recorded activity; when nothing has activity yet it falls back to the
++  // first project (proposal §3), and renders nothing when there are no
++  // projects. Selection lives in lib/today (pickJumpProject).
++  const jumpProject = useMemo(() => pickJumpProject(projectList), [projectList]);
++
+   const firstName = (user?.display_name ?? "").trim().split(/\s+/)[0];
+   const openCount = buckets.overdue.length + buckets.today.length + buckets.week.length;
+   const loaded = data !== null;
+@@ -411,6 +426,19 @@ export default function Today() {
+ 
+             {portfolio && portfolio.projects.length > 0 && (
+               <aside className="tw-rail" aria-label="Coming up and projects">
++                {jumpProject && (
++                  <div className="tw-card jump-back-in">
++                    <h3>Jump back in</h3>
++                    <p className="jump-back-in-name">
++                      <Link to={`/app/projects/${jumpProject.id}`}>{jumpProject.name}</Link>
++                    </p>
++                    <div className="jump-back-in-links">
++                      <Link to={`/app/projects/${jumpProject.id}?tab=tasks`}>Tasks</Link>
++                      <Link to={`/app/projects/${jumpProject.id}?tab=risks`}>Risks</Link>
++                      <Link to={`/app/projects/${jumpProject.id}?tab=decisions`}>Decisions</Link>
++                    </div>
++                  </div>
++                )}
+                 <div className="tw-card">
+                   <h3>Coming up</h3>
+                   {portfolio.upcomingMilestones.length === 0 ? (

@@ -98,6 +98,21 @@ describe("GlobalSearch", () => {
     expect(document.querySelector(".search-panel")?.textContent).toContain("Nothing matches");
   });
 
+  it("resolves feature names instantly (v174): snapshot leads the results", async () => {
+    await mount();
+    const trigger = [...container.querySelectorAll("button")].find((b) => b.textContent?.includes("Search"))!;
+    await act(async () => { trigger.click(); });
+    const input = document.querySelector<HTMLInputElement>(".search-input")!;
+    await type(input, "snapshot");
+    const panel = document.querySelector(".search-panel")!;
+    const groups = [...panel.querySelectorAll(".search-group-title")].map((g) => g.textContent);
+    expect(groups[0]).toBe("Pages & features");
+    expect(panel.textContent).toContain("Client Snapshot");
+    await key(input, "ArrowDown");
+    await key(input, "Enter");
+    expect(container.querySelector("[data-where]")?.getAttribute("data-where")).toBe("/app/projects");
+  });
+
   it("Escape closes the palette", async () => {
     await mount();
     const trigger = [...container.querySelectorAll("button")].find((b) => b.textContent?.includes("Search"))!;

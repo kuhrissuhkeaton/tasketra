@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  addDays, bucketTasks, closedToday, daysLate, greeting, isAfterHours, isMineOrUnassigned, localDateKey, startHere, weekendMode, wrapUpNote,
+  addDays, bucketTasks, closedToday, daysLate, greeting, isAfterHours, isMineOrUnassigned, localDateKey, pickJumpProject, startHere, weekendMode, wrapUpNote,
   type TodayTask,
 } from "../lib/today";
 
@@ -110,5 +110,46 @@ describe("v163 eggs: weekendMode (Egg 4) and isAfterHours (Egg 5)", () => {
     expect(isAfterHours(new Date(2026, 10, 13, 21, 59))).toBe(false);
     expect(isAfterHours(new Date(2026, 10, 13, 22, 0))).toBe(true);
     expect(isAfterHours(new Date(2026, 10, 13, 23, 30))).toBe(true);
+  });
+});
+
+describe("pickJumpProject (v174 fix pass, proposal fallback)", () => {
+  const p = (id: string, over: Record<string, unknown> = {}) => ({
+    id, created_at: "2026-09-01T00:00:00Z", last_activity_at: null as string | null, closed_at: null as string | null, ...over,
+  });
+
+  it("points at the most recently active open project", () => {
+    const projects = [
+      p("old", { created_at: "2026-08-01T00:00:00Z", last_activity_at: "2026-11-20T00:00:00Z" }),
+      p("newer-active", { created_at: "2026-09-01T00:00:00Z", last_activity_at: "2026-11-22T00:00:00Z" }),
+    ];
+    expect(pickJumpProject(projects)?.id).toBe("newer-active");
+  });
+
+  it("recorded activity beats a later-created project with none", () => {
+    const projects = [
+      p("worked-on", { created_at: "2026-08-01T00:00:00Z", last_activity_at: "2026-11-20T00:00:00Z" }),
+      p("just-created", { created_at: "2026-11-23T00:00:00Z" }),
+    ];
+    expect(pickJumpProject(projects)?.id).toBe("worked-on");
+  });
+
+  it("with no activity anywhere, falls back to the FIRST project, not the newest", () => {
+    const projects = [
+      p("second", { created_at: "2026-09-15T00:00:00Z" }),
+      p("first", { created_at: "2026-09-01T00:00:00Z" }),
+      p("third", { created_at: "2026-10-01T00:00:00Z" }),
+    ];
+    expect(pickJumpProject(projects)?.id).toBe("first");
+  });
+
+  it("ignores closed projects and returns null when nothing is open", () => {
+    const projects = [
+      p("closed-recent", { created_at: "2026-08-01T00:00:00Z", last_activity_at: "2026-11-22T00:00:00Z", closed_at: "2026-11-23T00:00:00Z" }),
+      p("open", { created_at: "2026-09-01T00:00:00Z" }),
+    ];
+    expect(pickJumpProject(projects)?.id).toBe("open");
+    expect(pickJumpProject([p("c", { closed_at: "2026-11-23T00:00:00Z" })])).toBeNull();
+    expect(pickJumpProject([])).toBeNull();
   });
 });

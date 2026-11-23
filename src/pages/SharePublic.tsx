@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { api, type SharedDocument } from "../lib/api";
+import { useAuth } from "../lib/auth-context";
 import { Wordmark } from "../components/Wordmark";
 import { RiskDocument } from "../components/RiskDocument";
 import { SnapshotDocument } from "../components/SnapshotDocument";
@@ -12,6 +13,7 @@ import { fmtLongDate } from "../lib/format";
 // visitor; the server only returns it while the owner's link is active.
 export default function SharePublic() {
   const { token } = useParams<{ token: string }>();
+  const { user } = useAuth();
   const [data, setData] = useState<SharedDocument | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -57,6 +59,15 @@ export default function SharePublic() {
           <p className="muted no-print" style={{ marginTop: 24, fontSize: 12 }}>
             This is a read-only view shared by the project owner. Built with Tasketra.
           </p>
+          {/* v174: a recipient who is also a member gets a way back into
+              the app (the shared payload carries no project id, so the
+              door is the Projects list). Signed-out recipients see no
+              change. */}
+          {user && (
+            <p className="no-print" style={{ marginTop: 12 }}>
+              <Link className="btn btn-ghost" to="/app/projects">Open in Tasketra</Link>
+            </p>
+          )}
         </>
       )}
     </main>

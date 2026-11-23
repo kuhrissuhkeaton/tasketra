@@ -4,7 +4,7 @@ import { AppSidebar } from "../components/AppSidebar";
 import { TodayCheckIn } from "../components/TodayCheckIn";
 import { GettingStartedCard } from "../components/GettingStartedCard";
 import { StatusExplainer } from "../components/StatusExplainer";
-import { api, type MyTodayData, type PortfolioData, type PortfolioProjectSummary } from "../lib/api";
+import { api, type MyTodayData, type PortfolioData, type PortfolioProjectSummary, type Project } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
 import { useDocumentTitle } from "../lib/documentTitle";
 import { announce } from "../lib/announce";
@@ -18,6 +18,7 @@ import {
   isAfterHours,
   isMineOrUnassigned,
   localDateKey,
+  pickJumpProject,
   startHere,
   weekendMode,
   wrapUpNote,
@@ -39,6 +40,7 @@ export default function Today() {
   const { user } = useAuth();
   const [data, setData] = useState<MyTodayData | null>(null);
   const [portfolio, setPortfolio] = useState<PortfolioData | null>(null);
+  const [projectList, setProjectList] = useState<Project[]>([]);
   const [error, setError] = useState("");
   const [mine, setMine] = useState(true);
   const [wrapOpen, setWrapOpen] = useState(false);
@@ -58,6 +60,13 @@ export default function Today() {
       .then((r) => { setData(r); setTasks(r.tasks as TodayTask[]); })
       .catch(() => setError("Couldn't load your tasks. Refresh to try again."));
     api.getPortfolio().then(setPortfolio).catch(() => {});
+    // For the Jump back in card: the project list carries the recorded
+    // activity timestamps the portfolio rollup does not.
+    try {
+      Promise.resolve(api.listProjects())
+        .then(({ projects }) => setProjectList(projects))
+        .catch(() => {});
+    } catch { /* the card just doesn't render */ }
   }, []);
   useEffect(() => { load(); }, [load]);
 
@@ -176,6 +185,12 @@ export default function Today() {
       /* The note is also in a selectable text box below. */
     }
   }
+
+  // v174: "Jump back in" -- the most recently active open project, from
+  // recorded activity; when nothing has activity yet it falls back to the
+  // first project (proposal §3), and renders nothing when there are no
+  // projects. Selection lives in lib/today (pickJumpProject).
+  const jumpProject = useMemo(() => pickJumpProject(projectList), [projectList]);
 
   const firstName = (user?.display_name ?? "").trim().split(/\s+/)[0];
   const openCount = buckets.overdue.length + buckets.today.length + buckets.week.length;
@@ -411,6 +426,19 @@ export default function Today() {
 
             {portfolio && portfolio.projects.length > 0 && (
               <aside className="tw-rail" aria-label="Coming up and projects">
+                {jumpProject && (
+                  <div className="tw-card jump-back-in">
+                    <h3>Jump back in</h3>
+                    <p className="jump-back-in-name">
+                      <Link to={`/app/projects/${jumpProject.id}`}>{jumpProject.name}</Link>
+                    </p>
+                    <div className="jump-back-in-links">
+                      <Link to={`/app/projects/${jumpProject.id}?tab=tasks`}>Tasks</Link>
+                      <Link to={`/app/projects/${jumpProject.id}?tab=risks`}>Risks</Link>
+                      <Link to={`/app/projects/${jumpProject.id}?tab=decisions`}>Decisions</Link>
+                    </div>
+                  </div>
+                )}
                 <div className="tw-card">
                   <h3>Coming up</h3>
                   {portfolio.upcomingMilestones.length === 0 ? (

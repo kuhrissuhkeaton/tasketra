@@ -1,7 +1,7 @@
 // v171: extra_tabs parsing and the grow-in-place visibility rule.
 import { describe, it, expect } from "vitest";
 import { parseExtraTabs, isTabHidden, hiddenTabLabels, hiddenTabIds } from "../lib/projectView";
-import { visibleGroups, sectionDirectory } from "../lib/projectNav";
+import { visibleGroups, hiddenSections } from "../lib/projectNav";
 
 describe("parseExtraTabs", () => {
   it("parses a stored JSON array of tab ids", () => {
@@ -40,15 +40,14 @@ describe("grow-in-place visibility", () => {
     expect(hiddenTabLabels("light", ["budget"])).toEqual(all.filter((l) => l !== "Budget"));
   });
 
-  it("the nav and the section directory include a grown-back section", () => {
+  it("the nav and the More sections list include a grown-back section", () => {
     const groups = visibleGroups("home", "light", false, ["budget"]);
     const plan = groups.find((g) => g.group.id === "plan");
     expect(plan?.sections.map((s) => s.id)).toContain("budget");
-    const dir = sectionDirectory("light", false, ["budget"]);
-    const dirPlan = dir.find((g) => g.group.id === "plan");
-    expect(dirPlan?.sections.map((s) => s.id)).toContain("budget");
-    // And without the extra, budget stays out of both.
+    expect(hiddenSections("light", false, ["budget"]).map((s) => s.id)).not.toContain("budget");
+    // And without the extra, budget stays out of the nav and in the list.
     const plain = visibleGroups("home", "light", false);
     expect(plain.find((g) => g.group.id === "plan")?.sections.map((s) => s.id)).not.toContain("budget");
+    expect(hiddenSections("light", false).map((s) => s.id)).toContain("budget");
   });
 });

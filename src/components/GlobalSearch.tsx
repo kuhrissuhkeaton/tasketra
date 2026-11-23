@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { api, type SearchResults } from "../lib/api";
-import { flattenSearchResults, moveSearchIndex, type SearchItem } from "../lib/search";
+import { useAuth } from "../lib/auth-context";
+import { featureMatches, flattenSearchResults, moveSearchIndex, type SearchItem } from "../lib/search";
 
 const EMPTY: SearchResults = { projects: [], tasks: [], decisions: [], risks: [] };
-const GROUP_ORDER: SearchItem["group"][] = ["Projects", "Tasks", "Decisions", "Risks"];
+const GROUP_ORDER: SearchItem["group"][] = ["Pages & features", "Projects", "Tasks", "Decisions", "Risks"];
 
 /**
  * Global search (v159, F-18): a search box in the sidebar bar and a
@@ -13,9 +14,14 @@ const GROUP_ORDER: SearchItem["group"][] = ["Projects", "Tasks", "Decisions", "R
  * grouped by type; arrow keys move, Enter opens, Escape closes. Picking a
  * result lands on the project tab where the thing lives (tasks, decisions
  * and risks each have their own tab; a project lands on its Overview).
+ * Since v174 the palette also knows the product's own pages and features
+ * (lib/search's feature index), so "snapshot", "webhooks" and "connect
+ * your AI" resolve instead of returning nothing.
  */
 export function GlobalSearch() {
   const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const { user } = useAuth();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResults>(EMPTY);
@@ -72,7 +78,12 @@ export function GlobalSearch() {
     return () => clearTimeout(t);
   }, [query, open]);
 
-  const items = useMemo(() => flattenSearchResults(results), [results]);
+  const projectId = useMemo(() => pathname.match(/^\/app\/projects\/([^/]+)/)?.[1] ?? null, [pathname]);
+  const features = useMemo(
+    () => (open ? featureMatches(query, { projectId, plan: user?.plan }) : []),
+    [open, query, projectId, user?.plan],
+  );
+  const items = useMemo(() => [...features, ...flattenSearchResults(results)], [features, results]);
   const grouped = useMemo(
     () => GROUP_ORDER.map((g) => ({ group: g, items: items.filter((i) => i.group === g) })).filter((g) => g.items.length > 0),
     [items],
@@ -139,16 +150,16 @@ export function GlobalSearch() {
                 aria-expanded={items.length > 0}
                 aria-controls="search-results"
                 aria-activedescendant={active >= 0 && items[active] ? `search-item-${items[active].key}` : undefined}
-                placeholder="Search projects, tasks, decisions, risks…"
-                aria-label="Search projects, tasks, decisions, risks"
+                placeholder="Search projects, tasks, pages and features…"
+                aria-label="Search projects, tasks, pages and features"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={onInputKeyDown}
               />
               <div className="search-results" id="search-results" role="listbox" aria-label="Search results">
-                {query.trim().length < 2 ? (
+                {items.length === 0 && query.trim().length < 2 ? (
                   <p className="search-hint muted">Type at least two characters to search across your projects.</p>
-                ) : loading ? (
+                ) : items.length === 0 && loading ? (
                   <p className="search-hint muted">Searching…</p>
                 ) : items.length === 0 ? (
                   <p className="search-hint muted">Nothing matches “{query.trim()}”.</p>

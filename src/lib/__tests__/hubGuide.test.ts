@@ -23,9 +23,9 @@ describe("Resource hub guide", () => {
   });
 
   it("only points at tabs that exist in the project navigation", () => {
-    // Tab labels come from the nav arrays in ProjectHome.tsx and from
-    // projectView.ts; the home-grown extras are sub-views that the app names
-    // inside another tab ("Weekly report" hosts Lessons).
+    // Tab labels come from the nav arrays in projectNav.ts (v174 labels:
+    // "Roles (RACI)", "Communication plan", "Status report"); the guide
+    // must name sections exactly as the sidebar does.
     for (const name of guideTabNames()) {
       expect(projectHome.includes(`label: "${name}"`), `tab "${name}" is not labelled in ProjectHome.tsx`).toBe(true);
     }
@@ -37,6 +37,6 @@ describe("Resource hub guide", () => {
 
   it("marks exactly the steps whose tabs Light hides", () => {
     const flagged = GUIDE_STAGES.flatMap((s) => s.steps.filter((x) => x.lightHides).map((x) => x.tab)).sort();
-    expect(flagged).toEqual(["Budget", "Budget", "Comms Plan", "RACI"]);
+    expect(flagged).toEqual(["Budget", "Budget", "Communication plan", "Roles (RACI)"]);
   });
 });

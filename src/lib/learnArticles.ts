@@ -182,7 +182,7 @@ export const LEARN_ARTICLES: LearnArticle[] = [
     blurb: "One row per audience: what they hear, how often, by what channel.",
     shelf: "learn",
     tab: "comms",
-    tabLabel: "Comms Plan",
+    tabLabel: "Communication plan",
     body: [
       "A communications plan answers three questions for every audience the project has: what do they need to hear, how often, and by what channel. One row per audience keeps it a reference you can check in ten seconds.",
       "It is a plan, not a workflow, so rows have no status. When the arrangement changes, edit the row. When an audience stops mattering, remove it. A short, current plan beats a long, stale one every time.",
@@ -208,7 +208,7 @@ export const LEARN_ARTICLES: LearnArticle[] = [
     blurb: "Outcomes the project is driving toward, and the results that prove them.",
     shelf: "learn",
     tab: "okrs",
-    tabLabel: "OKRs",
+    tabLabel: "Goals (OKRs)",
     body: [
       "OKRs are the handful of outcomes this project is actually driving toward, stated separately from the day-to-day work. Tasks say what people are doing. Objectives say where the project is going, and key results say whether it is getting there.",
       "A good key result is measurable without argument: a number, a date, a count. If reasonable people could disagree about whether it happened, it is not finished being written yet. A few key results per objective is plenty; a long list dilutes the few that matter.",

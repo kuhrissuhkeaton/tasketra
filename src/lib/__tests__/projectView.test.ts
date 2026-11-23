@@ -8,7 +8,7 @@ describe("isTabHidden", () => {
   });
 
   it("hides the frozen governance suite in Standard", () => {
-    expect(hiddenTabLabels("standard")).toEqual(["Quality", "Compliance", "Comms Plan", "OKRs", "RACI", "Templates"]);
+    expect(hiddenTabLabels("standard")).toEqual(["Quality", "Compliance", "Communication plan", "Goals (OKRs)", "Roles (RACI)", "Saved templates"]);
     expect(isTabHidden("quality", "standard", false)).toBe(true);
     expect(isTabHidden("okrs", "standard", false)).toBe(true);
     expect(isTabHidden("raci", "standard", false)).toBe(true);

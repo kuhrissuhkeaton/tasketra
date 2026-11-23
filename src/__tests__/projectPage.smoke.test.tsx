@@ -207,7 +207,10 @@ describe("project page smoke test", () => {
 
   it("the phone Menu button opens and closes the navigation, and Escape closes it", async () => {
     await mountProject("standard", "charter");
-    const btn = host.querySelector("button.sidebar-menu-btn") as HTMLButtonElement;
+    // v174: the Menu button lives in the phone bottom bar; the old
+    // in-header .sidebar-menu-btn retired with the tab bar.
+    const btn = [...host.querySelectorAll<HTMLButtonElement>(".phone-bar-item")].find((b) => b.textContent?.includes("Menu"))!;
+    expect(btn).toBeTruthy();
     expect(btn.getAttribute("aria-expanded")).toBe("false");
     expect(host.querySelector(".sidebar-open")).toBeNull();
     await act(async () => btn.click());
@@ -273,23 +276,26 @@ describe("project page smoke test", () => {
     expect(errors, errors.join("\n---\n")).toEqual([]);
   });
 
-  it("shows every section in the sidebar, grouped, when all tabs are shown (v172)", async () => {
+  it("shows every section in the sidebar, grouped, when all tabs are shown (v174 order)", async () => {
     await mountProject("full", "issues");
-    // v172: project navigation moved from the two in-page tab bars into
-    // the sidebar. Project items carry the tour's data-tour="tab-*" ids.
+    // Project items carry the tour's data-tour="tab-*" ids. v174
+    // regrouped them by job (Plan / Track / People / Wrap up + a settings
+    // tail), renamed the jargon labels plain-word-first, and made Client
+    // Snapshot and Trash regular entries: 26 tabs plus the snapshot link.
     const items = [...host.querySelectorAll(".side-nav .side-tab[data-tour^='tab-']")].map((b) =>
       (b.textContent ?? "").replace(/\d+$/, ""),
     );
     expect(items).toEqual([
-      "Overview", "Tasks",
-      "Roadmap", "Budget", "Meetings", "Charter", "OKRs",
-      "Issues", "Risks", "Assumptions", "Dependencies", "Quality", "Compliance",
-      "Decisions", "Stakeholders", "Settings", "RACI", "Vendors", "Comms Plan",
-      "Documents", "Weekly Report", "Closure", "Templates", "Export", "Connections",
+      "Overview",
+      "Roadmap", "Charter", "Budget", "Meetings", "Goals (OKRs)",
+      "Tasks", "Issues", "Risks", "Assumptions", "Dependencies", "Quality", "Compliance",
+      "Stakeholders", "Decisions", "Roles (RACI)", "Vendors", "Communication plan",
+      "Documents", "Status report", "Client Snapshot", "Closure", "Saved templates", "Export", "Trash",
+      "Project settings", "Webhooks",
     ]);
     expect(host.querySelector(".side-nav .side-tab.active")?.getAttribute("data-tour")).toBe("tab-issues");
     const labels = [...host.querySelectorAll(".side-nav-label")].map((b) => (b.textContent ?? "").replace(/▾$/, ""));
-    expect(labels).toEqual(expect.arrayContaining(["Plan", "Risks & issues", "People and decisions", "Docs"]));
+    expect(labels).toEqual(expect.arrayContaining(["Plan", "Track", "People", "Wrap up"]));
   });
 
   it("the sidebar lists the project tabs under the project name (v172)", async () => {

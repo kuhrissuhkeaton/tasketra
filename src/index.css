@@ -716,23 +716,8 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
 .today-section { margin-bottom: 24px; }
 .today-section h4, .today-section h3 { margin-bottom: 8px; }
 
-/* --- All sections directory (v153.1): one even grid of tiles per group,
-   replacing the underlined link list. Tiles follow the card recipe. --- */
-.section-dir { display: flex; flex-direction: column; gap: var(--ds-space-6); margin-top: var(--ds-space-3); }
-.section-dir-label {
-  margin: 0 0 var(--ds-space-2); font-size: var(--ds-text-xs); font-weight: 700;
-  text-transform: uppercase; letter-spacing: 0.04em; color: var(--slate-text);
-}
-.section-dir-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: var(--ds-space-3); }
-.section-dir-item {
-  display: block; width: 100%; height: 100%; text-align: left; cursor: pointer;
-  background: var(--cream); border: 1px solid var(--border); border-radius: var(--radius);
-  box-shadow: var(--ds-shadow-resting); padding: var(--ds-space-3) var(--ds-space-4);
-  font-family: inherit; transition: box-shadow var(--ease), transform var(--ease);
-}
-.section-dir-item:hover { box-shadow: var(--ds-shadow-raised); transform: translateY(-1px); }
-.section-dir-name { display: block; font-size: var(--ds-text-md); font-weight: 700; color: var(--navy); line-height: var(--ds-leading-tight); }
-.section-dir-blurb { display: block; margin-top: var(--ds-space-1); font-size: var(--ds-text-sm); color: var(--slate-text); line-height: var(--ds-leading-normal); }
+/* (The v153.1 "All sections" directory styles lived here; v174 removed
+   the directory itself, and the rules went with it.) */
 .today-list { list-style: none; margin: 0; padding: 0; }
 .today-list li {
   padding: 10px 6px; border-bottom: 1px solid var(--border); font-size: 14px;
@@ -879,49 +864,10 @@ body.col-resize-active * { cursor: col-resize !important; user-select: none !imp
    tabs keep 960px. */
 .project-main.project-main-tables { max-width: 1240px; padding-left: 28px; padding-right: 28px; }
 
-/* v164 (Portfolio Command): the portfolio top tabs. On desktop the bar is
-   fixed across the top of the content column (offset by the sidebar's
-   width, which the collapse toggle changes), and .project-main takes a
-   matching top margin so nothing slides under it. On phones the shell is
-   a column, so the bar simply sits in the flow under the sidebar's top
-   bar and scrolls sideways. Print drops it entirely. */
-.app-tabs {
-  display: flex; align-items: center; gap: 2px; height: 49px; padding: 0 12px;
-  background: var(--panel); border-bottom: 1px solid var(--border);
-}
-/* v164.1: only the tab strip scrolls (sideways, scrollbar hidden as
-   before); the + New project button is a sibling outside the strip with
-   flex-shrink: 0, so it is always fully on screen -- in v164 it was the
-   last item inside the scrolling row and clipped off the right edge on
-   narrower windows, mid-label, with no visible way to scroll to it. */
-.app-tabs-scroll {
-  display: flex; align-items: center; gap: 2px; flex: 1 1 auto; min-width: 0;
-  overflow-x: auto; scrollbar-width: none;
-}
-.app-tabs-scroll::-webkit-scrollbar { display: none; }
-.app-tab {
-  padding: 7px 12px; border-radius: var(--radius-pill); font-size: 14px; font-weight: 600;
-  color: var(--navy); text-decoration: none; white-space: nowrap; flex-shrink: 0;
-}
-/* The hover colors are spelled out on purpose: the global a:hover rule
-   (color: var(--navy), specificity 0-1-1) otherwise beats .app-tab-active's
-   color (0-1-0) and repaints the active tab's label navy on its ink pill --
-   black-on-black until the cursor moves away (v164.1 fix). Same for the
-   New project link, whose ink text the global rule turned navy on hover. */
-.app-tab:hover { background: rgba(127, 127, 127, 0.14); color: var(--navy); }
-.app-tab-active { background: var(--ink); color: var(--ivory); }
-.app-tab-active:hover { background: var(--ink); color: var(--ivory); }
-.app-tabs-new {
-  margin-left: auto; flex-shrink: 0; padding: 7px 14px; border-radius: var(--radius-pill); white-space: nowrap;
-  background: var(--lime); color: var(--ink); font-size: 14px; font-weight: 700; text-decoration: none;
-}
-.app-tabs-new:hover { filter: brightness(0.96); color: var(--ink); }
-@media (min-width: 861px) {
-  .app-tabs { position: fixed; top: 0; left: 264px; right: 0; z-index: 45; }
-  .sidebar-collapsed + .app-tabs { left: 68px; }
-  .project-main { margin-top: 49px; }
-}
-@media print { .app-tabs { display: none; } .project-main { margin-top: 0; } }
+/* v174: the v164 portfolio top tabs (.app-tabs) are retired -- the
+   sidebar is the one navigation system now, and the 49px top margin
+   .project-main carried for the fixed tab bar went with them. The phone
+   bottom bar styles live in the v174 section further down. */
 
 /* v164 shared visual kit (src/components/charts/): gauges, donut, variance
    bars. Categorical colors come from palette.ts; status colors only ever
@@ -1021,8 +967,10 @@ a.dash-list-title:hover { text-decoration: underline; }
 
 @media (max-width: 860px) {
   .project-shell { flex-direction: column; }
-  /* On a phone the sidebar is a slim top bar (wordmark + Menu button). Tapping
-     Menu opens the same navigation the desktop sidebar shows, stacked. */
+  /* On a phone the sidebar is a slim top bar (wordmark + bell). The
+     navigation itself lives in the Menu sheet: the bottom bar's Menu
+     button opens .sidebar-body as a fixed sheet above the bar (v174
+     section below). */
   .sidebar {
     width: 100%; height: auto; position: static; padding: 12px 16px;
     flex-direction: column; align-items: stretch; gap: 0; overflow: visible;
@@ -1030,19 +978,9 @@ a.dash-list-title:hover { text-decoration: underline; }
   }
   .sidebar-bar { display: flex; align-items: center; justify-content: space-between; }
   .sidebar-wordmark { margin-bottom: 0; }
-  .sidebar-menu-btn {
-    display: inline-flex; align-items: center; min-height: 40px; padding: 0 16px;
-    border-radius: var(--radius-pill); border: 1.5px solid rgba(242, 235, 217, 0.4);
-    background: none; color: var(--ivory); font-family: inherit; font-size: 14px; font-weight: 700; cursor: pointer;
-  }
-  .sidebar-menu-btn:hover { background: rgba(255, 255, 255, 0.08); }
-  .sidebar .side-nav, .sidebar .sidebar-footer { display: none; }
-  .sidebar.sidebar-open .side-nav { display: block; margin-top: 14px; }
-  .sidebar.sidebar-open .sidebar-footer { display: block; }
   .sidebar-project { display: none; }
   .project-main, .project-main.project-main-tables { padding: 20px 16px; max-width: none; }
 }
-@media (min-width: 861px) { .sidebar-menu-btn { display: none; } }
 
 /* Collapsible sidebar (desktop only): a narrow rail of icons. Text is hidden by
    zeroing the font size (the icons are fixed-size boxes), so every nav group,
@@ -1051,7 +989,8 @@ a.dash-list-title:hover { text-decoration: underline; }
 .sidebar-bar-actions { display: flex; align-items: center; gap: 6px; }
 /* Notification bell: same round outline as the collapse button, always visible (phone and desktop). */
 .sidebar-bell-btn {
-  position: relative; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; flex-shrink: 0;
+  /* v174: 44px, the touch-target guideline (it was 32px). */
+  position: relative; display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; flex-shrink: 0;
   border-radius: var(--radius-pill); border: 1.5px solid rgba(242, 235, 217, 0.4); background: none;
   color: var(--ivory); cursor: pointer;
 }
@@ -1405,7 +1344,6 @@ a.dash-list-title:hover { text-decoration: underline; }
 .feed-composer { margin-bottom: 24px; }
 .feed-composer-title { margin: 0 0 2px; font-size: 1.05rem; }
 .feed-composer-help { margin: 0 0 10px; }
-.project-section-line { margin: 2px 0 0; font-size: 0.9rem; }
 .feed-composer-form { margin-bottom: 0; }
 .status-pill-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
 .status-pill { border: 2px solid transparent; cursor: pointer; font-family: inherit; opacity: 0.55; }
@@ -2732,8 +2670,11 @@ a.dash-attention-next:hover { text-decoration: underline; text-underline-offset:
    One calm line under the project title. Only the pill is coloured. */
 .hs-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 4px 0 14px; padding: 9px 14px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); font-size: 14px; min-width: 0; }
 .hs-why { flex: 1 1 220px; min-width: 0; overflow-wrap: anywhere; }
-.hs-link { background: none; border: 0; padding: 0; font: inherit; font-weight: 600; color: var(--navy); text-decoration: underline; text-underline-offset: 3px; text-decoration-color: color-mix(in srgb, var(--navy) 35%, transparent); cursor: pointer; }
-.hs-link:hover { text-decoration-color: var(--navy); }
+/* v174 (proposal row 68): the problem links carry a full-strength underline
+   in the link colour -- the old 35%-strength decoration read as plain bold
+   text, so the buttons gave no visual sign they navigate. */
+.hs-link { background: none; border: 0; padding: 0; font: inherit; font-weight: 600; color: var(--navy); text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--navy); cursor: pointer; }
+.hs-link:hover { text-decoration-thickness: 2px; }
 .hs-next { font-size: 13px; min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hs-new { background: var(--border); color: var(--slate-text); }
 .hs-stated { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; font-size: 13px; min-width: 0; }
@@ -3204,6 +3145,13 @@ a.dash-attention-next:hover { text-decoration: underline; text-underline-offset:
   color: var(--slate-2);
   text-transform: capitalize;
 }
+/* The project name in the sidebar block truncates in the narrow sidebar
+   (the full name is on hover via the title attribute, v160 F-24). */
+.side-project-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .side-grow-btn {
   width: 100%;
   background: none;
@@ -3266,3 +3214,144 @@ a.dash-attention-next:hover { text-decoration: underline; text-underline-offset:
 .admin-main .rg-row { padding-top: var(--pad-row); padding-bottom: var(--pad-row); }
 .admin-main .rg-list { margin-bottom: var(--gap-stack); }
 .admin-main p.muted { line-height: 1.55; }
+
+/* --- v174: navigation consolidation -----------------------------------
+   One sidebar system; the phone bottom bar; the Menu sheet. The bar
+   height is a variable so the sheet, the content padding and the
+   QuickAddJump button all clear the same bar. */
+:root { --phone-bar-height: 60px; }
+
+/* The sidebar body wrapper is transparent on desktop: the rail lays out
+   exactly as if the nav and footer were direct children of the aside. */
+.sidebar-body { display: contents; }
+.phone-account-links { display: none; }
+.side-project-switcher { display: none; }
+
+/* The + New project button at the head of the nav (it lived in the
+   retired tab bar). Lime, like the tab bar's button was. */
+.sidebar-new-project {
+  display: flex; align-items: center; gap: 10px; width: 100%; box-sizing: border-box;
+  padding: 10px 14px; margin-bottom: 14px; border-radius: var(--radius-pill);
+  background: var(--lime); color: var(--ink); font-size: 15px; font-weight: 700;
+  text-decoration: none;
+}
+.sidebar-new-project:hover { filter: brightness(0.96); color: var(--ink); }
+.sidebar-new-plus { font-size: 17px; line-height: 1; font-weight: 700; }
+.sidebar-collapsed .sidebar-new-label { display: none; }
+.sidebar-collapsed .sidebar-new-project { justify-content: center; }
+
+/* The phone bottom bar: hidden above phone width and in print. */
+.phone-bottom-bar { display: none; }
+@media (max-width: 860px) {
+  .phone-bottom-bar {
+    display: flex; align-items: stretch; position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
+    height: calc(var(--phone-bar-height) + env(safe-area-inset-bottom, 0px));
+    padding-bottom: env(safe-area-inset-bottom, 0px); box-sizing: border-box;
+    background: var(--ink); border-top: 1px solid rgba(242, 235, 217, 0.18);
+  }
+  .phone-bar-item {
+    flex: 1 1 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+    min-height: 48px; padding: 6px 2px; background: none; border: none; cursor: pointer;
+    color: #B9C2A3; font-family: inherit; font-size: 11.5px; font-weight: 600; text-decoration: none;
+  }
+  .phone-bar-item .nav-icon-wrap { background: rgba(207, 234, 70, 0.14); }
+  /* Active state is a lime pill with dark text, never lime text on a
+     light ground (the contrast pair the proposal pins). */
+  .phone-bar-item.active { color: var(--ink); }
+  .phone-bar-item.active .nav-icon-wrap { background: var(--lime); }
+  .phone-bar-item.active .nav-icon-glyph * { stroke: var(--ink); }
+  .phone-bar-label { line-height: 1; }
+  .phone-bar-item.active .phone-bar-label {
+    background: var(--lime); border-radius: var(--radius-pill); padding: 2px 8px;
+  }
+  .phone-bar-plus-glyph { font-size: 24px; line-height: 1; font-weight: 600; height: 22px; display: flex; align-items: center; }
+
+  /* Content clears the bar, and the QuickAddJump rescue button floats
+     above it instead of under it. */
+  .project-main { padding-bottom: calc(var(--phone-bar-height) + env(safe-area-inset-bottom, 0px) + 24px); }
+  .quick-add-jump { bottom: calc(var(--phone-bar-height) + env(safe-area-inset-bottom, 0px) + 12px); }
+
+  /* The Menu sheet: the sidebar body, fixed above the bottom bar. */
+  .sidebar-body { display: none; }
+  .sidebar.sidebar-open .sidebar-body {
+    display: block; position: fixed; left: 0; right: 0;
+    bottom: calc(var(--phone-bar-height) + env(safe-area-inset-bottom, 0px));
+    z-index: 55; max-height: min(72vh, 640px); overflow-y: auto;
+    background: var(--ink); border-radius: 16px 16px 0 0;
+    box-shadow: 0 -12px 32px rgba(28, 36, 21, 0.35);
+    padding: 16px 16px 8px;
+  }
+  .sidebar.sidebar-open .side-nav { display: flex; flex-direction: column; }
+  /* Inside a project, the project's block leads the sheet. */
+  .sidebar.sidebar-open .side-project-block { order: -1; }
+  /* Groups never sit collapsed on the phone (the trap the old CSS left:
+     a group collapsed on desktop stayed collapsed in the phone menu). */
+  .sidebar .side-nav-group.collapsed .side-nav-items { display: block; }
+  .sidebar .side-nav-chevron { display: none; }
+  .sidebar .side-nav-label.collapsible { cursor: default; }
+  /* Sheet rows meet the 44px touch guideline. */
+  .sidebar.sidebar-open .side-tab { min-height: 44px; }
+  /* The nested user menu flattens: account items list directly. */
+  .sidebar .user-menu { display: none; }
+  .phone-account-links { display: block; }
+  /* The project switcher shows in the sheet (and only there). */
+  .side-project-switcher { display: block; margin: 2px 0 6px; }
+  .side-project-switcher select {
+    width: 100%; min-height: 44px; padding: 8px 10px; border-radius: var(--radius-sm);
+    border: 1.5px solid rgba(242, 235, 217, 0.4); background: var(--ink); color: var(--ivory);
+    font-family: inherit; font-size: 15px; font-weight: 600;
+  }
+}
+@media print {
+  .phone-bottom-bar { display: none !important; }
+  .sidebar-body { display: contents; }
+}
+
+/* The + Create action sheet and its quick-add form. */
+.phone-sheet-backdrop {
+  position: fixed; inset: 0; z-index: 56; background: rgba(28, 36, 21, 0.45);
+  display: flex; align-items: flex-end; justify-content: center;
+}
+.phone-sheet {
+  background: var(--panel); width: 100%; max-width: 520px; max-height: 82vh; overflow-y: auto;
+  border-radius: 16px 16px 0 0; padding: 12px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+  box-sizing: border-box;
+}
+.phone-sheet-item {
+  display: block; width: 100%; box-sizing: border-box; text-align: left;
+  min-height: 48px; padding: 13px 10px; background: none; border: none; border-bottom: 1px solid var(--border);
+  font-family: inherit; font-size: 16px; font-weight: 600; color: var(--navy); cursor: pointer; text-decoration: none;
+}
+.phone-sheet-item:last-child { border-bottom: none; }
+.phone-sheet-cancel { color: var(--slate); }
+.phone-quickadd { display: flex; flex-direction: column; gap: 10px; padding: 6px 2px 2px; }
+.phone-quickadd-label { font-size: 16px; font-weight: 700; color: var(--navy); }
+.phone-quickadd input[type="text"], .phone-quickadd select {
+  min-height: 44px; padding: 9px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border);
+  font-family: inherit; font-size: 15px; box-sizing: border-box; width: 100%;
+}
+.phone-quickadd-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 2px; }
+@media (min-width: 861px) {
+  /* The action sheet is a phone pattern; on desktop it bottom-centers
+     like a small dialog if it is ever opened there. */
+  .phone-sheet-backdrop { align-items: center; }
+  .phone-sheet { border-radius: 16px; margin: 0 16px; }
+}
+
+/* Overview: the client snapshot card and the More sections row. */
+.snapshot-card {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+  background: var(--cream); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 16px 18px; margin: 0 0 16px;
+}
+.snapshot-card-title { margin: 0 0 4px; font-size: 16px; color: var(--navy); }
+.snapshot-card-text { margin: 0; max-width: 52ch; }
+.snapshot-card-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+/* The inline share controls (D2 fix) take their own full-width row under
+   the card's actions instead of squeezing into the flex line. */
+.snapshot-card .share-box { flex: 1 1 100%; margin-bottom: 0; background: var(--panel); }
+.more-sections-row { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* Today: the Jump back in card. */
+.jump-back-in-name { margin: 0 0 8px; font-weight: 700; }
+.jump-back-in-links { display: flex; gap: 14px; flex-wrap: wrap; }

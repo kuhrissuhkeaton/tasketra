@@ -2,6 +2,7 @@ import { useEffect, useState, useRef, Fragment } from "react";
 import { useParams, useSearchParams, useNavigate, useLocation, Link } from "react-router-dom";
 import { api, ApiError, type Project, type Task, type Stakeholder, type Decision, type Issue, type Risk, type Assumption, type Dependency, type ChangeRequest, type Lesson, type TodayData, type WeeklyReport, type BudgetData, type FeedItem, type TrashItem, type ProjectMember, type Meeting, type MeetingActionItem, type ProjectDocument, type StorageUsage, type RoadmapItem, type RoadmapItemType, type StakeholderInterest, type StakeholderContactMethod, type ProcurementItem, type CommPlanItem, type Objective, type KeyResult, type RiskTaskLink, type IssueTaskLink, type TaskTaskLink, type ProjectStage, type BaselineData, type CharterApproval, type ExampleDataCounts } from "../lib/api";
 import { RowActionsMenu } from "../components/RowActionsMenu";
+import { ShareBox } from "../components/ShareBox";
 import { QuickAddForm } from "../components/QuickAddForm";
 import { RoadmapTimeline, ROADMAP_TYPE_LABEL, ROADMAP_STATUS_LABEL } from "../components/RoadmapTimeline";
 import { DateField } from "../components/DateField";
@@ -20,7 +21,7 @@ import { fmtDate, fmtDateTime, fmtLocalDate, fmtMoney, fmtPct, fmtRatio, fmtByte
 import { capacityLevel, CAPACITY_LABEL, CAPACITY_PILL, type CapacityLevel } from "../lib/capacity";
 import { useAuth } from "../lib/auth-context";
 import { AppSidebar } from "../components/AppSidebar";
-import { NAV_GROUPS, STRIP_TABS, groupOf, sectionLabel, sectionDirectory, visibleGroups } from "../lib/projectNav";
+import { STRIP_TABS, groupOf, sectionLabel, hiddenSections, visibleGroups } from "../lib/projectNav";
 import { useConfirm } from "../components/ConfirmDialog";
 import { RegisterRow, RegisterSummary, RegisterEmpty } from "../components/ui";
 import { StatCards, StatCard, LayerGroup, HowItWorks, TeachEmpty } from "../components/Layered";
@@ -40,7 +41,7 @@ import { ProjectSetupPicker } from "../components/ProjectSetup";
 import { useIsScrollable } from "../lib/scrollRegion";
 import { announce } from "../lib/announce";
 import { AddForm } from "../components/AddForm";
-import CalmHome, { GROW_PIECES } from "../components/CalmHome";
+import CalmHome from "../components/CalmHome";
 import { StatusTier } from "../components/StatusTier";
 import type { ReactNode } from "react";
 import { ProjectSidebarNav } from "../components/ProjectSidebarNav";
@@ -278,9 +279,12 @@ export default function ProjectHome() {
     setParams({ tab: tabId as Tab });
   }
   const activeGroup = groupOf(tab);
-  // Strip views (the old top row) keep the project name as the heading; every other
-  // view gets a breadcrumb and uses the view name as the heading.
-  const viewLabel: string | null = STRIP_TABS.has(tab) ? null : sectionLabel(tab);
+  // v174: the breadcrumb shows on every tab (it used to vanish on the
+  // strip views, so the orientation aid came and went). Strip views (the
+  // old top row) still keep the project name as the heading; every other
+  // view uses the view name as the heading.
+  const viewLabel: string | null = sectionLabel(tab);
+  const stripHeading = STRIP_TABS.has(tab);
 
   // v172: the sidebar's Decisions badge. Refetched on the same triggers
   // as the project itself (tab change, project-changed event).
@@ -301,17 +305,17 @@ export default function ProjectHome() {
     };
   }, [id, tab, healthNonce]);
 
-  // v172: the sidebar's grow row offers the pieces the size view still
-  // hides (the calm home's grow list, same order and labels).
-  const sidebarGrowPieces =
-    size === "light" && !showAll
-      ? GROW_PIECES.filter((p) => isTabHidden(p.id, size, showAll, extraTabs))
-      : [];
+  // v174: the sidebar's "More sections" list offers every section the
+  // size view still hides, on any size (it was a Light-only grow row
+  // before, one of three mechanisms doing this job; see projectNav's
+  // hiddenSections).
+  const sidebarGrowPieces = hiddenSections(size, showAll, extraTabs);
 
   return (
     <div className="project-shell">
-      <AppSidebar menuLabel="Project tools">
+      <AppSidebar>
         <ProjectSidebarNav
+          projectId={projectId}
           projectName={project?.name || "Project"}
           stageLabel={project?.stage ? STAGE_LABEL[project.stage] : null}
           groups={navGroups}
@@ -335,22 +339,12 @@ export default function ProjectHome() {
           </nav>
         )}
         <div className="page-head project-page-head">
-          <h1>{viewLabel ?? (project?.name || "Project")}</h1>
+          <h1>{stripHeading ? (project?.name || "Project") : (viewLabel ?? (project?.name || "Project"))}</h1>
           <div className="page-head-actions">
             <StageChip stage={project?.stage} />
-            <RowActionsMenu
-              label="Project actions"
-              items={[{ label: "Trash", onSelect: () => setParams({ tab: "trash" }) }]}
-            />
+            {/* v174: the one-item "Project actions" (⋯) menu is gone --
+                Trash is a real section in the sidebar's Wrap up group. */}
           </div>
-          {/* v150: strip views keep the project name as the heading, so name
-              the section too — the page you land on says what the menu said
-              (e.g. "Plan · Roadmap" instead of an unnamed roadmap). */}
-          {!viewLabel && tab !== "home" && sectionLabel(tab) && (
-            <p className="project-section-line muted" style={{ flexBasis: "100%" }}>
-              {NAV_GROUPS.find((g) => g.id === activeGroup)?.label} · {sectionLabel(tab)}
-            </p>
-          )}
           {user &&
             (doingTourState ? (
               <DoingTour
@@ -409,6 +403,7 @@ export default function ProjectHome() {
             showAll={project?.show_all_tabs ?? false}
             extraTabs={extraTabs}
             onShowAllTabs={showAllTabs}
+            onGrowTab={growTab}
             onStageChange={(stage: ProjectStage) => setProject((p) => (p ? { ...p, stage } : p))}
             onOpenTab={(t) => setParams({ tab: t })}
             statusRefreshKey={`${healthNonce}`}
@@ -477,7 +472,7 @@ export default function ProjectHome() {
   );
 }
 
-function HomeTab({ projectId, isOwner, purpose, stage, size, showAll, extraTabs, onShowAllTabs, onStageChange, onOpenTab, statusChecklist, statusRefreshKey }: {
+function HomeTab({ projectId, isOwner, purpose, stage, size, showAll, extraTabs, onShowAllTabs, onGrowTab, onStageChange, onOpenTab, statusChecklist, statusRefreshKey }: {
   projectId: string;
   isOwner: boolean;
   purpose?: string;
@@ -486,12 +481,18 @@ function HomeTab({ projectId, isOwner, purpose, stage, size, showAll, extraTabs,
   showAll: boolean;
   extraTabs: string[];
   onShowAllTabs: () => void;
+  onGrowTab: (tab: string) => void;
   onStageChange: (stage: ProjectStage) => void;
   onOpenTab: (tab: string) => void;
   statusChecklist?: ReactNode;
   statusRefreshKey?: string;
 }) {
   const [view, setView] = useState<"today" | "feed">("today");
+  // v174 fix pass (D2): the snapshot card's "Share by link" opens the real
+  // share controls (the same ShareBox the snapshot page itself carries),
+  // inline in the card -- the button used to be a second link to the print
+  // view, promising a share flow it never started.
+  const [shareOpen, setShareOpen] = useState(false);
   // v150: the Next Step card's "Write a check-in" jumps to the Feed composer.
   const [feedFocusNonce, setFeedFocusNonce] = useState(0);
   function goToCheckIn() {
@@ -526,19 +527,38 @@ function HomeTab({ projectId, isOwner, purpose, stage, size, showAll, extraTabs,
       {purpose && (
         <p className="home-purpose">
           <span className="home-purpose-label">Purpose</span>
-          {purpose}{" "}
-          <button type="button" className="view-banner-link" onClick={() => onOpenTab("charter")}>Charter</button>
+          {purpose}
         </p>
       )}
       {/* v165: the Project Cockpit follows the status tier as layer 2 --
           the shared kit's gauges, work breakdown and budget picture above
           the day-to-day Today/Feed content, which is unchanged below. */}
       <ProjectCockpit projectId={projectId} onOpenTab={onOpenTab} />
-      <p className="muted" style={{ margin: "0 0 16px" }}>
-        Sharing this project with a sponsor?{" "}
-        <Link to={`/app/projects/${projectId}/print/snapshot`}>Open the client snapshot</Link>
-        {" "}— a read-only page with the status you have stated, the gauges and what needs them. Share it by link from there.
-      </p>
+      {/* v174: the client snapshot gets a proper card (it was one small
+          link under this card, the only door it had). Client Snapshot is
+          also a section in the sidebar's Wrap up group now. */}
+      <div className="snapshot-card">
+        <div>
+          <h3 className="snapshot-card-title">Client snapshot</h3>
+          <p className="muted snapshot-card-text">
+            A read-only page with the status you have stated, the gauges and what needs them,
+            ready to share with a sponsor.
+          </p>
+        </div>
+        <div className="snapshot-card-actions">
+          <Link className="btn btn-primary" to={`/app/projects/${projectId}/print/snapshot`}>Open the client snapshot</Link>
+          {isOwner && (
+            <button className="btn btn-ghost" type="button" aria-expanded={shareOpen} onClick={() => setShareOpen((v) => !v)}>Share by link</button>
+          )}
+        </div>
+        {isOwner && shareOpen && (
+          <ShareBox
+            projectId={projectId}
+            kind="snapshot"
+            recipientsSee="They see the status you stated at your last check-in, how much of the work, time and budget is used, the milestones, the top three things being watched, and any open decisions a stakeholder owns. Task lists, registers and other projects are never included."
+          />
+        )}
+      </div>
       <div className="view-toggle">
         <button
           className={view === "today" ? "btn btn-primary" : "btn btn-ghost"}
@@ -564,65 +584,30 @@ function HomeTab({ projectId, isOwner, purpose, stage, size, showAll, extraTabs,
         <StageRail projectId={projectId} isOwner={isOwner} onStageChange={onStageChange} onOpenTab={onOpenTab} />
       </div>
 
-      {/* v153.1: the directory is a tidy tile grid, and sectionDirectory()
-          applies the same size rule as the sidebar — sections hidden by size
-          are simply not listed (the footnote below says how many). */}
-      <div className="today-section" style={{ marginTop: 28 }}>
-        <h4>All sections</h4>
-        <div className="section-dir">
-          {sectionDirectory(size, showAll, extraTabs).map(({ group, sections }) => (
-            <div key={group.id} className="section-dir-group">
-              <h5 className="section-dir-label">{group.label}</h5>
-              <div className="section-dir-grid">
-                {sections.map((s) => (
-                  <button key={s.id} type="button" className="section-dir-item" onClick={() => onOpenTab(s.id)}>
-                    <span className="section-dir-name">{s.label}</span>
-                    {SECTION_BLURB[s.id] && (
-                      <span className="section-dir-blurb">{SECTION_BLURB[s.id].charAt(0).toUpperCase() + SECTION_BLURB[s.id].slice(1)}</span>
-                    )}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-        {size !== "full" && !showAll && (
-          <p className="muted" style={{ marginTop: 12 }}>
-            {hiddenTabLabels(size, extraTabs).length} sections are hidden by the {SIZE_LABEL[size]} view.
-            {isOwner && <> <button type="button" className="view-banner-link" onClick={onShowAllTabs}>Show all sections</button></>}
+      {/* v174: the "All sections" directory is gone (it re-rendered the
+          whole sidebar a second time on this page; the sidebar is the
+          single section index now). What remains here is the one "More
+          sections" pattern: the sections this project's size hides, each
+          with an Add action that grows it in place and opens it -- the
+          same list the sidebar tail offers. */}
+      {hiddenSections(size, showAll, extraTabs).length > 0 && (
+        <div className="today-section" style={{ marginTop: 28 }}>
+          <h4>More sections</h4>
+          <p className="muted" style={{ marginTop: 0 }}>
+            Hidden by the {SIZE_LABEL[size]} view. Add one and it joins this project&apos;s sidebar.
           </p>
-        )}
-      </div>
+          <div className="more-sections-row">
+            {hiddenSections(size, showAll, extraTabs).map((s) => (
+              <button key={s.id} type="button" className="calm-chip" onClick={() => onGrowTab(s.id)}>
+                + {s.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
-
-const SECTION_BLURB: Record<string, string> = {
-  tasks: "the work list",
-  roadmap: "phases, milestones, baseline",
-  budget: "costs and earned value",
-  meetings: "meeting notes",
-  charter: "purpose, sponsor, success",
-  okrs: "objectives and key results",
-  issues: "problems needing action",
-  risks: "what might go wrong",
-  assumptions: "taken for granted, checked",
-  dependencies: "what waits on what",
-  quality: "checks and acceptance",
-  compliance: "requirements and evidence",
-  decisions: "requests and the decision log",
-  stakeholders: "who cares, and how much",
-  team: "members and settings",
-  raci: "who does, approves, advises",
-  procurement: "vendors and purchases",
-  comms: "who hears what, when",
-  documents: "files and links",
-  report: "weekly status, ready to send",
-  closure: "close-out checklist and record",
-  templates: "save and reuse setups",
-  export: "audit trails and downloads",
-  connections: "webhooks and integrations",
-};
 
 function FeedTab({ projectId, focusComposerNonce = 0 }: { projectId: string; focusComposerNonce?: number }) {
   const { user } = useAuth();

@@ -18,7 +18,7 @@ export const APPROACH_LABEL: Record<ProjectApproach, string> = { predictive: "Pr
 export const SIZE_BLURB: Record<ProjectSize, string> = {
   light: "Small or short. Tasks, roadmap, risks and the essentials.",
   standard: "Most projects. Adds budget, meetings, vendors and closure.",
-  full: "Regulated or large. Adds OKRs, RACI, quality, compliance, comms plan and templates.",
+  full: "Regulated or large. Adds goals, roles, quality, compliance, communication plan and saved templates.",
 };
 
 export const APPROACH_BLURB: Record<ProjectApproach, string> = {
@@ -39,10 +39,10 @@ const HIDDEN: Record<ProjectSize, string[]> = {
 };
 
 const TAB_LABEL: Record<string, string> = {
-  budget: "Budget", meetings: "Meetings", okrs: "OKRs", assumptions: "Assumptions",
+  budget: "Budget", meetings: "Meetings", okrs: "Goals (OKRs)", assumptions: "Assumptions",
   dependencies: "Dependencies", quality: "Quality", compliance: "Compliance",
-  procurement: "Vendors", comms: "Comms Plan", templates: "Templates", export: "Export",
-  connections: "Connections", raci: "RACI",
+  procurement: "Vendors", comms: "Communication plan", templates: "Saved templates", export: "Export",
+  connections: "Webhooks", raci: "Roles (RACI)",
 };
 
 export function hiddenTabIds(size: ProjectSize): string[] {

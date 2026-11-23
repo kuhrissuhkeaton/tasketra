@@ -10,6 +10,12 @@ export type ChangeEntry = { version: string; date: string; title: string; body: 
 // they can do.
 export const CHANGES: ChangeEntry[] = [
   {
+    version: "v174",
+    date: "November 2026",
+    title: "One simpler navigation: everything lives in the sidebar now, and your phone gets a bottom bar.",
+    body: "Tasketra used to have two sets of navigation at once, a sidebar and a row of tabs across the top, and they did not always agree on where you were. Now there is one system. The cross-project Decisions and Risks & Issues views moved into the sidebar's new Portfolio group, and a project's sections are grouped by the job they do: Plan, Track, People, and Wrap up, with project settings at the end. A few names are plainer now (Goals (OKRs), Roles (RACI), Communication plan, Status report, Saved templates, Webhooks), the Client Snapshot and Trash have their own sections instead of hiding, and Learn is a single entry. Search finds pages and features now, not just content: try \"snapshot\", \"webhooks\" or \"connect your AI\". On your phone there is a bottom bar (Today, Projects, Create, Sync, Menu), and the menu opens as a sheet with everything expanded. Nothing changed address: every link, bookmark and email deep link works exactly as before.",
+  },
+  {
     version: "v173",
     date: "November 2026",
     title: "One status story: the status you state leads everywhere, and every count agrees with it.",

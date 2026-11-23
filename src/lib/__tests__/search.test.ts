@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { flattenSearchResults, moveSearchIndex } from "../search";
+import { featureMatches, flattenSearchResults, moveSearchIndex } from "../search";
 import type { SearchResults } from "../api";
 
 // v159 (F-18): the palette's list plumbing -- grouping order, link targets
@@ -36,6 +36,52 @@ describe("flattenSearchResults", () => {
 
   it("returns nothing for an empty payload", () => {
     expect(flattenSearchResults({ projects: [], tasks: [], decisions: [], risks: [] })).toEqual([]);
+  });
+});
+
+describe("featureMatches (v174 pages & features index)", () => {
+  it("resolves the features members could never find: snapshot, webhooks, connect your AI", () => {
+    const snap = featureMatches("snapshot", { projectId: "p1", plan: "free" });
+    expect(snap[0]).toMatchObject({ title: "Client Snapshot", href: "/app/projects/p1/print/snapshot", group: "Pages & features" });
+
+    const hooks = featureMatches("webhooks", { projectId: "p1", plan: "free" });
+    expect(hooks.map((i) => i.href)).toContain("/app/projects/p1?tab=connections");
+
+    const ai = featureMatches("connect your AI", { projectId: null, plan: "free" });
+    expect(ai.map((i) => i.title)).toContain("Account");
+    expect(ai.find((i) => i.title === "Account")!.href).toBe("/app/account");
+  });
+
+  it("without a project context, project features point at the Projects list", () => {
+    const snap = featureMatches("snapshot", { projectId: null, plan: "free" });
+    expect(snap[0]).toMatchObject({ title: "Client Snapshot", href: "/app/projects", projectName: "Pick a project first" });
+  });
+
+  it("keeps the old labels working as aliases for one cycle (Comms Plan, Weekly Report, OKRs, RACI)", () => {
+    const ctx = { projectId: "p1", plan: "free" };
+    expect(featureMatches("comms plan", ctx).map((i) => i.href)).toContain("/app/projects/p1?tab=comms");
+    expect(featureMatches("weekly report", ctx).map((i) => i.href)).toContain("/app/projects/p1?tab=report");
+    expect(featureMatches("okrs", ctx).map((i) => i.href)).toContain("/app/projects/p1?tab=okrs");
+    expect(featureMatches("raci", ctx).map((i) => i.href)).toContain("/app/projects/p1?tab=raci");
+    expect(featureMatches("guides", ctx).map((i) => i.href)).toContain("/app/resources");
+  });
+
+  it("never offers Billing to founding members, and offers Founder hub only to them", () => {
+    expect(featureMatches("billing", { projectId: null, plan: "founding" })).toEqual([]);
+    expect(featureMatches("upgrade", { projectId: null, plan: "founding" })).toEqual([]);
+    expect(featureMatches("billing", { projectId: null, plan: "free" }).map((i) => i.title)).toContain("Billing");
+    expect(featureMatches("founder hub", { projectId: null, plan: "founding" }).map((i) => i.href)).toContain("/app/founding");
+    expect(featureMatches("founder hub", { projectId: null, plan: "free" })).toEqual([]);
+  });
+
+  it("matches the plain destinations by name and stays quiet below two characters", () => {
+    expect(featureMatches("workload", { plan: "free" })[0]).toMatchObject({ title: "Workload", href: "/app/workload" });
+    expect(featureMatches("w", { plan: "free" })).toEqual([]);
+    expect(featureMatches("zzzz", { plan: "free" })).toEqual([]);
+  });
+
+  it("caps the feature list so it cannot swamp content results", () => {
+    expect(featureMatches("project", { projectId: "p1", plan: "free" }).length).toBeLessThanOrEqual(8);
   });
 });
 

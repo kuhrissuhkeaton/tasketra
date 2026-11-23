@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 //
-// Project page chrome (v113): Trash lives in the Project actions menu, sidebar views
-// and Trash get a breadcrumb and use the view name as the heading, strip views are
-// unchanged, and Trash restore still works.
+// Project page chrome: every view gets a breadcrumb (v174; strip views
+// keep the project name as the heading, the rest use the view name),
+// Trash is a regular sidebar section in Wrap up (it lived in a one-item
+// "Project actions" menu until v174), and Trash restore still works.
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
 import { createRoot, type Root } from "react-dom/client";
 import { act } from "react";
@@ -68,8 +69,6 @@ async function mount(tab: string, isOwner = true) {
 
 const crumb = () => host.querySelector<HTMLElement>('nav[aria-label="Breadcrumb"]');
 const h1 = () => host.querySelector("h1")!.textContent;
-const menuBtn = () => host.querySelector<HTMLButtonElement>('button[aria-label="Project actions"]')!;
-const items = () => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')];
 
 describe("breadcrumb and page heading", () => {
   it("sidebar view: breadcrumb with real links, current page text, heading is the view name", async () => {
@@ -85,16 +84,16 @@ describe("breadcrumb and page heading", () => {
     expect(h1()).toBe("Risks");
   });
 
-  it("uses the sidebar label for the view (Weekly report, Comms plan)", async () => {
+  it("uses the sidebar label for the view (Communication plan since v174)", async () => {
     await mount("comms");
-    expect(crumb()!.querySelector('[aria-current="page"]')!.textContent).toBe("Comms Plan");
-    expect(h1()).toBe("Comms Plan");
+    expect(crumb()!.querySelector('[aria-current="page"]')!.textContent).toBe("Communication plan");
+    expect(h1()).toBe("Communication plan");
   });
 
-  it("strip views have no breadcrumb and keep the project name as the heading", async () => {
+  it("strip views get a breadcrumb too (v174) and keep the project name as the heading", async () => {
     for (const tab of ["home", "tasks", "roadmap", "budget", "meetings"]) {
       await mount(tab);
-      expect(crumb(), tab).toBeNull();
+      expect(crumb(), tab).not.toBeNull();
       expect(h1(), tab).toBe("Chrome Project");
       await act(async () => { root.unmount(); });
       host.innerHTML = "";
@@ -109,49 +108,27 @@ describe("breadcrumb and page heading", () => {
   });
 });
 
-describe("Project actions menu", () => {
-  it("is in the page header, closed by default, and the sidebar no longer lists Trash", async () => {
+describe("Trash in the sidebar (v174)", () => {
+  it("there is no Project actions menu, and the sidebar lists Trash as a section", async () => {
     await mount("home");
-    expect(menuBtn()).not.toBeNull();
-    expect(menuBtn().getAttribute("aria-haspopup")).toBe("menu");
-    expect(menuBtn().getAttribute("aria-expanded")).toBe("false");
-    expect(host.closest("body")!.querySelector('[role="menu"]')).toBeNull();
-    const sideLabels = [...host.querySelectorAll(".side-tab, .side-nav-label")].map((e) => e.textContent?.trim());
-    expect(sideLabels).not.toContain("Trash");
-    expect(sideLabels).not.toContain("Reference");
+    expect(host.querySelector('button[aria-label="Project actions"]')).toBeNull();
+    const trash = host.querySelector<HTMLElement>("[data-tour='tab-trash']");
+    expect(trash).not.toBeNull();
+    expect(trash!.textContent).toContain("Trash");
   });
 
-  it("click opens a menu with Trash; choosing it opens the Trash view (?tab=trash)", async () => {
+  it("choosing the sidebar Trash section opens the Trash view (?tab=trash)", async () => {
     await mount("risks");
-    await act(async () => { menuBtn().click(); });
-    expect(menuBtn().getAttribute("aria-expanded")).toBe("true");
-    expect(items().map((i) => i.textContent)).toEqual(["Trash"]);
-    await act(async () => { items()[0].click(); });
+    const trash = host.querySelector<HTMLButtonElement>("[data-tour='tab-trash']")!;
+    await act(async () => { trash.click(); });
     await act(async () => { await new Promise((r) => setTimeout(r, 40)); });
     expect(h1()).toBe("Trash");
     expect(host.textContent).toContain("Old risk");
   });
 
-  it("keyboard: ArrowDown opens and focuses the first item, Escape closes and returns focus", async () => {
-    await mount("home");
-    menuBtn().focus();
-    await act(async () => { menuBtn().dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })); });
-    expect(items().length).toBe(1);
-    expect(document.activeElement).toBe(items()[0]);
-    await act(async () => { items()[0].dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); });
-    expect(items().length).toBe(0);
-    expect(document.activeElement).toBe(menuBtn());
-  });
-
   it("is available to non-owners too (Trash access is unchanged)", async () => {
     await mount("home", false);
-    expect(menuBtn()).not.toBeNull();
-  });
-
-  it("Delete project is not in the menu", async () => {
-    await mount("home");
-    await act(async () => { menuBtn().click(); });
-    expect(items().map((i) => i.textContent.toLowerCase()).join()).not.toContain("delete");
+    expect(host.querySelector("[data-tour='tab-trash']")).not.toBeNull();
   });
 });
 

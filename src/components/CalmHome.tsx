@@ -13,11 +13,12 @@ import { fmtDate } from "../lib/format";
 import { hiddenTabIds, type ProjectSize } from "../lib/projectView";
 
 // The pieces offered on the grow row, in the order a growing project
-// usually reaches for them. Timeline (roadmap) is not hidden by size, but
-// it belongs here: on the calm home it is the one core surface with no
-// card of its own.
+// usually reaches for them. Roadmap is not hidden by size, but it
+// belongs here: on the calm home it is the one core surface with no
+// card of its own. (v174: the piece is called "Roadmap" here too --
+// "Timeline" used to name this tab, a Tasks view, and a component.)
 export const GROW_PIECES: { id: string; label: string }[] = [
-  { id: "roadmap", label: "Timeline" },
+  { id: "roadmap", label: "Roadmap" },
   { id: "budget", label: "Budget" },
   { id: "meetings", label: "Meetings" },
   { id: "stakeholders", label: "Stakeholders" },
@@ -182,7 +183,7 @@ export default function CalmHome({
       </div>
 
       <div className="calm-grow">
-        <p className="calm-grow-label">Need more for this project?</p>
+        <p className="calm-grow-label">More sections</p>
         <div className="calm-grow-row">
           {GROW_PIECES.map((piece) => (
             <button key={piece.id} type="button" className="calm-chip" onClick={() => grow(piece.id)}>

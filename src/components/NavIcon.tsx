@@ -53,6 +53,9 @@ export type NavIconName =
   | "templates"
   | "export"
   | "connections"
+  | "snapshot"
+  | "email"
+  | "menu"
   | "trash"
   | "help"
   | "tour"
@@ -236,6 +239,20 @@ const SHAPES: Record<NavIconName, Shape[]> = {
   connections: [
     { tag: "rect", attrs: { x: 3, y: 8.3, width: 8, height: 4.2, rx: 2.1, transform: "rotate(-35 7 10.4)" } },
     { tag: "rect", attrs: { x: 9, y: 6.3, width: 8, height: 4.2, rx: 2.1, transform: "rotate(-35 13 8.4)" } },
+  ],
+  snapshot: [
+    { tag: "rect", attrs: { x: 3, y: 4.5, width: 14, height: 11.5, rx: 1.5 } },
+    { tag: "circle", attrs: { cx: 7.3, cy: 8.3, r: 1.3 } },
+    { tag: "path", attrs: { d: "M3.5 14.5 8 10.8l2.8 2.3 2.4-1.9 3.3 2.7" } },
+  ],
+  email: [
+    { tag: "rect", attrs: { x: 2.8, y: 5, width: 14.4, height: 10.5, rx: 1.5 } },
+    { tag: "path", attrs: { d: "M3.5 6.5 10 11l6.5-4.5" } },
+  ],
+  menu: [
+    { tag: "path", attrs: { d: "M3.5 5.8h13" } },
+    { tag: "path", attrs: { d: "M3.5 10h13" } },
+    { tag: "path", attrs: { d: "M3.5 14.2h13" } },
   ],
   trash: [
     { tag: "path", attrs: { d: "M4 6h12" } },
