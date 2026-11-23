@@ -1,0 +1,306 @@
+--- a/src/App.tsx
++++ b/src/App.tsx
+@@ -1,8 +1,9 @@
+-import { lazy, Suspense } from "react";
+-import { Routes, Route, Navigate } from "react-router-dom";
++import { lazy, Suspense, useEffect } from "react";
++import { Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
+ import { AuthProvider, useAuth } from "./lib/auth-context";
+ import { ConfirmProvider } from "./components/ConfirmDialog";
+ import { VerifyEmailGate } from "./components/VerifyEmailGate";
++import { takeTrialIntent } from "./lib/trialIntent";
+ 
+ // Every route is loaded on demand rather than bundled into the initial
+ // chunk -- ProjectHome in particular carries every tab's logic (Tasks,
+@@ -53,12 +54,34 @@
+   return <div className="shell"><p className="muted" style={{ padding: 24 }}>Loading...</p></div>;
+ }
+ 
++/** v173.2: a Pro signup's trial intent is remembered at registration
++ *  (lib/trialIntent) because the email-confirmation round trip used to drop
++ *  it -- the tab the emailed link opens could only continue to the app home,
++ *  so the trial never started. This sits in Protected's verified branch, the
++ *  one place every post-verification entry passes through (the confirmation
++ *  tab's continue, a later sign-in, a fresh app open), and sends a verified
++ *  free account with a stored intent on to Billing exactly once. The intent
++ *  is consumed even when the person is already on a Billing page (the
++ *  original tab's path), so it can never fire late on a later visit. */
++export function TrialIntentRedirect() {
++  const { user } = useAuth();
++  const navigate = useNavigate();
++  const location = useLocation();
++  useEffect(() => {
++    if (!user || user.emailVerified === false) return;
++    if (takeTrialIntent(user) && !location.pathname.startsWith("/app/billing")) {
++      navigate("/app/billing", { replace: true });
++    }
++  }, [user, location.pathname, navigate]);
++  return null;
++}
++
+ function Protected({ children }: { children: React.ReactNode }) {
+   const { user, loading, sessionExpired } = useAuth();
+   if (loading) return <div className="shell"><p className="muted" style={{ padding: 24 }}>Loading...</p></div>;
+   if (!user) return <Navigate to={sessionExpired ? "/login?expired=1" : "/login"} replace />;
+   if (user.emailVerified === false) return <VerifyEmailGate />;
+-  return <>{children}</>;
++  return <><TrialIntentRedirect />{children}</>;
+ }
+ 
+ function AdminProtected({ children }: { children: React.ReactNode }) {
+--- a/src/pages/Login.tsx
++++ b/src/pages/Login.tsx
+@@ -4,6 +4,7 @@
+ import { useAuth } from "../lib/auth-context";
+ import { Wordmark } from "../components/Wordmark";
+ import { track } from "../lib/analytics";
++import { rememberTrialIntent } from "../lib/trialIntent";
+ import { useDocumentTitle } from "../lib/documentTitle";
+ 
+ /** Which offer brought someone to sign up: the tasketra.com pricing buttons
+@@ -84,6 +85,10 @@
+       } else {
+         await api.register(email, password, refCode);
+         track("signup_completed", { plan });
++        // Remember the Pro intent in this browser: if the person confirms
++        // their email in another tab, the intent is what carries them on to
++        // Billing once they're verified (see lib/trialIntent).
++        if (plan === "pro") rememberTrialIntent(email);
+       }
+       await refresh();
+       // Only the Pro offer continues to Billing. A founding spot is awarded
+--- a/src/lib/trialIntent.ts
++++ b/src/lib/trialIntent.ts
+@@ -0,0 +1,57 @@
++// Trial intent: remembering that a brand-new account signed up for the Pro
++// trial, across the email-confirmation round trip.
++//
++// The Pro offer on tasketra.com links to /login?plan=pro, and registration
++// there continues straight to Billing -- in the tab that registered. But the
++// account starts unverified, so that tab waits behind the verify-email gate
++// at the Billing URL, while the tab the person actually confirms in (the
++// emailed link) lands on /verify-email, whose only way forward is the app
++// home. Nothing carried the trial intent across, so a plan=pro signup who
++// clicked the emailed link never reached Billing and the trial never
++// started.
++//
++// The intent is stored in this browser at registration (the confirmation
++// almost always happens in the same browser) and consumed exactly once, the
++// first time a verified user is seen: App's Protected branch asks for it and
++// sends a verified free account to Billing. Consumption is deliberately
++// one-shot and guarded -- the stored email must match the signed-in account,
++// and any account already on a plan (founding, trialing, active, past_due)
++// is never routed; its stale intent is simply cleared.
++
++import type { User } from "./api";
++
++const KEY = "tasketra.trialIntent";
++
++/** Called when a plan=pro registration succeeds in this browser. */
++export function rememberTrialIntent(email: string): void {
++  try {
++    window.localStorage.setItem(KEY, JSON.stringify({ email }));
++  } catch {
++    // Storage unavailable: the original tab still continues to Billing;
++    // only the confirmation-tab handoff is lost.
++  }
++}
++
++/**
++ * Ask whether this verified user should be sent to Billing to start the
++ * trial they signed up for. The stored intent is always cleared the first
++ * time a verified user is seen, whatever the answer, so it can never fire
++ * late or twice. An unverified user neither routes nor consumes: their
++ * confirmation is still outstanding.
++ */
++export function takeTrialIntent(user: User): boolean {
++  if (!user || user.emailVerified === false) return false;
++  let stored: { email?: unknown } | null = null;
++  try {
++    const raw = window.localStorage.getItem(KEY);
++    window.localStorage.removeItem(KEY);
++    stored = raw ? (JSON.parse(raw) as { email?: unknown }) : null;
++  } catch {
++    return false;
++  }
++  if (!stored || typeof stored.email !== "string") return false;
++  if (stored.email.toLowerCase() !== user.email.toLowerCase()) return false;
++  // Only a free account still has a trial to start. Founding members never
++  // see Billing, and trialing/active/past_due accounts are already on one.
++  return (user.plan ?? "free") === "free";
++}
+--- a/src/lib/__tests__/trialIntent.test.ts
++++ b/src/lib/__tests__/trialIntent.test.ts
+@@ -0,0 +1,80 @@
++// @vitest-environment jsdom
++//
++// v173.2: trial intent is remembered at a plan=pro registration and consumed
++// exactly once, the first time a verified user is seen, so the
++// email-confirmation round trip can carry the person on to Billing.
++import { describe, it, expect, beforeEach } from "vitest";
++import { rememberTrialIntent, takeTrialIntent } from "../trialIntent";
++import type { User } from "../api";
++
++const KEY = "tasketra.trialIntent";
++
++function user(overrides: Partial<User> = {}): User {
++  return { id: "u1", email: "me@gmail.com", emailVerified: true, plan: "free", ...overrides };
++}
++
++beforeEach(() => {
++  window.localStorage.clear();
++});
++
++describe("takeTrialIntent", () => {
++  it("routes a verified free account whose email matches the stored intent", () => {
++    rememberTrialIntent("me@gmail.com");
++    expect(takeTrialIntent(user())).toBe(true);
++  });
++
++  it("matches the stored email case-insensitively", () => {
++    rememberTrialIntent("Me@Gmail.com");
++    expect(takeTrialIntent(user({ email: "me@gmail.COM" }))).toBe(true);
++  });
++
++  it("treats a missing plan as free, like Billing does", () => {
++    rememberTrialIntent("me@gmail.com");
++    expect(takeTrialIntent(user({ plan: undefined }))).toBe(true);
++  });
++
++  it("consumes the intent: a second sighting does not route again", () => {
++    rememberTrialIntent("me@gmail.com");
++    expect(takeTrialIntent(user())).toBe(true);
++    expect(window.localStorage.getItem(KEY)).toBeNull();
++    expect(takeTrialIntent(user())).toBe(false);
++  });
++
++  it("does not route when no intent was stored", () => {
++    expect(takeTrialIntent(user())).toBe(false);
++  });
++
++  it("never routes a founding account, and clears its stray intent", () => {
++    rememberTrialIntent("me@gmail.com");
++    expect(takeTrialIntent(user({ plan: "founding" }))).toBe(false);
++    expect(window.localStorage.getItem(KEY)).toBeNull();
++    expect(takeTrialIntent(user({ plan: "founding" }))).toBe(false);
++  });
++
++  it.each(["trialing", "active", "past_due"] as const)("never routes an account already on a plan (%s), and clears the intent", (plan) => {
++    rememberTrialIntent("me@gmail.com");
++    expect(takeTrialIntent(user({ plan }))).toBe(false);
++    expect(window.localStorage.getItem(KEY)).toBeNull();
++  });
++
++  it("does not route a different account, and clears the stale intent", () => {
++    rememberTrialIntent("someone-else@gmail.com");
++    expect(takeTrialIntent(user())).toBe(false);
++    expect(window.localStorage.getItem(KEY)).toBeNull();
++  });
++
++  it("neither routes nor consumes while the user is still unverified", () => {
++    rememberTrialIntent("me@gmail.com");
++    expect(takeTrialIntent(user({ emailVerified: false }))).toBe(false);
++    expect(window.localStorage.getItem(KEY)).not.toBeNull();
++    // Once verified, the same intent is still there to consume.
++    expect(takeTrialIntent(user())).toBe(true);
++  });
++
++  it("ignores a malformed stored value", () => {
++    window.localStorage.setItem(KEY, "not json");
++    expect(takeTrialIntent(user())).toBe(false);
++    window.localStorage.setItem(KEY, JSON.stringify({ email: 42 }));
++    expect(takeTrialIntent(user())).toBe(false);
++  });
++});
+--- a/src/__tests__/trialIntentRedirect.test.tsx
++++ b/src/__tests__/trialIntentRedirect.test.tsx
+@@ -0,0 +1,89 @@
++// @vitest-environment jsdom
++//
++// v173.2: the landing component inside Protected's verified branch. A
++// verified free account with a stored trial intent is sent on to Billing
++// from wherever verification dropped it; everyone else is left exactly
++// where they are.
++import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
++import { createRoot, type Root } from "react-dom/client";
++import { act } from "react";
++import { MemoryRouter, Routes, Route } from "react-router-dom";
++import type { User } from "../lib/api";
++
++const auth = vi.hoisted(() => ({ user: null as User | null }));
++vi.mock("../lib/auth-context", () => ({
++  useAuth: () => ({ user: auth.user, loading: false, sessionExpired: false, refresh: async () => {}, logout: async () => {} }),
++  AuthProvider: ({ children }: { children: unknown }) => children,
++}));
++
++import { TrialIntentRedirect } from "../App";
++import { rememberTrialIntent } from "../lib/trialIntent";
++
++let container: HTMLDivElement;
++let root: Root;
++beforeAll(() => { (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true; });
++beforeEach(() => {
++  window.localStorage.clear();
++  auth.user = null;
++  container = document.createElement("div");
++  document.body.appendChild(container);
++  root = createRoot(container);
++});
++afterEach(() => { act(() => root.unmount()); container.remove(); });
++
++const flush = () => act(async () => { await new Promise((r) => setTimeout(r, 0)); });
++
++async function renderAt(path: string) {
++  await act(async () => {
++    root.render(
++      <MemoryRouter initialEntries={[path]}>
++        <Routes>
++          <Route path="/app" element={<><TrialIntentRedirect /><p>app home</p></>} />
++          <Route path="/app/billing" element={<><TrialIntentRedirect /><p>billing page</p></>} />
++        </Routes>
++      </MemoryRouter>,
++    );
++  });
++  await flush();
++}
++
++const verifiedFree: User = { id: "u1", email: "me@gmail.com", emailVerified: true, plan: "free" };
++
++describe("TrialIntentRedirect", () => {
++  it("sends a verified free account with trial intent from the app home to Billing", async () => {
++    auth.user = verifiedFree;
++    rememberTrialIntent("me@gmail.com");
++    await renderAt("/app");
++    expect(container.textContent).toContain("billing page");
++    expect(container.textContent).not.toContain("app home");
++  });
++
++  it("leaves a verified free account with no stored intent where it is", async () => {
++    auth.user = verifiedFree;
++    await renderAt("/app");
++    expect(container.textContent).toContain("app home");
++  });
++
++  it("never sends a founding account to Billing, even with a stray intent", async () => {
++    auth.user = { ...verifiedFree, plan: "founding" };
++    rememberTrialIntent("me@gmail.com");
++    await renderAt("/app");
++    expect(container.textContent).toContain("app home");
++  });
++
++  it("does nothing while the account is still unverified", async () => {
++    auth.user = { ...verifiedFree, emailVerified: false };
++    rememberTrialIntent("me@gmail.com");
++    await renderAt("/app");
++    expect(container.textContent).toContain("app home");
++    expect(window.localStorage.getItem("tasketra.trialIntent")).not.toBeNull();
++  });
++
++  it("stays put when the account is already on Billing, and consumes the intent", async () => {
++    auth.user = verifiedFree;
++    rememberTrialIntent("me@gmail.com");
++    await renderAt("/app/billing");
++    expect(container.textContent).toContain("billing page");
++    expect(window.localStorage.getItem("tasketra.trialIntent")).toBeNull();
++  });
++});

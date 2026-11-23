@@ -4,6 +4,7 @@ import { api, ApiError } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
 import { Wordmark } from "../components/Wordmark";
 import { track } from "../lib/analytics";
+import { rememberTrialIntent } from "../lib/trialIntent";
 import { useDocumentTitle } from "../lib/documentTitle";
 
 /** Which offer brought someone to sign up: the tasketra.com pricing buttons
@@ -84,6 +85,10 @@ export default function Login() {
       } else {
         await api.register(email, password, refCode);
         track("signup_completed", { plan });
+        // Remember the Pro intent in this browser: if the person confirms
+        // their email in another tab, the intent is what carries them on to
+        // Billing once they're verified (see lib/trialIntent).
+        if (plan === "pro") rememberTrialIntent(email);
       }
       await refresh();
       // Only the Pro offer continues to Billing. A founding spot is awarded

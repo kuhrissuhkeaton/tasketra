@@ -1,8 +1,9 @@
-import { lazy, Suspense } from "react";
-import { Routes, Route, Navigate } from "react-router-dom";
+import { lazy, Suspense, useEffect } from "react";
+import { Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./lib/auth-context";
 import { ConfirmProvider } from "./components/ConfirmDialog";
 import { VerifyEmailGate } from "./components/VerifyEmailGate";
+import { takeTrialIntent } from "./lib/trialIntent";
 
 // Every route is loaded on demand rather than bundled into the initial
 // chunk -- ProjectHome in particular carries every tab's logic (Tasks,
@@ -53,12 +54,34 @@ function RouteLoading() {
   return <div className="shell"><p className="muted" style={{ padding: 24 }}>Loading...</p></div>;
 }
 
+/** v173.2: a Pro signup's trial intent is remembered at registration
+ *  (lib/trialIntent) because the email-confirmation round trip used to drop
+ *  it -- the tab the emailed link opens could only continue to the app home,
+ *  so the trial never started. This sits in Protected's verified branch, the
+ *  one place every post-verification entry passes through (the confirmation
+ *  tab's continue, a later sign-in, a fresh app open), and sends a verified
+ *  free account with a stored intent on to Billing exactly once. The intent
+ *  is consumed even when the person is already on a Billing page (the
+ *  original tab's path), so it can never fire late on a later visit. */
+export function TrialIntentRedirect() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+  useEffect(() => {
+    if (!user || user.emailVerified === false) return;
+    if (takeTrialIntent(user) && !location.pathname.startsWith("/app/billing")) {
+      navigate("/app/billing", { replace: true });
+    }
+  }, [user, location.pathname, navigate]);
+  return null;
+}
+
 function Protected({ children }: { children: React.ReactNode }) {
   const { user, loading, sessionExpired } = useAuth();
   if (loading) return <div className="shell"><p className="muted" style={{ padding: 24 }}>Loading...</p></div>;
   if (!user) return <Navigate to={sessionExpired ? "/login?expired=1" : "/login"} replace />;
   if (user.emailVerified === false) return <VerifyEmailGate />;
-  return <>{children}</>;
+  return <><TrialIntentRedirect />{children}</>;
 }
 
 function AdminProtected({ children }: { children: React.ReactNode }) {
