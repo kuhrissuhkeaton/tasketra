@@ -23,8 +23,14 @@ export const TASK_GROUP_LABEL: Record<TaskGroupId, string> = {
   done: "Done",
 };
 
-/** Groups shown open by default; the others start collapsed, with a count. */
-export const TASK_GROUPS_OPEN_BY_DEFAULT: readonly TaskGroupId[] = ["overdue", "week"];
+/**
+ * Groups shown open by default. v173 (P0-5): every group starts open. The
+ * old default (Overdue + Next 7 days only) meant a project whose tasks all
+ * sat in Later / No due date opened on a page that looked empty -- the
+ * Tasks tab must never hide the work it holds behind a collapsed group.
+ * Collapsing stays one click away per group.
+ */
+export const TASK_GROUPS_OPEN_BY_DEFAULT: readonly TaskGroupId[] = ["overdue", "week", "later", "nodate", "done"];
 
 type TaskLike = {
   id: string;

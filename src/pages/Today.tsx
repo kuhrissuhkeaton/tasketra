@@ -424,7 +424,7 @@ export default function Today() {
                       {portfolio.upcomingMilestones.slice(0, 4).map((m) => (
                         <li key={m.id} className="tw-rail-row">
                           <Link to={`/app/projects/${m.projectId}?tab=roadmap`}>{m.title}</Link>
-                          <span className="muted tw-row-meta">{m.projectName} &middot; {fmtLocalDate(m.date)}</span>
+                          <span className="muted tw-row-meta">{m.projectName} &middot; <span className="tw-nowrap">{fmtLocalDate(m.date)}</span></span>
                         </li>
                       ))}
                     </ul>

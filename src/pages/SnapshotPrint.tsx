@@ -7,6 +7,7 @@ import { SnapshotDocument } from "../components/SnapshotDocument";
 import { useDocumentTitle } from "../lib/documentTitle";
 import { fmtLongDate } from "../lib/format";
 import { workGroups, plannedWindow } from "../lib/workGroups";
+import { sortRisks } from "../lib/riskExposure";
 import { daysBetween } from "../lib/calendarItems";
 
 // Signed-in Client Snapshot page (v168): a live preview of exactly what
@@ -22,14 +23,14 @@ function todayKey(): string {
   return `${now.getFullYear()}-${mm}-${dd}`;
 }
 
-// The public endpoint's risk ordering, mirrored exactly: highest
-// probability/impact combinations first, newest first within a band.
-function riskRank(r: { probability: string; impact: string }): number {
-  if (r.probability === "high" && r.impact === "high") return 0;
-  if (r.probability === "high" || r.impact === "high") return 1;
-  if (r.probability === "medium" && r.impact === "medium") return 2;
-  return 3;
-}
+// v173 (P0-1): the snapshot's top risks are the register's top risks --
+// the shared exposure ordering from lib/riskExposure (score-aware: a risk
+// the shared definition counts as high exposure ranks first, whatever its
+// bands say). The old band-only rank could surface a both-high-band risk
+// scored 2x2 (not high exposure) above a 3x4 risk the register counts as
+// high exposure, so the snapshot and the register told different stories.
+// The public endpoint's SQL mirrors the same comparator
+// (netlify/lib/snapshotData.ts).
 
 export default function SnapshotPrint() {
   const { id } = useParams<{ id: string }>();
@@ -79,11 +80,10 @@ export default function SnapshotPrint() {
           .filter((m) => m.date)
           .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 
-        const risks = risksRes.risks
-          .filter((r) => r.status === "open" || r.status === "monitoring")
-          .sort((a, b) =>
-            riskRank(a) - riskRank(b)
-            || (a.created_at < b.created_at ? 1 : -1))
+        const risks = sortRisks(
+          risksRes.risks.filter((r) => r.status === "open" || r.status === "monitoring"),
+          "exposure",
+        )
           .slice(0, 3)
           .map((r) => ({ title: r.title, mitigation: r.mitigation ?? null }));
 

@@ -1386,8 +1386,9 @@ function TasksTab({ projectId, projectName, highlightId, defaultView = "list" }:
   const [editDescription, setEditDescription] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  // Sort (remembered in this browser only) and which groups are open. Groups other than
-  // Overdue / Next 7 days start collapsed with a count.
+  // Sort (remembered in this browser only) and which groups are open. All
+  // groups start open (v173, P0-5); a group the user collapses stays as
+  // they left it for the session.
   const [sortBy, setSortBy] = useState<TaskSort>(() => {
     try {
       const v = window.localStorage.getItem("tasketra.tasks.sort");

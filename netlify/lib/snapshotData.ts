@@ -65,15 +65,30 @@ export async function buildSnapshot(database: any, projectId: string): Promise<S
       WHERE project_id = ${projectId}
       ORDER BY created_at DESC LIMIT 1
     `,
+    // v173 (P0-1): this ORDER BY mirrors the shared exposure comparator
+    // (src/lib/riskExposure.ts compareRisksByExposure) word for word, the
+    // same discipline the high-exposure definition itself follows: status
+    // (open before monitoring), high-exposure first under the shared
+    // score-aware definition, then score (real score, else band product),
+    // then impact, then oldest first. The old band-only CASE ranked a
+    // both-high-band risk scored 2x2 above a 3x4 risk the register counts
+    // as high exposure, so the snapshot's "top risks" could disagree with
+    // the register's own count.
     database.sql`
       SELECT title, mitigation FROM risks
       WHERE project_id = ${projectId} AND deleted_at IS NULL AND status IN ('open', 'monitoring')
       ORDER BY
-        CASE WHEN probability = 'high' AND impact = 'high' THEN 0
-             WHEN probability = 'high' OR impact = 'high' THEN 1
-             WHEN probability = 'medium' AND impact = 'medium' THEN 2
-             ELSE 3 END,
-        created_at DESC
+        CASE status WHEN 'open' THEN 0 WHEN 'monitoring' THEN 1 ELSE 2 END,
+        CASE WHEN probability_score IS NOT NULL AND impact_score IS NOT NULL
+             THEN probability_score * impact_score >= 12 OR impact_score = 5
+             ELSE probability = 'high' AND impact = 'high' END DESC,
+        CASE WHEN probability_score IS NOT NULL AND impact_score IS NOT NULL
+             THEN probability_score * impact_score
+             ELSE (CASE probability WHEN 'low' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END)
+                * (CASE impact WHEN 'low' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END) END DESC,
+        CASE WHEN impact_score IS NOT NULL THEN impact_score
+             ELSE (CASE impact WHEN 'low' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END) END DESC,
+        created_at ASC
       LIMIT 3
     `,
     database.sql`

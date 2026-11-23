@@ -67,8 +67,8 @@ describe("task groups", () => {
     expect(isTaskSort("priority")).toBe(true);
   });
 
-  it("only Overdue and Next 7 days start open", () => {
-    expect([...TASK_GROUPS_OPEN_BY_DEFAULT]).toEqual(["overdue", "week"]);
+  it("every group starts open, so the tab never opens looking empty (v173, P0-5)", () => {
+    expect([...TASK_GROUPS_OPEN_BY_DEFAULT]).toEqual(["overdue", "week", "later", "nodate", "done"]);
   });
 
   it("recognises only real sort choices", () => {

@@ -190,7 +190,8 @@ describe("project page smoke test", () => {
     const heads = [...host.querySelectorAll("summary.rg-group-head h2")].map((h) => h.textContent);
     expect(heads).toEqual(["Overdue", "Next 7 days", "Later", "Done"]);
     const open = [...host.querySelectorAll("details.rg-group")].map((x) => (x as HTMLDetailsElement).open);
-    expect(open).toEqual([true, true, false, false]);
+    // v173 (P0-5): all groups start open -- the tab shows its tasks on arrival.
+    expect(open).toEqual([true, true, true, true]);
     const late = host.querySelector('details.rg-group li.rg-row [data-slot="flag"]');
     expect(late?.textContent).toBe("3 days late");
     expect(host.querySelector('select[aria-label="Sort tasks by"]')).not.toBeNull();

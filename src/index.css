@@ -242,7 +242,10 @@ h1 { font-size: 36px; }
    meant to weigh against their stated status, so it reads in full body
    text with a colored dot carrying the health color -- not in the tan
    muted style, which failed contrast and read as fine print. */
-.evidence-note { color: var(--navy); font-size: 13px; }
+/* v173 (P0-1): the evidence line is subordinate by design (Phase 4 §4.1) --
+   the stated status pill leads; evidence renders small and muted, never at
+   the pill's weight. */
+.evidence-note { color: var(--slate-text); font-size: 12px; }
 .evidence-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; background: var(--slate); }
 .evidence-dot.evidence-on_track { background: var(--success); }
 .evidence-dot.evidence-at_risk { background: #6B4A1C; }
@@ -468,6 +471,11 @@ textarea { resize: vertical; }
 .btn-danger:hover { background: #742F22; box-shadow: none; transform: translateY(-1px); }
 .btn-danger:active { transform: translateY(0); box-shadow: none; }
 .btn-block { width: 100%; margin-top: 16px; }
+/* v173 (P0-4): .btn-small was used in TSX (calendar steppers, tour, getting
+   started, project rename) but defined nowhere, so those buttons silently
+   rendered at default size. The small size in the .btn family: tighter
+   padding, the small text step, same pill shape and weight. */
+.btn-small { padding: 5px 12px; font-size: var(--ds-text-sm); }
 .btn:disabled { opacity: 0.55; cursor: not-allowed; transform: none; box-shadow: none; }
 .btn-link:disabled { opacity: 0.55; cursor: not-allowed; text-decoration: none; }
 input:disabled, textarea:disabled, select:disabled {
@@ -2655,6 +2663,8 @@ a.dash-attention-next:hover { text-decoration: underline; text-underline-offset:
 .tw-rail .tw-list > .tw-rail-row:first-child { border-top: 0; }
 .tw-rail-row a { font-weight: 600; color: var(--navy); overflow-wrap: anywhere; }
 .tw-rail-project { flex-direction: row; align-items: center; justify-content: space-between; gap: 8px; }
+/* v173 (P0-3): a date in a rail row never wraps mid-phrase. */
+.tw-nowrap { white-space: nowrap; }
 .tw-rail-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 @media (max-width: 900px) {
   .tw-grid { grid-template-columns: minmax(0, 1fr); }

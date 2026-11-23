@@ -138,6 +138,16 @@ describe("sortRisks by exposure", () => {
     expect(sortRisks(risks, "exposure").map((r) => r.title)).toEqual(["scored 12", "unscored high/high", "unscored low/low"]);
   });
 
+  it("ranks a scored high-exposure risk above a both-high-band risk scored 2x2 (v173, P0-1: the snapshot/register agreement case)", () => {
+    const risks = [
+      mk("band high/high, scored 2x2", { probability: "high", impact: "high", probability_score: 2, impact_score: 2, created_at: "2026-01-01T00:00:00Z" }),
+      mk("scored 3x4", { probability: "medium", impact: "high", probability_score: 3, impact_score: 4, created_at: "2026-01-02T00:00:00Z" }),
+    ];
+    expect(isHighExposureRisk(risks[0])).toBe(false);
+    expect(isHighExposureRisk(risks[1])).toBe(true);
+    expect(sortRisks(risks, "exposure").map((r) => r.title)).toEqual(["scored 3x4", "band high/high, scored 2x2"]);
+  });
+
   it("breaks exact ties by log order and never mutates the input", () => {
     const risks = [
       mk("first", { probability_score: 3, impact_score: 4, probability: "medium", impact: "high", created_at: "2026-01-01T00:00:00Z" }),

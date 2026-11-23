@@ -969,7 +969,13 @@ export default function Dashboard() {
       };
     }),
   );
-  const shownRows = rows.filter((r) => (listFilter === "all" ? true : listFilter === "attention" ? r.health !== "on_track" && !r.project.closed_at : r.health === "on_track"))
+  // v173 (P0-1): the list filters count what the rows display. "On track"
+  // filters on the headline (stated) health the row's pill shows -- the old
+  // evidence-based filter could read "On track 0" above rows all wearing
+  // On track pills. "Needs attention" is the shared attention definition
+  // (buildNeedsAttention), the same list the chip count and the Dashboard
+  // section use, not a second health-based approximation of it.
+  const shownRows = rows.filter((r) => (listFilter === "all" ? true : listFilter === "attention" ? attentionIds.has(r.project.id) && !r.project.closed_at : r.headline === "on_track" && !r.project.closed_at))
     .filter((r) => !listSearch.trim() || r.project.name.toLowerCase().includes(listSearch.trim().toLowerCase()));
   // v159 (F-12 + Egg 8): the page subline IS the morning band now -- one
   // line of text carrying the day's five numbers, replacing the repeated
@@ -1188,7 +1194,7 @@ export default function Dashboard() {
                 {([
                   ["all", "All", rows.length],
                   ["attention", "Needs attention", attention.length],
-                  ["on_track", "On track", rows.filter((r) => r.health === "on_track").length],
+                  ["on_track", "On track", rows.filter((r) => r.headline === "on_track" && !r.project.closed_at).length],
                 ] as const).map(([key, label, n]) => (
                   <button
                     key={key}

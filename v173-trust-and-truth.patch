@@ -1,0 +1,251 @@
+--- a/netlify/lib/snapshotData.ts
++++ b/netlify/lib/snapshotData.ts
+@@ -65,15 +65,30 @@
+       WHERE project_id = ${projectId}
+       ORDER BY created_at DESC LIMIT 1
+     `,
++    // v173 (P0-1): this ORDER BY mirrors the shared exposure comparator
++    // (src/lib/riskExposure.ts compareRisksByExposure) word for word, the
++    // same discipline the high-exposure definition itself follows: status
++    // (open before monitoring), high-exposure first under the shared
++    // score-aware definition, then score (real score, else band product),
++    // then impact, then oldest first. The old band-only CASE ranked a
++    // both-high-band risk scored 2x2 above a 3x4 risk the register counts
++    // as high exposure, so the snapshot's "top risks" could disagree with
++    // the register's own count.
+     database.sql`
+       SELECT title, mitigation FROM risks
+       WHERE project_id = ${projectId} AND deleted_at IS NULL AND status IN ('open', 'monitoring')
+       ORDER BY
+-        CASE WHEN probability = 'high' AND impact = 'high' THEN 0
+-             WHEN probability = 'high' OR impact = 'high' THEN 1
+-             WHEN probability = 'medium' AND impact = 'medium' THEN 2
+-             ELSE 3 END,
+-        created_at DESC
++        CASE status WHEN 'open' THEN 0 WHEN 'monitoring' THEN 1 ELSE 2 END,
++        CASE WHEN probability_score IS NOT NULL AND impact_score IS NOT NULL
++             THEN probability_score * impact_score >= 12 OR impact_score = 5
++             ELSE probability = 'high' AND impact = 'high' END DESC,
++        CASE WHEN probability_score IS NOT NULL AND impact_score IS NOT NULL
++             THEN probability_score * impact_score
++             ELSE (CASE probability WHEN 'low' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END)
++                * (CASE impact WHEN 'low' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END) END DESC,
++        CASE WHEN impact_score IS NOT NULL THEN impact_score
++             ELSE (CASE impact WHEN 'low' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END) END DESC,
++        created_at ASC
+       LIMIT 3
+     `,
+     database.sql`
+--- a/src/__tests__/projectPage.smoke.test.tsx
++++ b/src/__tests__/projectPage.smoke.test.tsx
+@@ -190,7 +190,8 @@
+     const heads = [...host.querySelectorAll("summary.rg-group-head h2")].map((h) => h.textContent);
+     expect(heads).toEqual(["Overdue", "Next 7 days", "Later", "Done"]);
+     const open = [...host.querySelectorAll("details.rg-group")].map((x) => (x as HTMLDetailsElement).open);
+-    expect(open).toEqual([true, true, false, false]);
++    // v173 (P0-5): all groups start open -- the tab shows its tasks on arrival.
++    expect(open).toEqual([true, true, true, true]);
+     const late = host.querySelector('details.rg-group li.rg-row [data-slot="flag"]');
+     expect(late?.textContent).toBe("3 days late");
+     expect(host.querySelector('select[aria-label="Sort tasks by"]')).not.toBeNull();
+--- a/src/index.css
++++ b/src/index.css
+@@ -242,7 +242,10 @@
+    meant to weigh against their stated status, so it reads in full body
+    text with a colored dot carrying the health color -- not in the tan
+    muted style, which failed contrast and read as fine print. */
+-.evidence-note { color: var(--navy); font-size: 13px; }
++/* v173 (P0-1): the evidence line is subordinate by design (Phase 4 §4.1) --
++   the stated status pill leads; evidence renders small and muted, never at
++   the pill's weight. */
++.evidence-note { color: var(--slate-text); font-size: 12px; }
+ .evidence-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; background: var(--slate); }
+ .evidence-dot.evidence-on_track { background: var(--success); }
+ .evidence-dot.evidence-at_risk { background: #6B4A1C; }
+@@ -468,6 +471,11 @@
+ .btn-danger:hover { background: #742F22; box-shadow: none; transform: translateY(-1px); }
+ .btn-danger:active { transform: translateY(0); box-shadow: none; }
+ .btn-block { width: 100%; margin-top: 16px; }
++/* v173 (P0-4): .btn-small was used in TSX (calendar steppers, tour, getting
++   started, project rename) but defined nowhere, so those buttons silently
++   rendered at default size. The small size in the .btn family: tighter
++   padding, the small text step, same pill shape and weight. */
++.btn-small { padding: 5px 12px; font-size: var(--ds-text-sm); }
+ .btn:disabled { opacity: 0.55; cursor: not-allowed; transform: none; box-shadow: none; }
+ .btn-link:disabled { opacity: 0.55; cursor: not-allowed; text-decoration: none; }
+ input:disabled, textarea:disabled, select:disabled {
+@@ -2655,6 +2663,8 @@
+ .tw-rail .tw-list > .tw-rail-row:first-child { border-top: 0; }
+ .tw-rail-row a { font-weight: 600; color: var(--navy); overflow-wrap: anywhere; }
+ .tw-rail-project { flex-direction: row; align-items: center; justify-content: space-between; gap: 8px; }
++/* v173 (P0-3): a date in a rail row never wraps mid-phrase. */
++.tw-nowrap { white-space: nowrap; }
+ .tw-rail-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+ @media (max-width: 900px) {
+   .tw-grid { grid-template-columns: minmax(0, 1fr); }
+--- a/src/lib/__tests__/riskExposure.test.ts
++++ b/src/lib/__tests__/riskExposure.test.ts
+@@ -138,6 +138,16 @@
+     expect(sortRisks(risks, "exposure").map((r) => r.title)).toEqual(["scored 12", "unscored high/high", "unscored low/low"]);
+   });
+ 
++  it("ranks a scored high-exposure risk above a both-high-band risk scored 2x2 (v173, P0-1: the snapshot/register agreement case)", () => {
++    const risks = [
++      mk("band high/high, scored 2x2", { probability: "high", impact: "high", probability_score: 2, impact_score: 2, created_at: "2026-01-01T00:00:00Z" }),
++      mk("scored 3x4", { probability: "medium", impact: "high", probability_score: 3, impact_score: 4, created_at: "2026-01-02T00:00:00Z" }),
++    ];
++    expect(isHighExposureRisk(risks[0])).toBe(false);
++    expect(isHighExposureRisk(risks[1])).toBe(true);
++    expect(sortRisks(risks, "exposure").map((r) => r.title)).toEqual(["scored 3x4", "band high/high, scored 2x2"]);
++  });
++
+   it("breaks exact ties by log order and never mutates the input", () => {
+     const risks = [
+       mk("first", { probability_score: 3, impact_score: 4, probability: "medium", impact: "high", created_at: "2026-01-01T00:00:00Z" }),
+--- a/src/lib/__tests__/taskGroups.test.ts
++++ b/src/lib/__tests__/taskGroups.test.ts
+@@ -67,8 +67,8 @@
+     expect(isTaskSort("priority")).toBe(true);
+   });
+ 
+-  it("only Overdue and Next 7 days start open", () => {
+-    expect([...TASK_GROUPS_OPEN_BY_DEFAULT]).toEqual(["overdue", "week"]);
++  it("every group starts open, so the tab never opens looking empty (v173, P0-5)", () => {
++    expect([...TASK_GROUPS_OPEN_BY_DEFAULT]).toEqual(["overdue", "week", "later", "nodate", "done"]);
+   });
+ 
+   it("recognises only real sort choices", () => {
+--- a/src/lib/taskGroups.ts
++++ b/src/lib/taskGroups.ts
+@@ -23,8 +23,14 @@
+   done: "Done",
+ };
+ 
+-/** Groups shown open by default; the others start collapsed, with a count. */
+-export const TASK_GROUPS_OPEN_BY_DEFAULT: readonly TaskGroupId[] = ["overdue", "week"];
++/**
++ * Groups shown open by default. v173 (P0-5): every group starts open. The
++ * old default (Overdue + Next 7 days only) meant a project whose tasks all
++ * sat in Later / No due date opened on a page that looked empty -- the
++ * Tasks tab must never hide the work it holds behind a collapsed group.
++ * Collapsing stays one click away per group.
++ */
++export const TASK_GROUPS_OPEN_BY_DEFAULT: readonly TaskGroupId[] = ["overdue", "week", "later", "nodate", "done"];
+ 
+ type TaskLike = {
+   id: string;
+--- a/src/lib/whatsNewData.ts
++++ b/src/lib/whatsNewData.ts
+@@ -10,6 +10,12 @@
+ // they can do.
+ export const CHANGES: ChangeEntry[] = [
+   {
++    version: "v173",
++    date: "November 2026",
++    title: "One status story: the status you state leads everywhere, and every count agrees with it.",
++    body: "Tasketra shows two things about a project: the status you stated at your last check-in, and what the evidence suggests. Your stated status has always been the headline, but a few places still counted by the evidence instead, so the Projects list could say \"On track 0\" above projects all wearing On track pills, and the client snapshot's top risks could leave out the very risks your register counts as high exposure. Now the stated status leads everywhere it is shown or counted, the evidence stays as the quiet second line it was designed to be, and the snapshot picks its top three risks with the same definition your register uses, so the two always agree. The Tasks tab also opens with every group expanded, so a project full of later-dated work no longer opens looking empty, and a handful of small buttons that were quietly rendering at the wrong size (the calendar steppers, the tour, the getting-started card) are back to their proper size.",
++  },
++  {
+     version: "v172",
+     date: "November 2026",
+     title: "A calmer Tasketra: every page leads with the summary, and the detail waits until you ask for it.",
+--- a/src/pages/Dashboard.tsx
++++ b/src/pages/Dashboard.tsx
+@@ -969,7 +969,13 @@
+       };
+     }),
+   );
+-  const shownRows = rows.filter((r) => (listFilter === "all" ? true : listFilter === "attention" ? r.health !== "on_track" && !r.project.closed_at : r.health === "on_track"))
++  // v173 (P0-1): the list filters count what the rows display. "On track"
++  // filters on the headline (stated) health the row's pill shows -- the old
++  // evidence-based filter could read "On track 0" above rows all wearing
++  // On track pills. "Needs attention" is the shared attention definition
++  // (buildNeedsAttention), the same list the chip count and the Dashboard
++  // section use, not a second health-based approximation of it.
++  const shownRows = rows.filter((r) => (listFilter === "all" ? true : listFilter === "attention" ? attentionIds.has(r.project.id) && !r.project.closed_at : r.headline === "on_track" && !r.project.closed_at))
+     .filter((r) => !listSearch.trim() || r.project.name.toLowerCase().includes(listSearch.trim().toLowerCase()));
+   // v159 (F-12 + Egg 8): the page subline IS the morning band now -- one
+   // line of text carrying the day's five numbers, replacing the repeated
+@@ -1188,7 +1194,7 @@
+                 {([
+                   ["all", "All", rows.length],
+                   ["attention", "Needs attention", attention.length],
+-                  ["on_track", "On track", rows.filter((r) => r.health === "on_track").length],
++                  ["on_track", "On track", rows.filter((r) => r.headline === "on_track" && !r.project.closed_at).length],
+                 ] as const).map(([key, label, n]) => (
+                   <button
+                     key={key}
+--- a/src/pages/ProjectHome.tsx
++++ b/src/pages/ProjectHome.tsx
+@@ -1386,8 +1386,9 @@
+   const [editDescription, setEditDescription] = useState("");
+   const [loading, setLoading] = useState(true);
+   const [error, setError] = useState("");
+-  // Sort (remembered in this browser only) and which groups are open. Groups other than
+-  // Overdue / Next 7 days start collapsed with a count.
++  // Sort (remembered in this browser only) and which groups are open. All
++  // groups start open (v173, P0-5); a group the user collapses stays as
++  // they left it for the session.
+   const [sortBy, setSortBy] = useState<TaskSort>(() => {
+     try {
+       const v = window.localStorage.getItem("tasketra.tasks.sort");
+--- a/src/pages/SnapshotPrint.tsx
++++ b/src/pages/SnapshotPrint.tsx
+@@ -7,6 +7,7 @@
+ import { useDocumentTitle } from "../lib/documentTitle";
+ import { fmtLongDate } from "../lib/format";
+ import { workGroups, plannedWindow } from "../lib/workGroups";
++import { sortRisks } from "../lib/riskExposure";
+ import { daysBetween } from "../lib/calendarItems";
+ 
+ // Signed-in Client Snapshot page (v168): a live preview of exactly what
+@@ -22,14 +23,14 @@
+   return `${now.getFullYear()}-${mm}-${dd}`;
+ }
+ 
+-// The public endpoint's risk ordering, mirrored exactly: highest
+-// probability/impact combinations first, newest first within a band.
+-function riskRank(r: { probability: string; impact: string }): number {
+-  if (r.probability === "high" && r.impact === "high") return 0;
+-  if (r.probability === "high" || r.impact === "high") return 1;
+-  if (r.probability === "medium" && r.impact === "medium") return 2;
+-  return 3;
+-}
++// v173 (P0-1): the snapshot's top risks are the register's top risks --
++// the shared exposure ordering from lib/riskExposure (score-aware: a risk
++// the shared definition counts as high exposure ranks first, whatever its
++// bands say). The old band-only rank could surface a both-high-band risk
++// scored 2x2 (not high exposure) above a 3x4 risk the register counts as
++// high exposure, so the snapshot and the register told different stories.
++// The public endpoint's SQL mirrors the same comparator
++// (netlify/lib/snapshotData.ts).
+ 
+ export default function SnapshotPrint() {
+   const { id } = useParams<{ id: string }>();
+@@ -79,11 +80,10 @@
+           .filter((m) => m.date)
+           .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+ 
+-        const risks = risksRes.risks
+-          .filter((r) => r.status === "open" || r.status === "monitoring")
+-          .sort((a, b) =>
+-            riskRank(a) - riskRank(b)
+-            || (a.created_at < b.created_at ? 1 : -1))
++        const risks = sortRisks(
++          risksRes.risks.filter((r) => r.status === "open" || r.status === "monitoring"),
++          "exposure",
++        )
+           .slice(0, 3)
+           .map((r) => ({ title: r.title, mitigation: r.mitigation ?? null }));
+ 
+--- a/src/pages/Today.tsx
++++ b/src/pages/Today.tsx
+@@ -424,7 +424,7 @@
+                       {portfolio.upcomingMilestones.slice(0, 4).map((m) => (
+                         <li key={m.id} className="tw-rail-row">
+                           <Link to={`/app/projects/${m.projectId}?tab=roadmap`}>{m.title}</Link>
+-                          <span className="muted tw-row-meta">{m.projectName} &middot; {fmtLocalDate(m.date)}</span>
++                          <span className="muted tw-row-meta">{m.projectName} &middot; <span className="tw-nowrap">{fmtLocalDate(m.date)}</span></span>
+                         </li>
+                       ))}
+                     </ul>

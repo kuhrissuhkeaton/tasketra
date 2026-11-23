@@ -10,6 +10,12 @@ export type ChangeEntry = { version: string; date: string; title: string; body: 
 // they can do.
 export const CHANGES: ChangeEntry[] = [
   {
+    version: "v173",
+    date: "November 2026",
+    title: "One status story: the status you state leads everywhere, and every count agrees with it.",
+    body: "Tasketra shows two things about a project: the status you stated at your last check-in, and what the evidence suggests. Your stated status has always been the headline, but a few places still counted by the evidence instead, so the Projects list could say \"On track 0\" above projects all wearing On track pills, and the client snapshot's top risks could leave out the very risks your register counts as high exposure. Now the stated status leads everywhere it is shown or counted, the evidence stays as the quiet second line it was designed to be, and the snapshot picks its top three risks with the same definition your register uses, so the two always agree. The Tasks tab also opens with every group expanded, so a project full of later-dated work no longer opens looking empty, and a handful of small buttons that were quietly rendering at the wrong size (the calendar steppers, the tour, the getting-started card) are back to their proper size.",
+  },
+  {
     version: "v172",
     date: "November 2026",
     title: "A calmer Tasketra: every page leads with the summary, and the detail waits until you ask for it.",
