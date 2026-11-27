@@ -62,6 +62,15 @@ describe("Billing page", () => {
     calls.status.mockResolvedValue({ plan: "free", canStartTrial: false, hasBillingAccount: true, cancelAtPeriodEnd: false });
     await render();
     expect(container.textContent).not.toContain("14 days free");
+    expect(container.textContent).not.toContain("After 14 days, your Pro plan begins");
+  });
+
+  it("tells someone who can start a trial exactly what happens when it ends", async () => {
+    plan = "free";
+    calls.status.mockResolvedValue({ plan: "free", canStartTrial: true, hasBillingAccount: false, cancelAtPeriodEnd: false });
+    await render();
+    expect(container.textContent).toContain("14 days free, cancel any time from this page.");
+    expect(container.textContent).toContain("After 14 days, your Pro plan begins and your card is charged $29 a month. Cancel before the trial ends and you won't be charged.");
   });
 
   it("sends upgrades to the checkout page instead of starting a hosted session", async () => {

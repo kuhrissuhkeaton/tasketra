@@ -10,6 +10,12 @@ export type ChangeEntry = { version: string; date: string; title: string; body: 
 // they can do.
 export const CHANGES: ChangeEntry[] = [
   {
+    version: "v176",
+    date: "November 2026",
+    title: "Two things are stated plainly now: what happens when a trial ends, and what a stakeholder email does.",
+    body: "The Billing page used to say a Pro trial is \"14 days free, cancel any time\" and stop there. It now says the rest of it too: after 14 days, your Pro plan begins and your card is charged $29 a month, and if you cancel before the trial ends you won't be charged. And on a project's Stakeholders tab, the email field now carries a note it always needed: adding an email does not send anything. The address is kept on the register for your own records, and invites go out only when you choose Send invite.",
+  },
+  {
     version: "v175",
     date: "November 2026",
     title: "Decision links become a proper record, and you can stop sharing one whenever you like.",

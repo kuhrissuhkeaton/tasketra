@@ -210,7 +210,7 @@ export default function Billing() {
               <p className="muted">
                 Up to 3 active projects (finished projects don't count), up to 25 team members per project, and 2GB of document storage.
                 {trialOffer
-                  ? " Upgrade to Pro for unlimited projects and 25GB of storage, 14 days free, cancel any time from this page."
+                  ? " Upgrade to Pro for unlimited projects and 25GB of storage, 14 days free, cancel any time from this page. After 14 days, your Pro plan begins and your card is charged $29 a month. Cancel before the trial ends and you won't be charged."
                   : " Upgrade to Pro for unlimited projects and 25GB of storage."}
               </p>
               {details?.hasBillingAccount && (

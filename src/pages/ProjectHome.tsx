@@ -5749,7 +5749,12 @@ function StakeholdersTab({ projectId }: { projectId: string }) {
       </div>
       <AddForm className="inline-form inline-form-wide" onSubmit={addStakeholder}>
         <input aria-label="Name" aria-required="true" placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} />
-        <input aria-label="Email (optional)" placeholder="Email (optional)" value={email} onChange={(e) => setEmail(e.target.value)} />
+        <span style={{ display: "flex", flexDirection: "column", flex: 1, minWidth: 180 }}>
+          <input aria-label="Email (optional)" aria-describedby="stakeholder-email-note" placeholder="Email (optional)" value={email} onChange={(e) => setEmail(e.target.value)} />
+          <span id="stakeholder-email-note" className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+            Adding an email does not send anything. Invites go out only when you choose Send invite.
+          </span>
+        </span>
         <input aria-label="Phone (optional)" placeholder="Phone (optional)" value={phone} onChange={(e) => setPhone(e.target.value)} />
         <input aria-label="Role (optional)" placeholder="Role (optional)" value={role} onChange={(e) => setRole(e.target.value)} />
         <select aria-label="Power (optional)" value={power} onChange={(e) => setPower(e.target.value as StakeholderInterest | "")}>
