@@ -42,6 +42,10 @@ function EyeIcon({ crossed }: { crossed: boolean }) {
 export default function Login() {
   const [params] = useSearchParams();
   const refCode = params.get("ref") || undefined;
+  // v175: a marketing source marker (e.g. ?src=decision-link from a shared
+  // decision page's footer). Not a referral code -- it only rides along as
+  // a prop on the signup events so the funnel can tell where a signup began.
+  const source = params.get("src") || undefined;
   const plan: SignupPlan = params.get("plan") === "pro" || params.get("plan") === "founding" ? (params.get("plan") as SignupPlan) : "none";
   const [mode, setMode] = useState<"login" | "register">(params.get("mode") === "register" ? "register" : "login");
   const [email, setEmail] = useState("");
@@ -84,7 +88,7 @@ export default function Login() {
         await api.login(email, password);
       } else {
         await api.register(email, password, refCode);
-        track("signup_completed", { plan });
+        track("signup_completed", source ? { plan, source } : { plan });
         // Remember the Pro intent in this browser: if the person confirms
         // their email in another tab, the intent is what carries them on to
         // Billing once they're verified (see lib/trialIntent).
@@ -108,7 +112,7 @@ export default function Login() {
   function onFormFocus() {
     if (mode !== "register" || signupStarted.current) return;
     signupStarted.current = true;
-    track("signup_started", { plan });
+    track("signup_started", source ? { plan, source } : { plan });
   }
 
   const copy = REGISTER_COPY[plan];

@@ -1353,6 +1353,13 @@ export const api = {
   // an outcome directly. Only this resolves the decision.
   confirmDecision: (id: string, confirm: { recordId: string } | { chosenOption: string }) =>
     request<{ ok: true }>("/decisions", { method: "PATCH", body: JSON.stringify({ id, action: "confirm", ...confirm }) }),
+  // v175: "Stop sharing" -- rotates the decision's public token so the old
+  // link dies at once; the response carries the fresh token to share instead.
+  rotateDecisionShareLink: (id: string) =>
+    request<{ ok: true; public_token: string; shareUrl: string }>("/decisions", {
+      method: "PATCH",
+      body: JSON.stringify({ id, action: "rotate-share" }),
+    }),
 
   listIssues: (projectId: string) => request<{ issues: Issue[] }>(`/issues?projectId=${projectId}`),
   createIssue: (projectId: string, title: string, description?: string, severity?: Issue["severity"], ownerName?: string, status?: Issue["status"]) =>
@@ -1729,7 +1736,7 @@ export const api = {
     request<{ webhook_url: string | null }>("/webhook-settings", { method: "PATCH", body: JSON.stringify({ webhook_url: webhookUrl }) }),
 
   getPublicDecision: (token: string) =>
-    request<{ decision: { id: string; title: string; context: string | null; options: string[]; deadline: string | null; status: string; project_name: string }; record: { chosen_option: string; responder_name: string; responded_at: string } | null }>(
+    request<{ decision: { title: string; context: string | null; options: string[]; deadline: string | null; status: string; project_name: string }; record: { chosen_option: string; responder_name: string; responded_at: string } | null }>(
       `/decision-public?token=${token}`
     ),
   respondToDecision: (token: string, chosenOption: string, responderName: string) =>

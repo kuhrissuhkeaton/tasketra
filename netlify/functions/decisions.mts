@@ -176,6 +176,21 @@ export default withSentry(async (req: Request) => {
       return json({ ok: true });
     }
 
+    // v175: "Stop sharing." The owner rotates the public token: the old
+    // link dies immediately and the decision gets a fresh one, the same
+    // one-action revoke-and-regenerate the share_links system uses. A
+    // value update on the existing column -- no schema change.
+    if (body?.action === "rotate-share") {
+      if (existing.deleted_at) return json({ error: "Not found" }, { status: 404 });
+      const publicToken = crypto.randomBytes(24).toString("base64url");
+      await database.sql`UPDATE decision_requests SET public_token = ${publicToken} WHERE id = ${id}`;
+      await logActivity(database, {
+        projectId: existing.project_id, entityType: "decision", entityId: id, entityTitle: existing.title,
+        action: "updated", summary: "Decision share link replaced: the old link stopped working",
+      });
+      return json({ ok: true, public_token: publicToken, shareUrl: `/d/${publicToken}` });
+    }
+
     if (!body?.restore) return json({ error: "id and restore are required." }, { status: 400 });
     await database.sql`UPDATE decision_requests SET deleted_at = NULL WHERE id = ${id}`;
     await logActivity(database, { projectId: existing.project_id, entityType: "decision", entityId: id, entityTitle: existing.title, action: "restored" });

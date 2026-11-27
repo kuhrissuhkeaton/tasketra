@@ -5997,6 +5997,22 @@ function StakeholderDecisionsTab({ projectId }: { projectId: string }) {
     });
   }
 
+  // v175: "Stop sharing" rotates the public token. The link already sent
+  // out dies immediately; the card updates in place to the fresh one, so
+  // sharing can resume whenever the owner copies it again.
+  async function stopSharing(d: Decision) {
+    if (!(await confirmDialog("Stop sharing this decision? The link you have already sent out will stop working right away. The decision itself stays as it is, with a new link.", "Stop sharing"))) return;
+    try {
+      const res = await api.rotateDecisionShareLink(d.id);
+      // The just-created callout may still be showing the now-dead link.
+      setLastShareUrl((cur) => (cur === `/d/${d.public_token}` ? null : cur));
+      setDecisions((cur) => cur.map((x) => (x.id === d.id ? { ...x, public_token: res.public_token } : x)));
+      announce("Sharing stopped. The old link no longer works.");
+    } catch {
+      setError("Could not stop sharing. Try again.");
+    }
+  }
+
   // v151 (Part D): responses collect until the owner confirms the outcome.
   async function confirmResponse(d: Decision, recordId: string) {
     try {
@@ -6185,6 +6201,12 @@ function StakeholderDecisionsTab({ projectId }: { projectId: string }) {
                     aria-label="Decision share link"
                   />
                 </div>
+                <p className="muted decision-share-note">
+                  Anyone with this link can see the decision's title, context, and options, and the decider's name once it's decided.
+                </p>
+                <div className="row-actions">
+                  <button className="btn-link" type="button" onClick={() => stopSharing(d)}>Stop sharing</button>
+                </div>
               </>
             ) : (
               <div className="decision-record">
@@ -6229,6 +6251,9 @@ function StakeholderDecisionsTab({ projectId }: { projectId: string }) {
             onFocus={(e) => e.target.select()}
             aria-label="Decision share link"
           />
+          <p className="muted decision-share-note">
+            Anyone with this link can see the decision's title, context, and options, and the decider's name once it's decided.
+          </p>
         </div>
       )}
 

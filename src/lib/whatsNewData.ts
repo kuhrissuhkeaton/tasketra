@@ -10,6 +10,12 @@ export type ChangeEntry = { version: string; date: string; title: string; body: 
 // they can do.
 export const CHANGES: ChangeEntry[] = [
   {
+    version: "v175",
+    date: "November 2026",
+    title: "Decision links become a proper record, and you can stop sharing one whenever you like.",
+    body: "A shared decision link now opens on a page that looks like what it is: a decision on the record, with the Tasketra name on it. The person answering sees plainly, before they respond, that their name and choice will be visible to anyone with the link once you confirm the decision. You also get an off switch: Stop sharing, beside the link on any open decision, kills the old link immediately and gives the decision a fresh one. And deleting a decision now retires its link too -- a deleted decision (or one in a deleted project) no longer opens for anyone, and no longer accepts responses.",
+  },
+  {
     version: "v174",
     date: "November 2026",
     title: "One simpler navigation: everything lives in the sidebar now, and your phone gets a bottom bar.",

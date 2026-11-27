@@ -43,9 +43,9 @@ export default function Terms() {
       <h2>4. Public sharing features</h2>
       <p>
         Tasketra lets you generate a public, unguessable link to share an individual decision request for
-        stakeholder input (the "Decision" feature). Anyone with that link can view the decision and, once it's been
-        responded to, the responder's name and choice. Don't share a link you don't want to be public, and don't put
-        anything in a shareable Decision that shouldn't be visible outside your team.
+        stakeholder input (the "Decision" feature). Anyone with that link can view the project's name and the
+        decision and, once it's been responded to, the responder's name and choice. Don't share a link you don't
+        want to be public, and don't put anything in a shareable Decision that shouldn't be visible outside your team.
       </p>
 
       <h2>5. Outbound webhooks</h2>

@@ -105,10 +105,11 @@ export default function Privacy() {
 
       <h2>4. Public sharing features</h2>
       <p>
-        If you create a shareable Decision link, the decision's title, context, options, and (once answered) the
-        responder's name and chosen option are visible to anyone who has that link, without needing an account.
-        This is intentional -- it's how the feature works -- but it means that information is not private once
-        shared. Don't use this feature for anything you don't want visible outside your team.
+        If you create a shareable Decision link, the project's name, the decision's title, context, options, and
+        (once answered) the responder's name and chosen option are visible to anyone who has that link, without
+        needing an account. This is intentional -- it's how the feature works -- but it means that information is
+        not private once shared. Don't use this feature for anything you don't want visible outside your team.
+        Shared pages carry Tasketra's branding and a link to create a free Tasketra account.
       </p>
 
       <p>

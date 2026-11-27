@@ -1,0 +1,907 @@
+--- a/netlify/functions/decision-public.mts
++++ b/netlify/functions/decision-public.mts
+@@ -3,6 +3,7 @@
+ import { json } from "../lib/http.ts";
+ import { sendEmail } from "../lib/notify.ts";
+ import { withSentry } from "../lib/sentry.ts";
++import { checkRateLimit, getClientIp } from "../lib/rate-limit.ts";
+ 
+ // Public, unauthenticated endpoint. Only ever exposes the single decision
+ // request matching an unguessable token -- never a list, never other project data.
+@@ -12,6 +13,15 @@
+ // as the outcome in the app (see decisions.mts PATCH action "confirm").
+ // The GET record is the confirmed outcome, present only once the request
+ // is resolved (for pre-v151 decisions, their single record).
++//
++// v175: the endpoint meets the same standard as share-public.mts --
++// no-store + noindex headers on every response, per-IP rate limiting, and
++// retraction that actually works: a trashed decision, or a decision inside
++// a trashed project, no longer resolves and no longer accepts responses.
++// The public payload also drops the internal decision id; the page never
++// used it, and nothing outside the login needs it.
++
++const HEADERS = { "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow" };
+ 
+ export default withSentry(async (req: Request) => {
+   const database = db();
+@@ -19,22 +29,32 @@
+ 
+   if (req.method === "GET") {
+     const token = url.searchParams.get("token");
+-    if (!token) return json({ error: "token required" }, { status: 400 });
++    if (!token) return json({ error: "token required" }, { status: 400, headers: HEADERS });
+ 
+-    const [decision] = await database.sql`
++    if (!(await checkRateLimit(database, `decision-public:${getClientIp(req)}`, 60, 10))) {
++      return json({ error: "Too many requests. Try again in a few minutes." }, { status: 429, headers: HEADERS });
++    }
++
++    const [row] = await database.sql`
+       SELECT dr.id, dr.title, dr.context, dr.options, dr.deadline, dr.status, p.name AS project_name
+       FROM decision_requests dr
+       JOIN projects p ON p.id = dr.project_id
+       WHERE dr.public_token = ${token}
++        AND dr.deleted_at IS NULL
++        AND p.deleted_at IS NULL
+     `;
+-    if (!decision) return json({ error: "This decision link is not valid." }, { status: 404 });
++    if (!row) return json({ error: "This decision link is not valid." }, { status: 404, headers: HEADERS });
++
++    // The internal id stays server-side (the record lookup below needs
++    // it); the public payload is the record's content only.
++    const { id: _internalId, ...decision } = row;
+ 
+     let record = null;
+-    if (decision.status === "resolved") {
++    if (row.status === "resolved") {
+       const [rec] = await database.sql`
+         SELECT chosen_option, responder_name, responded_at, confirmed_at
+         FROM decision_records rec
+-        WHERE rec.decision_request_id = ${decision.id}
++        WHERE rec.decision_request_id = ${row.id}
+           AND (rec.confirmed_at IS NOT NULL
+                OR NOT EXISTS (SELECT 1 FROM decision_records c
+                               WHERE c.decision_request_id = rec.decision_request_id
+@@ -45,7 +65,7 @@
+       record = rec || null;
+     }
+ 
+-    return json({ decision, record });
++    return json({ decision, record }, { headers: HEADERS });
+   }
+ 
+   if (req.method === "POST") {
+@@ -55,19 +75,28 @@
+     const responderName = (body?.responderName || "").trim();
+ 
+     if (!token || !chosenOption || !responderName) {
+-      return json({ error: "token, chosenOption, and responderName are required." }, { status: 400 });
++      return json({ error: "token, chosenOption, and responderName are required." }, { status: 400, headers: HEADERS });
++    }
++
++    if (!(await checkRateLimit(database, `decision-public:${getClientIp(req)}`, 60, 10))) {
++      return json({ error: "Too many requests. Try again in a few minutes." }, { status: 429, headers: HEADERS });
+     }
+ 
+     const [decision] = await database.sql`
+-      SELECT id, title, options, status FROM decision_requests WHERE public_token = ${token}
++      SELECT dr.id, dr.title, dr.options, dr.status
++      FROM decision_requests dr
++      JOIN projects p ON p.id = dr.project_id
++      WHERE dr.public_token = ${token}
++        AND dr.deleted_at IS NULL
++        AND p.deleted_at IS NULL
+     `;
+-    if (!decision) return json({ error: "This decision link is not valid." }, { status: 404 });
++    if (!decision) return json({ error: "This decision link is not valid." }, { status: 404, headers: HEADERS });
+     if (decision.status === "resolved") {
+-      return json({ error: "This decision has already been resolved." }, { status: 409 });
++      return json({ error: "This decision has already been resolved." }, { status: 409, headers: HEADERS });
+     }
+     const validOptions: string[] = decision.options;
+     if (!validOptions.includes(chosenOption)) {
+-      return json({ error: "That is not a valid option for this decision." }, { status: 400 });
++      return json({ error: "That is not a valid option for this decision." }, { status: 400, headers: HEADERS });
+     }
+ 
+     const [record] = await database.sql`
+@@ -99,10 +128,10 @@
+       // notification failures are non-fatal
+     }
+ 
+-    return json({ record }, { status: 201 });
++    return json({ record }, { status: 201, headers: HEADERS });
+   }
+ 
+-  return json({ error: "Method not allowed" }, { status: 405 });
++  return json({ error: "Method not allowed" }, { status: 405, headers: HEADERS });
+ });
+ 
+ export const config: Config = { path: "/api/decision-public" };
+--- a/netlify/functions/decisions.mts
++++ b/netlify/functions/decisions.mts
+@@ -176,6 +176,21 @@
+       return json({ ok: true });
+     }
+ 
++    // v175: "Stop sharing." The owner rotates the public token: the old
++    // link dies immediately and the decision gets a fresh one, the same
++    // one-action revoke-and-regenerate the share_links system uses. A
++    // value update on the existing column -- no schema change.
++    if (body?.action === "rotate-share") {
++      if (existing.deleted_at) return json({ error: "Not found" }, { status: 404 });
++      const publicToken = crypto.randomBytes(24).toString("base64url");
++      await database.sql`UPDATE decision_requests SET public_token = ${publicToken} WHERE id = ${id}`;
++      await logActivity(database, {
++        projectId: existing.project_id, entityType: "decision", entityId: id, entityTitle: existing.title,
++        action: "updated", summary: "Decision share link replaced: the old link stopped working",
++      });
++      return json({ ok: true, public_token: publicToken, shareUrl: `/d/${publicToken}` });
++    }
++
+     if (!body?.restore) return json({ error: "id and restore are required." }, { status: 400 });
+     await database.sql`UPDATE decision_requests SET deleted_at = NULL WHERE id = ${id}`;
+     await logActivity(database, { projectId: existing.project_id, entityType: "decision", entityId: id, entityTitle: existing.title, action: "restored" });
+--- a/src/index.css
++++ b/src/index.css
+@@ -1408,6 +1408,33 @@
+ .decision-context { color: var(--slate); margin: 12px 0; white-space: pre-wrap; }
+ .option-list { margin: 8px 0 16px; }
+ 
++/* v175: the decision page's branded header band, eyebrow, footer CTA, and
++   the Decided marker. The band stretches across the top of the card
++   (negative margins against the card's 32px padding); --ink and --ivory
++   are the fixed Palette A pair, so the band reads the same in both themes. */
++.public-decision-brand {
++  display: flex; align-items: center; gap: 10px;
++  background: var(--ink); border-radius: var(--radius) var(--radius) 0 0;
++  margin: -32px -32px 20px; padding: 16px 32px;
++}
++.public-decision-brand-name {
++  font-family: 'Fraunces', serif; font-weight: 700; font-size: 21px; letter-spacing: -0.3px; color: var(--ivory);
++}
++.public-decision-eyebrow {
++  font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
++  color: var(--slate-text); margin: 0 0 4px;
++}
++.public-decision-footer { border-top: 1px solid var(--border); margin-top: 24px; padding-top: 16px; }
++.public-decision-cta-line { font-weight: 600; margin: 0 0 4px; }
++.public-decision-footer .muted { margin: 0 0 12px; }
++.public-decision-footer .btn { width: 100%; justify-content: center; }
++.decision-decided-marker {
++  display: inline-block; background: var(--lime); color: var(--ink);
++  font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
++  padding: 2px 8px; border-radius: var(--radius-pill);
++}
++.decision-share-note { font-size: 13px; margin: 8px 0 4px; }
++
+ .public-roadmap {
+   max-width: 1100px; margin: 40px auto; padding: 32px; background: var(--cream);
+   border-radius: var(--radius); box-shadow: var(--shadow-lift);
+--- a/src/lib/analytics.ts
++++ b/src/lib/analytics.ts
+@@ -9,7 +9,13 @@
+   | "template_chosen"
+   | "first_task_edited"
+   | "three_tasks_added"
+-  | "teammate_invited";
++  | "teammate_invited"
++  // v175: the public decision page. Props carry state only (open/decided)
++  // -- never the decision title, the project name, or the token, so event
++  // data can never become a second copy of the record.
++  | "decision_link_viewed"
++  | "decision_link_responded"
++  | "decision_link_cta_clicked";
+ 
+ type Plausible = (event: string, options?: { props?: Record<string, string> }) => void;
+ 
+--- a/src/lib/api.ts
++++ b/src/lib/api.ts
+@@ -1353,6 +1353,13 @@
+   // an outcome directly. Only this resolves the decision.
+   confirmDecision: (id: string, confirm: { recordId: string } | { chosenOption: string }) =>
+     request<{ ok: true }>("/decisions", { method: "PATCH", body: JSON.stringify({ id, action: "confirm", ...confirm }) }),
++  // v175: "Stop sharing" -- rotates the decision's public token so the old
++  // link dies at once; the response carries the fresh token to share instead.
++  rotateDecisionShareLink: (id: string) =>
++    request<{ ok: true; public_token: string; shareUrl: string }>("/decisions", {
++      method: "PATCH",
++      body: JSON.stringify({ id, action: "rotate-share" }),
++    }),
+ 
+   listIssues: (projectId: string) => request<{ issues: Issue[] }>(`/issues?projectId=${projectId}`),
+   createIssue: (projectId: string, title: string, description?: string, severity?: Issue["severity"], ownerName?: string, status?: Issue["status"]) =>
+@@ -1729,7 +1736,7 @@
+     request<{ webhook_url: string | null }>("/webhook-settings", { method: "PATCH", body: JSON.stringify({ webhook_url: webhookUrl }) }),
+ 
+   getPublicDecision: (token: string) =>
+-    request<{ decision: { id: string; title: string; context: string | null; options: string[]; deadline: string | null; status: string; project_name: string }; record: { chosen_option: string; responder_name: string; responded_at: string } | null }>(
++    request<{ decision: { title: string; context: string | null; options: string[]; deadline: string | null; status: string; project_name: string }; record: { chosen_option: string; responder_name: string; responded_at: string } | null }>(
+       `/decision-public?token=${token}`
+     ),
+   respondToDecision: (token: string, chosenOption: string, responderName: string) =>
+--- a/src/lib/whatsNewData.ts
++++ b/src/lib/whatsNewData.ts
+@@ -10,6 +10,12 @@
+ // they can do.
+ export const CHANGES: ChangeEntry[] = [
+   {
++    version: "v175",
++    date: "November 2026",
++    title: "Decision links become a proper record, and you can stop sharing one whenever you like.",
++    body: "A shared decision link now opens on a page that looks like what it is: a decision on the record, with the Tasketra name on it. The person answering sees plainly, before they respond, that their name and choice will be visible to anyone with the link once you confirm the decision. You also get an off switch: Stop sharing, beside the link on any open decision, kills the old link immediately and gives the decision a fresh one. And deleting a decision now retires its link too -- a deleted decision (or one in a deleted project) no longer opens for anyone, and no longer accepts responses.",
++  },
++  {
+     version: "v174",
+     date: "November 2026",
+     title: "One simpler navigation: everything lives in the sidebar now, and your phone gets a bottom bar.",
+--- a/src/pages/DecisionPublic.tsx
++++ b/src/pages/DecisionPublic.tsx
+@@ -1,9 +1,34 @@
+ import { useEffect, useState } from "react";
+ import { useParams } from "react-router-dom";
+ import { api } from "../lib/api";
+-import { Wordmark } from "../components/Wordmark";
++import { Logomark } from "../components/Wordmark";
+ import { fmtDateTime } from "../lib/format";
+ import { useDocumentTitle } from "../lib/documentTitle";
++import { track } from "../lib/analytics";
++
++// v175: the one invitation this page makes, held in a single constant so
++// the wording can change in exactly one place. Variant A, picked from the
++// decision-link spec. The destination is a free account (never a plan
++// pitch); the src marker rides along so a signup that began on a decision
++// page is attributable in the signup events (see Login.tsx).
++const DECISION_LINK_CTA = {
++  headline: "Decisions like this one are kept on record with Tasketra.",
++  smallLine: "Free for up to 3 projects. No card to start.",
++  button: "Start free",
++  href: "/login?mode=register&src=decision-link",
++} as const;
++
++// The branded band every state of this page opens with: the Level mark and
++// the wordmark on the brand's dark green. This page is the one place a
++// person outside the app meets Tasketra, so it stops being anonymous.
++function BrandBand() {
++  return (
++    <header className="public-decision-brand">
++      <Logomark size={40} />
++      <span className="public-decision-brand-name">tasketra</span>
++    </header>
++  );
++}
+ 
+ export default function DecisionPublic() {
+   const { token } = useParams<{ token: string }>();
+@@ -19,7 +44,18 @@
+   // loaded already-resolved shows the decided state.
+   const [justSubmitted, setJustSubmitted] = useState(false);
+ 
+-  useDocumentTitle(decision?.title ?? "Decision request");
++  // v175: a neutral tab title. The decision's own title renders in the page
++  // body, where the link-holder is meant to read it -- not in the browser
++  // tab and history of everyone who opens the link.
++  useDocumentTitle("Decision request");
++  useEffect(() => {
++    const meta = document.createElement("meta");
++    meta.name = "robots";
++    meta.content = "noindex, nofollow";
++    document.head.appendChild(meta);
++    return () => { meta.remove(); };
++  }, []);
++
+   useEffect(() => {
+     if (!token) return;
+     api
+@@ -27,6 +63,8 @@
+       .then(({ decision, record }) => {
+         setDecision(decision);
+         setRecord(record);
++        // State only, never the record's content (see lib/analytics).
++        track("decision_link_viewed", { state: decision.status === "resolved" ? "decided" : "open" });
+       })
+       .catch((e) => setError(e.message))
+       .finally(() => setLoading(false));
+@@ -41,6 +79,7 @@
+       const { record } = await api.respondToDecision(token, chosen, name.trim());
+       setRecord(record);
+       setJustSubmitted(true);
++      track("decision_link_responded");
+     } catch (err) {
+       setError(err instanceof Error ? err.message : "Something went wrong.");
+     } finally {
+@@ -48,12 +87,12 @@
+     }
+   }
+ 
+-  if (loading) return <main className="public-decision"><div className="skel-loading-block"><div className="skel skel-text" style={{ width: "45%" }} /><div className="skel skel-text" style={{ width: "80%" }} /><div className="skel skel-text" style={{ width: "60%", marginBottom: 0 }} /></div></main>;
++  if (loading) return <main className="public-decision"><BrandBand /><div className="skel-loading-block"><div className="skel skel-text" style={{ width: "45%" }} /><div className="skel skel-text" style={{ width: "80%" }} /><div className="skel skel-text" style={{ width: "60%", marginBottom: 0 }} /></div></main>;
+ 
+   if (error && !decision) {
+     return (
+       <main className="public-decision">
+-        <Wordmark size="sm" />
++        <BrandBand />
+         <p className="form-error">{error}</p>
+       </main>
+     );
+@@ -63,7 +102,8 @@
+ 
+   return (
+     <main className="public-decision">
+-      <Wordmark size="sm" />
++      <BrandBand />
++      <p className="public-decision-eyebrow">A decision on the record</p>
+       <p className="muted">Regarding project: {decision.project_name}</p>
+       <h1>{decision.title}</h1>
+       {decision.context && <p className="decision-context">{decision.context}</p>}
+@@ -80,8 +120,9 @@
+           </div>
+         ) : (
+           <div className="decision-record-card">
++            <p><span className="decision-decided-marker">Decided</span></p>
+             <p>
+-              <strong>{record.chosen_option}</strong> · decided · response by <strong>{record.responder_name}</strong>
++              <strong>{record.chosen_option}</strong> · response by <strong>{record.responder_name}</strong>
+             </p>
+             <p className="muted">{fmtDateTime(record.responded_at)}</p>
+             <p className="muted">This decision has been decided. You can close this page.</p>
+@@ -90,7 +131,7 @@
+       ) : (
+         <form className="stacked-form" onSubmit={submit}>
+           <label>Your response</label>
+-          <p className="muted">Your response is recorded for the project team. The owner confirms the final decision.</p>
++          <p className="muted">Your response is recorded for the project team, and your name and choice will be visible to anyone with this link once the owner confirms the decision. The owner confirms the final outcome.</p>
+           <div className="option-list">
+             {decision.options.map((opt) => (
+               <label key={opt} className="option-row">
+@@ -107,6 +148,14 @@
+           </button>
+         </form>
+       )}
++
++      <footer className="public-decision-footer">
++        <p className="public-decision-cta-line">{DECISION_LINK_CTA.headline}</p>
++        <p className="muted">{DECISION_LINK_CTA.smallLine}</p>
++        <a className="btn btn-primary" href={DECISION_LINK_CTA.href} onClick={() => track("decision_link_cta_clicked")}>
++          {DECISION_LINK_CTA.button}
++        </a>
++      </footer>
+     </main>
+   );
+ }
+--- a/src/pages/Login.tsx
++++ b/src/pages/Login.tsx
+@@ -42,6 +42,10 @@
+ export default function Login() {
+   const [params] = useSearchParams();
+   const refCode = params.get("ref") || undefined;
++  // v175: a marketing source marker (e.g. ?src=decision-link from a shared
++  // decision page's footer). Not a referral code -- it only rides along as
++  // a prop on the signup events so the funnel can tell where a signup began.
++  const source = params.get("src") || undefined;
+   const plan: SignupPlan = params.get("plan") === "pro" || params.get("plan") === "founding" ? (params.get("plan") as SignupPlan) : "none";
+   const [mode, setMode] = useState<"login" | "register">(params.get("mode") === "register" ? "register" : "login");
+   const [email, setEmail] = useState("");
+@@ -84,7 +88,7 @@
+         await api.login(email, password);
+       } else {
+         await api.register(email, password, refCode);
+-        track("signup_completed", { plan });
++        track("signup_completed", source ? { plan, source } : { plan });
+         // Remember the Pro intent in this browser: if the person confirms
+         // their email in another tab, the intent is what carries them on to
+         // Billing once they're verified (see lib/trialIntent).
+@@ -108,7 +112,7 @@
+   function onFormFocus() {
+     if (mode !== "register" || signupStarted.current) return;
+     signupStarted.current = true;
+-    track("signup_started", { plan });
++    track("signup_started", source ? { plan, source } : { plan });
+   }
+ 
+   const copy = REGISTER_COPY[plan];
+--- a/src/pages/ProjectHome.tsx
++++ b/src/pages/ProjectHome.tsx
+@@ -5997,6 +5997,22 @@
+     });
+   }
+ 
++  // v175: "Stop sharing" rotates the public token. The link already sent
++  // out dies immediately; the card updates in place to the fresh one, so
++  // sharing can resume whenever the owner copies it again.
++  async function stopSharing(d: Decision) {
++    if (!(await confirmDialog("Stop sharing this decision? The link you have already sent out will stop working right away. The decision itself stays as it is, with a new link.", "Stop sharing"))) return;
++    try {
++      const res = await api.rotateDecisionShareLink(d.id);
++      // The just-created callout may still be showing the now-dead link.
++      setLastShareUrl((cur) => (cur === `/d/${d.public_token}` ? null : cur));
++      setDecisions((cur) => cur.map((x) => (x.id === d.id ? { ...x, public_token: res.public_token } : x)));
++      announce("Sharing stopped. The old link no longer works.");
++    } catch {
++      setError("Could not stop sharing. Try again.");
++    }
++  }
++
+   // v151 (Part D): responses collect until the owner confirms the outcome.
+   async function confirmResponse(d: Decision, recordId: string) {
+     try {
+@@ -6185,6 +6201,12 @@
+                     aria-label="Decision share link"
+                   />
+                 </div>
++                <p className="muted decision-share-note">
++                  Anyone with this link can see the decision's title, context, and options, and the decider's name once it's decided.
++                </p>
++                <div className="row-actions">
++                  <button className="btn-link" type="button" onClick={() => stopSharing(d)}>Stop sharing</button>
++                </div>
+               </>
+             ) : (
+               <div className="decision-record">
+@@ -6229,6 +6251,9 @@
+             onFocus={(e) => e.target.select()}
+             aria-label="Decision share link"
+           />
++          <p className="muted decision-share-note">
++            Anyone with this link can see the decision's title, context, and options, and the decider's name once it's decided.
++          </p>
+         </div>
+       )}
+ 
+--- a/src/pages/legal/Privacy.tsx
++++ b/src/pages/legal/Privacy.tsx
+@@ -105,10 +105,11 @@
+ 
+       <h2>4. Public sharing features</h2>
+       <p>
+-        If you create a shareable Decision link, the decision's title, context, options, and (once answered) the
+-        responder's name and chosen option are visible to anyone who has that link, without needing an account.
+-        This is intentional -- it's how the feature works -- but it means that information is not private once
+-        shared. Don't use this feature for anything you don't want visible outside your team.
++        If you create a shareable Decision link, the project's name, the decision's title, context, options, and
++        (once answered) the responder's name and chosen option are visible to anyone who has that link, without
++        needing an account. This is intentional -- it's how the feature works -- but it means that information is
++        not private once shared. Don't use this feature for anything you don't want visible outside your team.
++        Shared pages carry Tasketra's branding and a link to create a free Tasketra account.
+       </p>
+ 
+       <p>
+--- a/src/pages/legal/Terms.tsx
++++ b/src/pages/legal/Terms.tsx
+@@ -43,9 +43,9 @@
+       <h2>4. Public sharing features</h2>
+       <p>
+         Tasketra lets you generate a public, unguessable link to share an individual decision request for
+-        stakeholder input (the "Decision" feature). Anyone with that link can view the decision and, once it's been
+-        responded to, the responder's name and choice. Don't share a link you don't want to be public, and don't put
+-        anything in a shareable Decision that shouldn't be visible outside your team.
++        stakeholder input (the "Decision" feature). Anyone with that link can view the project's name and the
++        decision and, once it's been responded to, the responder's name and choice. Don't share a link you don't
++        want to be public, and don't put anything in a shareable Decision that shouldn't be visible outside your team.
+       </p>
+ 
+       <h2>5. Outbound webhooks</h2>
+--- /dev/null
++++ b/netlify/functions/__tests__/decision-link.integration.test.ts
+@@ -0,0 +1,149 @@
++import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
++import { setupTestDb, teardownTestDb, resetTestDb } from "../../lib/__tests__/testDb.ts";
++import { createTestUser, createTestProject, asUser, jsonBody } from "./fixtures.ts";
++import { db } from "../../lib/db.ts";
++import decisionsHandler from "../decisions.mts";
++import decisionPublicHandler from "../decision-public.mts";
++
++// v175: the public decision page becomes a branded record, and the
++// endpoint is hardened to the share-public standard. Marshall's six
++// conditions, as tests: retraction works (1), the owner gets an off
++// switch (3), endpoint hygiene at parity (4), and no new data is
++// exposed -- the payload drops the internal id (6). Conditions 2 and 5
++// are copy (responder wording, Privacy section 4) and are covered by the
++// DecisionPublic component tests and the legal pages themselves.
++const respond = (token: string, chosenOption: string, responderName: string) =>
++  decisionPublicHandler(new Request("https://app.tasketra.com/api/decision-public", {
++    method: "POST", headers: { "content-type": "application/json" },
++    body: JSON.stringify({ token, chosenOption, responderName }),
++  }));
++
++const publicGetRaw = (token: string) =>
++  decisionPublicHandler(new Request(`https://app.tasketra.com/api/decision-public?token=${token}`));
++
++const publicGet = async (token: string) => jsonBody<any>(await publicGetRaw(token));
++
++const patch = (user: any, body: unknown) =>
++  decisionsHandler(asUser(user, { method: "PATCH", url: "https://app.tasketra.com/api/decisions", body }));
++
++async function makeDecision(owner: any, projectId: string) {
++  const res = await decisionsHandler(asUser(owner, {
++    method: "POST", url: "https://app.tasketra.com/api/decisions",
++    body: { projectId, title: "Which date works best?", options: ["Nov 20", "Nov 27"], stakeholderIds: [] },
++  }));
++  expect(res.status).toBe(201);
++  const { decision } = await jsonBody<any>(res);
++  return decision;
++}
++
++describe("decision links: retraction, off switch, endpoint parity (v175)", () => {
++  beforeAll(async () => { await setupTestDb(); }, 30000);
++  afterAll(async () => { await teardownTestDb(); });
++  beforeEach(async () => { await resetTestDb(); });
++
++  it("serves the record with parity headers and no internal id in the payload", async () => {
++    const owner = await createTestUser("owner@example.com");
++    const project = await createTestProject(owner.id);
++    const decision = await makeDecision(owner, project.id);
++
++    const res = await publicGetRaw(decision.public_token);
++    expect(res.status).toBe(200);
++    expect(res.headers.get("cache-control")).toContain("no-store");
++    expect(res.headers.get("x-robots-tag")).toBe("noindex, nofollow");
++
++    const pub = await jsonBody<any>(res);
++    expect(pub.decision.title).toBe("Which date works best?");
++    expect(pub.decision.project_name).toBe(project.name);
++    expect(pub.decision.status).toBe("open");
++    // Condition 6: the internal id never leaves the server.
++    expect("id" in pub.decision).toBe(false);
++    expect(pub.record).toBeNull();
++  });
++
++  it("a trashed decision stops resolving and stops accepting responses", async () => {
++    const owner = await createTestUser("owner@example.com");
++    const project = await createTestProject(owner.id);
++    const decision = await makeDecision(owner, project.id);
++    const token = decision.public_token;
++
++    const del = await decisionsHandler(asUser(owner, {
++      method: "DELETE", url: `https://app.tasketra.com/api/decisions?id=${decision.id}`,
++    }));
++    expect(del.status).toBe(200);
++
++    expect((await publicGetRaw(token)).status).toBe(404);
++    expect((await respond(token, "Nov 20", "Sponsor One")).status).toBe(404);
++
++    // Restoring the decision brings the link back, and the rejected
++    // response was never recorded.
++    expect((await patch(owner, { id: decision.id, restore: true })).status).toBe(200);
++    const pub = await publicGet(token);
++    expect(pub.decision.status).toBe("open");
++    expect(pub.record).toBeNull();
++  });
++
++  it("a decision inside a trashed project stops resolving and stops accepting responses", async () => {
++    const owner = await createTestUser("owner@example.com");
++    const project = await createTestProject(owner.id);
++    const decision = await makeDecision(owner, project.id);
++    const token = decision.public_token;
++
++    const database = db();
++    await database.sql`UPDATE projects SET deleted_at = now() WHERE id = ${project.id}`;
++
++    expect((await publicGetRaw(token)).status).toBe(404);
++    expect((await respond(token, "Nov 20", "Sponsor One")).status).toBe(404);
++  });
++
++  it("stop sharing rotates the token: the old link dies, the new one resolves", async () => {
++    const owner = await createTestUser("owner@example.com");
++    const project = await createTestProject(owner.id);
++    const decision = await makeDecision(owner, project.id);
++    const oldToken = decision.public_token;
++
++    const res = await patch(owner, { id: decision.id, action: "rotate-share" });
++    expect(res.status).toBe(200);
++    const body = await jsonBody<any>(res);
++    expect(body.public_token).toBeTruthy();
++    expect(body.public_token).not.toBe(oldToken);
++    expect(body.shareUrl).toBe(`/d/${body.public_token}`);
++
++    expect((await publicGetRaw(oldToken)).status).toBe(404);
++    expect((await respond(oldToken, "Nov 20", "Sponsor One")).status).toBe(404);
++
++    const pub = await publicGet(body.public_token);
++    expect(pub.decision.title).toBe("Which date works best?");
++    expect((await respond(body.public_token, "Nov 20", "Sponsor One")).status).toBe(201);
++  });
++
++  it("only someone with project access can stop sharing", async () => {
++    const owner = await createTestUser("owner@example.com");
++    const stranger = await createTestUser("stranger@example.com");
++    const project = await createTestProject(owner.id);
++    const decision = await makeDecision(owner, project.id);
++
++    expect((await patch(stranger, { id: decision.id, action: "rotate-share" })).status).toBe(404);
++
++    const unauth = await decisionsHandler(new Request("https://app.tasketra.com/api/decisions", {
++      method: "PATCH", headers: { "content-type": "application/json" },
++      body: JSON.stringify({ id: decision.id, action: "rotate-share" }),
++    }));
++    expect(unauth.status).toBe(401);
++
++    // Neither attempt touched the token.
++    expect((await publicGetRaw(decision.public_token)).status).toBe(200);
++  });
++
++  it("rate limiting trips at the share-public threshold (60 per 10 minutes per IP)", async () => {
++    const owner = await createTestUser("owner@example.com");
++    const project = await createTestProject(owner.id);
++    const decision = await makeDecision(owner, project.id);
++
++    for (let i = 0; i < 60; i++) {
++      expect((await publicGetRaw(decision.public_token)).status).toBe(200);
++    }
++    const limited = await publicGetRaw(decision.public_token);
++    expect(limited.status).toBe(429);
++    expect(limited.headers.get("x-robots-tag")).toBe("noindex, nofollow");
++  });
++});
+--- /dev/null
++++ b/src/__tests__/decisionPublic.component.test.tsx
+@@ -0,0 +1,268 @@
++// @vitest-environment jsdom
++//
++// v175: the public decision page becomes a branded record with one quiet
++// footer CTA, the responder copy tells the truth about who will see a
++// name and choice (Marshall's condition 2), and the Decisions tab gains
++// the Stop sharing off switch with its one-line exposure notice
++// (condition 3). Mounts the real DecisionPublic and the real ProjectHome
++// decisions tab with the api answered at the fetch layer.
++import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
++import { createRoot, type Root } from "react-dom/client";
++import { act } from "react";
++import { MemoryRouter, Routes, Route } from "react-router-dom";
++
++vi.mock("../lib/auth-context", () => ({
++  useAuth: () => ({
++    user: { id: "u1", email: "owner@example.com", tour_completed_at: "2026-01-01T00:00:00Z", display_name: "Owner" },
++    loading: false,
++    refresh: async () => {},
++    logout: async () => {},
++  }),
++  AuthProvider: ({ children }: { children: unknown }) => children,
++}));
++
++import DecisionPublic from "../pages/DecisionPublic";
++import ProjectHome from "../pages/ProjectHome";
++import { ConfirmProvider } from "../components/ConfirmDialog";
++import { clearApiCache } from "../lib/api";
++
++const OPEN_DECISION = {
++  decision: {
++    title: "Which date works best?", context: "The sponsor is in town both weeks.",
++    options: ["Nov 20", "Nov 27"], deadline: null, status: "open", project_name: "Website Relaunch",
++  },
++  record: null,
++};
++
++const DECIDED_DECISION = {
++  decision: {
++    title: "Which date works best?", context: "The sponsor is in town both weeks.",
++    options: ["Nov 20", "Nov 27"], deadline: null, status: "resolved", project_name: "Website Relaunch",
++  },
++  record: { chosen_option: "Nov 27", responder_name: "Sponsor One", responded_at: "2026-11-20T15:04:00Z" },
++};
++
++let host: HTMLDivElement;
++let root: Root;
++let errors: string[];
++let plausible: ReturnType<typeof vi.fn>;
++
++beforeAll(() => {
++  (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
++  (globalThis as any).ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
++  const zero = { width: 0, height: 0, top: 0, left: 0, right: 0, bottom: 0, x: 0, y: 0, toJSON() {} };
++  (Range.prototype as any).getBoundingClientRect = () => zero;
++  (Range.prototype as any).getClientRects = () => [];
++  window.matchMedia = window.matchMedia || ((q: string) => ({ matches: false, media: q, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, onchange: null, dispatchEvent: () => false }) as any);
++  Element.prototype.scrollIntoView = () => {};
++  window.scrollTo = (() => {}) as any;
++});
++
++beforeEach(() => {
++  errors = [];
++  vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
++    errors.push(args.map((a) => (a instanceof Error ? `${a.message}\n${a.stack}` : String(a))).join(" "));
++  });
++  window.localStorage.clear();
++  clearApiCache();
++  plausible = vi.fn();
++  (window as any).plausible = plausible;
++  host = document.createElement("div");
++  document.body.appendChild(host);
++});
++
++afterEach(async () => {
++  await act(async () => { root?.unmount(); });
++  host.remove();
++  delete (window as any).plausible;
++  vi.restoreAllMocks();
++});
++
++function jsonResponse(body: unknown, status = 200) {
++  return Promise.resolve(new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } }));
++}
++
++async function settle(predicate: () => boolean, rounds = 40) {
++  for (let i = 0; i < rounds; i++) {
++    if (predicate()) return;
++    await act(async () => { await new Promise((r) => setTimeout(r, 25)); });
++  }
++}
++
++function setInputValue(input: HTMLInputElement, value: string) {
++  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
++  setter.call(input, value);
++  input.dispatchEvent(new Event("input", { bubbles: true }));
++}
++
++async function mountDecisionPage(handler: (url: string, method: string, body: any) => unknown) {
++  vi.stubGlobal("fetch", vi.fn((input: unknown, init?: { method?: string; body?: string }) => {
++    const url = String(input);
++    const method = init?.method || "GET";
++    let body: any = undefined;
++    try { body = init?.body ? JSON.parse(init.body) : undefined; } catch { /* not JSON */ }
++    const out = handler(url, method, body) as any;
++    if (out !== undefined) return jsonResponse(out.body ?? out, out.status ?? 200);
++    return new Promise(() => {});
++  }));
++  root = createRoot(host, {
++    onUncaughtError: (e) => { errors.push(`uncaught: ${e instanceof Error ? e.message + "\n" + e.stack : String(e)}`); },
++    onCaughtError: (e) => { errors.push(`caught: ${e instanceof Error ? e.message : String(e)}`); },
++  });
++  await act(async () => {
++    root.render(
++      <MemoryRouter initialEntries={["/d/tok1"]}>
++        <Routes>
++          <Route path="/d/:token" element={<DecisionPublic />} />
++        </Routes>
++      </MemoryRouter>
++    );
++  });
++}
++
++describe("the public decision page (v175)", () => {
++  it("open: branded record, truthful responder copy, the one footer CTA, neutral tab title", async () => {
++    await mountDecisionPage((url) => {
++      if (/\/api\/decision-public/.test(url)) return OPEN_DECISION;
++      return undefined;
++    });
++    await settle(() => (host.textContent || "").includes("Which date works best?"));
++
++    const text = host.textContent || "";
++    expect(text).toContain("A decision on the record");
++    expect(text).toContain("Regarding project: Website Relaunch");
++    // Condition 2: the form says who will see the responder's name and choice.
++    expect(text).toContain("your name and choice will be visible to anyone with this link once the owner confirms the decision");
++    expect(text).not.toContain("Your response is recorded for the project team. The owner confirms the final decision.");
++    // The single CTA, free-tier only, carrying the source marker.
++    expect(text).toContain("Decisions like this one are kept on record with Tasketra.");
++    expect(text).toContain("Free for up to 3 projects. No card to start.");
++    const cta = [...host.querySelectorAll("a")].find((a) => a.textContent === "Start free");
++    expect(cta).toBeTruthy();
++    expect(cta!.getAttribute("href")).toBe("/login?mode=register&src=decision-link");
++    // The decision title stays out of the browser tab (useDocumentTitle
++    // appends the brand suffix to the neutral title).
++    expect(document.title).toBe("Decision request | Tasketra");
++    expect(document.title).not.toContain("Which date works best?");
++    // Viewed event: state only.
++    expect(plausible).toHaveBeenCalledWith("decision_link_viewed", { props: { state: "open" } });
++    expect(errors).toEqual([]);
++  });
++
++  it("decided: the record card wears the Decided marker and the CTA still stands", async () => {
++    await mountDecisionPage((url) => {
++      if (/\/api\/decision-public/.test(url)) return DECIDED_DECISION;
++      return undefined;
++    });
++    await settle(() => (host.textContent || "").includes("Sponsor One"));
++
++    const marker = host.querySelector(".decision-decided-marker");
++    expect(marker?.textContent).toBe("Decided");
++    const text = host.textContent || "";
++    expect(text).toContain("Nov 27");
++    expect(text).toContain("This decision has been decided. You can close this page.");
++    expect(text).toContain("Decisions like this one are kept on record with Tasketra.");
++    expect(plausible).toHaveBeenCalledWith("decision_link_viewed", { props: { state: "decided" } });
++    expect(errors).toEqual([]);
++  });
++
++  it("invalid link: the error shows and no CTA is offered", async () => {
++    await mountDecisionPage((url) => {
++      if (/\/api\/decision-public/.test(url)) return { body: { error: "This decision link is not valid." }, status: 404 };
++      return undefined;
++    });
++    await settle(() => (host.textContent || "").includes("not valid"));
++
++    expect(host.textContent).toContain("This decision link is not valid.");
++    expect(host.textContent).not.toContain("Start free");
++    expect(errors).toEqual([]);
++  });
++
++  it("responding records the response and fires the responded event", async () => {
++    await mountDecisionPage((url, method, body) => {
++      if (/\/api\/decision-public/.test(url) && method === "POST") {
++        return { body: { record: { chosen_option: body.chosenOption, responder_name: body.responderName, responded_at: "2026-11-20T16:00:00Z" } }, status: 201 };
++      }
++      if (/\/api\/decision-public/.test(url)) return OPEN_DECISION;
++      return undefined;
++    });
++    await settle(() => (host.textContent || "").includes("Which date works best?"));
++
++    const radio = host.querySelector('input[type="radio"][value="Nov 20"]') as HTMLInputElement;
++    expect(radio).toBeTruthy();
++    await act(async () => { radio.click(); });
++    const nameInput = host.querySelector("#f-decisionpublic-85") as HTMLInputElement;
++    await act(async () => { setInputValue(nameInput, "Sponsor One"); });
++    const submit = [...host.querySelectorAll("button")].find((b) => b.textContent === "Submit response")!;
++    await act(async () => { submit.click(); });
++    await settle(() => (host.textContent || "").includes("Thanks, your response was recorded."));
++
++    expect(plausible).toHaveBeenCalledWith("decision_link_responded", undefined);
++    expect(errors).toEqual([]);
++  });
++});
++
++describe("the Decisions tab off switch (v175)", () => {
++  const PROJECT = {
++    id: "p1", name: "Share Control Project", description: "A project", is_owner: true,
++    size: "full", approach: "hybrid", show_all_tabs: true, stage: "plan",
++    created_at: "2026-09-01T00:00:00Z",
++  };
++  const OPEN = {
++    id: "d1", title: "Approve the baseline", context: "", options: ["Approve", "Reject"],
++    status: "open", deadline: null, created_at: "2026-11-10T10:00:00Z", public_token: "tok1",
++    recipients: [], records: [], owner_stakeholder_id: null, owner: null,
++    chosen_option: null, responder_name: null, responded_at: null, outcome_confirmed_at: null,
++  };
++
++  it("shows the exposure notice by the share field, and Stop sharing swaps in the new link", async () => {
++    const patches: any[] = [];
++    vi.stubGlobal("fetch", vi.fn((input: unknown, init?: { method?: string; body?: string }) => {
++      const url = String(input);
++      const method = init?.method || "GET";
++      let body: any = undefined;
++      try { body = init?.body ? JSON.parse(init.body) : undefined; } catch { /* not JSON */ }
++      if (/\/api\/project\?id=/.test(url)) return jsonResponse({ project: PROJECT });
++      if (/\/api\/decisions\?projectId=/.test(url)) return jsonResponse({ decisions: [OPEN] });
++      if (/\/api\/stakeholders\?projectId=/.test(url)) return jsonResponse({ stakeholders: [] });
++      if (/\/api\/decisions$/.test(url) && method === "PATCH") {
++        patches.push(body);
++        return jsonResponse({ ok: true, public_token: "tok2", shareUrl: "/d/tok2" });
++      }
++      return new Promise(() => {});
++    }));
++    root = createRoot(host, {
++      onUncaughtError: (e) => { errors.push(`uncaught: ${e instanceof Error ? e.message + "\n" + e.stack : String(e)}`); },
++      onCaughtError: (e) => { errors.push(`caught: ${e instanceof Error ? e.message : String(e)}`); },
++    });
++    await act(async () => {
++      root.render(
++        <MemoryRouter initialEntries={["/app/projects/p1?tab=decisions"]}>
++          <ConfirmProvider>
++            <Routes>
++              <Route path="/app/projects/:id" element={<ProjectHome />} />
++            </Routes>
++          </ConfirmProvider>
++        </MemoryRouter>
++      );
++    });
++    await settle(() => !!host.querySelector(".decision-card"));
++
++    const card = host.querySelector(".decision-card")!;
++    expect(card.textContent).toContain("Anyone with this link can see the decision's title, context, and options, and the decider's name once it's decided.");
++    const shareInput = card.querySelector('input[aria-label="Decision share link"]') as HTMLInputElement;
++    expect(shareInput.value).toContain("/d/tok1");
++
++    const stopBtn = [...card.querySelectorAll("button")].find((b) => b.textContent === "Stop sharing")!;
++    expect(stopBtn).toBeTruthy();
++    await act(async () => { stopBtn.click(); });
++    await settle(() => !!document.querySelector('[role="alertdialog"]'));
++    const confirmBtn = [...document.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button')].find((b) => b.textContent === "Stop sharing")!;
++    await act(async () => { confirmBtn.click(); });
++    await settle(() => shareInput.value.includes("/d/tok2"));
++
++    expect(patches).toEqual([{ id: "d1", action: "rotate-share" }]);
++    expect(shareInput.value).toContain("/d/tok2");
++    expect(errors).toEqual([]);
++  });
++});

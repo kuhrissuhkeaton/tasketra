@@ -1408,6 +1408,33 @@ a.dash-list-title:hover { text-decoration: underline; }
 .decision-context { color: var(--slate); margin: 12px 0; white-space: pre-wrap; }
 .option-list { margin: 8px 0 16px; }
 
+/* v175: the decision page's branded header band, eyebrow, footer CTA, and
+   the Decided marker. The band stretches across the top of the card
+   (negative margins against the card's 32px padding); --ink and --ivory
+   are the fixed Palette A pair, so the band reads the same in both themes. */
+.public-decision-brand {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--ink); border-radius: var(--radius) var(--radius) 0 0;
+  margin: -32px -32px 20px; padding: 16px 32px;
+}
+.public-decision-brand-name {
+  font-family: 'Fraunces', serif; font-weight: 700; font-size: 21px; letter-spacing: -0.3px; color: var(--ivory);
+}
+.public-decision-eyebrow {
+  font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--slate-text); margin: 0 0 4px;
+}
+.public-decision-footer { border-top: 1px solid var(--border); margin-top: 24px; padding-top: 16px; }
+.public-decision-cta-line { font-weight: 600; margin: 0 0 4px; }
+.public-decision-footer .muted { margin: 0 0 12px; }
+.public-decision-footer .btn { width: 100%; justify-content: center; }
+.decision-decided-marker {
+  display: inline-block; background: var(--lime); color: var(--ink);
+  font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  padding: 2px 8px; border-radius: var(--radius-pill);
+}
+.decision-share-note { font-size: 13px; margin: 8px 0 4px; }
+
 .public-roadmap {
   max-width: 1100px; margin: 40px auto; padding: 32px; background: var(--cream);
   border-radius: var(--radius); box-shadow: var(--shadow-lift);

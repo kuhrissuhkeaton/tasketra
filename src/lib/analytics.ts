@@ -9,7 +9,13 @@ export type AnalyticsEvent =
   | "template_chosen"
   | "first_task_edited"
   | "three_tasks_added"
-  | "teammate_invited";
+  | "teammate_invited"
+  // v175: the public decision page. Props carry state only (open/decided)
+  // -- never the decision title, the project name, or the token, so event
+  // data can never become a second copy of the record.
+  | "decision_link_viewed"
+  | "decision_link_responded"
+  | "decision_link_cta_clicked";
 
 type Plausible = (event: string, options?: { props?: Record<string, string> }) => void;
 
