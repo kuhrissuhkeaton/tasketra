@@ -34,6 +34,14 @@ const OPEN_DECISION = {
   record: null,
 };
 
+const DEADLINE_DECISION = {
+  decision: {
+    title: "Which date works best?", context: "The sponsor is in town both weeks.",
+    options: ["Nov 20", "Nov 27"], deadline: "2026-12-04T00:00:00.000Z", status: "open", project_name: "Website Relaunch",
+  },
+  record: null,
+};
+
 const DECIDED_DECISION = {
   decision: {
     title: "Which date works best?", context: "The sponsor is in town both weeks.",
@@ -146,6 +154,19 @@ describe("the public decision page (v175)", () => {
     expect(document.title).not.toContain("Which date works best?");
     // Viewed event: state only.
     expect(plausible).toHaveBeenCalledWith("decision_link_viewed", { props: { state: "open" } });
+    expect(errors).toEqual([]);
+  });
+
+  it("needed-by date: renders formatted (Dec 4, 2026), never the raw ISO timestamp (v175.1)", async () => {
+    await mountDecisionPage((url) => {
+      if (/\/api\/decision-public/.test(url)) return DEADLINE_DECISION;
+      return undefined;
+    });
+    await settle(() => (host.textContent || "").includes("Needed by:"));
+
+    const text = host.textContent || "";
+    expect(text).toContain("Needed by: Dec 4, 2026");
+    expect(text).not.toContain("2026-12-04T00:00:00.000Z");
     expect(errors).toEqual([]);
   });
 

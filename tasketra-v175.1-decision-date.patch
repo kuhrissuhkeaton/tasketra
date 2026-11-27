@@ -1,0 +1,57 @@
+--- a/src/pages/DecisionPublic.tsx
++++ b/src/pages/DecisionPublic.tsx
+@@ -2,7 +2,7 @@
+ import { useParams } from "react-router-dom";
+ import { api } from "../lib/api";
+ import { Logomark } from "../components/Wordmark";
+-import { fmtDateTime } from "../lib/format";
++import { fmtDateTime, fmtLocalDate } from "../lib/format";
+ import { useDocumentTitle } from "../lib/documentTitle";
+ import { track } from "../lib/analytics";
+ 
+@@ -107,7 +107,7 @@
+       <p className="muted">Regarding project: {decision.project_name}</p>
+       <h1>{decision.title}</h1>
+       {decision.context && <p className="decision-context">{decision.context}</p>}
+-      {decision.deadline && <p className="muted">Needed by: {decision.deadline}</p>}
++      {decision.deadline && <p className="muted">Needed by: {fmtLocalDate(decision.deadline)}</p>}
+ 
+       {record ? (
+         justSubmitted ? (
+--- a/src/__tests__/decisionPublic.component.test.tsx
++++ b/src/__tests__/decisionPublic.component.test.tsx
+@@ -34,6 +34,14 @@
+   record: null,
+ };
+ 
++const DEADLINE_DECISION = {
++  decision: {
++    title: "Which date works best?", context: "The sponsor is in town both weeks.",
++    options: ["Nov 20", "Nov 27"], deadline: "2026-12-04T00:00:00.000Z", status: "open", project_name: "Website Relaunch",
++  },
++  record: null,
++};
++
+ const DECIDED_DECISION = {
+   decision: {
+     title: "Which date works best?", context: "The sponsor is in town both weeks.",
+@@ -149,6 +157,19 @@
+     expect(errors).toEqual([]);
+   });
+ 
++  it("needed-by date: renders formatted (Dec 4, 2026), never the raw ISO timestamp (v175.1)", async () => {
++    await mountDecisionPage((url) => {
++      if (/\/api\/decision-public/.test(url)) return DEADLINE_DECISION;
++      return undefined;
++    });
++    await settle(() => (host.textContent || "").includes("Needed by:"));
++
++    const text = host.textContent || "";
++    expect(text).toContain("Needed by: Dec 4, 2026");
++    expect(text).not.toContain("2026-12-04T00:00:00.000Z");
++    expect(errors).toEqual([]);
++  });
++
+   it("decided: the record card wears the Decided marker and the CTA still stands", async () => {
+     await mountDecisionPage((url) => {
+       if (/\/api\/decision-public/.test(url)) return DECIDED_DECISION;

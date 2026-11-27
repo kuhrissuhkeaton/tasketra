@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { Logomark } from "../components/Wordmark";
-import { fmtDateTime } from "../lib/format";
+import { fmtDateTime, fmtLocalDate } from "../lib/format";
 import { useDocumentTitle } from "../lib/documentTitle";
 import { track } from "../lib/analytics";
 
@@ -107,7 +107,7 @@ export default function DecisionPublic() {
       <p className="muted">Regarding project: {decision.project_name}</p>
       <h1>{decision.title}</h1>
       {decision.context && <p className="decision-context">{decision.context}</p>}
-      {decision.deadline && <p className="muted">Needed by: {decision.deadline}</p>}
+      {decision.deadline && <p className="muted">Needed by: {fmtLocalDate(decision.deadline)}</p>}
 
       {record ? (
         justSubmitted ? (
