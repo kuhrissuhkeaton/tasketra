@@ -317,77 +317,6 @@
   --skel-highlight: #323B26;
 }
 
-/* Design-system tokens (UX redesign, Phase A). The shared primitives
-   (.btn, .pill, labels, form fields, modal text) adopted this scale in
-   v153; the rest of the app adopts it one screen or component at a time.
-   Prefixed --ds- so they can never collide with the existing tokens above.
-   Existing --radius (16px) is left alone; the card radius is decided when
-   cards are migrated, not here.
-   Type scale: 12 / 13 / 14 / 16 / 20 / 28. Spacing: 4px scale. Radii: three.
-   Shadows: two. Status colors checked at >= 4.5:1 on both light surfaces
-   (#FFFFFF, #F2EBD9) and both dark surfaces (#242B1C, #1E2417). */
-:root {
-  --ds-text-xs: 12px;
-  --ds-text-sm: 13px;
-  --ds-text-md: 14px;
-  --ds-text-lg: 16px;
-  --ds-text-xl: 20px;
-  --ds-text-2xl: 28px;
-  --ds-leading-tight: 1.25;
-  --ds-leading-normal: 1.5;
-
-  --ds-space-1: 4px;
-  --ds-space-2: 8px;
-  --ds-space-3: 12px;
-  --ds-space-4: 16px;
-  --ds-space-6: 24px;
-  --ds-space-8: 32px;
-
-  --ds-radius-sm: 6px;
-  --ds-radius-md: 10px;
-  --ds-radius-pill: 999px;
-
-  --ds-shadow-resting: 0 1px 2px rgba(28, 36, 21, 0.06);
-  --ds-shadow-raised: 0 8px 24px rgba(28, 36, 21, 0.12);
-
-  /* Status colors, for text and icons on a surface (never color alone). */
-  --ds-status-success: #46702A;
-  --ds-status-warning: #7A5B00;
-  --ds-status-danger: #8A3B2C;
-  --ds-status-info: #2F5E7A;
-
-  /* Keyboard focus: dark ink ring in light mode, lime ring in dark mode. */
-  --ds-focus-color: #1C2415;
-  --ds-focus-width: 2px;
-  --ds-focus-offset: 2px;
-
-  /* Layout budgets used by the later header and tab-strip steps. */
-  --ds-header-height: 64px;
-  --ds-tabstrip-height: 32px;
-  --ds-row-height: 40px;
-  --ds-tab-indicator: 2px;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --ds-shadow-resting: 0 1px 2px rgba(0, 0, 0, 0.35);
-    --ds-shadow-raised: 0 8px 24px rgba(0, 0, 0, 0.5);
-    --ds-status-success: #7FBF52;
-    --ds-status-warning: #E3B341;
-    --ds-status-danger: #E2725A;
-    --ds-status-info: #7DB4D6;
-    --ds-focus-color: #CFEA46;
-  }
-}
-:root[data-theme="dark"] {
-  --ds-shadow-resting: 0 1px 2px rgba(0, 0, 0, 0.35);
-  --ds-shadow-raised: 0 8px 24px rgba(0, 0, 0, 0.5);
-  --ds-status-success: #7FBF52;
-  --ds-status-warning: #E3B341;
-  --ds-status-danger: #E2725A;
-  --ds-status-info: #7DB4D6;
-  --ds-focus-color: #CFEA46;
-}
-
 .project-shell { background: var(--panel); }
 
 * { box-sizing: border-box; }
@@ -566,14 +495,14 @@ h1.auth-tagline { font-family: inherit; font-size: inherit; font-weight: inherit
 .row-jump-highlight { animation: row-jump-flash 1.6s ease-out; }
 
 /* --- Forms --- */
-label { display: block; font-size: var(--ds-text-sm); font-weight: 600; margin: 12px 0 4px; color: var(--navy); }
+label { display: block; font-size: 13px; font-weight: 600; margin: 12px 0 4px; color: var(--navy); }
 input, textarea, select {
   width: 100%;
   padding: 9px 11px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   font-family: inherit;
-  font-size: var(--ds-text-md);
+  font-size: 14px;
   background: var(--panel);
   color: var(--navy);
   transition: border-color var(--ease), box-shadow var(--ease);
@@ -595,7 +524,7 @@ input[aria-invalid="true"], textarea[aria-invalid="true"], select[aria-invalid="
 .quick-add-error { margin: 8px 0 0; }
 .inline-form > .add-form-error { flex: 1 1 100%; margin: 0; }
 textarea { resize: vertical; }
-.form-error { color: var(--red); font-size: var(--ds-text-sm); margin-top: 8px; }
+.form-error { color: var(--red); font-size: 13px; margin-top: 8px; }
 
 .inline-form { display: flex; gap: 8px; margin-bottom: 24px; flex-wrap: wrap; }
 .inline-form input { margin: 0; }
@@ -648,7 +577,7 @@ textarea { resize: vertical; }
   border: none;
   border-radius: var(--radius-pill);
   padding: 9px 18px;
-  font-size: var(--ds-text-md);
+  font-size: 14px;
   font-weight: 700;
   cursor: pointer;
   font-family: inherit;
@@ -669,7 +598,7 @@ textarea { resize: vertical; }
    started, project rename) but defined nowhere, so those buttons silently
    rendered at default size. The small size in the .btn family: tighter
    padding, the small text step, same pill shape and weight. */
-.btn-small { padding: 5px 12px; font-size: var(--ds-text-sm); }
+.btn-small { padding: 5px 12px; font-size: 13px; }
 .btn:disabled { opacity: 0.55; cursor: not-allowed; transform: none; box-shadow: none; }
 .btn-link:disabled { opacity: 0.55; cursor: not-allowed; text-decoration: none; }
 input:disabled, textarea:disabled, select:disabled {
@@ -686,7 +615,7 @@ input:disabled, textarea:disabled, select:disabled {
   background: var(--cream); border-radius: var(--radius);
   box-shadow: var(--shadow-lift); padding: 24px; max-width: 420px; width: 100%;
 }
-.confirm-message { color: var(--navy); font-size: var(--ds-text-md); line-height: 1.5; margin: 0 0 20px; }
+.confirm-message { color: var(--navy); font-size: 14px; line-height: 1.5; margin: 0 0 20px; }
 .confirm-actions { display: flex; justify-content: flex-end; gap: 10px; }
 @keyframes confirm-fade { from { opacity: 0; } to { opacity: 1; } }
 
@@ -697,7 +626,7 @@ td.row-actions { display: table-cell; vertical-align: middle; white-space: norma
 td.row-actions > * { margin-right: 12px; }
 td.row-actions > *:last-child { margin-right: 0; }
 .btn-link {
-  background: none; border: none; padding: 0; font-size: var(--ds-text-sm); font-weight: 600; color: var(--slate-text);
+  background: none; border: none; padding: 0; font-size: 13px; font-weight: 600; color: var(--slate-text);
   min-height: 24px; /* WCAG 2.2 minimum target size */
   cursor: pointer; font-family: inherit; transition: color var(--ease);
 }
@@ -769,7 +698,7 @@ td.row-actions > *:last-child { margin-right: 0; }
 .project-card-menu-backdrop { position: fixed; inset: 0; z-index: 4; background: transparent; }
 
 /* --- Pills --- */
-.pill { display: inline-block; white-space: nowrap; padding: 3px 10px; border-radius: var(--radius-pill); font-size: var(--ds-text-xs); font-weight: 600; letter-spacing: 0.01em; }
+.pill { display: inline-block; white-space: nowrap; padding: 3px 10px; border-radius: var(--radius-pill); font-size: 12px; font-weight: 600; letter-spacing: 0.01em; }
 .pill-gold { background: var(--tag-tan); color: #6B4A1C; }
 .pill-green { background: var(--tag-sage); color: #3D5F24; }
 .pill-red { background: var(--red-border); color: #8A3B2C; }
@@ -2560,8 +2489,8 @@ a:hover { color: var(--navy); }
 }
 .project-tabs::-webkit-scrollbar { display: none; }
 .project-tab {
-  flex: none; min-height: var(--ds-tabstrip-height); padding: 6px 14px;
-  background: none; border: none; border-bottom: var(--ds-tab-indicator) solid transparent; margin-bottom: -1px;
+  flex: none; min-height: 32px; padding: 6px 14px;
+  background: none; border: none; border-bottom: 2px solid transparent; margin-bottom: -1px;
   font-family: inherit; font-size: 14px; font-weight: 600; color: var(--slate); cursor: pointer; white-space: nowrap;
   transition: color var(--ease), border-color var(--ease);
 }
@@ -2718,7 +2647,7 @@ a.dash-attention-next:hover { text-decoration: underline; text-underline-offset:
 /* Jump-to-form button for the register entry forms (phones and portrait tablets). */
 .quick-add-jump { display: none; }
 @media (max-width: 860px) {
-  .quick-add { scroll-margin-top: calc(var(--ds-tabstrip-height, 32px) + 12px); }
+  .quick-add { scroll-margin-top: calc(32px + 12px); }
   .project-main:has(form.quick-add) { padding-bottom: 88px; }
   .quick-add-jump {
     display: inline-flex; align-items: center; justify-content: center;

@@ -1,3 +1,6 @@
+import type { DatabaseConnection } from "@netlify/database";
+import type { ProjectCountRow, StorageTotalRow, SubscriptionStatusRow, UserFoundingMemberRow } from "./rows.ts";
+
 // Central plan/limit logic. A user is on the paid plan if they're a founding
 // member (free forever, first 100 signups) OR have a subscription row in
 // 'trialing' or 'active' status (or a recent failed payment, see below). Everyone else is on the free tier.
@@ -37,11 +40,11 @@ export function planForSubscription(status: string | null | undefined, pastDueSi
   return "free";
 }
 
-export async function getUserPlan(database: any, userId: string): Promise<PlanStatus> {
-  const [user] = await database.sql`SELECT founding_member FROM users WHERE id = ${userId}`;
+export async function getUserPlan(database: DatabaseConnection, userId: string): Promise<PlanStatus> {
+  const [user] = await database.sql<UserFoundingMemberRow>`SELECT founding_member FROM users WHERE id = ${userId}`;
   if (user?.founding_member) return "founding";
 
-  const [sub] = await database.sql`SELECT status, past_due_since FROM subscriptions WHERE user_id = ${userId}`;
+  const [sub] = await database.sql<SubscriptionStatusRow>`SELECT status, past_due_since FROM subscriptions WHERE user_id = ${userId}`;
   return planForSubscription(sub?.status, sub?.past_due_since);
 }
 
@@ -49,10 +52,10 @@ export function isPaidPlan(plan: PlanStatus): boolean {
   return plan !== "free";
 }
 
-export async function canCreateProject(database: any, userId: string): Promise<boolean> {
+export async function canCreateProject(database: DatabaseConnection, userId: string): Promise<boolean> {
   const plan = await getUserPlan(database, userId);
   if (isPaidPlan(plan)) return true;
-  const [{ count }] = await database.sql`
+  const [{ count }] = await database.sql<ProjectCountRow>`
     SELECT count(*)::int AS count FROM projects WHERE owner_id = ${userId} AND deleted_at IS NULL AND closed_at IS NULL
   `;
   return count < FREE_PROJECT_LIMIT;
@@ -77,8 +80,8 @@ export function storageCapBytes(plan: PlanStatus): number {
 // Computed on read (SUM over the owner's non-deleted documents) rather than
 // a maintained counter column on `users` -- avoids counter/reality drift,
 // and at current document volume a SUM over an indexed join is cheap.
-export async function storageUsedBytes(database: any, ownerId: string): Promise<number> {
-  const [row] = await database.sql`
+export async function storageUsedBytes(database: DatabaseConnection, ownerId: string): Promise<number> {
+  const [row] = await database.sql<StorageTotalRow>`
     SELECT COALESCE(SUM(d.size_bytes), 0)::bigint AS total
     FROM documents d
     JOIN projects p ON p.id = d.project_id
@@ -88,7 +91,7 @@ export async function storageUsedBytes(database: any, ownerId: string): Promise<
 }
 
 export async function canUploadBytes(
-  database: any,
+  database: DatabaseConnection,
   ownerId: string,
   addBytes: number
 ): Promise<{ ok: boolean; usedBytes: number; capBytes: number; plan: PlanStatus }> {

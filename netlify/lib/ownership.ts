@@ -1,4 +1,5 @@
 import { db } from "./db.ts";
+import type { ExistenceRow } from "./rows.ts";
 
 /**
  * Returns true if the given user can read/write this project -- either as the
@@ -7,7 +8,7 @@ import { db } from "./db.ts";
  */
 export async function hasProjectAccess(userId: string, projectId: string): Promise<boolean> {
   const database = db();
-  const rows = await database.sql`
+  const rows = await database.sql<ExistenceRow>`
     SELECT 1 FROM projects WHERE id = ${projectId} AND owner_id = ${userId}
     UNION
     SELECT 1 FROM project_members WHERE project_id = ${projectId} AND user_id = ${userId} AND status = 'active'
@@ -21,6 +22,6 @@ export async function hasProjectAccess(userId: string, projectId: string): Promi
  */
 export async function isProjectOwner(userId: string, projectId: string): Promise<boolean> {
   const database = db();
-  const rows = await database.sql`SELECT 1 FROM projects WHERE id = ${projectId} AND owner_id = ${userId}`;
+  const rows = await database.sql<ExistenceRow>`SELECT 1 FROM projects WHERE id = ${projectId} AND owner_id = ${userId}`;
   return rows.length > 0;
 }
