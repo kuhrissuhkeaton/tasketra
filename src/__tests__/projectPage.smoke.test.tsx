@@ -72,6 +72,13 @@ beforeEach(() => {
   consoleError = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
     errors.push(args.map((a) => (a instanceof Error ? `${a.message}\n${a.stack}` : String(a))).join(" "));
   });
+  // The api layer caches GET responses per URL in module memory, so a test
+  // that re-answers a URL an earlier test in this file already answered
+  // would silently receive the FIRST test's fixture (the v172 lesson;
+  // delight.component.test.tsx does the same). The Tasks-grouping and RACI
+  // tests below re-answer /api/tasks?projectId=, which the row-actions
+  // Tasks test above them answers first with undated tasks.
+  clearApiCache();
   host = document.createElement("div");
   document.body.appendChild(host);
 });

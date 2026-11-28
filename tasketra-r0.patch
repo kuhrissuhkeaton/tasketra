@@ -1,0 +1,367 @@
+diff --git a/.gitignore b/.gitignore
+index 172e2e7..7f08894 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -7,6 +7,11 @@ yarn-error.log*
+ pnpm-debug.log*
+ lerna-debug.log*
+ 
++# Secrets — never commit local env files (this repo is public)
++.env
++.env.*
++!.env.example
++
+ node_modules
+ dist
+ dist-ssr
+diff --git a/README.md b/README.md
+index d6af7e3..cce1808 100644
+--- a/README.md
++++ b/README.md
+@@ -1,32 +1,101 @@
+-# React + TypeScript + Vite
++# Tasketra
+ 
+-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
++Tasketra is project management software for independent and fractional project
++managers, and the consultants and small teams who run client projects — real
++project structure without enterprise bloat. One flat price per account
++(14-day free Pro trial, then $29/month), no per-seat pricing.
+ 
+-Currently, two official plugins are available:
++- Live app: https://app.tasketra.com (Netlify project `charter-pm-karissa2026`)
++- Marketing site: https://tasketra.com — a **different** repo (ProjectPMP) and a
++  different Netlify project. Never deploy this repo there.
+ 
+-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
+-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
++## Stack
+ 
+-## React Compiler
++- React 19 + TypeScript + Vite (app project: `tsconfig.app.json`, strict mode on)
++- Netlify Functions (82 serverless functions in `netlify/functions/`, project:
++  `tsconfig.functions.json`, strict mode on)
++- Netlify Database (Postgres) for data, Netlify Blobs + Backblaze B2 for files
++- Stripe for billing, Resend for email, Sentry for error reporting
++- Tests: Vitest (component, smoke, and integration suites under `src/__tests__/`)
+ 
+-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
++Architecture notes live in `docs/ARCHITECTURE.md`. Deploy, rollback, and
++recovery procedures live in `docs/RUNBOOK.md` — read it before shipping.
+ 
+-## Expanding the Oxlint configuration
++## Local setup
+ 
+-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
++```sh
++npm ci --no-bin-links   # on some VMs plain `npm ci` fails with EPERM chown;
++                        # --no-bin-links is the known-good install there
++npm run dev             # Vite dev server
++```
++
++Note: `netlify dev` on the maintainer's Mac currently dies with an EMFILE
++error while loading all 82 functions (see the runbook's known failure modes).
++The working pattern is: verify locally with the test suite + `tsc -b`, deploy,
++then run the verification pass against the live site.
++
++## Environment variables
++
++Names only — values live in the Netlify dashboard (site environment) and in
++the maintainer's password manager, never in this repo. `.env` files are
++gitignored; never commit one (this repo is public).
++
++| Variable | Used for |
++| --- | --- |
++| `SESSION_SECRET` | Signing session cookies. Required — the app fails loudly without it. |
++| `ADMIN_EMAIL` | The founder/admin account email. |
++| `STRIPE_SECRET_KEY` | Stripe API (server). |
++| `STRIPE_PUBLISHABLE_KEY` | Stripe publishable key served to the client. |
++| `STRIPE_WEBHOOK_SECRET` | Verifying Stripe webhook signatures. |
++| `STRIPE_PRICE_MONTHLY` / `STRIPE_PRICE_ANNUAL` | Pro price IDs. |
++| `RESEND_API_KEY` | Transactional email. |
++| `B2_ENDPOINT` / `B2_BUCKET_NAME` / `B2_APPLICATION_KEY_ID` / `B2_APPLICATION_KEY` | Backblaze B2 document storage. |
++| `NETLIFY_DB_URL` / `NETLIFY_DB_DRIVER` | Provided by Netlify Database. |
++| `FOUNDING_CAP` | Founding-member cap (optional; code default applies when unset). |
++| `EMAIL_DNS_CHECK` | Optional toggle for the signup email DNS check. |
++| `VITE_SENTRY_DSN` | Build-time Sentry DSN for the client bundle. |
++
++Functions snapshot environment variables at deploy time: after adding or
++changing a variable in the dashboard, redeploy before concluding it does not
++work.
+ 
+-```json
+-{
+-  "$schema": "./node_modules/oxlint/configuration_schema.json",
+-  "plugins": ["react", "typescript", "oxc"],
+-  "options": {
+-    "typeAware": true
+-  },
+-  "rules": {
+-    "react/rules-of-hooks": "error",
+-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
+-  }
+-}
++## Verifying a change (the manual gate — there is no CI)
++
++Two checks, run **sequentially**, and both must pass before a release is
++called verified:
++
++```sh
++node node_modules/typescript/bin/tsc -b   # NOT `tsc --noEmit`: the
++                                          # production build runs `tsc -b`,
++                                          # which enforces checks --noEmit
++                                          # misses (e.g. noUnusedLocals)
++npm test                                  # the FULL vitest suite
+ ```
+ 
+-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
++Rules that have bitten before, so they are written down:
++
++- **Never run two vitest invocations concurrently.** The integration suites
++  share local database setup; concurrent runs starve each other's hooks into
++  timeouts that look like failures. Run targeted suites first, then one full
++  sequential run.
++- **Only the full run's final tally counts.** A subset run (e.g. only the
++  unit tests) is not "all tests pass", and partial results that arrive while
++  the full run is still going are not the result. The suite grows with each
++  release, so always date the tally when you report it.
++- **The api layer caches GET responses per URL in module memory**
++  (`getCache` in `src/lib/api.ts`). Inside one test file, a later test that
++  re-answers the same URL with a different fixture silently gets the FIRST
++  test's cached response. A test that needs its own payload for an
++  already-used URL must call `clearApiCache()` (exported from `src/lib/api`)
++  first; component test files do this in `beforeEach`.
++
++## Shipping
++
++Deploys run **only from the maintainer's Mac**, one step at a time, each on
++her go-ahead. The full procedure — the three-block deploy flow, the rollback
++procedure with the migration guard, and the backup-restore entry — is in
++`docs/RUNBOOK.md`.
++
++Every user-facing release also gets a plain-language entry in
++`src/lib/whatsNewData.ts` (newest first). Pure hotfixes and internal hygiene
++releases (like R0) add no entry.
+diff --git a/docs/RUNBOOK.md b/docs/RUNBOOK.md
+new file mode 100644
+index 0000000..2c12d8c
+--- /dev/null
++++ b/docs/RUNBOOK.md
+@@ -0,0 +1,155 @@
++# Tasketra runbook — deploy, rollback, restore
++
++The operational procedures for app.tasketra.com. If you are reading this at
++2 a.m. because something broke, go straight to **Rollback**.
++
++Standing safety rule for every deploy: **code deploys do not touch the
++database.** Any release that carries a database migration must be flagged
++before deploy, and migrations are additive-only.
++
++## Deploy (production)
++
++Deploys run **only from the maintainer's Mac** (the repo checkout at
++`~/Downloads/tasketra-repo`), in three blocks, one at a time, each on her
++explicit go-ahead. Never bundle the blocks into one paste, and run each
++terminal block **once** — a duplicated patch application can partially
++reverse-apply.
++
++**Block 1 — fetch and check the patch**
++
++```sh
++cd ~/Downloads/tasketra-repo
++curl -L "<patch download URL>" -o <patch-file>
++wc -c <patch-file>            # must match the byte count in the release notes
++git apply --check <patch-file>   # silence means it applies cleanly
++```
++
++(Releases with binary files use `git apply`; older text-only releases used
++`patch -p1`. The release notes say which.)
++
++**Block 2 — apply, commit, push**
++
++```sh
++git apply <patch-file>
++git add -A
++git status --short            # eyeball the file list against the release notes
++git commit -m "vNNN: <release summary>"
++git push origin main
++```
++
++**Block 3 — deploy**
++
++```sh
++netlify status                # MUST name charter-pm-karissa2026 and
++                              # https://app.tasketra.com — see below
++unset NETLIFY_SITE_ID
++netlify deploy --prod
++```
++
++The `netlify status` check is not ceremony: on 2026-10-09 an app deploy went
++to the marketing site's project because the folder was linked to the wrong
++project. If status names anything else, stop and fix the link first:
++
++```sh
++netlify unlink
++netlify link --id 9f780a23-ee8d-4fee-b96f-dcace24db7ea
++netlify status                # confirm before deploying
++```
++
++**After the deploy**
++
++- Confirm the live bundle changed:
++  `curl -s https://app.tasketra.com/ | grep -o 'assets/[^"]*'`
++  and compare the bundle filename against the deploy output.
++- Run the post-deploy spot-check against the live app on the beta test
++  account: the surfaces the release touched, plus a visual spacing/formatting
++  pass (not just "does it work"). Only then is the release verified.
++
++## Rollback
++
++A rollback republishes an earlier deploy. It restores **code only** — it does
++not undo database migrations or data writes.
++
++1. Open the Netlify dashboard → project `charter-pm-karissa2026` → Deploys.
++2. Find the last known-good deploy and choose **Publish deploy**.
++3. Verify the live bundle changed (same curl check as above) and spot-check
++   the app.
++
++### The migration guard — read this before republishing anything
++
++Once a migration in `netlify/database/migrations/` has been applied to the
++production database, **Netlify refuses to publish any deploy that does not
++contain that migration file** — including rollback republishes of older
++deploys. The error reads like "migration … has been removed after being
++applied".
++
++Recovery, learned 2026-11-02:
++
++1. Recreate the migration file in `netlify/database/migrations/` with the
++   **same version_name** as the applied one.
++2. Deploy fresh from the repo (`netlify deploy --prod`) instead of
++   republishing the old deploy.
++
++### When rollback is safe, and when it is a decision
++
++- **Safe as a reflex:** the bad release was code-only (no migration, no data
++  writes). Republish the previous deploy.
++- **A decision, not a reflex:** the bad release included a migration or wrote
++  data in a new shape. Old code against a migrated database can misread or
++  corrupt the new data. Stop, assess what the migration changed, and choose
++  deliberately: roll forward with a fix, or pair the code rollback with a
++  data plan. Additive-only migrations are the standing rule precisely so old
++  code can usually keep running against the new schema — but "usually" is a
++  thing to verify, not assume.
++
++## Restore from backup
++
++**Status: entry point only — the restore rehearsal has not yet been run.**
++
++Backups exist (Netlify Database backups run daily and on every publish, plus
++Backblaze B2 storage), and backup files are manifest-verified — but a restore
++has never been rehearsed end to end, so today a restore is an unproven
++procedure, not a capability anyone should promise against.
++
++The tested restore rehearsal is **Gate 0** of the Step 1 Foundation Plan
++(plan §1.7): build/verify the importer against synthetic data in an isolated
++scratch environment with a throwaway `SESSION_SECRET`, attended by the
++maintainer, results reported as counts and pass/fail only (never data
++samples), scratch destroyed the same session. When Gate 0 has run, this
++section gets the full entry: importer path, steps, exclusions, and the
++measured restore duration, with the date last rehearsed.
++
++Backups are disaster recovery. They are **not** a member-facing undo service,
++and no restore promise is made to members on the strength of them.
++
++## Data changes in production
++
++- **Netlify's built-in AI agent is not a SQL console.** Asking it to change
++  production data made it apply the change as a formal migration and publish
++  its own deploy, which broke /api/* routing site-wide (~13 min outage,
++  2026-11-02). Data changes go through the Netlify/Neon dashboard SQL editor
++  (owner access) or a reviewed migration file in the repo — never the agent.
++- Both CLI connection strings are effectively read-only for the `users`
++  table; production data writes need the dashboard SQL editor or the app's
++  own functions.
++
++## Known failure modes
++
++- **The wrapper CLI's env commands lie.** `netlify env:get` / `env:list` have
++  reported existing production variables as "no value set", and `env:set`
++  has failed while the variable was in fact set correctly. Ground truth is
++  the direct API: `GET https://api.netlify.com/api/v1/sites/<site_id>/env`
++  with the stored auth token (values come back masked for secret-marked
++  vars; keys and contexts are accurate). And remember: functions snapshot
++  env vars at deploy time — redeploy after adding a variable.
++- **Draft deploys have a broken auth backend.** A draft deploy runs against
++  an isolated database branch and every login returns 500. Do not conclude a
++  release is broken from a draft deploy's login failure; the working pattern
++  is ship-then-verify-live with the previous deploy ready to republish as
++  the rollback.
++- **`netlify dev` on the Mac dies with EMFILE** while loading the 82
++  functions; raising `ulimit -n` to 8192 was not enough. Local verification
++  is the test suite + `tsc -b`, not `netlify dev`.
++- **`restoreSiteDeploy` via the API returned 422** for a CLI-created deploy;
++  the dashboard "Publish deploy" path is the reliable rollback route (subject
++  to the migration guard above).
+diff --git a/src/__tests__/appPages.smoke.test.tsx b/src/__tests__/appPages.smoke.test.tsx
+index a9984c5..287f135 100644
+--- a/src/__tests__/appPages.smoke.test.tsx
++++ b/src/__tests__/appPages.smoke.test.tsx
+@@ -28,6 +28,7 @@ import Billing from "../pages/Billing";
+ import { ApplyTemplateDrawer } from "../components/ApplyTemplateDrawer";
+ import { SaveTemplateDrawer } from "../components/SaveTemplateDrawer";
+ import { ConfirmProvider } from "../components/ConfirmDialog";
++import { clearApiCache } from "../lib/api";
+ 
+ let host: HTMLDivElement;
+ let root: Root;
+@@ -51,6 +52,13 @@ beforeEach(() => {
+   consoleError = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+     errors.push(args.map((a) => (a instanceof Error ? `${a.message}\n${a.stack}` : String(a))).join(" "));
+   });
++  // The api layer caches GET responses per URL in module memory, so a test
++  // that re-answers a URL an earlier test in this file already answered
++  // would silently receive the FIRST test's fixture (the v172 lesson;
++  // delight.component.test.tsx does the same). The apply-drawer test at the
++  // bottom of this file re-answers /api/user-templates, which the
++  // save-drawer tests above it answer first with an empty list.
++  clearApiCache();
+   host = document.createElement("div");
+   document.body.appendChild(host);
+ });
+diff --git a/src/__tests__/appTabs.test.tsx b/src/__tests__/appTabs.test.tsx
+deleted file mode 100644
+index e69de29..0000000
+diff --git a/src/__tests__/projectPage.smoke.test.tsx b/src/__tests__/projectPage.smoke.test.tsx
+index 9b68c05..a828e94 100644
+--- a/src/__tests__/projectPage.smoke.test.tsx
++++ b/src/__tests__/projectPage.smoke.test.tsx
+@@ -72,6 +72,13 @@ beforeEach(() => {
+   consoleError = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+     errors.push(args.map((a) => (a instanceof Error ? `${a.message}\n${a.stack}` : String(a))).join(" "));
+   });
++  // The api layer caches GET responses per URL in module memory, so a test
++  // that re-answers a URL an earlier test in this file already answered
++  // would silently receive the FIRST test's fixture (the v172 lesson;
++  // delight.component.test.tsx does the same). The Tasks-grouping and RACI
++  // tests below re-answer /api/tasks?projectId=, which the row-actions
++  // Tasks test above them answers first with undated tasks.
++  clearApiCache();
+   host = document.createElement("div");
+   document.body.appendChild(host);
+ });
+diff --git a/src/components/AppTabs.tsx b/src/components/AppTabs.tsx
+deleted file mode 100644
+index e69de29..0000000
+diff --git a/tsconfig.app.json b/tsconfig.app.json
+index 6830b6f..4fc48da 100644
+--- a/tsconfig.app.json
++++ b/tsconfig.app.json
+@@ -7,6 +7,7 @@
+     "types": ["vite/client"],
+     "allowArbitraryExtensions": true,
+     "skipLibCheck": true,
++    "strict": true,
+ 
+     /* Bundler mode */
+     "moduleResolution": "bundler",

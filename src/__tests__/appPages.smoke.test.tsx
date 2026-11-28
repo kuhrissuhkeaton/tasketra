@@ -28,6 +28,7 @@ import Billing from "../pages/Billing";
 import { ApplyTemplateDrawer } from "../components/ApplyTemplateDrawer";
 import { SaveTemplateDrawer } from "../components/SaveTemplateDrawer";
 import { ConfirmProvider } from "../components/ConfirmDialog";
+import { clearApiCache } from "../lib/api";
 
 let host: HTMLDivElement;
 let root: Root;
@@ -51,6 +52,13 @@ beforeEach(() => {
   consoleError = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
     errors.push(args.map((a) => (a instanceof Error ? `${a.message}\n${a.stack}` : String(a))).join(" "));
   });
+  // The api layer caches GET responses per URL in module memory, so a test
+  // that re-answers a URL an earlier test in this file already answered
+  // would silently receive the FIRST test's fixture (the v172 lesson;
+  // delight.component.test.tsx does the same). The apply-drawer test at the
+  // bottom of this file re-answers /api/user-templates, which the
+  // save-drawer tests above it answer first with an empty list.
+  clearApiCache();
   host = document.createElement("div");
   document.body.appendChild(host);
 });
