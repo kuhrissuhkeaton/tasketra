@@ -11,6 +11,23 @@ import { GlobalSearch } from "./GlobalSearch";
 import { PhoneBottomBar } from "./PhoneBottomBar";
 import { readSidebarCollapsed, writeSidebarCollapsed, readNavGroupCollapsed, writeNavGroupCollapsed } from "../lib/sidebarState";
 
+/** Phone-width media query, the QuickAddJump useMatch pattern: the Menu
+ * sheet's modal behaviour (R3-pre) attaches only while the sheet is the
+ * phone sheet, never to the desktop rail. */
+const PHONE_QUERY = "(max-width: 860px)";
+function usePhoneWidth(): boolean {
+  const [matches, setMatches] = useState(() => (typeof window !== "undefined" && window.matchMedia ? window.matchMedia(PHONE_QUERY).matches : false));
+  useEffect(() => {
+    if (!window.matchMedia) return;
+    const mq = window.matchMedia(PHONE_QUERY);
+    const on = () => setMatches(mq.matches);
+    on();
+    mq.addEventListener?.("change", on);
+    return () => mq.removeEventListener?.("change", on);
+  }, []);
+  return matches;
+}
+
 /** Collapsible nav section used by both the sidebar's own groups and
  * ProjectHome's project groups -- clicking the label toggles a chevron
  * and shows/hides the items below it. On phones the items always render
@@ -86,6 +103,12 @@ export function AppSidebar({ children }: { children?: ReactNode }) {
   // bar's Menu button opens (PhoneBottomBar).
   const [menuOpen, setMenuOpen] = useState(false);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const sheetRef = useRef<HTMLDivElement>(null);
+  // R3-pre: the sheet is a modal dialog only while it is open at phone
+  // width. On desktop the same .sidebar-body element is the rail
+  // (display:contents) and none of this attaches.
+  const phoneWidth = usePhoneWidth();
+  const sheetActive = menuOpen && phoneWidth;
   // Desktop only: tuck the sidebar down to a strip of icons. Remembered per browser.
   const [collapsed, setCollapsed] = useState<boolean>(() => readSidebarCollapsed());
   const asideRef = useRef<HTMLElement>(null);
@@ -132,6 +155,57 @@ export function AppSidebar({ children }: { children?: ReactNode }) {
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [menuOpen]);
+
+  // R3-pre: while the Menu sheet is open at phone width it behaves as the
+  // modal dialog it now declares itself to be -- the union of the Create
+  // sheet's pattern (PhoneBottomBar) and Modal.tsx's: the page behind is
+  // scroll-locked (with Modal's scrollbar compensation), focus moves into
+  // the sheet on open, Tab cycles inside it, and focus returns to the
+  // Menu button on close when it was inside the sheet. Escape stays with
+  // the effect above, exactly as it already behaved.
+  useEffect(() => {
+    if (!sheetActive) return;
+    const sheet = sheetRef.current;
+    const body = document.body;
+    const prevOverflow = body.style.overflow;
+    const prevPadding = body.style.paddingRight;
+    const barWidth = window.innerWidth - document.documentElement.clientWidth;
+    body.style.overflow = "hidden";
+    if (barWidth > 0) body.style.paddingRight = `${barWidth}px`;
+
+    const focusables = () =>
+      sheet
+        ? Array.from(
+            sheet.querySelectorAll<HTMLElement>(
+              'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+            ),
+          ).filter((el) => !el.closest("[hidden]"))
+        : [];
+    focusables()[0]?.focus();
+
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key !== "Tab") return;
+      const items = focusables();
+      if (items.length === 0) return;
+      const firstEl = items[0];
+      const lastEl = items[items.length - 1];
+      const active = document.activeElement;
+      if (e.shiftKey && (active === firstEl || !sheet?.contains(active))) {
+        e.preventDefault();
+        lastEl.focus();
+      } else if (!e.shiftKey && (active === lastEl || !sheet?.contains(active))) {
+        e.preventDefault();
+        firstEl.focus();
+      }
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      body.style.overflow = prevOverflow;
+      body.style.paddingRight = prevPadding;
+      if (sheet?.contains(document.activeElement)) menuButtonRef.current?.focus();
+    };
+  }, [sheetActive]);
 
   function toggleCollapsed() {
     setCollapsed((current) => {
@@ -212,10 +286,29 @@ export function AppSidebar({ children }: { children?: ReactNode }) {
 
       <GlobalSearch />
 
+      {/* R3-pre: while the sheet is open at phone width, a backdrop sits
+          behind it (above the page, below the sheet) and a tap on it
+          closes the sheet. It never renders on desktop. */}
+      {sheetActive && (
+        <div
+          className="menu-sheet-backdrop"
+          aria-hidden="true"
+          onMouseDown={(e) => { if (e.target === e.currentTarget) setMenuOpen(false); }}
+        />
+      )}
+
       {/* On phones this wrapper is the Menu sheet (fixed, above the bottom
           bar); on desktop it is display:contents and the rail lays out as
-          before. */}
-      <div className="sidebar-body">
+          before. While open at phone width it is presented as a modal
+          dialog (R3-pre); the dialog attributes attach only in that
+          state, so the desktop rail keeps its plain landmark structure. */}
+      <div
+        className="sidebar-body"
+        ref={sheetRef}
+        role={sheetActive ? "dialog" : undefined}
+        aria-modal={sheetActive ? true : undefined}
+        aria-label={sheetActive ? "Menu" : undefined}
+      >
       <nav className="side-nav" id="sidebar-nav" aria-label="Main">
         <Link to="/app/projects?new=1" className="sidebar-new-project" title="New project">
           <span aria-hidden="true" className="sidebar-new-plus">+</span>

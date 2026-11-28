@@ -3374,6 +3374,8 @@ a.dash-attention-next:hover { text-decoration: underline; text-underline-offset:
 /* The sidebar body wrapper is transparent on desktop: the rail lays out
    exactly as if the nav and footer were direct children of the aside. */
 .sidebar-body { display: contents; }
+/* R3-pre: the Menu sheet's backdrop exists only at phone width. */
+.menu-sheet-backdrop { display: none; }
 .phone-account-links { display: none; }
 .side-project-switcher { display: none; }
 
@@ -3420,6 +3422,17 @@ a.dash-attention-next:hover { text-decoration: underline; text-underline-offset:
      above it instead of under it. */
   .project-main { padding-bottom: calc(var(--phone-bar-height) + env(safe-area-inset-bottom, 0px) + 24px); }
   .quick-add-jump { bottom: calc(var(--phone-bar-height) + env(safe-area-inset-bottom, 0px) + 12px); }
+
+  /* R3-pre: the Menu sheet's backdrop -- the Create sheet's dim
+     (.phone-sheet-backdrop), but it ends where the sheet itself ends,
+     at the top of the bottom bar, so the bar and its Menu button stay
+     visible and tappable as the toggle. Below the sheet (z 55), above
+     the page. */
+  .menu-sheet-backdrop {
+    display: block; position: fixed; left: 0; right: 0; top: 0;
+    bottom: calc(var(--phone-bar-height) + env(safe-area-inset-bottom, 0px));
+    z-index: 54; background: rgba(28, 36, 21, 0.45);
+  }
 
   /* The Menu sheet: the sidebar body, fixed above the bottom bar. */
   .sidebar-body { display: none; }
@@ -3505,3 +3518,50 @@ a.dash-attention-next:hover { text-decoration: underline; text-underline-offset:
 /* Today: the Jump back in card. */
 .jump-back-in-name { margin: 0 0 8px; font-weight: 700; }
 .jump-back-in-links { display: flex; gap: 14px; flex-wrap: wrap; }
+
+/* --- R3-pre: quick win 9's phone target + input sweep ------------------
+   One ≤860px block; nothing here applies above phone width. Targets
+   grow by minimums and hit areas, never by restyling, and every text
+   field renders at 16px so iOS stops zooming the page on focus. */
+@media (max-width: 860px) {
+  /* Row "..." menus, the plain and page-head variants alike. */
+  .row-menu-btn { min-width: 44px; min-height: 44px; }
+  .page-head-actions .row-menu-btn { min-width: 44px; min-height: 44px; }
+
+  /* Dialog and drawer closes: a 44px hit area; the glyph is unchanged. */
+  .modal-close { min-width: 44px; min-height: 44px; }
+  .drawer-close { min-width: 44px; min-height: 44px; }
+
+  /* The project tab strip, held to the accessibility gate's 44px
+     standard for changed surfaces (Kk's decision, R3-pre package §3). */
+  .project-tab { min-height: 44px; }
+
+  /* Checkbox and radio hit areas, label-based (Kk's amendment to the
+     R3-pre package, option B): the drawn box stays 16px and untouched;
+     the wrapping label -- already the control's native click target --
+     becomes at least 44px tall, and in the flex rows that carry nearly
+     every checkbox in the app (.checkbox-row, .option-row, the inline
+     flex labels, all align-items: center) the control stays centred in
+     that area. The extension is the label's own box -- the pattern the
+     Menu sheet proves, minimums on the control's context -- so stacked
+     rows tile instead of overlapping each other's targets. Two things
+     are deliberately NOT covered here: standalone checkboxes with no
+     wrapping label (the meeting action items in ProjectHome) and the
+     segmented setup pills (.setup-seg-item, a button-like target);
+     both route to the R3 gate's group D log with .btn and .btn-link. */
+  label:not(.setup-seg-item):has(> input[type="checkbox"]),
+  label:not(.setup-seg-item):has(> input[type="radio"]) { min-height: 44px; }
+
+  /* Inputs at 16px: the global rule, plus every component override a
+     plain element rule in this block would silently miss. */
+  input, textarea, select { font-size: 16px; }
+  .phone-quickadd input[type="text"], .phone-quickadd select { font-size: 16px; }
+  .side-project-switcher select { font-size: 16px; }
+  .first-run-name input { font-size: 16px; }
+  .pw-rename input { font-size: 16px; }
+  .pw-search input { font-size: 16px; }
+  .sync-bullet-input { font-size: 16px; }
+  .today-list-row .status-select { font-size: 16px; }
+  /* Font only: this field's 32px minimum height is a named exclusion. */
+  .tw-date input { font-size: 16px; }
+}

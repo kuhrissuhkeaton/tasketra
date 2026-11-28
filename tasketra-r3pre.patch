@@ -1,0 +1,476 @@
+diff --git a/src/__tests__/appSidebarMenuSheet.test.tsx b/src/__tests__/appSidebarMenuSheet.test.tsx
+new file mode 100644
+index 0000000..c12b580
+--- /dev/null
++++ b/src/__tests__/appSidebarMenuSheet.test.tsx
+@@ -0,0 +1,154 @@
++// @vitest-environment jsdom
++//
++// R3-pre: the phone Menu sheet as a modal dialog. At phone width the open
++// sheet gains the union of the Create sheet's and Modal.tsx's patterns --
++// backdrop with tap-to-close, dialog semantics, focus in on open, a Tab
++// trap, a body scroll-lock, focus back to the Menu button on close --
++// while on desktop the same .sidebar-body element stays the plain rail:
++// no dialog attributes, no backdrop, no lock (the regression guard).
++import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
++import { createRoot, type Root } from "react-dom/client";
++import { act } from "react";
++import { MemoryRouter } from "react-router-dom";
++import type { User } from "../lib/api";
++
++let currentUser: User;
++vi.mock("../lib/auth-context", () => ({
++  useAuth: () => ({ user: currentUser, loading: false, refresh: async () => {}, logout: async () => {} }),
++  AuthProvider: ({ children }: { children: unknown }) => children,
++}));
++vi.mock("../lib/api", async (importOriginal) => {
++  const orig = await importOriginal<typeof import("../lib/api")>();
++  return {
++    ...orig,
++    api: {
++      ...orig.api,
++      getPortfolio: async () => ({ openDecisions: [] }),
++      getNotifications: async () => [],
++    },
++  };
++});
++
++import { AppSidebar } from "../components/AppSidebar";
++
++let phoneMatches = true;
++let container: HTMLDivElement;
++let root: Root;
++
++beforeAll(() => { (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true; });
++beforeEach(() => {
++  (window as any).matchMedia = (q: string) => ({
++    matches: q === "(max-width: 860px)" ? phoneMatches : false,
++    media: q,
++    addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {},
++    onchange: null, dispatchEvent: () => false,
++  });
++  container = document.createElement("div");
++  document.body.appendChild(container);
++  root = createRoot(container);
++});
++afterEach(() => {
++  act(() => root.unmount());
++  container.remove();
++  delete (window as any).matchMedia;
++  document.body.style.overflow = "";
++  document.body.style.paddingRight = "";
++});
++
++async function render() {
++  currentUser = { id: "u1", email: "a@x.co", plan: "free" } as User;
++  await act(async () => {
++    root.render(<MemoryRouter initialEntries={["/app"]}><AppSidebar /></MemoryRouter>);
++  });
++  await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
++}
++
++const menuButton = () => container.querySelector<HTMLButtonElement>('.phone-bottom-bar button[aria-controls="sidebar-nav"]')!;
++const sheetBody = () => container.querySelector(".sidebar-body")!;
++const backdrop = () => container.querySelector(".menu-sheet-backdrop");
++const sheetFocusables = () => [...sheetBody().querySelectorAll<HTMLElement>(
++  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
++)].filter((el) => !el.closest("[hidden]"));
++
++async function openSheet() {
++  await act(async () => { menuButton().click(); });
++  await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
++}
++
++function keydown(init: KeyboardEventInit) {
++  document.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, ...init }));
++}
++
++describe("Menu sheet at phone width (R3-pre)", () => {
++  beforeEach(() => { phoneMatches = true; });
++
++  it("presents the open sheet as a modal dialog with a backdrop, and locks body scroll", async () => {
++    await render();
++    expect(backdrop()).toBeNull();
++    expect(sheetBody().getAttribute("role")).toBeNull();
++    await openSheet();
++    expect(sheetBody().getAttribute("role")).toBe("dialog");
++    expect(sheetBody().getAttribute("aria-modal")).toBe("true");
++    expect(sheetBody().getAttribute("aria-label")).toBe("Menu");
++    expect(backdrop()).not.toBeNull();
++    expect(document.body.style.overflow).toBe("hidden");
++  });
++
++  it("moves focus into the sheet on open", async () => {
++    await render();
++    await openSheet();
++    const first = sheetFocusables()[0];
++    expect(first.getAttribute("href")).toBe("/app/projects?new=1");
++    expect(document.activeElement).toBe(first);
++  });
++
++  it("keeps Tab and Shift-Tab cycling inside the sheet", async () => {
++    await render();
++    await openSheet();
++    const items = sheetFocusables();
++    const first = items[0];
++    const last = items[items.length - 1];
++    await act(async () => { last.focus(); });
++    await act(async () => { keydown({ key: "Tab" }); });
++    expect(document.activeElement).toBe(first);
++    await act(async () => { keydown({ key: "Tab", shiftKey: true }); });
++    expect(document.activeElement).toBe(last);
++  });
++
++  it("closes on a backdrop tap and restores body scroll", async () => {
++    await render();
++    await openSheet();
++    const bd = backdrop()!;
++    await act(async () => {
++      bd.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
++    });
++    await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
++    expect(backdrop()).toBeNull();
++    expect(sheetBody().getAttribute("role")).toBeNull();
++    expect(document.body.style.overflow).toBe("");
++  });
++
++  it("Escape still closes the sheet and returns focus to the Menu button", async () => {
++    await render();
++    await openSheet();
++    expect(document.activeElement).not.toBe(menuButton());
++    await act(async () => { keydown({ key: "Escape" }); });
++    await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
++    expect(backdrop()).toBeNull();
++    expect(document.activeElement).toBe(menuButton());
++    expect(document.body.style.overflow).toBe("");
++  });
++});
++
++describe("the same sidebar on desktop (R3-pre regression guard)", () => {
++  beforeEach(() => { phoneMatches = false; });
++
++  it("never becomes a modal: no dialog attributes, no backdrop, no scroll-lock", async () => {
++    await render();
++    await openSheet();
++    expect(sheetBody().getAttribute("role")).toBeNull();
++    expect(sheetBody().getAttribute("aria-modal")).toBeNull();
++    expect(backdrop()).toBeNull();
++    expect(document.body.style.overflow).toBe("");
++  });
++});
+diff --git a/src/__tests__/r3preSweep.test.ts b/src/__tests__/r3preSweep.test.ts
+new file mode 100644
+index 0000000..bcb2e5a
+--- /dev/null
++++ b/src/__tests__/r3preSweep.test.ts
+@@ -0,0 +1,97 @@
++// R3-pre: quick win 9's phone sweep, pinned as CSS assertions in the
++// dashboardPolishD pattern. The sweep lives in one ≤860px block at the
++// end of index.css; the base (desktop) rules must keep their old values.
++import { describe, it, expect } from "vitest";
++
++async function readCss(): Promise<string> {
++  // @ts-ignore node builtin: the app tsconfig has no node types, vitest runs in node
++  const { readFileSync } = await import("node:fs");
++  return readFileSync("src/index.css", "utf8");
++}
++
++/** The R3-pre sweep block: from its header comment to end of file. */
++async function sweepBlock(): Promise<string> {
++  const css = await readCss();
++  const start = css.indexOf("R3-pre: quick win 9");
++  expect(start).toBeGreaterThan(-1);
++  return css.slice(start);
++}
++
++describe("R3-pre sweep targets (≤860px block)", () => {
++  it("raises both row-menu variants to 44px minimums", async () => {
++    const block = await sweepBlock();
++    expect(block).toMatch(/\.row-menu-btn \{ min-width: 44px; min-height: 44px; \}/);
++    expect(block).toMatch(/\.page-head-actions \.row-menu-btn \{ min-width: 44px; min-height: 44px; \}/);
++  });
++
++  it("gives the dialog and drawer closes a 44px hit area", async () => {
++    const block = await sweepBlock();
++    expect(block).toMatch(/\.modal-close \{ min-width: 44px; min-height: 44px; \}/);
++    expect(block).toMatch(/\.drawer-close \{ min-width: 44px; min-height: 44px; \}/);
++  });
++
++  it("holds the project tab strip to the 44px standard", async () => {
++    const block = await sweepBlock();
++    expect(block).toMatch(/\.project-tab \{ min-height: 44px; \}/);
++  });
++
++  it("extends checkbox/radio hit areas through the wrapping label only", async () => {
++    const block = await sweepBlock();
++    expect(block).toMatch(
++      /label:not\(\.setup-seg-item\):has\(> input\[type="checkbox"\]\),\s*label:not\(\.setup-seg-item\):has\(> input\[type="radio"\]\) \{ min-height: 44px; \}/,
++    );
++    // The amendment's prohibitions, pinned: no pseudo-element on the
++    // input itself, no appearance restyle, anywhere in the stylesheet.
++    const css = await readCss();
++    expect(css).not.toMatch(/input\[type="(?:checkbox|radio)"\]::/);
++    expect(css).not.toMatch(/input\[type="(?:checkbox|radio)"\][^{]*\{[^}]*appearance:\s*none/);
++  });
++
++  it("moves every input to 16px, naming each override", async () => {
++    const block = await sweepBlock();
++    expect(block).toMatch(/input, textarea, select \{ font-size: 16px; \}/);
++    expect(block).toMatch(/\.phone-quickadd input\[type="text"\], \.phone-quickadd select \{ font-size: 16px; \}/);
++    expect(block).toMatch(/\.side-project-switcher select \{ font-size: 16px; \}/);
++    expect(block).toMatch(/\.first-run-name input \{ font-size: 16px; \}/);
++    expect(block).toMatch(/\.pw-rename input \{ font-size: 16px; \}/);
++    expect(block).toMatch(/\.pw-search input \{ font-size: 16px; \}/);
++    expect(block).toMatch(/\.sync-bullet-input \{ font-size: 16px; \}/);
++    expect(block).toMatch(/\.today-list-row \.status-select \{ font-size: 16px; \}/);
++    // The date field: font only -- its 32px height stays untouched.
++    expect(block).toMatch(/\.tw-date input \{ font-size: 16px; \}/);
++    expect(block).not.toMatch(/\.tw-date input \{[^}]*min-height/);
++  });
++
++  it("leaves the exclusions alone: no .btn or .btn-link sizing in the block", async () => {
++    const block = await sweepBlock();
++    expect(block).not.toMatch(/\.btn-link\s*\{/);
++    expect(block).not.toMatch(/\.btn\s*\{/);
++  });
++});
++
++describe("R3-pre Menu sheet backdrop (CSS)", () => {
++  it("is display:none by default and a dimmed above-the-bar layer at ≤860px", async () => {
++    const css = await readCss();
++    expect(css).toContain(".menu-sheet-backdrop { display: none; }");
++    // The in-media rule is the second .menu-sheet-backdrop rule in the
++    // file (the first is the display:none default above).
++    const start = css.lastIndexOf(".menu-sheet-backdrop {");
++    expect(start).toBeGreaterThan(-1);
++    const rule = css.slice(start, css.indexOf("}", start));
++    expect(rule).toContain("position: fixed");
++    expect(rule).toContain("bottom: calc(var(--phone-bar-height)");
++    expect(rule).toContain("z-index: 54");
++    expect(rule).toContain("background: rgba(28, 36, 21, 0.45)");
++  });
++});
++
++describe("desktop values are unchanged (the sweep is ≤860px only)", () => {
++  it("keeps the base rules at their pre-R3-pre values", async () => {
++    const css = await readCss();
++    expect(css).toMatch(/\.row-menu-btn \{ min-width: 28px; min-height: 28px;/);
++    expect(css).toMatch(/\.page-head-actions \.row-menu-btn \{ min-width: 36px; min-height: 36px;/);
++    expect(css).toMatch(/\.project-tab \{\s*flex: none; min-height: 32px;/);
++    expect(css).toMatch(/input, textarea, select \{[^}]*font-size: 14px;/);
++    expect(css).toMatch(/input\[type="checkbox"\], input\[type="radio"\] \{\s*width: 16px;/);
++  });
++});
+diff --git a/src/components/AppSidebar.tsx b/src/components/AppSidebar.tsx
+index fe38a15..7cfa41f 100644
+--- a/src/components/AppSidebar.tsx
++++ b/src/components/AppSidebar.tsx
+@@ -11,6 +11,23 @@ import { GlobalSearch } from "./GlobalSearch";
+ import { PhoneBottomBar } from "./PhoneBottomBar";
+ import { readSidebarCollapsed, writeSidebarCollapsed, readNavGroupCollapsed, writeNavGroupCollapsed } from "../lib/sidebarState";
+ 
++/** Phone-width media query, the QuickAddJump useMatch pattern: the Menu
++ * sheet's modal behaviour (R3-pre) attaches only while the sheet is the
++ * phone sheet, never to the desktop rail. */
++const PHONE_QUERY = "(max-width: 860px)";
++function usePhoneWidth(): boolean {
++  const [matches, setMatches] = useState(() => (typeof window !== "undefined" && window.matchMedia ? window.matchMedia(PHONE_QUERY).matches : false));
++  useEffect(() => {
++    if (!window.matchMedia) return;
++    const mq = window.matchMedia(PHONE_QUERY);
++    const on = () => setMatches(mq.matches);
++    on();
++    mq.addEventListener?.("change", on);
++    return () => mq.removeEventListener?.("change", on);
++  }, []);
++  return matches;
++}
++
+ /** Collapsible nav section used by both the sidebar's own groups and
+  * ProjectHome's project groups -- clicking the label toggles a chevron
+  * and shows/hides the items below it. On phones the items always render
+@@ -86,6 +103,12 @@ export function AppSidebar({ children }: { children?: ReactNode }) {
+   // bar's Menu button opens (PhoneBottomBar).
+   const [menuOpen, setMenuOpen] = useState(false);
+   const menuButtonRef = useRef<HTMLButtonElement>(null);
++  const sheetRef = useRef<HTMLDivElement>(null);
++  // R3-pre: the sheet is a modal dialog only while it is open at phone
++  // width. On desktop the same .sidebar-body element is the rail
++  // (display:contents) and none of this attaches.
++  const phoneWidth = usePhoneWidth();
++  const sheetActive = menuOpen && phoneWidth;
+   // Desktop only: tuck the sidebar down to a strip of icons. Remembered per browser.
+   const [collapsed, setCollapsed] = useState<boolean>(() => readSidebarCollapsed());
+   const asideRef = useRef<HTMLElement>(null);
+@@ -133,6 +156,57 @@ export function AppSidebar({ children }: { children?: ReactNode }) {
+     return () => document.removeEventListener("keydown", onKey);
+   }, [menuOpen]);
+ 
++  // R3-pre: while the Menu sheet is open at phone width it behaves as the
++  // modal dialog it now declares itself to be -- the union of the Create
++  // sheet's pattern (PhoneBottomBar) and Modal.tsx's: the page behind is
++  // scroll-locked (with Modal's scrollbar compensation), focus moves into
++  // the sheet on open, Tab cycles inside it, and focus returns to the
++  // Menu button on close when it was inside the sheet. Escape stays with
++  // the effect above, exactly as it already behaved.
++  useEffect(() => {
++    if (!sheetActive) return;
++    const sheet = sheetRef.current;
++    const body = document.body;
++    const prevOverflow = body.style.overflow;
++    const prevPadding = body.style.paddingRight;
++    const barWidth = window.innerWidth - document.documentElement.clientWidth;
++    body.style.overflow = "hidden";
++    if (barWidth > 0) body.style.paddingRight = `${barWidth}px`;
++
++    const focusables = () =>
++      sheet
++        ? Array.from(
++            sheet.querySelectorAll<HTMLElement>(
++              'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
++            ),
++          ).filter((el) => !el.closest("[hidden]"))
++        : [];
++    focusables()[0]?.focus();
++
++    function onKeyDown(e: KeyboardEvent) {
++      if (e.key !== "Tab") return;
++      const items = focusables();
++      if (items.length === 0) return;
++      const firstEl = items[0];
++      const lastEl = items[items.length - 1];
++      const active = document.activeElement;
++      if (e.shiftKey && (active === firstEl || !sheet?.contains(active))) {
++        e.preventDefault();
++        lastEl.focus();
++      } else if (!e.shiftKey && (active === lastEl || !sheet?.contains(active))) {
++        e.preventDefault();
++        firstEl.focus();
++      }
++    }
++    document.addEventListener("keydown", onKeyDown);
++    return () => {
++      document.removeEventListener("keydown", onKeyDown);
++      body.style.overflow = prevOverflow;
++      body.style.paddingRight = prevPadding;
++      if (sheet?.contains(document.activeElement)) menuButtonRef.current?.focus();
++    };
++  }, [sheetActive]);
++
+   function toggleCollapsed() {
+     setCollapsed((current) => {
+       const next = !current;
+@@ -212,10 +286,29 @@ export function AppSidebar({ children }: { children?: ReactNode }) {
+ 
+       <GlobalSearch />
+ 
++      {/* R3-pre: while the sheet is open at phone width, a backdrop sits
++          behind it (above the page, below the sheet) and a tap on it
++          closes the sheet. It never renders on desktop. */}
++      {sheetActive && (
++        <div
++          className="menu-sheet-backdrop"
++          aria-hidden="true"
++          onMouseDown={(e) => { if (e.target === e.currentTarget) setMenuOpen(false); }}
++        />
++      )}
++
+       {/* On phones this wrapper is the Menu sheet (fixed, above the bottom
+           bar); on desktop it is display:contents and the rail lays out as
+-          before. */}
+-      <div className="sidebar-body">
++          before. While open at phone width it is presented as a modal
++          dialog (R3-pre); the dialog attributes attach only in that
++          state, so the desktop rail keeps its plain landmark structure. */}
++      <div
++        className="sidebar-body"
++        ref={sheetRef}
++        role={sheetActive ? "dialog" : undefined}
++        aria-modal={sheetActive ? true : undefined}
++        aria-label={sheetActive ? "Menu" : undefined}
++      >
+       <nav className="side-nav" id="sidebar-nav" aria-label="Main">
+         <Link to="/app/projects?new=1" className="sidebar-new-project" title="New project">
+           <span aria-hidden="true" className="sidebar-new-plus">+</span>
+diff --git a/src/index.css b/src/index.css
+index 2380ca7..f58c8ec 100644
+--- a/src/index.css
++++ b/src/index.css
+@@ -3374,6 +3374,8 @@ a.dash-attention-next:hover { text-decoration: underline; text-underline-offset:
+ /* The sidebar body wrapper is transparent on desktop: the rail lays out
+    exactly as if the nav and footer were direct children of the aside. */
+ .sidebar-body { display: contents; }
++/* R3-pre: the Menu sheet's backdrop exists only at phone width. */
++.menu-sheet-backdrop { display: none; }
+ .phone-account-links { display: none; }
+ .side-project-switcher { display: none; }
+ 
+@@ -3421,6 +3423,17 @@ a.dash-attention-next:hover { text-decoration: underline; text-underline-offset:
+   .project-main { padding-bottom: calc(var(--phone-bar-height) + env(safe-area-inset-bottom, 0px) + 24px); }
+   .quick-add-jump { bottom: calc(var(--phone-bar-height) + env(safe-area-inset-bottom, 0px) + 12px); }
+ 
++  /* R3-pre: the Menu sheet's backdrop -- the Create sheet's dim
++     (.phone-sheet-backdrop), but it ends where the sheet itself ends,
++     at the top of the bottom bar, so the bar and its Menu button stay
++     visible and tappable as the toggle. Below the sheet (z 55), above
++     the page. */
++  .menu-sheet-backdrop {
++    display: block; position: fixed; left: 0; right: 0; top: 0;
++    bottom: calc(var(--phone-bar-height) + env(safe-area-inset-bottom, 0px));
++    z-index: 54; background: rgba(28, 36, 21, 0.45);
++  }
++
+   /* The Menu sheet: the sidebar body, fixed above the bottom bar. */
+   .sidebar-body { display: none; }
+   .sidebar.sidebar-open .sidebar-body {
+@@ -3505,3 +3518,50 @@ a.dash-attention-next:hover { text-decoration: underline; text-underline-offset:
+ /* Today: the Jump back in card. */
+ .jump-back-in-name { margin: 0 0 8px; font-weight: 700; }
+ .jump-back-in-links { display: flex; gap: 14px; flex-wrap: wrap; }
++
++/* --- R3-pre: quick win 9's phone target + input sweep ------------------
++   One ≤860px block; nothing here applies above phone width. Targets
++   grow by minimums and hit areas, never by restyling, and every text
++   field renders at 16px so iOS stops zooming the page on focus. */
++@media (max-width: 860px) {
++  /* Row "..." menus, the plain and page-head variants alike. */
++  .row-menu-btn { min-width: 44px; min-height: 44px; }
++  .page-head-actions .row-menu-btn { min-width: 44px; min-height: 44px; }
++
++  /* Dialog and drawer closes: a 44px hit area; the glyph is unchanged. */
++  .modal-close { min-width: 44px; min-height: 44px; }
++  .drawer-close { min-width: 44px; min-height: 44px; }
++
++  /* The project tab strip, held to the accessibility gate's 44px
++     standard for changed surfaces (Kk's decision, R3-pre package §3). */
++  .project-tab { min-height: 44px; }
++
++  /* Checkbox and radio hit areas, label-based (Kk's amendment to the
++     R3-pre package, option B): the drawn box stays 16px and untouched;
++     the wrapping label -- already the control's native click target --
++     becomes at least 44px tall, and in the flex rows that carry nearly
++     every checkbox in the app (.checkbox-row, .option-row, the inline
++     flex labels, all align-items: center) the control stays centred in
++     that area. The extension is the label's own box -- the pattern the
++     Menu sheet proves, minimums on the control's context -- so stacked
++     rows tile instead of overlapping each other's targets. Two things
++     are deliberately NOT covered here: standalone checkboxes with no
++     wrapping label (the meeting action items in ProjectHome) and the
++     segmented setup pills (.setup-seg-item, a button-like target);
++     both route to the R3 gate's group D log with .btn and .btn-link. */
++  label:not(.setup-seg-item):has(> input[type="checkbox"]),
++  label:not(.setup-seg-item):has(> input[type="radio"]) { min-height: 44px; }
++
++  /* Inputs at 16px: the global rule, plus every component override a
++     plain element rule in this block would silently miss. */
++  input, textarea, select { font-size: 16px; }
++  .phone-quickadd input[type="text"], .phone-quickadd select { font-size: 16px; }
++  .side-project-switcher select { font-size: 16px; }
++  .first-run-name input { font-size: 16px; }
++  .pw-rename input { font-size: 16px; }
++  .pw-search input { font-size: 16px; }
++  .sync-bullet-input { font-size: 16px; }
++  .today-list-row .status-select { font-size: 16px; }
++  /* Font only: this field's 32px minimum height is a named exclusion. */
++  .tw-date input { font-size: 16px; }
++}
