@@ -23,13 +23,13 @@ export default withSentry(async (req: Request) => {
   const emailOk = await checkRateLimit(database, `login:email:${email}`, 8, 15);
   if (!ipOk || !emailOk) return json(TOO_MANY, { status: 429 });
 
-  const [user] = await database.sql`SELECT id, email, password_hash FROM users WHERE email = ${email}`;
+  const [user] = await database.sql`SELECT id, email, password_hash, session_version FROM users WHERE email = ${email}`;
   if (!user) return json({ error: "Incorrect email or password." }, { status: 401 });
 
   const valid = await verifyPassword(password, user.password_hash);
   if (!valid) return json({ error: "Incorrect email or password." }, { status: 401 });
 
-  const cookie = createSessionCookie(user.id);
+  const cookie = createSessionCookie(user.id, user.session_version);
   return json({ user: { id: user.id, email: user.email } }, { status: 200, headers: { "set-cookie": cookie } });
 });
 

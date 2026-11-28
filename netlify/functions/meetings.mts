@@ -16,7 +16,7 @@ const MEETING_FIELDS = [
 ];
 
 export default withSentry(async (req: Request) => {
-  const userId = getUserIdFromRequest(req);
+  const userId = await getUserIdFromRequest(req);
   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
   const database = db();
   const url = new URL(req.url);

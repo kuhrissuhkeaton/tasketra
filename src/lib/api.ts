@@ -1763,6 +1763,11 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify({ action: "change-password", currentPassword, newPassword }),
     }),
+  signOutEverywhere: () =>
+    request<{ ok: true }>("/account", {
+      method: "PATCH",
+      body: JSON.stringify({ action: "sign-out-everywhere" }),
+    }),
   completeTour: () =>
     request<{ ok: true }>("/account", {
       method: "PATCH",

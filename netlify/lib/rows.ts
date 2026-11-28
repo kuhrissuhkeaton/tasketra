@@ -28,6 +28,13 @@ export type UserFoundingMemberRow = {
   founding_member: boolean;
 };
 
+/** auth.getUserIdFromRequest / auth.bumpSessionVersion (R2, plan §5.4):
+ *  SELECT session_version FROM users WHERE id = ?, and the same column
+ *  RETURNING from the increment UPDATE. */
+export type UserSessionVersionRow = {
+  session_version: number;
+};
+
 /** A bare existence probe (ownership.ts): SELECT 1 FROM projects, UNIONed
  *  with SELECT 1 FROM project_members. Postgres names the column "?column?";
  *  callers only read rows.length. */

@@ -12,7 +12,7 @@ import { sanitizeCharter } from "../lib/charter.ts";
 import { sanitizeTolerances } from "../lib/tolerances.ts";
 
 export default withSentry(async (req: Request) => {
-  const userId = getUserIdFromRequest(req);
+  const userId = await getUserIdFromRequest(req);
   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
 
   const database = db();

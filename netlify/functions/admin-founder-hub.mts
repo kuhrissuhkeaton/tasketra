@@ -88,7 +88,7 @@ const USAGE_SECTIONS: { section: string; entityTypes: string[] }[] = [
 const UNLOGGED_SECTIONS = ["Budget", "Charter", "RACI", "Weekly report", "Templates", "Export", "Connections", "Trash"];
 
 export default withSentry(async (req: Request) => {
-  const userId = getUserIdFromRequest(req);
+  const userId = await getUserIdFromRequest(req);
   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
   if (req.method !== "GET") return json({ error: "Method not allowed" }, { status: 405 });
   const database = db();

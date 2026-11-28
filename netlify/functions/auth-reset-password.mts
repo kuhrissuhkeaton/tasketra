@@ -40,9 +40,13 @@ export default withSentry(async (req: Request) => {
   }
 
   const passwordHash = await hashPassword(password);
+  // The reset also retires every existing session (plan §5.4): the version
+  // bump happens in the same update as the password change, and the fresh
+  // cookie below is issued at the new version, so this device signs in
+  // while every other session dies at its next request.
   const [user] = await database.sql`
-    UPDATE users SET password_hash = ${passwordHash} WHERE id = ${record.user_id}
-    RETURNING id, email
+    UPDATE users SET password_hash = ${passwordHash}, session_version = session_version + 1 WHERE id = ${record.user_id}
+    RETURNING id, email, session_version
   `;
 
   await database.sql`UPDATE password_reset_tokens SET used_at = now() WHERE id = ${record.id}`;
@@ -55,7 +59,7 @@ export default withSentry(async (req: Request) => {
   // Getting the reset email proves they can read mail at this address.
   await markEmailVerified(database, user.id);
 
-  const cookie = createSessionCookie(user.id);
+  const cookie = createSessionCookie(user.id, user.session_version);
   return json({ user: { id: user.id, email: user.email } }, { headers: { "set-cookie": cookie } });
 });
 

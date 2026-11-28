@@ -1,7 +1,7 @@
 import type { Config } from "@netlify/functions";
 import { db } from "../lib/db.ts";
 import { getUserIdFromRequest } from "../lib/auth.ts";
-import { hashPassword, verifyPassword } from "../lib/auth.ts";
+import { bumpSessionVersion, createSessionCookie, hashPassword, verifyPassword } from "../lib/auth.ts";
 import { json } from "../lib/http.ts";
 import { withSentry } from "../lib/sentry.ts";
 import { canonicalEmail, normalizeEmail, validatePassword } from "../lib/accountRules.ts";
@@ -11,7 +11,7 @@ import { isEmailVerified, issueVerificationEmail } from "../lib/emailVerificatio
 import { pgErrorCode } from "../lib/pgError.ts";
 
 export default withSentry(async (req: Request) => {
-  const userId = getUserIdFromRequest(req);
+  const userId = await getUserIdFromRequest(req);
   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
   const database = db();
 
@@ -31,7 +31,20 @@ export default withSentry(async (req: Request) => {
       }
       const newHash = await hashPassword(newPassword);
       await database.sql`UPDATE users SET password_hash = ${newHash} WHERE id = ${userId}`;
-      return json({ ok: true });
+      // Changing the password signs out every other device (plan §5.4):
+      // bump the session version, then re-issue THIS device's cookie at
+      // the new version so the person changing it stays signed in.
+      const newVersion = await bumpSessionVersion(database, userId);
+      return json({ ok: true }, { headers: { "set-cookie": createSessionCookie(userId, newVersion) } });
+    }
+
+    // "Sign out everywhere" (plan §5.4 / SR-4.1): the lost-device answer.
+    // Same mechanism as the password change, without changing the
+    // password -- every other session dies at its next request, and this
+    // device is re-issued at the new version so it stays signed in.
+    if (body?.action === "sign-out-everywhere") {
+      const newVersion = await bumpSessionVersion(database, userId);
+      return json({ ok: true }, { headers: { "set-cookie": createSessionCookie(userId, newVersion) } });
     }
 
     // Fixes a mistyped address on an account that hasn't confirmed its email

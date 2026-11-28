@@ -1,0 +1,1661 @@
+diff --git a/netlify/database/migrations/20261128120000_add_session_version/migration.sql b/netlify/database/migrations/20261128120000_add_session_version/migration.sql
+new file mode 100644
+index 0000000..572cf14
+--- /dev/null
++++ b/netlify/database/migrations/20261128120000_add_session_version/migration.sql
+@@ -0,0 +1,9 @@
++-- Session revocation (Step 1 Foundation Plan §5.4, release R2): every
++-- session cookie now carries the account's session_version, and the server
++-- checks it on every authenticated request. Changing a password, resetting
++-- it, or using "Sign out everywhere" increments the version, which retires
++-- every cookie issued at the old version at its next request.
++--
++-- One additive column with a constant default: every existing account
++-- starts at 0, no data is rewritten, and nothing else in the schema moves.
++ALTER TABLE users ADD COLUMN session_version INTEGER NOT NULL DEFAULT 0;
+diff --git a/netlify/functions/__tests__/fixtures.ts b/netlify/functions/__tests__/fixtures.ts
+index c800666..f838c87 100644
+--- a/netlify/functions/__tests__/fixtures.ts
++++ b/netlify/functions/__tests__/fixtures.ts
+@@ -15,7 +15,7 @@ export async function createTestUser(
+     VALUES (${email}, ${passwordHash}, ${opts.foundingMember ?? false}, ${opts.verified === false ? null : new Date().toISOString()})
+     RETURNING id
+   `;
+-  const cookie = createSessionCookie(user.id).split(";")[0]; // "tasketra_session=..."
++  const cookie = createSessionCookie(user.id, 0).split(";")[0]; // "tasketra_session=..." (fresh accounts sit at session_version 0)
+   return { id: user.id, email, cookie };
+ }
+ 
+diff --git a/netlify/functions/__tests__/session-revocation.integration.test.ts b/netlify/functions/__tests__/session-revocation.integration.test.ts
+new file mode 100644
+index 0000000..a0c2052
+--- /dev/null
++++ b/netlify/functions/__tests__/session-revocation.integration.test.ts
+@@ -0,0 +1,167 @@
++import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from "vitest";
++import crypto from "node:crypto";
++import { setupTestDb, teardownTestDb, resetTestDb } from "../../lib/__tests__/testDb.ts";
++import accountHandler from "../account.mts";
++import resetPasswordHandler from "../auth-reset-password.mts";
++import adminAccountsHandler from "../admin-accounts.mts";
++import authMeHandler from "../auth-me.mts";
++import { createSessionCookie, getUserIdFromRequest, hashResetToken } from "../../lib/auth.ts";
++import { db } from "../../lib/db.ts";
++import { createTestUser, asUser, jsonBody } from "./fixtures.ts";
++
++// T-W5-1 (Step 1 Foundation Plan §5.7): session revocation end to end.
++// Two cookies for one account stand in for two devices. A credential
++// change (password change, password reset, "Sign out everywhere", or the
++// platform-admin action) must retire the OTHER device's cookie at its
++// next request, while the device that made the change is re-issued at the
++// new version and keeps working.
++
++const FIXTURE_PASSWORD = "irrelevant-for-these-tests-123";
++
++function requestWithCookie(cookie: string) {
++  return new Request("https://app.tasketra.com/api/auth/me", { headers: { cookie } });
++}
++
++/** Who does this cookie currently authenticate as? null once retired. */
++async function probe(cookie: string): Promise<string | null> {
++  const res = await authMeHandler(requestWithCookie(cookie));
++  const body = await jsonBody<{ user: { id: string } | null }>(res);
++  return body.user?.id ?? null;
++}
++
++function responseCookie(res: Response): string {
++  const setCookie = res.headers.get("set-cookie");
++  if (!setCookie) throw new Error("expected a set-cookie header on the response");
++  return setCookie.split(";")[0];
++}
++
++describe("session revocation (T-W5-1)", () => {
++  beforeAll(async () => {
++    await setupTestDb();
++  }, 30000);
++  afterAll(async () => {
++    await teardownTestDb();
++  });
++  beforeEach(async () => {
++    await resetTestDb();
++  });
++  afterEach(() => {
++    delete process.env.ADMIN_EMAIL;
++  });
++
++  it("password change kills the other session; the changing device stays signed in", async () => {
++    const user = await createTestUser("pw-change@example.com");
++    const otherDevice = createSessionCookie(user.id, 0).split(";")[0];
++    expect(await probe(otherDevice)).toBe(user.id);
++
++    const res = await accountHandler(
++      asUser(user, {
++        method: "PATCH",
++        url: "https://app.tasketra.com/api/account",
++        body: { action: "change-password", currentPassword: FIXTURE_PASSWORD, newPassword: "a-brand-new-passphrase" },
++      })
++    );
++    expect(res.status).toBe(200);
++
++    expect(await probe(otherDevice)).toBeNull(); // the other device is out
++    expect(await probe(user.cookie)).toBeNull(); // even this device's OLD cookie is retired
++    expect(await probe(responseCookie(res))).toBe(user.id); // its re-issued cookie works
++  });
++
++  it("password reset kills existing sessions; the reset device is signed in fresh", async () => {
++    const user = await createTestUser("pw-reset@example.com");
++    expect(await probe(user.cookie)).toBe(user.id);
++
++    await db().sql`
++      INSERT INTO password_reset_tokens (user_id, token_hash, expires_at)
++      VALUES (${user.id}, ${hashResetToken("r2-reset-token")}, now() + interval '1 hour')
++    `;
++    const res = await resetPasswordHandler(
++      new Request("https://app.tasketra.com/api/auth/reset-password", {
++        method: "POST",
++        headers: { "content-type": "application/json", "x-nf-client-connection-ip": "198.51.100.99" },
++        body: JSON.stringify({ token: "r2-reset-token", password: "a-brand-new-passphrase" }),
++      })
++    );
++    expect(res.status).toBe(200);
++
++    expect(await probe(user.cookie)).toBeNull();
++    expect(await probe(responseCookie(res))).toBe(user.id);
++  });
++
++  it("Sign out everywhere kills the other session and keeps this device signed in", async () => {
++    const user = await createTestUser("sign-out-everywhere@example.com");
++    const otherDevice = createSessionCookie(user.id, 0).split(";")[0];
++    expect(await probe(otherDevice)).toBe(user.id);
++
++    const res = await accountHandler(
++      asUser(user, {
++        method: "PATCH",
++        url: "https://app.tasketra.com/api/account",
++        body: { action: "sign-out-everywhere" },
++      })
++    );
++    expect(res.status).toBe(200);
++
++    expect(await probe(otherDevice)).toBeNull();
++    expect(await probe(user.cookie)).toBeNull();
++    expect(await probe(responseCookie(res))).toBe(user.id);
++  });
++
++  it("the platform-admin action retires every session the target holds", async () => {
++    process.env.ADMIN_EMAIL = "platform-admin@example.com";
++    const admin = await createTestUser("platform-admin@example.com");
++    const target = await createTestUser("target@example.com");
++    expect(await probe(target.cookie)).toBe(target.id);
++
++    const forbidden = await adminAccountsHandler(
++      asUser(target, {
++        method: "POST",
++        url: "https://app.tasketra.com/api/admin-accounts",
++        body: { userId: target.id, action: "sign-out-everywhere" },
++      })
++    );
++    expect(forbidden.status).toBe(403); // a non-admin cannot use it on anyone
++
++    const res = await adminAccountsHandler(
++      asUser(admin, {
++        method: "POST",
++        url: "https://app.tasketra.com/api/admin-accounts",
++        body: { userId: target.id, action: "sign-out-everywhere" },
++      })
++    );
++    expect(res.status).toBe(200);
++    expect(await probe(target.cookie)).toBeNull();
++    expect(await probe(admin.cookie)).toBe(admin.id); // the admin's own session is untouched
++  });
++
++  it("a pre-R2 three-segment cookie is rejected even with a valid signature", async () => {
++    const user = await createTestUser("old-format@example.com");
++    const secret = process.env.SESSION_SECRET ?? "dev-insecure-secret-change-me";
++    const expires = Date.now() + 60_000;
++    const payload = `${user.id}.${expires}`;
++    const sig = crypto.createHmac("sha256", secret).update(payload).digest("base64url");
++    expect(await probe(`tasketra_session=${payload}.${sig}`)).toBeNull();
++  });
++
++  it("measures the per-request cost of the version check (test environment)", async () => {
++    const user = await createTestUser("latency@example.com");
++    const req = requestWithCookie(user.cookie);
++    // Warm-up, then time the full checked lookup (parse + signature + the
++    // session_version SELECT) against this file's disposable Postgres.
++    for (let i = 0; i < 10; i++) await getUserIdFromRequest(req);
++    const samples: number[] = [];
++    for (let i = 0; i < 100; i++) {
++      const start = performance.now();
++      await getUserIdFromRequest(req);
++      samples.push(performance.now() - start);
++    }
++    samples.sort((a, b) => a - b);
++    const mean = samples.reduce((sum, v) => sum + v, 0) / samples.length;
++    const p95 = samples[Math.floor(samples.length * 0.95)];
++    console.log(
++      `[latency] getUserIdFromRequest (PGlite test DB, 100 samples): mean ${mean.toFixed(2)}ms, p95 ${p95.toFixed(2)}ms`
++    );
++    expect(samples.length).toBe(100);
++  });
++});
+diff --git a/netlify/functions/account-delete.mts b/netlify/functions/account-delete.mts
+index eeafcf0..2c85006 100644
+--- a/netlify/functions/account-delete.mts
++++ b/netlify/functions/account-delete.mts
+@@ -17,7 +17,7 @@ const realBlobDeleter: BlobDeleter = async (store, key) => {
+ 
+ export default withSentry(async (req: Request) => {
+   if (req.method !== "POST") return json({ error: "Method not allowed" }, { status: 405 });
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+   const database = db();
+ 
+diff --git a/netlify/functions/account.mts b/netlify/functions/account.mts
+index 6817917..052568c 100644
+--- a/netlify/functions/account.mts
++++ b/netlify/functions/account.mts
+@@ -1,7 +1,7 @@
+ import type { Config } from "@netlify/functions";
+ import { db } from "../lib/db.ts";
+ import { getUserIdFromRequest } from "../lib/auth.ts";
+-import { hashPassword, verifyPassword } from "../lib/auth.ts";
++import { bumpSessionVersion, createSessionCookie, hashPassword, verifyPassword } from "../lib/auth.ts";
+ import { json } from "../lib/http.ts";
+ import { withSentry } from "../lib/sentry.ts";
+ import { canonicalEmail, normalizeEmail, validatePassword } from "../lib/accountRules.ts";
+@@ -11,7 +11,7 @@ import { isEmailVerified, issueVerificationEmail } from "../lib/emailVerificatio
+ import { pgErrorCode } from "../lib/pgError.ts";
+ 
+ export default withSentry(async (req: Request) => {
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+   const database = db();
+ 
+@@ -31,7 +31,20 @@ export default withSentry(async (req: Request) => {
+       }
+       const newHash = await hashPassword(newPassword);
+       await database.sql`UPDATE users SET password_hash = ${newHash} WHERE id = ${userId}`;
+-      return json({ ok: true });
++      // Changing the password signs out every other device (plan §5.4):
++      // bump the session version, then re-issue THIS device's cookie at
++      // the new version so the person changing it stays signed in.
++      const newVersion = await bumpSessionVersion(database, userId);
++      return json({ ok: true }, { headers: { "set-cookie": createSessionCookie(userId, newVersion) } });
++    }
++
++    // "Sign out everywhere" (plan §5.4 / SR-4.1): the lost-device answer.
++    // Same mechanism as the password change, without changing the
++    // password -- every other session dies at its next request, and this
++    // device is re-issued at the new version so it stays signed in.
++    if (body?.action === "sign-out-everywhere") {
++      const newVersion = await bumpSessionVersion(database, userId);
++      return json({ ok: true }, { headers: { "set-cookie": createSessionCookie(userId, newVersion) } });
+     }
+ 
+     // Fixes a mistyped address on an account that hasn't confirmed its email
+diff --git a/netlify/functions/admin-accounts.mts b/netlify/functions/admin-accounts.mts
+index 989aef8..9eeb102 100644
+--- a/netlify/functions/admin-accounts.mts
++++ b/netlify/functions/admin-accounts.mts
+@@ -1,6 +1,6 @@
+ import type { Config } from "@netlify/functions";
+ import { db } from "../lib/db.ts";
+-import { getUserIdFromRequest } from "../lib/auth.ts";
++import { bumpSessionVersion, getUserIdFromRequest } from "../lib/auth.ts";
+ import { json } from "../lib/http.ts";
+ import { withSentry } from "../lib/sentry.ts";
+ import { getStrictAdmin } from "../lib/adminGate.ts";
+@@ -18,6 +18,9 @@ import { avatarsStore, documentsStore } from "../lib/blobs.ts";
+ //                              anything that blocks it
+ //   POST { userId, action: "remove-founding" }
+ //   POST { userId, action: "delete", confirmEmail }   (email must be typed)
++//   POST { userId, action: "sign-out-everywhere" }    (platform admin only,
++//        plan §5.4 / SR-4.2: bumps the account's session_version, retiring
++//        every session it holds; workspace Admins get no such power)
+ 
+ const realBlobDeleter: BlobDeleter = async (store, key) => {
+   const s = store === "documents" ? documentsStore() : avatarsStore();
+@@ -25,7 +28,7 @@ const realBlobDeleter: BlobDeleter = async (store, key) => {
+ };
+ 
+ export default withSentry(async (req: Request) => {
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+   const database = db();
+   const admin = await getStrictAdmin(database, userId);
+@@ -74,10 +77,17 @@ export default withSentry(async (req: Request) => {
+     const body = (await req.json().catch(() => null)) as any;
+     const targetId = typeof body?.userId === "string" ? body.userId : "";
+     const action = body?.action;
+-    if (!targetId || (action !== "remove-founding" && action !== "delete")) {
++    if (!targetId || (action !== "remove-founding" && action !== "delete" && action !== "sign-out-everywhere")) {
+       return json({ error: "userId and a valid action are required." }, { status: 400 });
+     }
+ 
++    if (action === "sign-out-everywhere") {
++      const [target] = await database.sql`SELECT id FROM users WHERE id = ${targetId}`;
++      if (!target) return json({ error: "Account not found." }, { status: 404 });
++      await bumpSessionVersion(database, targetId);
++      return json({ ok: true });
++    }
++
+     if (action === "remove-founding") {
+       const result = await removeFoundingStatus(database, targetId, admin);
+       return result.ok ? json({ ok: true, details: result.details }) : json({ error: result.error }, { status: result.status });
+diff --git a/netlify/functions/admin-broadcast.mts b/netlify/functions/admin-broadcast.mts
+index b7741e1..cb2e5ce 100644
+--- a/netlify/functions/admin-broadcast.mts
++++ b/netlify/functions/admin-broadcast.mts
+@@ -24,7 +24,7 @@ import {
+ // keeps calling "continue" until nothing is pending.
+ 
+ export default withSentry(async (req: Request) => {
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+   const database = db();
+   const admin = await getStrictAdmin(database, userId);
+diff --git a/netlify/functions/admin-founder-hub.mts b/netlify/functions/admin-founder-hub.mts
+index d57d0bb..4ad625f 100644
+--- a/netlify/functions/admin-founder-hub.mts
++++ b/netlify/functions/admin-founder-hub.mts
+@@ -88,7 +88,7 @@ const USAGE_SECTIONS: { section: string; entityTypes: string[] }[] = [
+ const UNLOGGED_SECTIONS = ["Budget", "Charter", "RACI", "Weekly report", "Templates", "Export", "Connections", "Trash"];
+ 
+ export default withSentry(async (req: Request) => {
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+   if (req.method !== "GET") return json({ error: "Method not allowed" }, { status: 405 });
+   const database = db();
+diff --git a/netlify/functions/admin-project-view.mts b/netlify/functions/admin-project-view.mts
+index 81d878c..4410496 100644
+--- a/netlify/functions/admin-project-view.mts
++++ b/netlify/functions/admin-project-view.mts
+@@ -35,7 +35,7 @@ function sanitizeFilename(filename: string): string {
+ }
+ 
+ export default withSentry(async (req: Request) => {
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+   if (req.method !== "GET") return json({ error: "Method not allowed" }, { status: 405 });
+   const database = db();
+diff --git a/netlify/functions/api-tokens.mts b/netlify/functions/api-tokens.mts
+index 57a773a..7bd684a 100644
+--- a/netlify/functions/api-tokens.mts
++++ b/netlify/functions/api-tokens.mts
+@@ -17,7 +17,7 @@ import {
+ // Creating a token is founding-members-only while MCP is in beta.
+ 
+ export default withSentry(async (req: Request) => {
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+   const database = db();
+ 
+diff --git a/netlify/functions/assumptions.mts b/netlify/functions/assumptions.mts
+index e995c4a..435478a 100644
+--- a/netlify/functions/assumptions.mts
++++ b/netlify/functions/assumptions.mts
+@@ -16,7 +16,7 @@ const ASSUMPTION_FIELDS = [
+ ];
+ 
+ export default withSentry(async (req: Request) => {
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+   const database = db();
+   const url = new URL(req.url);
+diff --git a/netlify/functions/auth-login.mts b/netlify/functions/auth-login.mts
+index 7df3b89..5f0ea29 100644
+--- a/netlify/functions/auth-login.mts
++++ b/netlify/functions/auth-login.mts
+@@ -23,13 +23,13 @@ export default withSentry(async (req: Request) => {
+   const emailOk = await checkRateLimit(database, `login:email:${email}`, 8, 15);
+   if (!ipOk || !emailOk) return json(TOO_MANY, { status: 429 });
+ 
+-  const [user] = await database.sql`SELECT id, email, password_hash FROM users WHERE email = ${email}`;
++  const [user] = await database.sql`SELECT id, email, password_hash, session_version FROM users WHERE email = ${email}`;
+   if (!user) return json({ error: "Incorrect email or password." }, { status: 401 });
+ 
+   const valid = await verifyPassword(password, user.password_hash);
+   if (!valid) return json({ error: "Incorrect email or password." }, { status: 401 });
+ 
+-  const cookie = createSessionCookie(user.id);
++  const cookie = createSessionCookie(user.id, user.session_version);
+   return json({ user: { id: user.id, email: user.email } }, { status: 200, headers: { "set-cookie": cookie } });
+ });
+ 
+diff --git a/netlify/functions/auth-me.mts b/netlify/functions/auth-me.mts
+index 44c2db4..cad7674 100644
+--- a/netlify/functions/auth-me.mts
++++ b/netlify/functions/auth-me.mts
+@@ -7,7 +7,7 @@ import { getUserPlan } from "../lib/billing.ts";
+ import { withSentry } from "../lib/sentry.ts";
+ 
+ export default withSentry(async (req: Request) => {
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ user: null }, { status: 200 });
+ 
+   const database = db();
+diff --git a/netlify/functions/auth-register.mts b/netlify/functions/auth-register.mts
+index f995060..45fcab4 100644
+--- a/netlify/functions/auth-register.mts
++++ b/netlify/functions/auth-register.mts
+@@ -69,12 +69,12 @@ export default withSentry(async (req: Request) => {
+   // A founding spot is NOT given here. It is awarded when the person confirms
+   // their email (see markEmailVerified), so an address nobody can read, or a
+   // typo, can never hold one.
+-  let user: { id: string; email: string };
++  let user: { id: string; email: string; session_version: number };
+   try {
+     [user] = await database.sql`
+       INSERT INTO users (email, email_canonical, password_hash, referred_by, terms_accepted_at)
+       VALUES (${email}, ${canonical}, ${passwordHash}, ${referredBy}, ${acceptedTerms ? new Date().toISOString() : null})
+-      RETURNING id, email
++      RETURNING id, email, session_version
+     `;
+   } catch (err: any) {
+     // Two sign-ups for the same mailbox at the same instant: the unique index
+@@ -87,7 +87,7 @@ export default withSentry(async (req: Request) => {
+   // confirmed, not now: until then we don't know the person owns the mailbox.
+   const verificationEmailSent = await issueVerificationEmail(database, user.id, user.email).catch(() => false);
+ 
+-  const cookie = createSessionCookie(user.id);
++  const cookie = createSessionCookie(user.id, user.session_version);
+   return json({ user: { id: user.id, email: user.email }, verificationRequired: true, verificationEmailSent }, { status: 201, headers: { "set-cookie": cookie } });
+ });
+ 
+diff --git a/netlify/functions/auth-resend-verification.mts b/netlify/functions/auth-resend-verification.mts
+index b2dd16e..53cb53b 100644
+--- a/netlify/functions/auth-resend-verification.mts
++++ b/netlify/functions/auth-resend-verification.mts
+@@ -11,7 +11,7 @@ import { isEmailVerified, issueVerificationEmail } from "../lib/emailVerificatio
+ 
+ export default withSentry(async (req: Request) => {
+   if (req.method !== "POST") return json({ error: "Method not allowed" }, { status: 405 });
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+ 
+   const database = db();
+diff --git a/netlify/functions/auth-reset-password.mts b/netlify/functions/auth-reset-password.mts
+index ad3a6c9..028f6ea 100644
+--- a/netlify/functions/auth-reset-password.mts
++++ b/netlify/functions/auth-reset-password.mts
+@@ -40,9 +40,13 @@ export default withSentry(async (req: Request) => {
+   }
+ 
+   const passwordHash = await hashPassword(password);
++  // The reset also retires every existing session (plan §5.4): the version
++  // bump happens in the same update as the password change, and the fresh
++  // cookie below is issued at the new version, so this device signs in
++  // while every other session dies at its next request.
+   const [user] = await database.sql`
+-    UPDATE users SET password_hash = ${passwordHash} WHERE id = ${record.user_id}
+-    RETURNING id, email
++    UPDATE users SET password_hash = ${passwordHash}, session_version = session_version + 1 WHERE id = ${record.user_id}
++    RETURNING id, email, session_version
+   `;
+ 
+   await database.sql`UPDATE password_reset_tokens SET used_at = now() WHERE id = ${record.id}`;
+@@ -55,7 +59,7 @@ export default withSentry(async (req: Request) => {
+   // Getting the reset email proves they can read mail at this address.
+   await markEmailVerified(database, user.id);
+ 
+-  const cookie = createSessionCookie(user.id);
++  const cookie = createSessionCookie(user.id, user.session_version);
+   return json({ user: { id: user.id, email: user.email } }, { headers: { "set-cookie": cookie } });
+ });
+ 
+diff --git a/netlify/functions/avatar.mts b/netlify/functions/avatar.mts
+index 74156be..a6affa8 100644
+--- a/netlify/functions/avatar.mts
++++ b/netlify/functions/avatar.mts
+@@ -25,7 +25,7 @@ function extOf(filename: string): string {
+ }
+ 
+ export default withSentry(async (req: Request) => {
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+   const database = db();
+   const url = new URL(req.url);
+diff --git a/netlify/functions/baseline.mts b/netlify/functions/baseline.mts
+index 8cd839e..b6af3a0 100644
+--- a/netlify/functions/baseline.mts
++++ b/netlify/functions/baseline.mts
+@@ -62,7 +62,7 @@ async function readBaseline(database: ReturnType<typeof db>, projectId: string)
+ }
+ 
+ export default withSentry(async (req: Request) => {
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+   const database = db();
+ 
+diff --git a/netlify/functions/billing-status.mts b/netlify/functions/billing-status.mts
+index 01030cb..24b2bdb 100644
+--- a/netlify/functions/billing-status.mts
++++ b/netlify/functions/billing-status.mts
+@@ -10,7 +10,7 @@ import { withSentry } from "../lib/sentry.ts";
+ 
+ export default withSentry(async (req: Request) => {
+   if (req.method !== "GET") return json({ error: "Method not allowed" }, { status: 405 });
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+ 
+   const database = db();
+diff --git a/netlify/functions/budget.mts b/netlify/functions/budget.mts
+index a410100..88cc33f 100644
+--- a/netlify/functions/budget.mts
++++ b/netlify/functions/budget.mts
+@@ -29,7 +29,7 @@ import { logActivity } from "../lib/activity.ts";
+ // can be tested without a database.
+ 
+ export default withSentry(async (req: Request) => {
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+   const database = db();
+   const url = new URL(req.url);
+diff --git a/netlify/functions/change-requests.mts b/netlify/functions/change-requests.mts
+index a6d67d1..aa34cba 100644
+--- a/netlify/functions/change-requests.mts
++++ b/netlify/functions/change-requests.mts
+@@ -19,7 +19,7 @@ const CR_FIELDS = [
+ ];
+ 
+ export default withSentry(async (req: Request) => {
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+   const database = db();
+   const url = new URL(req.url);
+diff --git a/netlify/functions/charter-approval.mts b/netlify/functions/charter-approval.mts
+index 507d4cd..8d4d12c 100644
+--- a/netlify/functions/charter-approval.mts
++++ b/netlify/functions/charter-approval.mts
+@@ -44,7 +44,7 @@ async function readApproval(database: ReturnType<typeof db>, projectId: string)
+ }
+ 
+ export default withSentry(async (req: Request) => {
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+   const database = db();
+ 
+diff --git a/netlify/functions/communications.mts b/netlify/functions/communications.mts
+index 71bdac9..114f8ce 100644
+--- a/netlify/functions/communications.mts
++++ b/netlify/functions/communications.mts
+@@ -24,7 +24,7 @@ const COMM_PLAN_FIELDS = [
+ ];
+ 
+ export default withSentry(async (req: Request) => {
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+   const database = db();
+   const url = new URL(req.url);
+diff --git a/netlify/functions/compliance.mts b/netlify/functions/compliance.mts
+index a950730..c6a2150 100644
+--- a/netlify/functions/compliance.mts
++++ b/netlify/functions/compliance.mts
+@@ -25,7 +25,7 @@ const COMPLIANCE_FIELDS = [
+ ];
+ 
+ export default withSentry(async (req: Request) => {
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+   const database = db();
+   const url = new URL(req.url);
+diff --git a/netlify/functions/create-checkout-session.mts b/netlify/functions/create-checkout-session.mts
+index 54ed64c..22aa8f9 100644
+--- a/netlify/functions/create-checkout-session.mts
++++ b/netlify/functions/create-checkout-session.mts
+@@ -15,7 +15,7 @@ import { proPriceLabel } from "../../src/lib/pricing.ts";
+ 
+ export default withSentry(async (req: Request) => {
+   if (req.method !== "POST") return json({ error: "Method not allowed" }, { status: 405 });
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+   {
+     const unverified = await requireVerifiedEmail(db(), userId);
+diff --git a/netlify/functions/create-portal-session.mts b/netlify/functions/create-portal-session.mts
+index cb8df93..87df6ad 100644
+--- a/netlify/functions/create-portal-session.mts
++++ b/netlify/functions/create-portal-session.mts
+@@ -13,7 +13,7 @@ import { withSentry } from "../lib/sentry.ts";
+ 
+ export default withSentry(async (req: Request) => {
+   if (req.method !== "POST") return json({ error: "Method not allowed" }, { status: 405 });
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+ 
+   const database = db();
+diff --git a/netlify/functions/decisions.mts b/netlify/functions/decisions.mts
+index 9ca6410..21c04ea 100644
+--- a/netlify/functions/decisions.mts
++++ b/netlify/functions/decisions.mts
+@@ -22,7 +22,7 @@ import { withSentry } from "../lib/sentry.ts";
+ // (decision-public, charter-approval, stage-gate, weekly-report).
+ 
+ export default withSentry(async (req: Request) => {
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+   const database = db();
+   const url = new URL(req.url);
+diff --git a/netlify/functions/dependencies.mts b/netlify/functions/dependencies.mts
+index 30ece8f..9acd796 100644
+--- a/netlify/functions/dependencies.mts
++++ b/netlify/functions/dependencies.mts
+@@ -18,7 +18,7 @@ const DEPENDENCY_FIELDS = [
+ ];
+ 
+ export default withSentry(async (req: Request) => {
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+   const database = db();
+   const url = new URL(req.url);
+diff --git a/netlify/functions/documents.mts b/netlify/functions/documents.mts
+index 67b63ba..7cac9ae 100644
+--- a/netlify/functions/documents.mts
++++ b/netlify/functions/documents.mts
+@@ -51,7 +51,7 @@ function fmtGB(bytes: number): string {
+ }
+ 
+ export default withSentry(async (req: Request) => {
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+   const database = db();
+   const url = new URL(req.url);
+diff --git a/netlify/functions/example-data.mts b/netlify/functions/example-data.mts
+index 982d827..a168080 100644
+--- a/netlify/functions/example-data.mts
++++ b/netlify/functions/example-data.mts
+@@ -116,7 +116,7 @@ function countsOf(rows: { key: keyof Counts }[]): Counts {
+ }
+ 
+ export default withSentry(async (req: Request) => {
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+   const database = db();
+   const url = new URL(req.url);
+diff --git a/netlify/functions/feed.mts b/netlify/functions/feed.mts
+index 4a021e4..9c085eb 100644
+--- a/netlify/functions/feed.mts
++++ b/netlify/functions/feed.mts
+@@ -6,7 +6,7 @@ import { json } from "../lib/http.ts";
+ import { withSentry } from "../lib/sentry.ts";
+ 
+ export default withSentry(async (req: Request) => {
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+ 
+   const url = new URL(req.url);
+diff --git a/netlify/functions/feedback.mts b/netlify/functions/feedback.mts
+index 19dd2ba..3f847f0 100644
+--- a/netlify/functions/feedback.mts
++++ b/netlify/functions/feedback.mts
+@@ -10,7 +10,7 @@ const VALID_STATUSES = ["new", "planned", "shipped", "dismissed"];
+ 
+ export default withSentry(async (req: Request) => {
+   const database = db();
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+ 
+   if (req.method === "POST") {
+diff --git a/netlify/functions/founding-me.mts b/netlify/functions/founding-me.mts
+index 69a6d98..f654d3d 100644
+--- a/netlify/functions/founding-me.mts
++++ b/netlify/functions/founding-me.mts
+@@ -9,7 +9,7 @@ import { withSentry } from "../lib/sentry.ts";
+ // they have chosen to appear on the founders' wall. Founders only.
+ export default withSentry(async (req: Request) => {
+   if (req.method !== "GET" && req.method !== "PATCH") return json({ error: "Method not allowed" }, { status: 405 });
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+ 
+   const database = db();
+diff --git a/netlify/functions/founding-members.mts b/netlify/functions/founding-members.mts
+index f26bd62..733c009 100644
+--- a/netlify/functions/founding-members.mts
++++ b/netlify/functions/founding-members.mts
+@@ -8,7 +8,7 @@ import { withSentry } from "../lib/sentry.ts";
+ export default withSentry(async (req: Request) => {
+   if (req.method !== "GET") return json({ error: "Method not allowed" }, { status: 405 });
+ 
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+   const database = db();
+   if (!(await getStrictAdmin(database, userId))) return json({ error: "Not authorized" }, { status: 403 });
+diff --git a/netlify/functions/founding-wall.mts b/netlify/functions/founding-wall.mts
+index 465aac1..1a8b230 100644
+--- a/netlify/functions/founding-wall.mts
++++ b/netlify/functions/founding-wall.mts
+@@ -8,7 +8,7 @@ import { withSentry } from "../lib/sentry.ts";
+ // name. Never returns an email. Visible to signed-in founding members only.
+ export default withSentry(async (req: Request) => {
+   if (req.method !== "GET") return json({ error: "Method not allowed" }, { status: 405 });
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+ 
+   const database = db();
+diff --git a/netlify/functions/issues.mts b/netlify/functions/issues.mts
+index ccb92ca..4724381 100644
+--- a/netlify/functions/issues.mts
++++ b/netlify/functions/issues.mts
+@@ -18,7 +18,7 @@ const ISSUE_FIELDS = [
+ ];
+ 
+ export default withSentry(async (req: Request) => {
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+   const database = db();
+   const url = new URL(req.url);
+diff --git a/netlify/functions/key-results.mts b/netlify/functions/key-results.mts
+index a91b684..0ce773f 100644
+--- a/netlify/functions/key-results.mts
++++ b/netlify/functions/key-results.mts
+@@ -30,7 +30,7 @@ async function loadObjectiveForAccess(database: any, objectiveId: string, userId
+ }
+ 
+ export default withSentry(async (req: Request) => {
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+   const database = db();
+   const url = new URL(req.url);
+diff --git a/netlify/functions/lessons.mts b/netlify/functions/lessons.mts
+index 6f005f4..d8c0d91 100644
+--- a/netlify/functions/lessons.mts
++++ b/netlify/functions/lessons.mts
+@@ -17,7 +17,7 @@ const LESSON_FIELDS = [
+ ];
+ 
+ export default withSentry(async (req: Request) => {
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+   const database = db();
+   const url = new URL(req.url);
+diff --git a/netlify/functions/meetings.mts b/netlify/functions/meetings.mts
+index 3d465ec..f6e1931 100644
+--- a/netlify/functions/meetings.mts
++++ b/netlify/functions/meetings.mts
+@@ -16,7 +16,7 @@ const MEETING_FIELDS = [
+ ];
+ 
+ export default withSentry(async (req: Request) => {
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+   const database = db();
+   const url = new URL(req.url);
+diff --git a/netlify/functions/members.mts b/netlify/functions/members.mts
+index 9245f58..1b17a75 100644
+--- a/netlify/functions/members.mts
++++ b/netlify/functions/members.mts
+@@ -11,7 +11,7 @@ import { withSentry } from "../lib/sentry.ts";
+ import { requireVerifiedEmail } from "../lib/emailVerification.ts";
+ 
+ export default withSentry(async (req: Request) => {
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+   const database = db();
+   const url = new URL(req.url);
+diff --git a/netlify/functions/my-activity.mts b/netlify/functions/my-activity.mts
+index d4bc251..48ca5d7 100644
+--- a/netlify/functions/my-activity.mts
++++ b/netlify/functions/my-activity.mts
+@@ -9,7 +9,7 @@ import { withSentry } from "../lib/sentry.ts";
+ // before authors were tracked have no author and never appear here.
+ export default withSentry(async (req: Request) => {
+   if (req.method !== "GET") return json({ error: "Method not allowed" }, { status: 405 });
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+ 
+   const database = db();
+diff --git a/netlify/functions/my-calendar.mts b/netlify/functions/my-calendar.mts
+index 54ae86a..076c418 100644
+--- a/netlify/functions/my-calendar.mts
++++ b/netlify/functions/my-calendar.mts
+@@ -53,7 +53,7 @@ function defaultRange(): { from: string; to: string } {
+ }
+ 
+ export default withSentry(async (req: Request) => {
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+   if (req.method !== "GET") return json({ error: "Method not allowed" }, { status: 405 });
+ 
+diff --git a/netlify/functions/my-today.mts b/netlify/functions/my-today.mts
+index 1678432..5782425 100644
+--- a/netlify/functions/my-today.mts
++++ b/netlify/functions/my-today.mts
+@@ -22,7 +22,7 @@ const OPEN_LIMIT = 400;
+ const DONE_LIMIT = 100;
+ 
+ export default withSentry(async (req: Request) => {
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+   if (req.method !== "GET") return json({ error: "Method not allowed" }, { status: 405 });
+ 
+diff --git a/netlify/functions/notifications.mts b/netlify/functions/notifications.mts
+index 2662bd8..fbc575a 100644
+--- a/netlify/functions/notifications.mts
++++ b/netlify/functions/notifications.mts
+@@ -33,7 +33,7 @@ function snippet(text: string, max = 60): string {
+ 
+ export default withSentry(async (req: Request) => {
+   if (req.method !== "GET" && req.method !== "PATCH") return json({ error: "Method not allowed" }, { status: 405 });
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+   const database = db();
+ 
+diff --git a/netlify/functions/objectives.mts b/netlify/functions/objectives.mts
+index bfb0fa7..f5aa367 100644
+--- a/netlify/functions/objectives.mts
++++ b/netlify/functions/objectives.mts
+@@ -25,7 +25,7 @@ const OBJECTIVE_FIELDS = [
+ ];
+ 
+ export default withSentry(async (req: Request) => {
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+   const database = db();
+   const url = new URL(req.url);
+diff --git a/netlify/functions/portfolio.mts b/netlify/functions/portfolio.mts
+index d5b0c41..94732e1 100644
+--- a/netlify/functions/portfolio.mts
++++ b/netlify/functions/portfolio.mts
+@@ -61,7 +61,7 @@ import { loadStageInputs } from "../lib/stageData.ts";
+ // keeps a pathological account from turning this rollup into a full dump.
+ 
+ export default withSentry(async (req: Request) => {
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+   if (req.method !== "GET") return json({ error: "Method not allowed" }, { status: 405 });
+ 
+diff --git a/netlify/functions/procurement.mts b/netlify/functions/procurement.mts
+index d7c4f65..89667ea 100644
+--- a/netlify/functions/procurement.mts
++++ b/netlify/functions/procurement.mts
+@@ -31,7 +31,7 @@ const PROCUREMENT_FIELDS = [
+ ];
+ 
+ export default withSentry(async (req: Request) => {
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+   const database = db();
+   const url = new URL(req.url);
+diff --git a/netlify/functions/project.mts b/netlify/functions/project.mts
+index a67a01a..d0d6d2f 100644
+--- a/netlify/functions/project.mts
++++ b/netlify/functions/project.mts
+@@ -12,7 +12,7 @@ import { sanitizeCharter } from "../lib/charter.ts";
+ import { sanitizeTolerances } from "../lib/tolerances.ts";
+ 
+ export default withSentry(async (req: Request) => {
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+ 
+   const database = db();
+diff --git a/netlify/functions/projects.mts b/netlify/functions/projects.mts
+index a92de13..774fc90 100644
+--- a/netlify/functions/projects.mts
++++ b/netlify/functions/projects.mts
+@@ -11,7 +11,7 @@ import { resolveTemplate } from "../lib/templateResolve.ts";
+ import { requireVerifiedEmail } from "../lib/emailVerification.ts";
+ 
+ export default withSentry(async (req: Request) => {
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+   const database = db();
+ 
+diff --git a/netlify/functions/quality.mts b/netlify/functions/quality.mts
+index 4503af9..0fc46c4 100644
+--- a/netlify/functions/quality.mts
++++ b/netlify/functions/quality.mts
+@@ -22,7 +22,7 @@ const QUALITY_FIELDS = [
+ ];
+ 
+ export default withSentry(async (req: Request) => {
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+   const database = db();
+   const url = new URL(req.url);
+diff --git a/netlify/functions/raci.mts b/netlify/functions/raci.mts
+index 62facb0..26b8322 100644
+--- a/netlify/functions/raci.mts
++++ b/netlify/functions/raci.mts
+@@ -15,7 +15,7 @@ import { loadRaci, isRaciRole } from "../lib/raciData.ts";
+ // "one Accountable per row" rule is a warning in the app, never enforced here.
+ 
+ export default withSentry(async (req: Request) => {
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+   const database = db();
+ 
+diff --git a/netlify/functions/raid-task-links.mts b/netlify/functions/raid-task-links.mts
+index 950f1eb..0ba2803 100644
+--- a/netlify/functions/raid-task-links.mts
++++ b/netlify/functions/raid-task-links.mts
+@@ -25,7 +25,7 @@ function isUniqueViolation(err: unknown): boolean {
+ }
+ 
+ export default withSentry(async (req: Request) => {
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+   const database = db();
+   const url = new URL(req.url);
+diff --git a/netlify/functions/referrals.mts b/netlify/functions/referrals.mts
+index 9842601..c8feb69 100644
+--- a/netlify/functions/referrals.mts
++++ b/netlify/functions/referrals.mts
+@@ -15,7 +15,7 @@ export function codeForUserId(userId: string): string {
+ 
+ export default withSentry(async (req: Request) => {
+   if (req.method !== "GET") return json({ error: "Method not allowed" }, { status: 405 });
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+ 
+   const database = db();
+diff --git a/netlify/functions/risks.mts b/netlify/functions/risks.mts
+index 00d0dc0..a345412 100644
+--- a/netlify/functions/risks.mts
++++ b/netlify/functions/risks.mts
+@@ -58,7 +58,7 @@ function parseScores(body: any):
+ }
+ 
+ export default withSentry(async (req: Request) => {
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+   const database = db();
+   const url = new URL(req.url);
+diff --git a/netlify/functions/roadmap.mts b/netlify/functions/roadmap.mts
+index 76e832e..60f0c68 100644
+--- a/netlify/functions/roadmap.mts
++++ b/netlify/functions/roadmap.mts
+@@ -25,7 +25,7 @@ const ROADMAP_FIELDS = [
+ ];
+ 
+ export default withSentry(async (req: Request) => {
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+   const database = db();
+   const url = new URL(req.url);
+diff --git a/netlify/functions/search.mts b/netlify/functions/search.mts
+index cb6a309..bfedab4 100644
+--- a/netlify/functions/search.mts
++++ b/netlify/functions/search.mts
+@@ -18,7 +18,7 @@ const GROUP_LIMIT = 8;
+ const MIN_QUERY = 2;
+ 
+ export default withSentry(async (req: Request) => {
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+   if (req.method !== "GET") return json({ error: "Method not allowed" }, { status: 405 });
+ 
+diff --git a/netlify/functions/share-links.mts b/netlify/functions/share-links.mts
+index 504da48..ea48c85 100644
+--- a/netlify/functions/share-links.mts
++++ b/netlify/functions/share-links.mts
+@@ -14,7 +14,7 @@ import { isShareKind } from "../lib/shareLinks.ts";
+ //   DELETE ?projectId=&kind=   -> stops sharing (revokes)
+ 
+ export default withSentry(async (req: Request) => {
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+   const database = db();
+   const url = new URL(req.url);
+diff --git a/netlify/functions/stage-gate.mts b/netlify/functions/stage-gate.mts
+index 50768ef..6c4ae1e 100644
+--- a/netlify/functions/stage-gate.mts
++++ b/netlify/functions/stage-gate.mts
+@@ -45,7 +45,7 @@ async function readGate(database: ReturnType<typeof db>, projectId: string) {
+ }
+ 
+ export default withSentry(async (req: Request) => {
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+   const database = db();
+ 
+diff --git a/netlify/functions/stage.mts b/netlify/functions/stage.mts
+index 87a5288..c1cff8b 100644
+--- a/netlify/functions/stage.mts
++++ b/netlify/functions/stage.mts
+@@ -12,7 +12,7 @@ import { monitorBand, stageChecklist } from "../lib/stageChecklist.ts";
+ // lib/stageChecklist.ts. Changing a project's stage is a PATCH on /api/project.
+ 
+ export default withSentry(async (req: Request) => {
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+   if (req.method !== "GET") return json({ error: "Method not allowed" }, { status: 405 });
+ 
+diff --git a/netlify/functions/stakeholders.mts b/netlify/functions/stakeholders.mts
+index 67c90f2..52e4b89 100644
+--- a/netlify/functions/stakeholders.mts
++++ b/netlify/functions/stakeholders.mts
+@@ -38,7 +38,7 @@ function validateContactFields(body: any): string | null {
+ }
+ 
+ export default withSentry(async (req: Request) => {
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+   const database = db();
+   const url = new URL(req.url);
+diff --git a/netlify/functions/status-updates.mts b/netlify/functions/status-updates.mts
+index de51e4e..2bb0202 100644
+--- a/netlify/functions/status-updates.mts
++++ b/netlify/functions/status-updates.mts
+@@ -13,7 +13,7 @@ import { HEALTH_LABEL } from "../../src/lib/healthLabels.ts";
+ const HEALTH_VALUES = ["on_track", "at_risk", "off_track"];
+ 
+ export default withSentry(async (req: Request) => {
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+   if (req.method !== "POST") return json({ error: "Method not allowed" }, { status: 405 });
+ 
+diff --git a/netlify/functions/task-dependencies.mts b/netlify/functions/task-dependencies.mts
+index a702b31..7a5c6de 100644
+--- a/netlify/functions/task-dependencies.mts
++++ b/netlify/functions/task-dependencies.mts
+@@ -17,7 +17,7 @@ function isUniqueViolation(err: unknown): boolean {
+ }
+ 
+ export default withSentry(async (req: Request) => {
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+   const database = db();
+   const url = new URL(req.url);
+diff --git a/netlify/functions/tasks.mts b/netlify/functions/tasks.mts
+index ca022d7..6c48352 100644
+--- a/netlify/functions/tasks.mts
++++ b/netlify/functions/tasks.mts
+@@ -48,7 +48,7 @@ async function validateStakeholder(database: ReturnType<typeof db>, stakeholderI
+ }
+ 
+ export default withSentry(async (req: Request) => {
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+   const database = db();
+   const url = new URL(req.url);
+diff --git a/netlify/functions/template-apply.mts b/netlify/functions/template-apply.mts
+index e660547..40fa31c 100644
+--- a/netlify/functions/template-apply.mts
++++ b/netlify/functions/template-apply.mts
+@@ -12,7 +12,7 @@ import { applyTemplateToExisting } from "../lib/applyTemplate.ts";
+ // preview: true returns what would be added and skipped without writing.
+ 
+ export default withSentry(async (req: Request) => {
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+   if (req.method !== "POST") return json({ error: "Method not allowed" }, { status: 405 });
+ 
+diff --git a/netlify/functions/templates.mts b/netlify/functions/templates.mts
+index ae4e19a..3be166a 100644
+--- a/netlify/functions/templates.mts
++++ b/netlify/functions/templates.mts
+@@ -204,7 +204,7 @@ async function buildRaci(database: any, project: any, projectId: string) {
+ }
+ 
+ export default withSentry(async (req: Request) => {
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+   if (req.method !== "GET") return json({ error: "Method not allowed" }, { status: 405 });
+ 
+diff --git a/netlify/functions/today.mts b/netlify/functions/today.mts
+index f82b62b..7c5af5a 100644
+--- a/netlify/functions/today.mts
++++ b/netlify/functions/today.mts
+@@ -11,7 +11,7 @@ import { withSentry } from "../lib/sentry.ts";
+ // it's all a read-only lens on data that already exists elsewhere.
+ 
+ export default withSentry(async (req: Request) => {
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+   const database = db();
+   const url = new URL(req.url);
+diff --git a/netlify/functions/trash.mts b/netlify/functions/trash.mts
+index 94c6882..660dc67 100644
+--- a/netlify/functions/trash.mts
++++ b/netlify/functions/trash.mts
+@@ -14,7 +14,7 @@ import { documentsStore } from "../lib/blobs.ts";
+ // and trashed documents lose their stored file as well.
+ 
+ export default withSentry(async (req: Request) => {
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+   if (req.method !== "GET" && req.method !== "DELETE") return json({ error: "Method not allowed" }, { status: 405 });
+ 
+diff --git a/netlify/functions/user-templates.mts b/netlify/functions/user-templates.mts
+index 42f6f56..f57cc01 100644
+--- a/netlify/functions/user-templates.mts
++++ b/netlify/functions/user-templates.mts
+@@ -24,7 +24,7 @@ function asTemplate(data: NonNullable<ReturnType<typeof sanitizeStored>>): Proje
+ }
+ 
+ export default withSentry(async (req: Request) => {
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+   const database = db();
+ 
+diff --git a/netlify/functions/verify-backup.mts b/netlify/functions/verify-backup.mts
+index 7984b4f..ca9aed9 100644
+--- a/netlify/functions/verify-backup.mts
++++ b/netlify/functions/verify-backup.mts
+@@ -24,7 +24,7 @@ async function streamToBytes(body: unknown): Promise<Uint8Array> {
+ }
+ 
+ export default withSentry(async (req: Request) => {
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+   if (!(await getStrictAdmin(db(), userId))) return json({ error: "Not found" }, { status: 404 });
+ 
+diff --git a/netlify/functions/waitlist.mts b/netlify/functions/waitlist.mts
+index 4040316..df20329 100644
+--- a/netlify/functions/waitlist.mts
++++ b/netlify/functions/waitlist.mts
+@@ -23,7 +23,7 @@ export default withSentry(async (req: Request) => {
+   }
+ 
+   // Everything else is admin-only.
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+   if (!(await getStrictAdmin(database, userId))) return json({ error: "Not authorized" }, { status: 403 });
+ 
+diff --git a/netlify/functions/webhook-settings.mts b/netlify/functions/webhook-settings.mts
+index f72eae6..1726d0a 100644
+--- a/netlify/functions/webhook-settings.mts
++++ b/netlify/functions/webhook-settings.mts
+@@ -11,7 +11,7 @@ import { withSentry } from "../lib/sentry.ts";
+ // once rather than re-entered per project.
+ 
+ export default withSentry(async (req: Request) => {
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+   const database = db();
+ 
+diff --git a/netlify/functions/weekly-report.mts b/netlify/functions/weekly-report.mts
+index 8d53ddf..fee9c0e 100644
+--- a/netlify/functions/weekly-report.mts
++++ b/netlify/functions/weekly-report.mts
+@@ -15,7 +15,7 @@ import { HEALTH_LABEL } from "../../src/lib/healthLabels.ts";
+ // records -- built to be skimmed by a stakeholder in under a minute.
+ 
+ export default withSentry(async (req: Request) => {
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+   const database = db();
+   const url = new URL(req.url);
+diff --git a/netlify/functions/weekly-sync.mts b/netlify/functions/weekly-sync.mts
+index 222db1a..0ae39b6 100644
+--- a/netlify/functions/weekly-sync.mts
++++ b/netlify/functions/weekly-sync.mts
+@@ -29,7 +29,7 @@ import { withSentry } from "../lib/sentry.ts";
+ const ASK_LIMIT = 200;
+ 
+ export default withSentry(async (req: Request) => {
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+   if (req.method !== "GET") return json({ error: "Method not allowed" }, { status: 405 });
+ 
+diff --git a/netlify/functions/workload.mts b/netlify/functions/workload.mts
+index e08e4e2..980847a 100644
+--- a/netlify/functions/workload.mts
++++ b/netlify/functions/workload.mts
+@@ -59,7 +59,7 @@ function currentWindow(): { start: string; end: string } {
+ }
+ 
+ export default withSentry(async (req: Request) => {
+-  const userId = getUserIdFromRequest(req);
++  const userId = await getUserIdFromRequest(req);
+   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
+   if (req.method !== "GET") return json({ error: "Method not allowed" }, { status: 405 });
+ 
+diff --git a/netlify/lib/__tests__/auth.test.ts b/netlify/lib/__tests__/auth.test.ts
+index a6ccf30..850778b 100644
+--- a/netlify/lib/__tests__/auth.test.ts
++++ b/netlify/lib/__tests__/auth.test.ts
+@@ -1,5 +1,8 @@
+-import { describe, it, expect, vi, beforeEach } from "vitest";
+-import { createSessionCookie, getUserIdFromRequest, hashPassword, verifyPassword } from "../auth.ts";
++import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from "vitest";
++import crypto from "node:crypto";
++import { createSessionCookie, getUserIdFromRequest, hashPassword, verifyPassword, bumpSessionVersion } from "../auth.ts";
++import { db } from "../db.ts";
++import { setupTestDb, teardownTestDb, resetTestDb } from "./testDb.ts";
+ 
+ function requestWithCookie(cookieHeader: string) {
+   return new Request("https://example.com/api/whatever", { headers: { cookie: cookieHeader } });
+@@ -9,43 +12,96 @@ function extractCookieValue(setCookieHeader: string) {
+   return setCookieHeader.split(";")[0];
+ }
+ 
++async function insertUser(email: string): Promise<string> {
++  const [user] = await db().sql<{ id: string }>`
++    INSERT INTO users (email, password_hash) VALUES (${email}, 'not-a-real-hash') RETURNING id
++  `;
++  return user.id;
++}
++
+ describe("session cookies", () => {
+-  it("round-trips a valid session token back to the same user id", () => {
+-    const cookie = createSessionCookie("user-123");
++  beforeAll(async () => {
++    await setupTestDb();
++  }, 30000);
++  afterAll(async () => {
++    await teardownTestDb();
++  });
++  beforeEach(async () => {
++    await resetTestDb();
++  });
++
++  it("round-trips a valid session token back to the same user id", async () => {
++    const id = await insertUser("round-trip@example.com");
++    const cookie = createSessionCookie(id, 0);
+     const req = requestWithCookie(extractCookieValue(cookie));
+-    expect(getUserIdFromRequest(req)).toBe("user-123");
++    await expect(getUserIdFromRequest(req)).resolves.toBe(id);
+   });
+ 
+-  it("rejects a request with no cookie", () => {
++  it("rejects a request with no cookie", async () => {
+     const req = new Request("https://example.com/api/whatever");
+-    expect(getUserIdFromRequest(req)).toBeNull();
++    await expect(getUserIdFromRequest(req)).resolves.toBeNull();
+   });
+ 
+-  it("rejects a tampered token (signature no longer matches)", () => {
+-    const cookie = createSessionCookie("user-123");
+-    const value = extractCookieValue(cookie); // tasketra_session=userId.expires.sig
++  it("rejects a tampered token (signature no longer matches)", async () => {
++    const id = await insertUser("tampered@example.com");
++    const cookie = createSessionCookie(id, 0);
++    const value = extractCookieValue(cookie); // tasketra_session=userId.expires.version.sig
+     const [name, token] = value.split("=");
+-    const [userId, expires] = token.split(".");
+-    const tampered = `${name}=${userId}-evil.${expires}.badsig`;
++    const [userId, expires, version] = token.split(".");
++    const tampered = `${name}=${userId}-evil.${expires}.${version}.badsig`;
+     const req = requestWithCookie(tampered);
+-    expect(getUserIdFromRequest(req)).toBeNull();
++    await expect(getUserIdFromRequest(req)).resolves.toBeNull();
+   });
+ 
+-  it("rejects an expired token", () => {
++  it("rejects an expired token", async () => {
++    const id = await insertUser("expired@example.com");
+     vi.useFakeTimers();
+     vi.setSystemTime(new Date("2020-01-01T00:00:00Z"));
+-    const cookie = createSessionCookie("user-123");
++    const cookie = createSessionCookie(id, 0);
+     vi.setSystemTime(new Date("2030-01-01T00:00:00Z")); // far past the 30-day expiry
+     const req = requestWithCookie(extractCookieValue(cookie));
+-    expect(getUserIdFromRequest(req)).toBeNull();
++    await expect(getUserIdFromRequest(req)).resolves.toBeNull();
+     vi.useRealTimers();
+   });
+ 
+-  it("ignores unrelated cookies and still finds the session cookie", () => {
+-    const cookie = createSessionCookie("user-456");
++  it("ignores unrelated cookies and still finds the session cookie", async () => {
++    const id = await insertUser("mixed-cookies@example.com");
++    const cookie = createSessionCookie(id, 0);
+     const value = extractCookieValue(cookie);
+     const req = requestWithCookie(`some_other_cookie=abc; ${value}; another=xyz`);
+-    expect(getUserIdFromRequest(req)).toBe("user-456");
++    await expect(getUserIdFromRequest(req)).resolves.toBe(id);
++  });
++
++  it("rejects a cookie whose version no longer matches the account's", async () => {
++    const id = await insertUser("revoked@example.com");
++    const cookie = createSessionCookie(id, 0);
++    await db().sql`UPDATE users SET session_version = 1 WHERE id = ${id}`;
++    const req = requestWithCookie(extractCookieValue(cookie));
++    await expect(getUserIdFromRequest(req)).resolves.toBeNull();
++  });
++
++  it("rejects a pre-R2 three-segment cookie even when its signature is valid", async () => {
++    const id = await insertUser("old-format@example.com");
++    // Exactly what every member held on R2 deploy day: userId.expires.sig,
++    // signed with the real secret (the dev fallback signs in tests, where
++    // the Netlify global does not exist -- see getSecret in ../auth.ts).
++    const secret = process.env.SESSION_SECRET ?? "dev-insecure-secret-change-me";
++    const expires = Date.now() + 60_000;
++    const payload = `${id}.${expires}`;
++    const sig = crypto.createHmac("sha256", secret).update(payload).digest("base64url");
++    const req = requestWithCookie(`tasketra_session=${payload}.${sig}`);
++    await expect(getUserIdFromRequest(req)).resolves.toBeNull();
++  });
++
++  it("bumpSessionVersion retires old cookies and admits ones at the new version", async () => {
++    const id = await insertUser("bump@example.com");
++    const database = db();
++    const newVersion = await bumpSessionVersion(database, id);
++    expect(newVersion).toBe(1);
++    const oldReq = requestWithCookie(extractCookieValue(createSessionCookie(id, 0)));
++    await expect(getUserIdFromRequest(oldReq)).resolves.toBeNull();
++    const newReq = requestWithCookie(extractCookieValue(createSessionCookie(id, newVersion)));
++    await expect(getUserIdFromRequest(newReq)).resolves.toBe(id);
+   });
+ });
+ 
+diff --git a/netlify/lib/__tests__/sessionRevocationFence.test.ts b/netlify/lib/__tests__/sessionRevocationFence.test.ts
+new file mode 100644
+index 0000000..d1807b4
+--- /dev/null
++++ b/netlify/lib/__tests__/sessionRevocationFence.test.ts
+@@ -0,0 +1,61 @@
++import { describe, it, expect } from "vitest";
++import { readFileSync, readdirSync } from "node:fs";
++import { join, dirname } from "node:path";
++import { fileURLToPath } from "node:url";
++
++// Step 1 Foundation Plan §5.4, release R2: session revocation only works
++// if EVERY handler goes through the async, database-checked
++// getUserIdFromRequest. The pre-R2 synchronous parser (signature and
++// expiry only, no revocation check) is deleted in the same release, and
++// this static test is the fence that keeps it deleted: it fails if the
++// session check in auth.ts stops being async, if its private parse helper
++// becomes an exported signature-only path, or if any production call site
++// uses the check without awaiting it.
++const here = dirname(fileURLToPath(import.meta.url));
++const libDir = join(here, "..");
++const functionsDir = join(here, "..", "..", "functions");
++
++function productionSources(): { name: string; source: string }[] {
++  const files: { name: string; source: string }[] = [];
++  for (const name of readdirSync(functionsDir)) {
++    if (name.endsWith(".mts")) {
++      files.push({ name: `functions/${name}`, source: readFileSync(join(functionsDir, name), "utf8") });
++    }
++  }
++  for (const name of readdirSync(libDir)) {
++    if (name.endsWith(".ts") && name !== "auth.ts") {
++      files.push({ name: `lib/${name}`, source: readFileSync(join(libDir, name), "utf8") });
++    }
++  }
++  return files;
++}
++
++describe("session revocation fence (plan §5.4)", () => {
++  it("the session check is async and its parse helper stays private", () => {
++    const auth = readFileSync(join(libDir, "auth.ts"), "utf8");
++    expect(auth).toContain("export async function getUserIdFromRequest");
++    expect(auth).not.toMatch(/export function getUserIdFromRequest/);
++    expect(auth).not.toMatch(/export (function|const) parseSessionCookie/);
++    // The check must actually consult the stored version -- a future edit
++    // that quietly dropped the database read would reopen F36 while every
++    // other assertion here still passed.
++    expect(auth).toContain("SELECT session_version FROM users");
++  });
++
++  it("every production call site awaits the session check", () => {
++    const offenders: string[] = [];
++    for (const { name, source } of productionSources()) {
++      for (const match of source.matchAll(/getUserIdFromRequest\(/g)) {
++        const before = source.slice(Math.max(0, match.index - 6), match.index);
++        if (before !== "await ") offenders.push(name);
++      }
++    }
++    expect(offenders).toEqual([]);
++  });
++
++  it("the cookie carries the session version as its third segment", () => {
++    const auth = readFileSync(join(libDir, "auth.ts"), "utf8");
++    expect(auth).toContain("`${userId}.${expires}.${sessionVersion}`");
++    expect(auth).toContain("parts.length !== 4");
++  });
++});
+diff --git a/netlify/lib/auth.ts b/netlify/lib/auth.ts
+index ac4e10a..813818c 100644
+--- a/netlify/lib/auth.ts
++++ b/netlify/lib/auth.ts
+@@ -1,5 +1,8 @@
+ import crypto from "node:crypto";
+ import bcrypt from "bcryptjs";
++import type { DatabaseConnection } from "@netlify/database";
++import { db } from "./db.ts";
++import type { UserSessionVersionRow } from "./rows.ts";
+ 
+ declare const Netlify: { env: { get(key: string): string | undefined } } | undefined;
+ 
+@@ -52,9 +55,9 @@ function sign(payload: string) {
+   return crypto.createHmac("sha256", getSecret()).update(payload).digest("base64url");
+ }
+ 
+-export function createSessionCookie(userId: string) {
++export function createSessionCookie(userId: string, sessionVersion: number) {
+   const expires = Date.now() + MAX_AGE_SECONDS * 1000;
+-  const payload = `${userId}.${expires}`;
++  const payload = `${userId}.${expires}.${sessionVersion}`;
+   const sig = sign(payload);
+   const token = `${payload}.${sig}`;
+   return `${COOKIE_NAME}=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${MAX_AGE_SECONDS}`;
+@@ -75,7 +78,14 @@ function safeEqual(a: string, b: string): boolean {
+   return crypto.timingSafeEqual(bufA, bufB);
+ }
+ 
+-export function getUserIdFromRequest(req: Request): string | null {
++/** Parses and verifies the session cookie's signature and expiry. This is
++ *  only the cryptographic half of authentication -- it proves the cookie
++ *  was issued by us and has not expired, but NOT that the session is still
++ *  current: revocation lives in the database (users.session_version), so
++ *  the only caller-facing check is the async getUserIdFromRequest below,
++ *  which compares the cookie's version against the stored one. Kept
++ *  private so no code path can authenticate on signature alone. */
++function parseSessionCookie(req: Request): { userId: string; sessionVersion: number } | null {
+   const cookieHeader = req.headers.get("cookie") || "";
+   const match = cookieHeader
+     .split(";")
+@@ -84,10 +94,43 @@ export function getUserIdFromRequest(req: Request): string | null {
+   if (!match) return null;
+   const token = match.slice(COOKIE_NAME.length + 1);
+   const parts = token.split(".");
+-  if (parts.length !== 3) return null;
+-  const [userId, expires, sig] = parts;
+-  const payload = `${userId}.${expires}`;
++  if (parts.length !== 4) return null;
++  const [userId, expires, version, sig] = parts;
++  if (!/^\d+$/.test(version)) return null;
++  const payload = `${userId}.${expires}.${version}`;
+   if (!safeEqual(sign(payload), sig)) return null;
+   if (Date.now() > Number(expires)) return null;
+-  return userId;
++  return { userId, sessionVersion: Number(version) };
++}
++
++/** The one session check every handler uses (Step 1 Foundation Plan §5.4,
++ *  ratification Item 8: a database check on every authenticated request, no
++ *  cache, no grace window). A cookie is accepted only while its embedded
++ *  session_version equals the account's stored version; incrementing the
++ *  stored version (password change, password reset, "Sign out
++ *  everywhere") retires every older cookie at its next request. Cookies in
++ *  the pre-R2 three-segment format fail the parse and are rejected, so
++ *  every member signs in once after this ships. */
++export async function getUserIdFromRequest(req: Request): Promise<string | null> {
++  const parsed = parseSessionCookie(req);
++  if (!parsed) return null;
++  const database = db();
++  const [row] = await database.sql<UserSessionVersionRow>`
++    SELECT session_version FROM users WHERE id = ${parsed.userId}
++  `;
++  if (!row || row.session_version !== parsed.sessionVersion) return null;
++  return parsed.userId;
++}
++
++/** Increments an account's session_version, retiring every session cookie
++ *  issued at the old version, and returns the new version so the caller
++ *  can re-issue the current device's cookie at it (the device performing a
++ *  password change or a "Sign out everywhere" stays signed in; every other
++ *  device is signed out at its next request). */
++export async function bumpSessionVersion(database: DatabaseConnection, userId: string): Promise<number> {
++  const [row] = await database.sql<UserSessionVersionRow>`
++    UPDATE users SET session_version = session_version + 1 WHERE id = ${userId}
++    RETURNING session_version
++  `;
++  return row.session_version;
+ }
+diff --git a/netlify/lib/requestContext.ts b/netlify/lib/requestContext.ts
+index c0b6c31..33f63b7 100644
+--- a/netlify/lib/requestContext.ts
++++ b/netlify/lib/requestContext.ts
+@@ -11,10 +11,12 @@ export function runWithUser<T>(userId: string | null, fn: () => T): T {
+   return storage.run({ userId }, fn);
+ }
+ 
+-export function runForRequest<T>(req: unknown, fn: () => T): T {
++export async function runForRequest<T>(req: unknown, fn: () => T): Promise<T> {
+   let userId: string | null = null;
+   try {
+-    userId = req instanceof Request ? getUserIdFromRequest(req) : null;
++    // The same revocation-checked session lookup the handlers use (R2):
++    // a retired cookie records no author, exactly as a signed-out request.
++    userId = req instanceof Request ? await getUserIdFromRequest(req) : null;
+   } catch {
+     userId = null; // a bad or missing session secret must never break a public endpoint
+   }
+diff --git a/netlify/lib/rows.ts b/netlify/lib/rows.ts
+index ee5010f..a30e352 100644
+--- a/netlify/lib/rows.ts
++++ b/netlify/lib/rows.ts
+@@ -28,6 +28,13 @@ export type UserFoundingMemberRow = {
+   founding_member: boolean;
+ };
+ 
++/** auth.getUserIdFromRequest / auth.bumpSessionVersion (R2, plan §5.4):
++ *  SELECT session_version FROM users WHERE id = ?, and the same column
++ *  RETURNING from the increment UPDATE. */
++export type UserSessionVersionRow = {
++  session_version: number;
++};
++
+ /** A bare existence probe (ownership.ts): SELECT 1 FROM projects, UNIONed
+  *  with SELECT 1 FROM project_members. Postgres names the column "?column?";
+  *  callers only read rows.length. */
+diff --git a/src/lib/api.ts b/src/lib/api.ts
+index 4760a32..4015688 100644
+--- a/src/lib/api.ts
++++ b/src/lib/api.ts
+@@ -1763,6 +1763,11 @@ export const api = {
+       method: "PATCH",
+       body: JSON.stringify({ action: "change-password", currentPassword, newPassword }),
+     }),
++  signOutEverywhere: () =>
++    request<{ ok: true }>("/account", {
++      method: "PATCH",
++      body: JSON.stringify({ action: "sign-out-everywhere" }),
++    }),
+   completeTour: () =>
+     request<{ ok: true }>("/account", {
+       method: "PATCH",
+diff --git a/src/lib/whatsNewData.ts b/src/lib/whatsNewData.ts
+index 5345d76..e67b509 100644
+--- a/src/lib/whatsNewData.ts
++++ b/src/lib/whatsNewData.ts
+@@ -9,6 +9,12 @@ export type ChangeEntry = { version: string; date: string; title: string; body:
+ // about; skip pure bug fixes and internal refactors that don't change what
+ // they can do.
+ export const CHANGES: ChangeEntry[] = [
++  {
++    version: "v177",
++    date: "November 2026",
++    title: "Sign-in security: changing your password now signs out your other devices, and there is a Sign out everywhere button.",
++    body: "We've improved sign-in security; you'll be asked to sign in again after this update. That one extra sign-in is the change working: Tasketra can now retire a session instead of letting it run until it expires on its own. From now on, changing your password signs your account out on every other device while the device you are using stays signed in, and the same is true after a password reset. Account also has a new Sign out everywhere button, for the lost laptop or the borrowed computer: one tap signs you out everywhere else, and this device stays signed in.",
++  },
+   {
+     version: "v176",
+     date: "November 2026",
+diff --git a/src/pages/Account.tsx b/src/pages/Account.tsx
+index 97f17d3..c629b09 100644
+--- a/src/pages/Account.tsx
++++ b/src/pages/Account.tsx
+@@ -41,6 +41,10 @@ export default function Account() {
+   const [passwordSaved, setPasswordSaved] = useState(false);
+   const [passwordError, setPasswordError] = useState("");
+ 
++  const [signOutBusy, setSignOutBusy] = useState(false);
++  const [signOutDone, setSignOutDone] = useState(false);
++  const [signOutError, setSignOutError] = useState("");
++
+   const [referrals, setReferrals] = useState<ReferralInfo | null>(null);
+   const [copied, setCopied] = useState(false);
+ 
+@@ -132,6 +136,20 @@ export default function Account() {
+     }
+   }
+ 
++  async function signOutEverywhere() {
++    setSignOutError("");
++    setSignOutDone(false);
++    setSignOutBusy(true);
++    try {
++      await api.signOutEverywhere();
++      setSignOutDone(true);
++    } catch (err) {
++      setSignOutError(err instanceof Error ? err.message : "Couldn't sign you out on your other devices.");
++    } finally {
++      setSignOutBusy(false);
++    }
++  }
++
+   function copyLink() {
+     if (!referrals) return;
+     navigator.clipboard.writeText(referrals.link).then(() => {
+@@ -238,13 +256,25 @@ export default function Account() {
+             <label htmlFor="f-account-194">New password</label>
+             <input id="f-account-194" type="password" required minLength={8} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+             {passwordError && <div className="form-error">{passwordError}</div>}
+-            {passwordSaved && <p className="form-success">Password updated.</p>}
++            {passwordSaved && <p className="form-success">Password updated. You have been signed out on your other devices.</p>}
+             <button type="submit" className="btn btn-primary" disabled={passwordBusy} style={{ marginTop: 8 }}>
+               {passwordBusy ? "Updating..." : "Update password"}
+             </button>
+           </form>
+         </SoftCard>
+ 
++        <SoftCard title="Sign out everywhere" className="ui-narrow billing-card">
++          <p className="muted" style={{ marginTop: 0 }}>
++            Lost a device, or signed in somewhere you should not have? This signs your account
++            out on every other device, right away. This device stays signed in.
++          </p>
++          {signOutError && <div className="form-error">{signOutError}</div>}
++          {signOutDone && <p className="form-success">You have been signed out on your other devices. This device stays signed in.</p>}
++          <button type="button" className="btn btn-ghost" disabled={signOutBusy} onClick={signOutEverywhere}>
++            {signOutBusy ? "Working..." : "Sign out everywhere"}
++          </button>
++        </SoftCard>
++
+         <SoftCard title="Your referral link" className="ui-narrow billing-card">
+           <p className="muted" style={{ marginTop: 0 }}>
+             Share it -- when someone joins through your link and subscribes to Pro, you both get a free month.
+diff --git a/src/pages/Today.tsx b/src/pages/Today.tsx
+index 5433cac..11493d5 100644
+--- a/src/pages/Today.tsx
++++ b/src/pages/Today.tsx
+@@ -348,7 +348,7 @@ export default function Today() {
+                     id="tw-add-title"
+                     value={newTitle}
+                     onChange={(e) => setNewTitle(e.target.value)}
+-                    placeholder="Add a task for today, press Enter"
++                    placeholder="Add a task for today"
+                     maxLength={200}
+                   />
+                   {projectsForAdd.length > 1 && (

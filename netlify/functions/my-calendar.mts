@@ -53,7 +53,7 @@ function defaultRange(): { from: string; to: string } {
 }
 
 export default withSentry(async (req: Request) => {
-  const userId = getUserIdFromRequest(req);
+  const userId = await getUserIdFromRequest(req);
   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
   if (req.method !== "GET") return json({ error: "Method not allowed" }, { status: 405 });
 

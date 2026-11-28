@@ -6,7 +6,7 @@ import { json } from "../lib/http.ts";
 import { withSentry } from "../lib/sentry.ts";
 
 export default withSentry(async (req: Request) => {
-  const userId = getUserIdFromRequest(req);
+  const userId = await getUserIdFromRequest(req);
   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
 
   const url = new URL(req.url);

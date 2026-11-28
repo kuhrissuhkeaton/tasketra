@@ -1,5 +1,8 @@
 import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
+import type { DatabaseConnection } from "@netlify/database";
+import { db } from "./db.ts";
+import type { UserSessionVersionRow } from "./rows.ts";
 
 declare const Netlify: { env: { get(key: string): string | undefined } } | undefined;
 
@@ -52,9 +55,9 @@ function sign(payload: string) {
   return crypto.createHmac("sha256", getSecret()).update(payload).digest("base64url");
 }
 
-export function createSessionCookie(userId: string) {
+export function createSessionCookie(userId: string, sessionVersion: number) {
   const expires = Date.now() + MAX_AGE_SECONDS * 1000;
-  const payload = `${userId}.${expires}`;
+  const payload = `${userId}.${expires}.${sessionVersion}`;
   const sig = sign(payload);
   const token = `${payload}.${sig}`;
   return `${COOKIE_NAME}=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${MAX_AGE_SECONDS}`;
@@ -75,7 +78,14 @@ function safeEqual(a: string, b: string): boolean {
   return crypto.timingSafeEqual(bufA, bufB);
 }
 
-export function getUserIdFromRequest(req: Request): string | null {
+/** Parses and verifies the session cookie's signature and expiry. This is
+ *  only the cryptographic half of authentication -- it proves the cookie
+ *  was issued by us and has not expired, but NOT that the session is still
+ *  current: revocation lives in the database (users.session_version), so
+ *  the only caller-facing check is the async getUserIdFromRequest below,
+ *  which compares the cookie's version against the stored one. Kept
+ *  private so no code path can authenticate on signature alone. */
+function parseSessionCookie(req: Request): { userId: string; sessionVersion: number } | null {
   const cookieHeader = req.headers.get("cookie") || "";
   const match = cookieHeader
     .split(";")
@@ -84,10 +94,43 @@ export function getUserIdFromRequest(req: Request): string | null {
   if (!match) return null;
   const token = match.slice(COOKIE_NAME.length + 1);
   const parts = token.split(".");
-  if (parts.length !== 3) return null;
-  const [userId, expires, sig] = parts;
-  const payload = `${userId}.${expires}`;
+  if (parts.length !== 4) return null;
+  const [userId, expires, version, sig] = parts;
+  if (!/^\d+$/.test(version)) return null;
+  const payload = `${userId}.${expires}.${version}`;
   if (!safeEqual(sign(payload), sig)) return null;
   if (Date.now() > Number(expires)) return null;
-  return userId;
+  return { userId, sessionVersion: Number(version) };
+}
+
+/** The one session check every handler uses (Step 1 Foundation Plan §5.4,
+ *  ratification Item 8: a database check on every authenticated request, no
+ *  cache, no grace window). A cookie is accepted only while its embedded
+ *  session_version equals the account's stored version; incrementing the
+ *  stored version (password change, password reset, "Sign out
+ *  everywhere") retires every older cookie at its next request. Cookies in
+ *  the pre-R2 three-segment format fail the parse and are rejected, so
+ *  every member signs in once after this ships. */
+export async function getUserIdFromRequest(req: Request): Promise<string | null> {
+  const parsed = parseSessionCookie(req);
+  if (!parsed) return null;
+  const database = db();
+  const [row] = await database.sql<UserSessionVersionRow>`
+    SELECT session_version FROM users WHERE id = ${parsed.userId}
+  `;
+  if (!row || row.session_version !== parsed.sessionVersion) return null;
+  return parsed.userId;
+}
+
+/** Increments an account's session_version, retiring every session cookie
+ *  issued at the old version, and returns the new version so the caller
+ *  can re-issue the current device's cookie at it (the device performing a
+ *  password change or a "Sign out everywhere" stays signed in; every other
+ *  device is signed out at its next request). */
+export async function bumpSessionVersion(database: DatabaseConnection, userId: string): Promise<number> {
+  const [row] = await database.sql<UserSessionVersionRow>`
+    UPDATE users SET session_version = session_version + 1 WHERE id = ${userId}
+    RETURNING session_version
+  `;
+  return row.session_version;
 }

@@ -1,6 +1,6 @@
 import type { Config } from "@netlify/functions";
 import { db } from "../lib/db.ts";
-import { getUserIdFromRequest } from "../lib/auth.ts";
+import { bumpSessionVersion, getUserIdFromRequest } from "../lib/auth.ts";
 import { json } from "../lib/http.ts";
 import { withSentry } from "../lib/sentry.ts";
 import { getStrictAdmin } from "../lib/adminGate.ts";
@@ -18,6 +18,9 @@ import { avatarsStore, documentsStore } from "../lib/blobs.ts";
 //                              anything that blocks it
 //   POST { userId, action: "remove-founding" }
 //   POST { userId, action: "delete", confirmEmail }   (email must be typed)
+//   POST { userId, action: "sign-out-everywhere" }    (platform admin only,
+//        plan §5.4 / SR-4.2: bumps the account's session_version, retiring
+//        every session it holds; workspace Admins get no such power)
 
 const realBlobDeleter: BlobDeleter = async (store, key) => {
   const s = store === "documents" ? documentsStore() : avatarsStore();
@@ -25,7 +28,7 @@ const realBlobDeleter: BlobDeleter = async (store, key) => {
 };
 
 export default withSentry(async (req: Request) => {
-  const userId = getUserIdFromRequest(req);
+  const userId = await getUserIdFromRequest(req);
   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
   const database = db();
   const admin = await getStrictAdmin(database, userId);
@@ -74,8 +77,15 @@ export default withSentry(async (req: Request) => {
     const body = (await req.json().catch(() => null)) as any;
     const targetId = typeof body?.userId === "string" ? body.userId : "";
     const action = body?.action;
-    if (!targetId || (action !== "remove-founding" && action !== "delete")) {
+    if (!targetId || (action !== "remove-founding" && action !== "delete" && action !== "sign-out-everywhere")) {
       return json({ error: "userId and a valid action are required." }, { status: 400 });
+    }
+
+    if (action === "sign-out-everywhere") {
+      const [target] = await database.sql`SELECT id FROM users WHERE id = ${targetId}`;
+      if (!target) return json({ error: "Account not found." }, { status: 404 });
+      await bumpSessionVersion(database, targetId);
+      return json({ ok: true });
     }
 
     if (action === "remove-founding") {

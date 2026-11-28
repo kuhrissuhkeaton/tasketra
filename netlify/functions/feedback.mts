@@ -10,7 +10,7 @@ const VALID_STATUSES = ["new", "planned", "shipped", "dismissed"];
 
 export default withSentry(async (req: Request) => {
   const database = db();
-  const userId = getUserIdFromRequest(req);
+  const userId = await getUserIdFromRequest(req);
   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
 
   if (req.method === "POST") {

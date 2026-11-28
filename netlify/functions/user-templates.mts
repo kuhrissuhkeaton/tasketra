@@ -24,7 +24,7 @@ function asTemplate(data: NonNullable<ReturnType<typeof sanitizeStored>>): Proje
 }
 
 export default withSentry(async (req: Request) => {
-  const userId = getUserIdFromRequest(req);
+  const userId = await getUserIdFromRequest(req);
   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
   const database = db();
 

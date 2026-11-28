@@ -14,7 +14,7 @@ import { documentsStore } from "../lib/blobs.ts";
 // and trashed documents lose their stored file as well.
 
 export default withSentry(async (req: Request) => {
-  const userId = getUserIdFromRequest(req);
+  const userId = await getUserIdFromRequest(req);
   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
   if (req.method !== "GET" && req.method !== "DELETE") return json({ error: "Method not allowed" }, { status: 405 });
 

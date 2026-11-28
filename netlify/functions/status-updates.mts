@@ -13,7 +13,7 @@ import { HEALTH_LABEL } from "../../src/lib/healthLabels.ts";
 const HEALTH_VALUES = ["on_track", "at_risk", "off_track"];
 
 export default withSentry(async (req: Request) => {
-  const userId = getUserIdFromRequest(req);
+  const userId = await getUserIdFromRequest(req);
   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, { status: 405 });
 

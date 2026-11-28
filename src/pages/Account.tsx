@@ -41,6 +41,10 @@ export default function Account() {
   const [passwordSaved, setPasswordSaved] = useState(false);
   const [passwordError, setPasswordError] = useState("");
 
+  const [signOutBusy, setSignOutBusy] = useState(false);
+  const [signOutDone, setSignOutDone] = useState(false);
+  const [signOutError, setSignOutError] = useState("");
+
   const [referrals, setReferrals] = useState<ReferralInfo | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -129,6 +133,20 @@ export default function Account() {
       setPasswordError(err instanceof Error ? err.message : "Couldn't change your password.");
     } finally {
       setPasswordBusy(false);
+    }
+  }
+
+  async function signOutEverywhere() {
+    setSignOutError("");
+    setSignOutDone(false);
+    setSignOutBusy(true);
+    try {
+      await api.signOutEverywhere();
+      setSignOutDone(true);
+    } catch (err) {
+      setSignOutError(err instanceof Error ? err.message : "Couldn't sign you out on your other devices.");
+    } finally {
+      setSignOutBusy(false);
     }
   }
 
@@ -238,11 +256,23 @@ export default function Account() {
             <label htmlFor="f-account-194">New password</label>
             <input id="f-account-194" type="password" required minLength={8} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
             {passwordError && <div className="form-error">{passwordError}</div>}
-            {passwordSaved && <p className="form-success">Password updated.</p>}
+            {passwordSaved && <p className="form-success">Password updated. You have been signed out on your other devices.</p>}
             <button type="submit" className="btn btn-primary" disabled={passwordBusy} style={{ marginTop: 8 }}>
               {passwordBusy ? "Updating..." : "Update password"}
             </button>
           </form>
+        </SoftCard>
+
+        <SoftCard title="Sign out everywhere" className="ui-narrow billing-card">
+          <p className="muted" style={{ marginTop: 0 }}>
+            Lost a device, or signed in somewhere you should not have? This signs your account
+            out on every other device, right away. This device stays signed in.
+          </p>
+          {signOutError && <div className="form-error">{signOutError}</div>}
+          {signOutDone && <p className="form-success">You have been signed out on your other devices. This device stays signed in.</p>}
+          <button type="button" className="btn btn-ghost" disabled={signOutBusy} onClick={signOutEverywhere}>
+            {signOutBusy ? "Working..." : "Sign out everywhere"}
+          </button>
         </SoftCard>
 
         <SoftCard title="Your referral link" className="ui-narrow billing-card">

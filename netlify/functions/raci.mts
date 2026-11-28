@@ -15,7 +15,7 @@ import { loadRaci, isRaciRole } from "../lib/raciData.ts";
 // "one Accountable per row" rule is a warning in the app, never enforced here.
 
 export default withSentry(async (req: Request) => {
-  const userId = getUserIdFromRequest(req);
+  const userId = await getUserIdFromRequest(req);
   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
   const database = db();
 

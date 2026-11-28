@@ -15,7 +15,7 @@ export async function createTestUser(
     VALUES (${email}, ${passwordHash}, ${opts.foundingMember ?? false}, ${opts.verified === false ? null : new Date().toISOString()})
     RETURNING id
   `;
-  const cookie = createSessionCookie(user.id).split(";")[0]; // "tasketra_session=..."
+  const cookie = createSessionCookie(user.id, 0).split(";")[0]; // "tasketra_session=..." (fresh accounts sit at session_version 0)
   return { id: user.id, email, cookie };
 }
 

@@ -69,12 +69,12 @@ export default withSentry(async (req: Request) => {
   // A founding spot is NOT given here. It is awarded when the person confirms
   // their email (see markEmailVerified), so an address nobody can read, or a
   // typo, can never hold one.
-  let user: { id: string; email: string };
+  let user: { id: string; email: string; session_version: number };
   try {
     [user] = await database.sql`
       INSERT INTO users (email, email_canonical, password_hash, referred_by, terms_accepted_at)
       VALUES (${email}, ${canonical}, ${passwordHash}, ${referredBy}, ${acceptedTerms ? new Date().toISOString() : null})
-      RETURNING id, email
+      RETURNING id, email, session_version
     `;
   } catch (err: any) {
     // Two sign-ups for the same mailbox at the same instant: the unique index
@@ -87,7 +87,7 @@ export default withSentry(async (req: Request) => {
   // confirmed, not now: until then we don't know the person owns the mailbox.
   const verificationEmailSent = await issueVerificationEmail(database, user.id, user.email).catch(() => false);
 
-  const cookie = createSessionCookie(user.id);
+  const cookie = createSessionCookie(user.id, user.session_version);
   return json({ user: { id: user.id, email: user.email }, verificationRequired: true, verificationEmailSent }, { status: 201, headers: { "set-cookie": cookie } });
 });
 

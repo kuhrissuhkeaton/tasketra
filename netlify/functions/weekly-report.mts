@@ -15,7 +15,7 @@ import { HEALTH_LABEL } from "../../src/lib/healthLabels.ts";
 // records -- built to be skimmed by a stakeholder in under a minute.
 
 export default withSentry(async (req: Request) => {
-  const userId = getUserIdFromRequest(req);
+  const userId = await getUserIdFromRequest(req);
   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
   const database = db();
   const url = new URL(req.url);

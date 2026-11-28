@@ -61,7 +61,7 @@ import { loadStageInputs } from "../lib/stageData.ts";
 // keeps a pathological account from turning this rollup into a full dump.
 
 export default withSentry(async (req: Request) => {
-  const userId = getUserIdFromRequest(req);
+  const userId = await getUserIdFromRequest(req);
   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
   if (req.method !== "GET") return json({ error: "Method not allowed" }, { status: 405 });
 

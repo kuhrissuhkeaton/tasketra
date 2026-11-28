@@ -24,7 +24,7 @@ async function streamToBytes(body: unknown): Promise<Uint8Array> {
 }
 
 export default withSentry(async (req: Request) => {
-  const userId = getUserIdFromRequest(req);
+  const userId = await getUserIdFromRequest(req);
   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
   if (!(await getStrictAdmin(db(), userId))) return json({ error: "Not found" }, { status: 404 });
 

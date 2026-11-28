@@ -11,10 +11,12 @@ export function runWithUser<T>(userId: string | null, fn: () => T): T {
   return storage.run({ userId }, fn);
 }
 
-export function runForRequest<T>(req: unknown, fn: () => T): T {
+export async function runForRequest<T>(req: unknown, fn: () => T): Promise<T> {
   let userId: string | null = null;
   try {
-    userId = req instanceof Request ? getUserIdFromRequest(req) : null;
+    // The same revocation-checked session lookup the handlers use (R2):
+    // a retired cookie records no author, exactly as a signed-out request.
+    userId = req instanceof Request ? await getUserIdFromRequest(req) : null;
   } catch {
     userId = null; // a bad or missing session secret must never break a public endpoint
   }

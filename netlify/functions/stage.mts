@@ -12,7 +12,7 @@ import { monitorBand, stageChecklist } from "../lib/stageChecklist.ts";
 // lib/stageChecklist.ts. Changing a project's stage is a PATCH on /api/project.
 
 export default withSentry(async (req: Request) => {
-  const userId = getUserIdFromRequest(req);
+  const userId = await getUserIdFromRequest(req);
   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
   if (req.method !== "GET") return json({ error: "Method not allowed" }, { status: 405 });
 

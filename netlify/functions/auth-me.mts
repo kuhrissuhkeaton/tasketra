@@ -7,7 +7,7 @@ import { getUserPlan } from "../lib/billing.ts";
 import { withSentry } from "../lib/sentry.ts";
 
 export default withSentry(async (req: Request) => {
-  const userId = getUserIdFromRequest(req);
+  const userId = await getUserIdFromRequest(req);
   if (!userId) return json({ user: null }, { status: 200 });
 
   const database = db();

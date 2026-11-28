@@ -23,7 +23,7 @@ export default withSentry(async (req: Request) => {
   }
 
   // Everything else is admin-only.
-  const userId = getUserIdFromRequest(req);
+  const userId = await getUserIdFromRequest(req);
   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
   if (!(await getStrictAdmin(database, userId))) return json({ error: "Not authorized" }, { status: 403 });
 

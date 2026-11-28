@@ -10,6 +10,12 @@ export type ChangeEntry = { version: string; date: string; title: string; body: 
 // they can do.
 export const CHANGES: ChangeEntry[] = [
   {
+    version: "v177",
+    date: "November 2026",
+    title: "Sign-in security: changing your password now signs out your other devices, and there is a Sign out everywhere button.",
+    body: "We've improved sign-in security; you'll be asked to sign in again after this update. That one extra sign-in is the change working: Tasketra can now retire a session instead of letting it run until it expires on its own. From now on, changing your password signs your account out on every other device while the device you are using stays signed in, and the same is true after a password reset. Account also has a new Sign out everywhere button, for the lost laptop or the borrowed computer: one tap signs you out everywhere else, and this device stays signed in.",
+  },
+  {
     version: "v176",
     date: "November 2026",
     title: "Two things are stated plainly now: what happens when a trial ends, and what a stakeholder email does.",

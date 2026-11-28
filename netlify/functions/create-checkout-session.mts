@@ -15,7 +15,7 @@ import { proPriceLabel } from "../../src/lib/pricing.ts";
 
 export default withSentry(async (req: Request) => {
   if (req.method !== "POST") return json({ error: "Method not allowed" }, { status: 405 });
-  const userId = getUserIdFromRequest(req);
+  const userId = await getUserIdFromRequest(req);
   if (!userId) return json({ error: "Not authenticated" }, { status: 401 });
   {
     const unverified = await requireVerifiedEmail(db(), userId);

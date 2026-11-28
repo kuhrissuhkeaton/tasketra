@@ -348,7 +348,7 @@ export default function Today() {
                     id="tw-add-title"
                     value={newTitle}
                     onChange={(e) => setNewTitle(e.target.value)}
-                    placeholder="Add a task for today, press Enter"
+                    placeholder="Add a task for today"
                     maxLength={200}
                   />
                   {projectsForAdd.length > 1 && (
