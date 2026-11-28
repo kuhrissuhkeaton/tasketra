@@ -1,0 +1,1149 @@
+diff --git a/docs/RUNBOOK.md b/docs/RUNBOOK.md
+index 2c12d8c..e2bd719 100644
+--- a/docs/RUNBOOK.md
++++ b/docs/RUNBOOK.md
+@@ -102,22 +102,122 @@ Recovery, learned 2026-11-02:
+   code can usually keep running against the new schema — but "usually" is a
+   thing to verify, not assume.
+ 
+-## Restore from backup
+-
+-**Status: entry point only — the restore rehearsal has not yet been run.**
+-
+-Backups exist (Netlify Database backups run daily and on every publish, plus
+-Backblaze B2 storage), and backup files are manifest-verified — but a restore
+-has never been rehearsed end to end, so today a restore is an unproven
+-procedure, not a capability anyone should promise against.
+-
+-The tested restore rehearsal is **Gate 0** of the Step 1 Foundation Plan
+-(plan §1.7): build/verify the importer against synthetic data in an isolated
+-scratch environment with a throwaway `SESSION_SECRET`, attended by the
+-maintainer, results reported as counts and pass/fail only (never data
+-samples), scratch destroyed the same session. When Gate 0 has run, this
+-section gets the full entry: importer path, steps, exclusions, and the
+-measured restore duration, with the date last rehearsed.
++## Restore from B2 backup
++
++**Status: procedure written and pre-rehearsed on synthetic data (Gate 0,
++Step 1 Foundation Plan §1.7). The attended rehearsal against a real backup
++run — which signs this entry — is recorded in the rehearsal log at the
++bottom of this section. Until that entry exists, treat a real restore as
++unproven and say so.**
++
++What the backup is: `scheduled-backup.mts` runs **weekly** (Mondays 06:00
++UTC, last 12 runs kept) and writes one run per week to Backblaze B2 under
++`backups/<runId>/`: `manifest.json` (export timestamp, per-table row counts,
++document count, avatar count), `db.json` (every table's rows), `documents/`
++(every file in the Netlify Blobs documents store), and `avatars/` (every
++file in the avatars store — runs from before the Gate 0 fix, 2026-11-28,
++have no `avatars/` folder and no avatar count; they restore validly, just
++without avatars). Netlify Database's own built-in backups are a separate
++mechanism and are **not** what this procedure restores.
++
++**Exclusions, by design:** `rate_limit_hits` (ephemeral abuse counters) and
++`password_reset_tokens` (short-lived security tokens — restoring one would
++let an expired reset link work again) are not exported. After a restore both
++tables are empty, which is correct.
++
++**The restore tool** is `scripts/restore-backup.mjs`, kept in this repo. It
++rebuilds the schema from all migrations in order, imports `db.json` in
++FK-safe order, copies the document and avatar files to a local directory,
++and then runs the verification battery. Its output is counts and pass/fail
++only — never row contents.
++
++### Safety rules (plan §6, SR-7 — conditions, not aspirations)
++
++- The importer **refuses a non-empty target database**. A restore only ever
++  runs into an empty, isolated scratch database — never production, never
++  over live data.
++- The scratch copy is attended by the maintainer, is never on a public URL,
++  and is never used for demos, screenshots, or browsing real projects.
++- If the app is booted against the scratch database for the load checks,
++  its auth uses a **throwaway `SESSION_SECRET`** so restored password
++  hashes and session material cannot be exercised.
++- Results are reported as counts and pass/fail only — never data samples,
++  in any log, message, or report.
++- The scratch copy is **destroyed at the end of the same session** and the
++  destruction is confirmed in the rehearsal log below.
++- A rehearsal never becomes a member-facing restore promise: backups are
++  disaster recovery, not an undo service (SR-7.4).
++
++### Procedure
++
++0. **Confirm the target's Postgres major version matches production's**
++   before creating the scratch database. (Production's major version is not
++   recorded in the repo; read it from the Netlify Database dashboard or
++   `SHOW server_version` against production, and write it into the
++   rehearsal log. The synthetic pre-rehearsal ran on PostgreSQL 16.)
++1. **Download the chosen run** from B2 (`backups/<runId>/`) into a local
++   directory: `manifest.json`, `db.json`, `documents/`, and `avatars/` if
++   the run has them. Note the run's timestamp — the backup's age goes in
++   the log (the weekly cadence means the newest run can be ~7 days old).
++2. **Create an empty scratch database** (local Postgres or a fresh Netlify
++   Database — the target must be empty; the importer checks and refuses
++   otherwise). No public URL.
++3. **Run the importer**, timed:
++   `node scripts/restore-backup.mjs --source <run-dir> --target <scratch-connection-string> --files-out <dir>`
++   It pre-flights the backup (manifest and `db.json` must agree), rebuilds
++   the schema from all migrations, loads the rows, copies the files out,
++   and runs the battery. Five tables cannot be strictly FK-ordered: one
++   genuine reference cycle (`projects` → `decision_requests` →
++   `stakeholders` → `projects`, via `charter_decision_id`,
++   `owner_stakeholder_id`, and `project_id`) plus the self-referencing
++   `users` (`referred_by`) and `tasks` (`parent_task_id`). Those five load
++   with FK checks deferred to the battery's integrity sweep, the same
++   mechanism `pg_restore --disable-triggers` uses. Every other table loads
++   with FK checks fully on, parents before children.
++4. **The battery decides — any single failure fails the restore:**
++   per-table row counts equal the manifest **exactly**; the FK integrity
++   sweep finds zero orphan rows; document and avatar file counts equal the
++   manifest with no empty files; the two excluded tables are present in the
++   schema and empty.
++5. **Spot checks, by the maintainer in the room, reported pass/fail only:**
++   the admin account is present; the Portal, Summit, and Clinic projects
++   are present with their known logged-cost total; one decision with a
++   public token has its link intact; one subscription row is shaped
++   correctly; one restored document actually opens.
++6. **App-boots check:** point a local/dev build of the app at the scratch
++   database with a throwaway `SESSION_SECRET` and confirm Today, one
++   project, and Workload load.
++7. **Record and destroy:** fill in the rehearsal log below (date, backup
++   run timestamp and age, target used, measured duration, battery result,
++   who ran it), then destroy the scratch database and the downloaded run
++   copy in the same session and confirm the destruction in the log.
++8. **After a real disaster restore** (not a rehearsal): the importer writes
++   document/avatar files to a local directory; re-uploading them to the
++   new site's Netlify Blobs stores (documents keyed by document id, avatars
++   keyed by user id) is a separate manual step before the app can serve
++   them.
++
++### Measured durations
++
++- Synthetic pre-rehearsal (2026-11-28, Ada): importer end-to-end **340 ms**
++  against a fixture-scale backup (44 tables, 21 rows, 3 files) on a local
++  PostgreSQL 16.15. This proves the path, not the production number — the
++  attended rehearsal records the real one.
++- Attended rehearsal: see the log below.
++
++### Rehearsal log (signed entry — Gate 0 completes when this is filled)
++
++- Date:
++- Backup run restored (runId / exportedAt):
++- Backup age at restore:
++- Target used (Netlify DB / local Postgres, and its Postgres version):
++- Production Postgres major version (and how it was confirmed):
++- Importer duration (end to end):
++- Battery result (pass/fail per section — counts, FK sweep, files):
++- Spot checks (pass/fail only):
++- App-boots check (Today / one project / Workload):
++- Ran by / attended by:
++- Scratch destroyed in the same session (confirmed by, how):
+ 
+ Backups are disaster recovery. They are **not** a member-facing undo service,
+ and no restore promise is made to members on the strength of them.
+diff --git a/netlify/functions/scheduled-backup.mts b/netlify/functions/scheduled-backup.mts
+index 70cfb69..08ebd09 100644
+--- a/netlify/functions/scheduled-backup.mts
++++ b/netlify/functions/scheduled-backup.mts
+@@ -1,18 +1,25 @@
+ import type { Config } from "@netlify/functions";
+ import { PutObjectCommand, ListObjectsV2Command, DeleteObjectCommand } from "@aws-sdk/client-s3";
+ import { db } from "../lib/db.ts";
+-import { documentsStore } from "../lib/blobs.ts";
++import { documentsStore, avatarsStore } from "../lib/blobs.ts";
+ import { s3, backupBucketName } from "../lib/s3.ts";
+ import { sendEmail } from "../lib/notify.ts";
+ import { getEnv } from "../lib/env.ts";
+ import { withSentry } from "../lib/sentry.ts";
+ 
+ // Weekly off-site backup: every table in the database plus every uploaded
+-// document, exported to a Backblaze B2 bucket outside Netlify entirely --
+-// so a Netlify-side incident can't take out the app and its backups at the
+-// same time. This supplements (doesn't replace) Netlify Database's own
+-// built-in backups, which only cover the database, not Blobs, and only for
+-// as long as the current plan's retention window.
++// document and profile avatar, exported to a Backblaze B2 bucket outside
++// Netlify entirely -- so a Netlify-side incident can't take out the app and
++// its backups at the same time. This supplements (doesn't replace) Netlify
++// Database's own built-in backups, which only cover the database, not Blobs,
++// and only for as long as the current plan's retention window.
++//
++// Avatars joined the run in the Gate 0 fix (2026-11-28): before that the
++// export copied only the documents store, so a restore would have brought
++// back users.avatar_key pointers to files that were never backed up. Runs
++// from before the fix have no avatars/ folder and no avatarCount in their
++// manifest; the restore tool (scripts/restore-backup.mjs) treats that shape
++// as valid and simply restores no avatars from those runs.
+ //
+ // Two tables are deliberately excluded: rate_limit_hits (ephemeral abuse
+ // counters, not real data) and password_reset_tokens (short-lived security
+@@ -60,6 +67,20 @@ async function exportDocuments() {
+   return files;
+ }
+ 
++// Avatars live in their own Blobs store, keyed by user id (see blobs.ts).
++// Same shape as exportDocuments so the run layout stays parallel:
++// documents/<key> and avatars/<key> side by side under the run prefix.
++async function exportAvatars() {
++  const store = avatarsStore();
++  const { blobs } = await store.list();
++  const files: { key: string; data: ArrayBuffer }[] = [];
++  for (const blob of blobs) {
++    const data = await store.get(blob.key, { type: "arrayBuffer" });
++    if (data) files.push({ key: blob.key, data });
++  }
++  return files;
++}
++
+ async function pruneOldRuns(client: ReturnType<typeof s3>, bucket: string) {
+   const listed = await client.send(
+     new ListObjectsV2Command({ Bucket: bucket, Prefix: "backups/", Delimiter: "/" })
+@@ -91,11 +112,13 @@ export default withSentry(async () => {
+ 
+     const tables = await exportDatabase(database);
+     const documents = await exportDocuments();
++    const avatars = await exportAvatars();
+ 
+     const manifest = {
+       exportedAt: startedAt.toISOString(),
+       tableCounts: Object.fromEntries(Object.entries(tables).map(([name, rows]) => [name, rows.length])),
+       documentCount: documents.length,
++      avatarCount: avatars.length,
+     };
+ 
+     await client.send(
+@@ -123,10 +146,19 @@ export default withSentry(async () => {
+         })
+       );
+     }
++    for (const file of avatars) {
++      await client.send(
++        new PutObjectCommand({
++          Bucket: bucket,
++          Key: `${prefix}avatars/${file.key}`,
++          Body: new Uint8Array(file.data),
++        })
++      );
++    }
+ 
+     const prunedCount = await pruneOldRuns(client, bucket);
+ 
+-    console.log(`[scheduled-backup] success runId=${runId} tables=${Object.keys(tables).length} documents=${documents.length} prunedRuns=${prunedCount}`);
++    console.log(`[scheduled-backup] success runId=${runId} tables=${Object.keys(tables).length} documents=${documents.length} avatars=${avatars.length} prunedRuns=${prunedCount}`);
+ 
+     return new Response(
+       JSON.stringify({ ok: true, runId, manifest, prunedRuns: prunedCount }),
+diff --git a/netlify/functions/verify-backup.mts b/netlify/functions/verify-backup.mts
+index ca9aed9..596346e 100644
+--- a/netlify/functions/verify-backup.mts
++++ b/netlify/functions/verify-backup.mts
+@@ -54,6 +54,11 @@ export default withSentry(async (req: Request) => {
+       exportedAt: string;
+       tableCounts: Record<string, number>;
+       documentCount: number;
++      // Absent on runs from before the Gate 0 avatar fix (2026-11-28);
++      // those runs genuinely contain no avatars, so there is nothing
++      // to cross-check — the check below reports that shape rather than
++      // failing a valid older run.
++      avatarCount?: number;
+     };
+     record("manifest.json readable + valid JSON", true, `exportedAt=${manifest.exportedAt}`);
+ 
+@@ -89,6 +94,27 @@ export default withSentry(async (req: Request) => {
+     }
+     if (docKeys.length > 0) record("all documents downloaded with nonzero size", docsOk, "");
+ 
++    if (typeof manifest.avatarCount === "number") {
++      const avatarsListed = await client.send(
++        new ListObjectsV2Command({ Bucket: bucket, Prefix: `${latest}avatars/` })
++      );
++      const avatarKeys = (avatarsListed.Contents || []).map((o) => o.Key).filter((k): k is string => !!k);
++      record(
++        "avatar count matches manifest",
++        avatarKeys.length === manifest.avatarCount,
++        `${avatarKeys.length} objects found, manifest says ${manifest.avatarCount}`
++      );
++      let avatarsOk = true;
++      for (const key of avatarKeys) {
++        const res = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
++        const bytes = await streamToBytes(res.Body);
++        if (bytes.length <= 0) avatarsOk = false;
++      }
++      if (avatarKeys.length > 0) record("all avatars downloaded with nonzero size", avatarsOk, "");
++    } else {
++      record("avatar count matches manifest", true, "run predates the avatar fix — no avatars in this run to check");
++    }
++
+     const allOk = checks.every((c) => c.ok);
+     console.log(`[verify-backup] ${allOk ? "PASSED" : "FAILED"} run=${latest} checks=${JSON.stringify(checks)}`);
+ 
+diff --git a/netlify/lib/__tests__/restore-backup.test.ts b/netlify/lib/__tests__/restore-backup.test.ts
+new file mode 100644
+index 0000000..4b7c2f5
+--- /dev/null
++++ b/netlify/lib/__tests__/restore-backup.test.ts
+@@ -0,0 +1,384 @@
++import { describe, it, expect, beforeAll, afterAll } from "vitest";
++import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync } from "node:fs";
++import { tmpdir, } from "node:os";
++import { join, dirname } from "node:path";
++import { fileURLToPath } from "node:url";
++import { execFile } from "node:child_process";
++import { promisify } from "node:util";
++import { PGlite } from "@electric-sql/pglite";
++import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
++import { PGLiteSocketServer } from "@electric-sql/pglite-socket";
++import pg from "pg";
++
++// Gate 0 / plan test T8: the backup importer (scripts/restore-backup.mjs)
++// runs against a synthetic backup fixture, so every future change to the
++// repo re-proves the importer still works — and a change to the export's
++// shape fails a test instead of failing silently on the worst day.
++//
++// The fixture is built the way the real backup is built: a source database
++// is migrated and seeded, then exported by the same live-catalog enumeration
++// + SELECT * that scheduled-backup.mts performs, so db.json's value shapes
++// (ISO timestamps, parsed JSONB, string numerics) are the exporter's real
++// shapes, not hand-written approximations. Contents follow the Gate 0
++// package's fixture list: every table present (most empty), the full FK
++// depth (user → project → members/tasks → task links; a decision with a
++// public token + record + recipient; a subscription; documents with their
++// files; an avatar), the awkward rows (soft-deleted, NULLs, JSONB, unicode,
++// timestamps), and the two designed-exclusion tables absent from the export.
++//
++// The rehearsal itself never runs on PGlite (plan §1.7 — the drill needs a
++// real Postgres at production's major version). This suite test is the
++// smoke alarm, not the fire drill; it uses the suite's disposable engine
++// exactly as testDb.ts does.
++
++const execFileAsync = promisify(execFile);
++const here = dirname(fileURLToPath(import.meta.url));
++const repoRoot = join(here, "..", "..", "..");
++const MIGRATIONS_DIR = join(repoRoot, "netlify", "database", "migrations");
++const IMPORTER = join(repoRoot, "scripts", "restore-backup.mjs");
++
++const EXCLUDED_TABLES = new Set(["rate_limit_hits", "password_reset_tokens"]);
++const TABLE_NAME_PATTERN = /^[a-z_][a-z0-9_]*$/;
++
++// Fixed synthetic ids — fixture data only, never real data (Marshall's
++// no-real-data-in-fixtures check).
++const IDS = {
++  userAdmin: "11111111-1111-4111-8111-111111111111",
++  userMember: "22222222-2222-4222-8222-222222222222",
++  projectA: "33333333-3333-4333-8333-333333333333",
++  projectB: "44444444-4444-4444-8444-444444444444",
++  stakeholder: "55555555-5555-4555-8555-555555555555",
++  stakeholderDeleted: "66666666-6666-4666-8666-666666666666",
++  taskA: "77777777-7777-4777-8777-777777777777",
++  taskB: "88888888-8888-4888-8888-888888888888",
++  taskDeleted: "99999999-9999-4999-8999-999999999999",
++  decision: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
++  document: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
++  documentDeleted: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
++};
++
++const DOCUMENT_BYTES = Buffer.from("Fixture document — café plan, naïve résumé ✓\n", "utf-8");
++const AVATAR_BYTES = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x66, 0x69, 0x78, 0x74, 0x75, 0x72, 0x65]);
++
++interface DisposablePg {
++  url: string;
++  close: () => Promise<void>;
++}
++
++async function findFreePort(): Promise<number> {
++  const net = await import("node:net");
++  return new Promise((resolve, reject) => {
++    const srv = net.createServer();
++    srv.listen(0, () => {
++      const address = srv.address();
++      if (address && typeof address === "object") {
++        const p = address.port;
++        srv.close(() => resolve(p));
++      } else {
++        srv.close(() => reject(new Error("could not find a free port")));
++      }
++    });
++    srv.on("error", reject);
++  });
++}
++
++/** A disposable Postgres with NO schema applied — the importer's target
++ *  shape (it rebuilds the schema itself). */
++async function startEmptyPg(): Promise<DisposablePg> {
++  const db = new PGlite({ extensions: { pgcrypto } });
++  const port = await findFreePort();
++  const server = new PGLiteSocketServer({ db, port, host: "127.0.0.1", maxConnections: 20 });
++  await server.start();
++  return {
++    url: `postgres://postgres:postgres@127.0.0.1:${port}/postgres`,
++    close: async () => {
++      await server.stop();
++      await db.close();
++    },
++  };
++}
++
++async function runMigrations(pool: pg.Pool): Promise<void> {
++  const { readdirSync, readFileSync } = await import("node:fs");
++  const dirs = readdirSync(MIGRATIONS_DIR, { withFileTypes: true })
++    .filter((d) => d.isDirectory())
++    .map((d) => d.name)
++    .sort();
++  for (const dir of dirs) {
++    await pool.query(readFileSync(join(MIGRATIONS_DIR, dir, "migration.sql"), "utf-8"));
++  }
++}
++
++async function seedSource(pool: pg.Pool): Promise<void> {
++  await pool.query(
++    `INSERT INTO users (id, email, password_hash, display_name, avatar_key, created_at) VALUES
++       ($1, 'fixture-admin@example.test', 'fixture-hash-not-a-real-password', 'Zoë Ñoño 🚀', 'image/png', '2026-01-15T10:30:00.123Z'),
++       ($2, 'fixture-member@example.test', 'fixture-hash-not-a-real-password', 'Plain Member', NULL, '2026-02-01T09:00:00.000Z')`,
++    [IDS.userAdmin, IDS.userMember]
++  );
++  await pool.query(
++    `INSERT INTO projects (id, owner_id, name, description) VALUES
++       ($1, $3, 'Fixture Project — Ünïcode', 'A synthetic project for the restore fixture'),
++       ($2, $3, 'Fixture Project B', NULL)`,
++    [IDS.projectA, IDS.projectB, IDS.userAdmin]
++  );
++  await pool.query(
++    `INSERT INTO project_members (project_id, user_id, invited_email, status, joined_at) VALUES
++       ($1, $2, 'fixture-member@example.test', 'active', '2026-02-02T09:00:00.000Z'),
++       ($1, NULL, 'invited@example.test', 'invited', NULL)`,
++    [IDS.projectA, IDS.userMember]
++  );
++  await pool.query(
++    `INSERT INTO stakeholders (id, project_id, name, email, role, deleted_at) VALUES
++       ($1, $3, 'Fixture Stakeholder', 'stakeholder@example.test', 'Sponsor', NULL),
++       ($2, $3, 'Deleted Stakeholder', NULL, NULL, '2026-03-01T12:00:00.000Z')`,
++    [IDS.stakeholder, IDS.stakeholderDeleted, IDS.projectA]
++  );
++  await pool.query(
++    `INSERT INTO tasks (id, project_id, title, status, owner_name, due_date, stakeholder_id, deleted_at) VALUES
++       ($1, $4, 'Fixture task — première', 'in_progress', 'Zoë Ñoño', '2026-12-04', $5, NULL),
++       ($2, $4, 'Dependent fixture task', 'not_started', NULL, NULL, NULL, NULL),
++       ($3, $4, 'Soft-deleted fixture task', 'done', NULL, NULL, NULL, '2026-03-02T12:00:00.000Z')`,
++    [IDS.taskA, IDS.taskB, IDS.taskDeleted, IDS.projectA, IDS.stakeholder]
++  );
++  await pool.query(
++    `INSERT INTO task_task_links (task_id, depends_on_task_id) VALUES ($1, $2)`,
++    [IDS.taskB, IDS.taskA]
++  );
++  await pool.query(
++    `INSERT INTO decision_requests (id, project_id, title, context, options, deadline, public_token, status) VALUES
++       ($1, $2, 'Fixture decision', 'Synthetic context', $3::jsonb, '2026-12-20', 'fixture-public-token-0001', 'resolved')`,
++    [IDS.decision, IDS.projectA, JSON.stringify(["Option A — café", "Option B"])]
++  );
++  await pool.query(
++    `INSERT INTO decision_request_recipients (decision_request_id, stakeholder_id) VALUES ($1, $2)`,
++    [IDS.decision, IDS.stakeholder]
++  );
++  await pool.query(
++    `INSERT INTO decision_records (decision_request_id, chosen_option, responder_name) VALUES ($1, 'Option A — café', 'Fixture Stakeholder')`,
++    [IDS.decision]
++  );
++  await pool.query(
++    `INSERT INTO subscriptions (user_id, stripe_customer_id, stripe_subscription_id, status, billing_interval, current_period_end) VALUES
++       ($1, 'cus_fixture', 'sub_fixture', 'active', NULL, '2027-01-01T00:00:00.000Z')`,
++    [IDS.userAdmin]
++  );
++  await pool.query(
++    `INSERT INTO documents (id, project_id, uploaded_by, filename, mime_type, size_bytes, blob_key, deleted_at) VALUES
++       ($1, $3, $4, 'fixture-plan.txt', 'text/plain', $5, $6, NULL),
++       ($2, $3, $4, 'fixture-deleted.txt', 'text/plain', $5, $7, '2026-03-03T12:00:00.000Z')`,
++    [IDS.document, IDS.documentDeleted, IDS.projectA, IDS.userAdmin, DOCUMENT_BYTES.length, IDS.document, IDS.documentDeleted]
++  );
++  await pool.query(
++    `INSERT INTO status_updates (project_id, body) VALUES ($1, 'Weekly sync — naïve café notes ✓')`,
++    [IDS.projectA]
++  );
++}
++
++interface Fixture {
++  dir: string;
++  manifest: { exportedAt: string; tableCounts: Record<string, number>; documentCount: number; avatarCount?: number };
++}
++
++/** Exports the seeded source exactly the way scheduled-backup.mts does:
++ *  live catalog enumeration, SELECT * per table, manifest from counts. */
++async function buildFixture(sourceUrl: string, withAvatars: boolean): Promise<Fixture> {
++  const pool = new pg.Pool({ connectionString: sourceUrl });
++  try {
++    const tableRows = await pool.query<{ table_name: string }>(
++      `SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE'`
++    );
++    const tables: Record<string, unknown[]> = {};
++    for (const { table_name } of tableRows.rows) {
++      if (EXCLUDED_TABLES.has(table_name)) continue;
++      if (!TABLE_NAME_PATTERN.test(table_name)) continue;
++      const result = await pool.query(`SELECT * FROM "${table_name}"`);
++      tables[table_name] = result.rows;
++    }
++
++    const dir = mkdtempSync(join(tmpdir(), "tasketra-fixture-backup-"));
++    mkdirSync(join(dir, "documents"), { recursive: true });
++    writeFileSync(join(dir, "documents", IDS.document), DOCUMENT_BYTES);
++    writeFileSync(join(dir, "documents", IDS.documentDeleted), DOCUMENT_BYTES);
++
++    const manifest: Fixture["manifest"] = {
++      exportedAt: new Date().toISOString(),
++      tableCounts: Object.fromEntries(Object.entries(tables).map(([name, rows]) => [name, rows.length])),
++      documentCount: 2,
++    };
++    if (withAvatars) {
++      mkdirSync(join(dir, "avatars"), { recursive: true });
++      // Avatars are keyed by user id (netlify/lib/blobs.ts).
++      writeFileSync(join(dir, "avatars", IDS.userAdmin), AVATAR_BYTES);
++      manifest.avatarCount = 1;
++    }
++    writeFileSync(join(dir, "db.json"), JSON.stringify(tables));
++    writeFileSync(join(dir, "manifest.json"), JSON.stringify(manifest, null, 2));
++    return { dir, manifest };
++  } finally {
++    await pool.end();
++  }
++}
++
++interface ImporterRun {
++  code: number;
++  stdout: string;
++  stderr: string;
++}
++
++async function runImporter(sourceDir: string, targetUrl: string, filesOut: string): Promise<ImporterRun> {
++  try {
++    const { stdout, stderr } = await execFileAsync(
++      process.execPath,
++      [IMPORTER, "--source", sourceDir, "--target", targetUrl, "--files-out", filesOut],
++      { maxBuffer: 16 * 1024 * 1024 }
++    );
++    return { code: 0, stdout, stderr };
++  } catch (err) {
++    const e = err as { code?: number; stdout?: string; stderr?: string };
++    return { code: typeof e.code === "number" ? e.code : -1, stdout: e.stdout ?? "", stderr: e.stderr ?? "" };
++  }
++}
++
++describe("Gate 0 — backup importer against a synthetic fixture (plan T8)", () => {
++  let source: DisposablePg;
++  let fixture: Fixture;
++  let legacyFixture: Fixture;
++
++  beforeAll(async () => {
++    source = await startEmptyPg();
++    const pool = new pg.Pool({ connectionString: source.url });
++    try {
++      await runMigrations(pool);
++      await seedSource(pool);
++    } finally {
++      await pool.end();
++    }
++    fixture = await buildFixture(source.url, true);
++    legacyFixture = await buildFixture(source.url, false);
++  }, 300_000);
++
++  afterAll(async () => {
++    await source?.close();
++  });
++
++  it("restores the fixture and passes the battery, spot records intact", async () => {
++    const target = await startEmptyPg();
++    const filesOut = mkdtempSync(join(tmpdir(), "tasketra-restored-files-"));
++    try {
++      const run = await runImporter(fixture.dir, target.url, filesOut);
++      expect(run.code, run.stdout + run.stderr).toBe(0);
++      expect(run.stdout).toContain("BATTERY: PASS");
++
++      const pool = new pg.Pool({ connectionString: target.url });
++      try {
++        // Counts equal the manifest exactly, for every exported table.
++        for (const [table, expected] of Object.entries(fixture.manifest.tableCounts)) {
++          const res = await pool.query(`SELECT count(*)::int AS n FROM "${table}"`);
++          expect(res.rows[0].n, table).toBe(expected);
++        }
++        // The designed exclusions exist (schema rebuilt) and are empty.
++        for (const table of EXCLUDED_TABLES) {
++          const res = await pool.query(`SELECT count(*)::int AS n FROM "${table}"`);
++          expect(res.rows[0].n, table).toBe(0);
++        }
++        // Spot records: unicode survives the round trip byte-for-byte.
++        const user = await pool.query(`SELECT display_name, avatar_key, created_at FROM users WHERE id = $1`, [IDS.userAdmin]);
++        expect(user.rows[0].display_name).toBe("Zoë Ñoño 🚀");
++        expect(user.rows[0].avatar_key).toBe("image/png");
++        expect(new Date(user.rows[0].created_at).getTime()).toBe(Date.parse("2026-01-15T10:30:00.123Z"));
++        // JSONB lands back as JSON, not text.
++        const decision = await pool.query(`SELECT options, public_token FROM decision_requests WHERE id = $1`, [IDS.decision]);
++        expect(decision.rows[0].options).toEqual(["Option A — café", "Option B"]);
++        expect(decision.rows[0].public_token).toBe("fixture-public-token-0001");
++        // Soft-deleted rows restore as soft-deleted rows.
++        const deletedTask = await pool.query(`SELECT deleted_at FROM tasks WHERE id = $1`, [IDS.taskDeleted]);
++        expect(deletedTask.rows[0].deleted_at).not.toBeNull();
++        // FK depth landed: the dependency link points at a real task.
++        const link = await pool.query(
++          `SELECT count(*)::int AS n FROM task_task_links l JOIN tasks t ON t.id = l.depends_on_task_id WHERE l.task_id = $1`,
++          [IDS.taskB]
++        );
++        expect(link.rows[0].n).toBe(1);
++        // NULLs stay NULL.
++        const projectB = await pool.query(`SELECT description FROM projects WHERE id = $1`, [IDS.projectB]);
++        expect(projectB.rows[0].description).toBeNull();
++      } finally {
++        await pool.end();
++      }
++
++      // Files restored: both documents, byte-identical; the avatar too.
++      expect(readdirSync(join(filesOut, "documents")).sort()).toEqual([IDS.document, IDS.documentDeleted].sort());
++      expect(readFileSync(join(filesOut, "documents", IDS.document)).equals(DOCUMENT_BYTES)).toBe(true);
++      expect(readFileSync(join(filesOut, "avatars", IDS.userAdmin)).equals(AVATAR_BYTES)).toBe(true);
++    } finally {
++      await target.close();
++    }
++  }, 300_000);
++
++  it("restores a pre-avatar-fix run (no avatarCount, no avatars folder)", async () => {
++    const target = await startEmptyPg();
++    const filesOut = mkdtempSync(join(tmpdir(), "tasketra-restored-files-"));
++    try {
++      const run = await runImporter(legacyFixture.dir, target.url, filesOut);
++      expect(run.code, run.stdout + run.stderr).toBe(0);
++      expect(run.stdout).toContain("BATTERY: PASS");
++      expect(run.stdout).toContain("not in this run");
++      expect(existsSync(join(filesOut, "documents", IDS.document))).toBe(true);
++    } finally {
++      await target.close();
++    }
++  }, 300_000);
++
++  it("fails the battery when the manifest lies about a count", async () => {
++    // A manifest count edited after export: the battery must catch it and
++    // fail — a rehearsal that cannot fail proves nothing.
++    const lyingDir = mkdtempSync(join(tmpdir(), "tasketra-lying-backup-"));
++    const lyingManifest = {
++      ...fixture.manifest,
++      tableCounts: { ...fixture.manifest.tableCounts, users: fixture.manifest.tableCounts.users + 1 },
++    };
++    writeFileSync(join(lyingDir, "manifest.json"), JSON.stringify(lyingManifest, null, 2));
++    writeFileSync(join(lyingDir, "db.json"), readFileSync(join(fixture.dir, "db.json")));
++    mkdirSync(join(lyingDir, "documents"), { recursive: true });
++    writeFileSync(join(lyingDir, "documents", IDS.document), DOCUMENT_BYTES);
++    writeFileSync(join(lyingDir, "documents", IDS.documentDeleted), DOCUMENT_BYTES);
++    mkdirSync(join(lyingDir, "avatars"), { recursive: true });
++    writeFileSync(join(lyingDir, "avatars", IDS.userAdmin), AVATAR_BYTES);
++
++    const target = await startEmptyPg();
++    const filesOut = mkdtempSync(join(tmpdir(), "tasketra-restored-files-"));
++    try {
++      const run = await runImporter(lyingDir, target.url, filesOut);
++      expect(run.code).not.toBe(0);
++      expect(run.stdout + run.stderr).toContain("FAIL");
++      expect(run.stdout).not.toContain("BATTERY: PASS");
++    } finally {
++      await target.close();
++    }
++  }, 300_000);
++
++  it("refuses to run against a non-empty target", async () => {
++    const target = await startEmptyPg();
++    const filesOut = mkdtempSync(join(tmpdir(), "tasketra-restored-files-"));
++    try {
++      const first = await runImporter(fixture.dir, target.url, filesOut);
++      expect(first.code, first.stdout + first.stderr).toBe(0);
++
++      const second = await runImporter(fixture.dir, target.url, filesOut);
++      expect(second.code).toBe(2);
++      expect(second.stdout + second.stderr).toContain("not empty");
++
++      // The refused run changed nothing.
++      const pool = new pg.Pool({ connectionString: target.url });
++      try {
++        const res = await pool.query(`SELECT count(*)::int AS n FROM users`);
++        expect(res.rows[0].n).toBe(fixture.manifest.tableCounts.users);
++      } finally {
++        await pool.end();
++      }
++    } finally {
++      await target.close();
++    }
++  }, 300_000);
++});
+diff --git a/scripts/restore-backup.mjs b/scripts/restore-backup.mjs
+new file mode 100644
+index 0000000..735f008
+--- /dev/null
++++ b/scripts/restore-backup.mjs
+@@ -0,0 +1,474 @@
++#!/usr/bin/env node
++// restore-backup.mjs — the Tasketra backup restore tool (Step 1 Foundation
++// Plan §1.7, Gate 0). The plan's words: "the script *is* the restore tool."
++//
++// What it does, in order:
++//   1. Reads one backup run (manifest.json + db.json + documents/ [+ avatars/]
++//      for runs made after the Gate 0 avatar fix) from a local directory —
++//      e.g. a run downloaded from the Backblaze B2 `backups/<runId>/` prefix.
++//   2. Pre-flight: checks the manifest and db.json agree with each other.
++//      A backup whose own two halves disagree is not restored from.
++//   3. Refuses to run against a target database that is not empty (the
++//      safety interlock: a restore can never be pointed at a live database
++//      and "restore" over real data).
++//   4. Rebuilds the schema by applying every migration in
++//      netlify/database/migrations/ in order — the schema is never part of
++//      the export; it is rebuilt from the same history as production.
++//   5. Imports db.json's rows in FK-safe order (parents before children,
++//      computed from the restored schema's own foreign keys).
++//   6. Copies the document (and avatar) files out to a local directory.
++//   7. Runs the verification battery: per-table row counts equal the
++//      manifest exactly, a foreign-key integrity sweep, and file counts.
++//      Any single failure fails the restore.
++//
++// Output discipline (SR-7): table names, row counts, file counts, timings,
++// PASS/FAIL — never row contents, never the target connection string.
++//
++// Usage:
++//   node scripts/restore-backup.mjs --source <run-dir> --target <postgres-url> [--files-out <dir>]
++//
++//   --source     Directory holding manifest.json, db.json, documents/,
++//                and (post-avatar-fix runs) avatars/.
++//   --target     Connection string for an EMPTY Postgres database.
++//   --files-out  Where document/avatar files are written
++//                (default: ./restored-files). Files land in documents/ and
++//                avatars/ subdirectories, keyed exactly as in the backup.
++//
++// Exit codes: 0 = battery PASS · 1 = pre-flight or battery FAIL ·
++//             2 = refused (usage error, or target not empty) ·
++//             3 = infrastructure error (connect / migration / load failure)
++//
++// Dependencies: Node 18+ and the repo's node_modules (`pg`, which the test
++// harness in netlify/lib/__tests__/testDb.ts also imports directly).
++
++import { readFileSync, readdirSync, existsSync, mkdirSync, copyFileSync, statSync } from "node:fs";
++import { join, dirname } from "node:path";
++import { fileURLToPath } from "node:url";
++import pg from "pg";
++
++const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
++const MIGRATIONS_DIR = join(repoRoot, "netlify", "database", "migrations");
++
++// The two tables the exporter leaves out on purpose (scheduled-backup.mts):
++// ephemeral abuse counters, and short-lived reset tokens — restoring an old
++// reset token would let an expired reset link work again. On restore both
++// tables are simply empty, which is correct. They are the ONLY schema tables
++// allowed to be absent from a backup's manifest.
++const DESIGNED_EXCLUSIONS = new Set(["rate_limit_hits", "password_reset_tokens"]);
++
++const IDENTIFIER = /^[a-z_][a-z0-9_]*$/;
++
++function fail(code, message) {
++  console.error(`ERROR: ${message}`);
++  process.exit(code);
++}
++
++function parseArgs(argv) {
++  const args = { source: null, target: null, filesOut: join(process.cwd(), "restored-files") };
++  for (let i = 0; i < argv.length; i++) {
++    const flag = argv[i];
++    if (flag === "--source") args.source = argv[++i];
++    else if (flag === "--target") args.target = argv[++i];
++    else if (flag === "--files-out") args.filesOut = argv[++i];
++    else fail(2, `unknown argument: ${flag}`);
++  }
++  if (!args.source || !args.target) {
++    fail(2, "usage: node scripts/restore-backup.mjs --source <run-dir> --target <postgres-url> [--files-out <dir>]");
++  }
++  return args;
++}
++
++function readJson(path, label) {
++  if (!existsSync(path)) fail(1, `pre-flight FAIL: ${label} not found at ${path}`);
++  try {
++    return JSON.parse(readFileSync(path, "utf-8"));
++  } catch {
++    fail(1, `pre-flight FAIL: ${label} is not valid JSON`);
++  }
++}
++
++// Convert one value from db.json back into something the pg driver should
++// send for the target column. db.json was produced by JSON.stringify-ing the
++// pg driver's own row objects, so: timestamps are ISO strings (Postgres
++// casts them back), JSONB values are plain objects/arrays (re-stringified
++// here, because a bare parameter is sent as text), numerics are strings
++// (Postgres casts), booleans are booleans. Bytea would arrive as
++// {type:"Buffer",data:[...]} — no bytea columns exist today; handled anyway
++// so a future one fails soft instead of corrupting.
++function convertValue(value, udtName) {
++  if (value === null || value === undefined) return null;
++  if (udtName === "json" || udtName === "jsonb") {
++    return typeof value === "object" ? JSON.stringify(value) : value;
++  }
++  if (udtName === "bytea" && typeof value === "object" && value.type === "Buffer" && Array.isArray(value.data)) {
++    return Buffer.from(value.data);
++  }
++  return value;
++}
++
++async function main() {
++  const args = parseArgs(process.argv.slice(2));
++  const startedAt = Date.now();
++  const phase = (name, t0) => console.log(`[${name}] done in ${Date.now() - t0}ms`);
++
++  // ---- Pre-flight: the backup's two halves must agree ---------------------
++  let t0 = Date.now();
++  const manifest = readJson(join(args.source, "manifest.json"), "manifest.json");
++  const dbJson = readJson(join(args.source, "db.json"), "db.json");
++  if (!manifest || typeof manifest !== "object" || typeof manifest.tableCounts !== "object" || manifest.tableCounts === null) {
++    fail(1, "pre-flight FAIL: manifest.json has no tableCounts object");
++  }
++  if (typeof manifest.documentCount !== "number") {
++    fail(1, "pre-flight FAIL: manifest.json has no numeric documentCount");
++  }
++  // Runs from before the Gate 0 avatar fix have no avatarCount and no
++  // avatars/ folder. That is a valid, restorable shape — avatars are simply
++  // absent from those runs, and the battery reports them as such.
++  const hasAvatars = typeof manifest.avatarCount === "number";
++  const manifestTables = Object.keys(manifest.tableCounts);
++  const dbTables = Object.keys(dbJson);
++  let preflightFailures = 0;
++  for (const table of manifestTables) {
++    if (!Array.isArray(dbJson[table])) {
++      console.log(`PREFLIGHT FAIL: table ${table} is in the manifest but missing (or not an array) in db.json`);
++      preflightFailures++;
++    } else if (dbJson[table].length !== manifest.tableCounts[table]) {
++      console.log(
++        `PREFLIGHT FAIL: table ${table}: manifest says ${manifest.tableCounts[table]} rows, db.json holds ${dbJson[table].length}`
++      );
++      preflightFailures++;
++    }
++  }
++  for (const table of dbTables) {
++    if (!(table in manifest.tableCounts)) {
++      console.log(`PREFLIGHT FAIL: table ${table} is in db.json but absent from the manifest`);
++      preflightFailures++;
++    }
++  }
++  if (preflightFailures > 0) {
++    console.log(`BATTERY: FAIL (${preflightFailures} pre-flight check(s) failed — nothing was written)`);
++    process.exit(1);
++  }
++  console.log(
++    `Backup run: exportedAt=${manifest.exportedAt} tables=${manifestTables.length} documents=${manifest.documentCount} avatars=${hasAvatars ? manifest.avatarCount : "not in this run (pre-avatar-fix backup)"}`
++  );
++  phase("pre-flight", t0);
++
++  // ---- Connect + interlock -------------------------------------------------
++  const client = new pg.Client({ connectionString: args.target });
++  try {
++    await client.connect();
++  } catch (err) {
++    fail(3, `could not connect to the target database: ${err.message}`);
++  }
++  try {
++    const identity = await client.query(
++      `SELECT current_database() AS db, split_part(version(), ' ', 2) AS pg_version`
++    );
++    console.log(`Target: database "${identity.rows[0].db}", Postgres ${identity.rows[0].pg_version}`);
++    // Deterministic date/timestamp casts for the load session: db.json's
++    // timestamps are UTC ISO strings, and the exporting process ran in UTC.
++    await client.query(`SET timezone = 'UTC'`);
++
++    const existing = await client.query(
++      `SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE'`
++    );
++    if (existing.rows.length > 0) {
++      console.error(
++        `ERROR: refusing to restore — the target database is not empty (${existing.rows.length} table(s) already present). ` +
++          `A restore only ever runs into an empty database.`
++      );
++      process.exit(2);
++    }
++
++    // ---- Schema: every migration, in order --------------------------------
++    t0 = Date.now();
++    const migrationDirs = readdirSync(MIGRATIONS_DIR, { withFileTypes: true })
++      .filter((d) => d.isDirectory())
++      .map((d) => d.name)
++      .sort();
++    for (const dir of migrationDirs) {
++      const sql = readFileSync(join(MIGRATIONS_DIR, dir, "migration.sql"), "utf-8");
++      try {
++        await client.query(sql);
++      } catch (err) {
++        fail(3, `migration ${dir} failed: ${err.message}`);
++      }
++    }
++    console.log(`Schema rebuilt from ${migrationDirs.length} migrations`);
++    phase("schema", t0);
++
++    // ---- Column + FK metadata from the restored schema ---------------------
++    const columnsRes = await client.query(
++      `SELECT table_name, column_name, udt_name FROM information_schema.columns WHERE table_schema = 'public'`
++    );
++    const columnsByTable = new Map();
++    for (const row of columnsRes.rows) {
++      if (!columnsByTable.has(row.table_name)) columnsByTable.set(row.table_name, new Map());
++      columnsByTable.get(row.table_name).set(row.column_name, row.udt_name);
++    }
++
++    const fkRes = await client.query(
++      `SELECT tc.table_name AS child_table, kcu.column_name AS child_column,
++              ccu.table_name AS parent_table, ccu.column_name AS parent_column,
++              tc.constraint_name
++       FROM information_schema.table_constraints tc
++       JOIN information_schema.key_column_usage kcu
++         ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema
++       JOIN information_schema.constraint_column_usage ccu
++         ON tc.constraint_name = ccu.constraint_name AND tc.table_schema = ccu.table_schema
++       WHERE tc.constraint_type = 'FOREIGN KEY' AND tc.table_schema = 'public'`
++    );
++    const fkEdges = fkRes.rows; // child -> parent
++
++    // ---- FK-safe order: parents before children ------------------------------
++    // Tables are grouped into strongly connected components of the FK graph
++    // and the components are ordered topologically, so every table loads
++    // after the tables it references. Almost every component is a single
++    // table loaded with FK checks fully on. The exceptions — the components
++    // that genuinely cannot be ordered — are:
++    //   * a multi-table reference cycle (in this schema exactly one:
++    //     projects → decision_requests → stakeholders → projects, via
++    //     charter_decision_id, owner_stakeholder_id, and project_id), and
++    //   * a table that references itself (tasks' hierarchy column), whose
++    //     rows can reference each other in any order.
++    // Only those tables are loaded with FK triggers held off inside the
++    // load transaction — the same mechanism pg_restore uses
++    // (--disable-triggers) — and the battery's FK sweep below is what
++    // proves the result is consistent. If the target role cannot hold
++    // triggers off, the load aborts loudly rather than improvising.
++    const allTables = [...columnsByTable.keys()];
++    const parentsOf = new Map(allTables.map((t) => [t, new Set()]));
++    const selfReferencing = new Set();
++    for (const edge of fkEdges) {
++      if (edge.child_table === edge.parent_table) selfReferencing.add(edge.child_table);
++      else parentsOf.get(edge.child_table)?.add(edge.parent_table);
++    }
++    // Tarjan's algorithm: strongly connected components of child → parents.
++    const sccs = [];
++    {
++      const indexOf = new Map();
++      const lowlink = new Map();
++      const onStack = new Set();
++      const stack = [];
++      let nextIndex = 0;
++      const strongConnect = (v) => {
++        indexOf.set(v, nextIndex);
++        lowlink.set(v, nextIndex);
++        nextIndex++;
++        stack.push(v);
++        onStack.add(v);
++        for (const w of parentsOf.get(v)) {
++          if (!indexOf.has(w)) {
++            strongConnect(w);
++            lowlink.set(v, Math.min(lowlink.get(v), lowlink.get(w)));
++          } else if (onStack.has(w)) {
++            lowlink.set(v, Math.min(lowlink.get(v), indexOf.get(w)));
++          }
++        }
++        if (lowlink.get(v) === indexOf.get(v)) {
++          const component = [];
++          let w;
++          do {
++            w = stack.pop();
++            onStack.delete(w);
++            component.push(w);
++          } while (w !== v);
++          sccs.push(component);
++        }
++      };
++      for (const table of allTables) if (!indexOf.has(table)) strongConnect(table);
++    }
++    const componentOf = new Map();
++    sccs.forEach((component, i) => component.forEach((t) => componentOf.set(t, i)));
++    const componentParents = sccs.map(() => new Set());
++    for (const table of allTables) {
++      for (const parent of parentsOf.get(table)) {
++        const from = componentOf.get(table);
++        const to = componentOf.get(parent);
++        if (from !== to) componentParents[from].add(to);
++      }
++    }
++    // Order components so parents come before children (Kahn on the
++    // condensation DAG — it is a DAG by construction, so this terminates).
++    const componentOrder = [];
++    {
++      const placedComponents = new Set();
++      const remainingComponents = new Set(sccs.map((_, i) => i));
++      while (remainingComponents.size > 0) {
++        for (const i of [...remainingComponents]) {
++          if ([...componentParents[i]].every((p) => placedComponents.has(p))) {
++            componentOrder.push(i);
++            placedComponents.add(i);
++            remainingComponents.delete(i);
++          }
++        }
++      }
++    }
++    const deferredTables = new Set();
++    const loadPlan = []; // [{ table, deferred }] in load order
++    for (const i of componentOrder) {
++      const component = [...sccs[i]].sort();
++      const deferred = component.length > 1 || component.some((t) => selfReferencing.has(t));
++      for (const table of component) {
++        if (deferred) deferredTables.add(table);
++        loadPlan.push({ table, deferred });
++      }
++    }
++    if (deferredTables.size > 0) {
++      console.log(
++        `NOTE: ${deferredTables.size} table(s) cannot be strictly FK-ordered (reference cycle or self-reference); ` +
++          `they are loaded with FK checks deferred to the verification sweep: ${[...deferredTables].sort().join(", ")}`
++      );
++    }
++
++    // ---- Load ----------------------------------------------------------------
++    t0 = Date.now();
++    await client.query("BEGIN");
++    let replicaMode = false;
++    try {
++      for (const { table, deferred } of loadPlan) {
++        const rows = dbJson[table];
++        if (!rows) continue; // schema table with no export rows (the designed exclusions)
++        if (rows.length === 0) {
++          console.log(`LOAD ${table}: 0 rows`);
++          continue;
++        }
++        if (deferred && !replicaMode) {
++          await client.query(`SET LOCAL session_replication_role = 'replica'`);
++          replicaMode = true;
++        }
++        if (!deferred && replicaMode) {
++          await client.query(`SET LOCAL session_replication_role = 'origin'`);
++          replicaMode = false;
++        }
++        const columnTypes = columnsByTable.get(table);
++        const columns = [...new Set(rows.flatMap((r) => Object.keys(r)))].filter((c) => columnTypes.has(c));
++        for (const col of columns) {
++          if (!IDENTIFIER.test(col)) fail(3, `unsafe column name in db.json for table ${table}: ${col}`);
++        }
++        const BATCH = 200;
++        for (let i = 0; i < rows.length; i += BATCH) {
++          const batch = rows.slice(i, i + BATCH);
++          const params = [];
++          const tuples = batch.map((row) => {
++            const placeholders = columns.map((col) => {
++              params.push(convertValue(row[col] ?? null, columnTypes.get(col)));
++              return `$${params.length}`;
++            });
++            return `(${placeholders.join(", ")})`;
++          });
++          await client.query(
++            `INSERT INTO "${table}" (${columns.map((c) => `"${c}"`).join(", ")}) VALUES ${tuples.join(", ")}`,
++            params
++          );
++        }
++        console.log(`LOAD ${table}: ${rows.length} rows`);
++      }
++      if (replicaMode) await client.query(`SET LOCAL session_replication_role = 'origin'`);
++      await client.query("COMMIT");
++    } catch (err) {
++      await client.query("ROLLBACK").catch(() => {});
++      fail(3, `data load failed and was rolled back (target holds schema only): ${err.message}`);
++    }
++    phase("load", t0);
++
++    // ---- Files -----------------------------------------------------------------
++    t0 = Date.now();
++    const fileResults = [];
++    const copyStore = (label, sourceDir, manifestCount) => {
++      const outDir = join(args.filesOut, label);
++      mkdirSync(outDir, { recursive: true });
++      if (manifestCount === null) {
++        fileResults.push({ label, status: "absent from this backup run", ok: true });
++        console.log(`FILES ${label}: not present in this backup run — nothing to restore`);
++        return;
++      }
++      if (!existsSync(sourceDir)) {
++        fileResults.push({ label, status: `source folder missing but manifest counts ${manifestCount}`, ok: false });
++        console.log(`FILES ${label}: FAIL — manifest counts ${manifestCount} but the folder is missing from the run`);
++        return;
++      }
++      const keys = readdirSync(sourceDir, { withFileTypes: true }).filter((e) => e.isFile()).map((e) => e.name);
++      let emptyFiles = 0;
++      for (const key of keys) {
++        copyFileSync(join(sourceDir, key), join(outDir, key));
++        if (statSync(join(outDir, key)).size <= 0) emptyFiles++;
++      }
++      const ok = keys.length === manifestCount && emptyFiles === 0;
++      fileResults.push({ label, status: `${keys.length} files (manifest ${manifestCount}), ${emptyFiles} empty`, ok });
++      console.log(`FILES ${label}: ${keys.length} copied, manifest says ${manifestCount}, ${emptyFiles} empty — ${ok ? "ok" : "FAIL"}`);
++    };
++    copyStore("documents", join(args.source, "documents"), manifest.documentCount);
++    copyStore("avatars", join(args.source, "avatars"), hasAvatars ? manifest.avatarCount : null);
++    phase("files", t0);
++
++    // ---- Battery -----------------------------------------------------------------
++    t0 = Date.now();
++    let failures = 0;
++    const check = (ok, line) => {
++      console.log(`${ok ? "PASS" : "FAIL"} ${line}`);
++      if (!ok) failures++;
++    };
++
++    // Row counts equal the manifest exactly — every table, no rounding.
++    for (const table of manifestTables) {
++      const res = await client.query(`SELECT count(*)::int AS n FROM "${table}"`);
++      check(res.rows[0].n === manifest.tableCounts[table], `count ${table}: restored ${res.rows[0].n}, manifest ${manifest.tableCounts[table]}`);
++    }
++    // Schema tables the manifest does not name: only the two designed
++    // exclusions may appear here, and they must be empty. Anything else is
++    // export drift — the backup silently stopped covering a table.
++    for (const table of allTables) {
++      if (table in manifest.tableCounts) continue;
++      const res = await client.query(`SELECT count(*)::int AS n FROM "${table}"`);
++      if (DESIGNED_EXCLUSIONS.has(table)) {
++        check(res.rows[0].n === 0, `excluded-by-design ${table}: empty as designed (${res.rows[0].n} rows)`);
++      } else {
++        check(false, `table ${table} exists in the schema but is absent from the backup manifest (restored ${res.rows[0].n} rows)`);
++      }
++    }
++
++    // FK integrity sweep: for every foreign key, no child row may reference
++    // a parent row that isn't there.
++    const constraints = new Map();
++    for (const edge of fkEdges) {
++      if (!constraints.has(edge.constraint_name)) {
++        constraints.set(edge.constraint_name, { child: edge.child_table, pairs: [] });
++      }
++      constraints.get(edge.constraint_name).pairs.push([edge.child_column, edge.parent_column]);
++    }
++    let fkViolations = 0;
++    for (const [name, { child, pairs }] of constraints) {
++      const parent = fkEdges.find((e) => e.constraint_name === name).parent_table;
++      const notNull = pairs.map(([c]) => `c."${c}" IS NOT NULL`).join(" AND ");
++      const match = pairs.map(([c, p]) => `p."${p}" = c."${c}"`).join(" AND ");
++      const res = await client.query(
++        `SELECT count(*)::int AS n FROM "${child}" c WHERE ${notNull} AND NOT EXISTS (SELECT 1 FROM "${parent}" p WHERE ${match})`
++      );
++      if (res.rows[0].n > 0) {
++        fkViolations += res.rows[0].n;
++        check(false, `fk ${name}: ${res.rows[0].n} orphan row(s) in ${child}`);
++      }
++    }
++    check(fkViolations === 0, `fk integrity sweep: ${constraints.size} constraints checked, ${fkViolations} orphan rows`);
++
++    // Files were counted and checked during the copy step.
++    for (const result of fileResults) {
++      check(result.ok, `files ${result.label}: ${result.status}`);
++    }
++    phase("battery", t0);
++
++    const totalMs = Date.now() - startedAt;
++    if (failures > 0) {
++      console.log(`BATTERY: FAIL (${failures} check(s) failed) — restore duration ${totalMs}ms`);
++      process.exit(1);
++    }
++    console.log(`BATTERY: PASS — restore duration ${totalMs}ms`);
++    process.exit(0);
++  } finally {
++    await client.end().catch(() => {});
++  }
++}
++
++main().catch((err) => fail(3, `unexpected error: ${err.message}`));

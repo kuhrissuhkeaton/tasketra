@@ -1,18 +1,25 @@
 import type { Config } from "@netlify/functions";
 import { PutObjectCommand, ListObjectsV2Command, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { db } from "../lib/db.ts";
-import { documentsStore } from "../lib/blobs.ts";
+import { documentsStore, avatarsStore } from "../lib/blobs.ts";
 import { s3, backupBucketName } from "../lib/s3.ts";
 import { sendEmail } from "../lib/notify.ts";
 import { getEnv } from "../lib/env.ts";
 import { withSentry } from "../lib/sentry.ts";
 
 // Weekly off-site backup: every table in the database plus every uploaded
-// document, exported to a Backblaze B2 bucket outside Netlify entirely --
-// so a Netlify-side incident can't take out the app and its backups at the
-// same time. This supplements (doesn't replace) Netlify Database's own
-// built-in backups, which only cover the database, not Blobs, and only for
-// as long as the current plan's retention window.
+// document and profile avatar, exported to a Backblaze B2 bucket outside
+// Netlify entirely -- so a Netlify-side incident can't take out the app and
+// its backups at the same time. This supplements (doesn't replace) Netlify
+// Database's own built-in backups, which only cover the database, not Blobs,
+// and only for as long as the current plan's retention window.
+//
+// Avatars joined the run in the Gate 0 fix (2026-11-28): before that the
+// export copied only the documents store, so a restore would have brought
+// back users.avatar_key pointers to files that were never backed up. Runs
+// from before the fix have no avatars/ folder and no avatarCount in their
+// manifest; the restore tool (scripts/restore-backup.mjs) treats that shape
+// as valid and simply restores no avatars from those runs.
 //
 // Two tables are deliberately excluded: rate_limit_hits (ephemeral abuse
 // counters, not real data) and password_reset_tokens (short-lived security
@@ -60,6 +67,20 @@ async function exportDocuments() {
   return files;
 }
 
+// Avatars live in their own Blobs store, keyed by user id (see blobs.ts).
+// Same shape as exportDocuments so the run layout stays parallel:
+// documents/<key> and avatars/<key> side by side under the run prefix.
+async function exportAvatars() {
+  const store = avatarsStore();
+  const { blobs } = await store.list();
+  const files: { key: string; data: ArrayBuffer }[] = [];
+  for (const blob of blobs) {
+    const data = await store.get(blob.key, { type: "arrayBuffer" });
+    if (data) files.push({ key: blob.key, data });
+  }
+  return files;
+}
+
 async function pruneOldRuns(client: ReturnType<typeof s3>, bucket: string) {
   const listed = await client.send(
     new ListObjectsV2Command({ Bucket: bucket, Prefix: "backups/", Delimiter: "/" })
@@ -91,11 +112,13 @@ export default withSentry(async () => {
 
     const tables = await exportDatabase(database);
     const documents = await exportDocuments();
+    const avatars = await exportAvatars();
 
     const manifest = {
       exportedAt: startedAt.toISOString(),
       tableCounts: Object.fromEntries(Object.entries(tables).map(([name, rows]) => [name, rows.length])),
       documentCount: documents.length,
+      avatarCount: avatars.length,
     };
 
     await client.send(
@@ -123,10 +146,19 @@ export default withSentry(async () => {
         })
       );
     }
+    for (const file of avatars) {
+      await client.send(
+        new PutObjectCommand({
+          Bucket: bucket,
+          Key: `${prefix}avatars/${file.key}`,
+          Body: new Uint8Array(file.data),
+        })
+      );
+    }
 
     const prunedCount = await pruneOldRuns(client, bucket);
 
-    console.log(`[scheduled-backup] success runId=${runId} tables=${Object.keys(tables).length} documents=${documents.length} prunedRuns=${prunedCount}`);
+    console.log(`[scheduled-backup] success runId=${runId} tables=${Object.keys(tables).length} documents=${documents.length} avatars=${avatars.length} prunedRuns=${prunedCount}`);
 
     return new Response(
       JSON.stringify({ ok: true, runId, manifest, prunedRuns: prunedCount }),

@@ -54,6 +54,11 @@ export default withSentry(async (req: Request) => {
       exportedAt: string;
       tableCounts: Record<string, number>;
       documentCount: number;
+      // Absent on runs from before the Gate 0 avatar fix (2026-11-28);
+      // those runs genuinely contain no avatars, so there is nothing
+      // to cross-check — the check below reports that shape rather than
+      // failing a valid older run.
+      avatarCount?: number;
     };
     record("manifest.json readable + valid JSON", true, `exportedAt=${manifest.exportedAt}`);
 
@@ -88,6 +93,27 @@ export default withSentry(async (req: Request) => {
       record(`document restorable: ${key}`, bytes.length > 0, `${bytes.length} bytes`);
     }
     if (docKeys.length > 0) record("all documents downloaded with nonzero size", docsOk, "");
+
+    if (typeof manifest.avatarCount === "number") {
+      const avatarsListed = await client.send(
+        new ListObjectsV2Command({ Bucket: bucket, Prefix: `${latest}avatars/` })
+      );
+      const avatarKeys = (avatarsListed.Contents || []).map((o) => o.Key).filter((k): k is string => !!k);
+      record(
+        "avatar count matches manifest",
+        avatarKeys.length === manifest.avatarCount,
+        `${avatarKeys.length} objects found, manifest says ${manifest.avatarCount}`
+      );
+      let avatarsOk = true;
+      for (const key of avatarKeys) {
+        const res = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+        const bytes = await streamToBytes(res.Body);
+        if (bytes.length <= 0) avatarsOk = false;
+      }
+      if (avatarKeys.length > 0) record("all avatars downloaded with nonzero size", avatarsOk, "");
+    } else {
+      record("avatar count matches manifest", true, "run predates the avatar fix — no avatars in this run to check");
+    }
 
     const allOk = checks.every((c) => c.ok);
     console.log(`[verify-backup] ${allOk ? "PASSED" : "FAILED"} run=${latest} checks=${JSON.stringify(checks)}`);
